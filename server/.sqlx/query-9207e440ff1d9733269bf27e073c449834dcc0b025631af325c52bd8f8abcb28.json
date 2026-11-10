@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds f SET last_seq = n.last_seq\n             FROM unnest($1::integer[], $2::integer[], $3::integer[]) AS n (feed_id, last_seq, by)\n             WHERE f.id = n.feed_id AND f.last_seq + n.by = n.last_seq",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9207e440ff1d9733269bf27e073c449834dcc0b025631af325c52bd8f8abcb28"
+}

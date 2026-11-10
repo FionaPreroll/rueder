@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO subscriptions (account_id, feed_id, folder_id, position, title, read_upto)\n         SELECT $1, f.id, $2, n.position, n.title, f.last_seq\n         FROM unnest($3::integer[], $4::float8[], $5::text[]) AS n (feed_id, position, title)\n         JOIN feeds f ON f.id = n.feed_id\n         ON CONFLICT (account_id, feed_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array",
+        "Float8Array",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f11a2b4d73f45895cd5a665f6fca33530e04775f5032089e6453ec4b2a8a4ed9"
+}

@@ -7,9 +7,9 @@ use std::{
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use rueder::{AppState, articles, bench, router};
+use rueder::{AppState, articles, bench, import, router};
 use sqlx::{
-    PgPool,
+    Connection, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use tokio::{
@@ -34,6 +34,14 @@ enum Command {
     /// queries the reader lives on.
     #[command(subcommand)]
     Bench(BenchCommand),
+    /// Bring over the feeds, articles, accounts, folders and subscriptions of the
+    /// old rueder. Adds what is not there yet, so it can run more than once.
+    ImportLegacy {
+        /// The old rueder's database, e.g. postgres://user:password@host/rueder.
+        /// It is only read.
+        #[arg(long, env = "LEGACY_DATABASE_URL", hide_env_values = true)]
+        from: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -98,6 +106,14 @@ async fn main() -> anyhow::Result<()> {
                 articles,
             };
             bench::generate(&db, size).await
+        }
+        Command::ImportLegacy { from } => {
+            let mut legacy = PgConnection::connect(&from)
+                .await
+                .context("connecting to the old database")?;
+            let report = import::run(&db, &mut legacy).await?;
+            println!("{report}");
+            Ok(())
         }
         Command::Bench(BenchCommand::Measure { runs }) => {
             let report = bench::measure(&db, runs).await?;
