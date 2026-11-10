@@ -1,0 +1,186 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n                a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title\n         FROM subscriptions s\n         JOIN articles a ON a.feed_id = s.feed_id\n         JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "author",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "html",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "html"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "tags",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "tags"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "enclosures",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "enclosures"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "image_url"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "image_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "image_title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "854fcf06246afcddcfef2251b481a0c803cb92ba6cf5bac487858d84b4cee67c"
+}

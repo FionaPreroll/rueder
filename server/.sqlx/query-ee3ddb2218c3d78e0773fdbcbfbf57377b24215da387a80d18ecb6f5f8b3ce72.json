@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM article_versions v\n         WHERE v.feed_id = $1 AND v.seq = $2\n           AND (SELECT count(*) FROM article_versions c WHERE c.feed_id = $1 AND c.seq = $2) > $3\n           AND v.version = (\n               SELECT o.version FROM article_versions o\n               WHERE o.feed_id = $1 AND o.seq = $2\n               ORDER BY o.version OFFSET 1 LIMIT 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee3ddb2218c3d78e0773fdbcbfbf57377b24215da387a80d18ecb6f5f8b3ce72"
+}

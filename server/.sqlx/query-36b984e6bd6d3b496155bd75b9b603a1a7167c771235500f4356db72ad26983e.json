@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM article_states\n         WHERE account_id = $1 AND feed_id = $2 AND seq = $3\n           AND NOT (coalesce($4, read) OR coalesce($5, kept_unread)\n                    OR coalesce($6, hidden) OR coalesce($7, starred))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "36b984e6bd6d3b496155bd75b9b603a1a7167c771235500f4356db72ad26983e"
+}

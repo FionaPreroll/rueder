@@ -1,0 +1,111 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH subs AS (\n            SELECT s.feed_id, s.read_upto,\n                   CASE WHEN $5 THEN coalesce(\n                       (SELECT m.id FROM articles m\n                        WHERE m.feed_id = s.feed_id AND m.seq = s.read_upto), 0)\n                   ELSE 0 END AS floor\n            FROM subscriptions s\n            WHERE s.account_id = $1 AND s.feed_id = ANY($2)\n        ), samples AS (\n            -- The newest few of each feed, enough to hold a page between them.\n            SELECT subs.feed_id, a.id\n            FROM subs CROSS JOIN LATERAL (\n                SELECT a.id FROM articles a\n                WHERE a.feed_id = subs.feed_id AND a.id > subs.floor AND a.id < $3\n                  AND NOT EXISTS (\n                      SELECT 1 FROM article_states x\n                      WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq\n                        AND (x.hidden OR ($5 AND x.read)))\n                ORDER BY a.id DESC\n                LIMIT (SELECT ($4::bigint + count(*) - 1) / greatest(count(*), 1) FROM subs)\n            ) a\n        ), threshold AS (\n            SELECT coalesce((\n                SELECT s.id FROM samples s\n                ORDER BY s.id DESC OFFSET $4::bigint - 1 LIMIT 1), 0) AS t\n        ), found AS (\n            SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n                   a.teaser, a.author, a.url, a.thumbnail_url, subs.read_upto\n            FROM subs CROSS JOIN threshold CROSS JOIN LATERAL (\n                SELECT a.* FROM articles a\n                WHERE a.feed_id = subs.feed_id AND a.id > subs.floor AND a.id >= threshold.t\n                  AND a.id < $3\n                  AND NOT EXISTS (\n                      SELECT 1 FROM article_states x\n                      WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq\n                        AND (x.hidden OR ($5 AND x.read)))\n                ORDER BY a.id DESC LIMIT $4\n            ) a\n            WHERE subs.feed_id IN (SELECT s.feed_id FROM samples s WHERE s.id >= threshold.t)\n          UNION ALL\n            -- Set back to unread under the read mark: few, found from their state.\n            SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n                   a.teaser, a.author, a.url, a.thumbnail_url, subs.read_upto\n            FROM subs\n            JOIN article_states k ON k.account_id = $1 AND k.feed_id = subs.feed_id\n                AND k.kept_unread AND NOT k.hidden AND k.seq <= subs.read_upto\n            JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq\n            WHERE $5 AND a.id < $3\n        )\n        SELECT f.feed_id AS \"feed_id!\", f.seq AS \"seq!\", f.id AS \"id!\",\n               f.published_at AS \"published_at!\", f.updated_at, f.version AS \"version!\",\n               f.title AS \"title!\", f.teaser AS \"teaser!\", f.author AS \"author!\", f.url,\n               f.thumbnail_url,\n               CASE WHEN f.seq <= f.read_upto THEN NOT coalesce(st.kept_unread, false)\n                    ELSE coalesce(st.read, false) END AS \"read!\",\n               coalesce(st.starred, false) AS \"starred!\"\n        FROM found f\n        LEFT JOIN article_states st\n            ON st.account_id = $1 AND st.feed_id = f.feed_id AND st.seq = f.seq\n        ORDER BY f.id DESC\n        LIMIT $4\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "seq!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "published_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "version!",
+        "type_info": "Int2",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "teaser!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "author!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "url",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "thumbnail_url",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "read!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "starred!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "fa8de8aa38da968d4e58a5a25d947ca4849302d508df67fd31ee85e92b36b30f"
+}

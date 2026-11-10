@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds SET last_seq = last_seq + $2 WHERE id = $1 RETURNING last_seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "61ccc4acf95ea296bb282d7c55981510cb16108a5b48c0c3ddc8316071141ce4"
+}

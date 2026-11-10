@@ -11,6 +11,9 @@ comment:
   layout: "condensed_header, diff, flags"
 # One upload per CI job; each flag covers its part of the repository.
 flags:
+  server:
+    paths:
+      - server/
   web:
     paths:
       - web/
