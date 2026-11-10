@@ -17,12 +17,17 @@ use axum::{
     routing::get,
 };
 use rueder::{
+    cleaning::Rules,
     feeds::Stored,
     fetch::{self, MAX_INTERVAL, MIN_INTERVAL, Outcome},
     http_client::{Config, HttpClient},
 };
 use sqlx::{PgPool, Row};
 use time::Duration;
+
+fn rules() -> Arc<Rules> {
+    Arc::new(Rules::built_in().unwrap())
+}
 
 /// A site with one feed, and what it saw.
 struct Site {
@@ -126,7 +131,9 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
     let feed = feed_at(&db, "ada", &url).await;
     let client = client();
 
-    let outcome = fetch::fetch_feed(&db, &client, feed).await.unwrap();
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
     assert_eq!(
         outcome,
         Outcome::Fetched(Stored {
@@ -153,7 +160,9 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
 
     // Nothing changed: the site says so and sends no feed.
     assert_eq!(
-        fetch::fetch_feed(&db, &client, feed).await.unwrap(),
+        fetch::fetch_feed(&db, &client, &rules(), feed)
+            .await
+            .unwrap(),
         Outcome::NotModified
     );
     assert_eq!(site.lock().unwrap().conditional, 1);
@@ -165,7 +174,9 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
         ("b", "Second", "two, corrected"),
         ("a", "First", "one"),
     ]);
-    let outcome = fetch::fetch_feed(&db, &client, feed).await.unwrap();
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
     assert_eq!(
         outcome,
         Outcome::Fetched(Stored {
@@ -183,7 +194,9 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
     let client = client();
 
     site.lock().unwrap().status = StatusCode::NOT_FOUND;
-    let outcome = fetch::fetch_feed(&db, &client, feed).await.unwrap();
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
     assert_eq!(
         outcome,
         Outcome::Failed("the site answers with 404 Not Found".to_owned())
@@ -199,7 +212,9 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
 
     // Failing again doubles the wait, up to the longest interval.
     for _ in 0..5 {
-        fetch::fetch_feed(&db, &client, feed).await.unwrap();
+        fetch::fetch_feed(&db, &client, &rules(), feed)
+            .await
+            .unwrap();
     }
     assert_eq!(
         row(&db, feed).await.get::<i32, _>("fetch_interval_s"),
@@ -212,7 +227,9 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
         site.status = StatusCode::OK;
         site.body = "<html><body>Under construction</body></html>".to_owned();
     }
-    let outcome = fetch::fetch_feed(&db, &client, feed).await.unwrap();
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
     assert!(
         matches!(&outcome, Outcome::Failed(why) if why.starts_with("not a feed")),
         "{outcome:?}"
@@ -221,7 +238,9 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
 
     // The site is back: the error is gone and the interval is short again.
     site.lock().unwrap().body = rss(&[("a", "First", "one")]);
-    let outcome = fetch::fetch_feed(&db, &client, feed).await.unwrap();
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
     assert!(
         matches!(outcome, Outcome::Fetched(Stored { new: 1, .. })),
         "{outcome:?}"
@@ -241,7 +260,9 @@ async fn a_feed_inside_the_own_network_is_not_fetched(db: PgPool) {
         "not an address",
     ] {
         let feed = feed_at(&db, &format!("reader of {url}"), url).await;
-        let outcome = fetch::fetch_feed(&db, &client, feed).await.unwrap();
+        let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+            .await
+            .unwrap();
         assert!(matches!(outcome, Outcome::Failed(_)), "{url}: {outcome:?}");
         let message = row(&db, feed)
             .await
@@ -263,7 +284,9 @@ async fn a_feed_can_be_fetched_as_a_browser(db: PgPool) {
         .execute(&db)
         .await
         .unwrap();
-    fetch::fetch_feed(&db, &client(), feed).await.unwrap();
+    fetch::fetch_feed(&db, &client(), &rules(), feed)
+        .await
+        .unwrap();
     assert!(site.lock().unwrap().agents[0].starts_with("Mozilla/5.0"));
 }
 
@@ -288,7 +311,7 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         .unwrap();
 
     let client = client();
-    assert_eq!(fetch::fetch_due(&db, &client).await.unwrap(), 2);
+    assert_eq!(fetch::fetch_due(&db, &client, &rules()).await.unwrap(), 2);
     assert_eq!(site.lock().unwrap().requests, 2);
     for (feed, articles) in [(due, 1), (also_due, 1), (later, 0), (unread, 0)] {
         assert_eq!(
@@ -298,7 +321,7 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         );
     }
     // Fetched feeds are not due any more.
-    assert_eq!(fetch::fetch_due(&db, &client).await.unwrap(), 0);
+    assert_eq!(fetch::fetch_due(&db, &client, &rules()).await.unwrap(), 0);
     assert_eq!(site.lock().unwrap().requests, 2);
 }
 

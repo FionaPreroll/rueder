@@ -367,7 +367,7 @@ fn only_harmless_markup_stays() {
         ),
         (
             "<math><mi xlink:href=\"javascript:alert(1)\">x</mi></math>",
-            "",
+            "x",
         ),
         (
             "<base href=\"https://evil.example/\"><link rel=\"stylesheet\" href=\"https://evil.example/x.css\"><meta http-equiv=\"refresh\" content=\"0;url=https://evil.example/\">x",

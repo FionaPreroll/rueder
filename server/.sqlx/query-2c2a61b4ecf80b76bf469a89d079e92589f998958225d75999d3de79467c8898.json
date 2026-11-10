@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE article_content SET checksum = $3, html = $4, enclosures = $5::text::jsonb\n         WHERE feed_id = $1 AND seq = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Bytea",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2c2a61b4ecf80b76bf469a89d079e92589f998958225d75999d3de79467c8898"
+}

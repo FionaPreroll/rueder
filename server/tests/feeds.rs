@@ -5,6 +5,7 @@ mod common;
 
 use rueder::{
     articles::{self, Page},
+    cleaning::Rules,
     feeds::{self, MAX_ARTICLES, Stored},
 };
 use sqlx::PgPool;
@@ -36,7 +37,13 @@ fn rss(entries: &[(&str, &str, &str)]) -> Vec<u8> {
 }
 
 fn parse(body: &[u8]) -> feeds::Parsed {
-    feeds::parse(body, "https://example.org/feed.xml", NOW).unwrap()
+    feeds::parse(
+        body,
+        "https://example.org/feed.xml",
+        NOW,
+        &Rules::built_in().unwrap(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -232,7 +239,15 @@ fn limits_hold_and_nonsense_is_an_error() {
         b"{\"a\": 1}",
         &[0xff, 0xfe, 0x00][..],
     ] {
-        assert!(feeds::parse(nonsense, "https://example.org/", NOW).is_err());
+        assert!(
+            feeds::parse(
+                nonsense,
+                "https://example.org/",
+                NOW,
+                &Rules::built_in().unwrap()
+            )
+            .is_err()
+        );
     }
 }
 

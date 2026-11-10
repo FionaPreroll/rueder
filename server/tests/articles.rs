@@ -178,6 +178,7 @@ async fn a_changed_article_gets_a_version_and_stays_read(db: PgPool) {
     // The same text with other line breaks is no new version.
     let mut reflowed = article(2);
     reflowed.original.content = reflowed.original.content.replace(' ', "\n ");
+    reflowed.html = reflowed.html.replace(' ', "\n ");
     assert_eq!(
         articles::add_version(&mut tx, feed_id, 2, &reflowed)
             .await
@@ -251,6 +252,7 @@ async fn an_article_keeps_its_first_and_its_newest_versions(db: PgPool) {
     for n in 2..=25 {
         let mut changed = article(1);
         changed.original.content = format!("<p>Version {n}.</p>");
+        changed.html = changed.original.content.clone();
         changed.fetched_at += Duration::hours(n);
         let version = articles::add_version(&mut tx, feed_id, 1, &changed)
             .await
