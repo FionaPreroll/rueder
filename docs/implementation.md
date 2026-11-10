@@ -54,6 +54,7 @@ Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das i
 | `server/migrations/` | SQL-Migrationen, laufen beim Start von selbst. |
 | `server/.sqlx/` | Cache der geprüften Abfragen, damit das Programm ohne Datenbank baut (`cargo sqlx prepare`). |
 | `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/`. |
+| `server/fuzz/` | Kommt mit Paket 2.11: Fuzz-Targets für Bereinigung, Feed-Verarbeitung und Bild-Proxy samt Korpus. |
 | `web/` | Neu. SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
 | `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`), erfundene Daten (`demo/`). |
 | `docs/` | Diese Dokumente. `user_data.md` beschreibt die Daten des alten Frontends im Browser. |
@@ -144,7 +145,7 @@ Das alte System startet wie im [README](../README.md) beschrieben.
 
 Die Abdeckung geht an Codecov, getrennt nach den Flags `web` und `server` (`codecov.yml`). Der Upload braucht das Repository-Secret `CODECOV_TOKEN`. Die Status von Codecov sind informativ und blockieren keinen Merge.
 
-In Schritt 2 kommen `cargo audit` und `cargo deny` dazu, außerdem ein Job, der das Container-Image baut.
+In Schritt 2 kommen `cargo audit` und `cargo deny` dazu, außerdem ein Job, der das Container-Image baut. Der Korpus der Fuzz-Targets läuft im Job `server` als gewöhnlicher Test mit; gefuzzt wird in der CI nicht.
 
 ## Arbeitsweise
 
@@ -175,7 +176,7 @@ Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft
 
 Ergebnis: Der neue Server läuft neben dem alten gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
-- [ ] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse. Dieses Paket zuerst, alle folgenden Abrufe hängen daran.
+- [ ] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse, und ein Property-Test mit `proptest` zeigt, dass die Adressprüfung in keiner Schreibweise eine interne Adresse durchlässt (siehe [Fuzzing](architecture.md#fuzzing)). Dieses Paket zuerst, alle folgenden Abrufe hängen daran.
 - [ ] **2.2 Abruf mit Versionen (A2).** Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden.
 - [ ] **2.3 Bereinigung (A10).** `ammonia` mit Allowlist, die Regeln aus `frontend/src/rueder/helpers/ArticleCleaner.ts`, Listen als Datendateien, Befehl zum erneuten Bereinigen aus `article_versions`. Fertig, wenn die Fälle aus `ArticleCleaner.test.ts` übertragen und grün sind.
 - [ ] **2.4 Bild-Proxy (A11).** Signierte Adressen, Formatprüfung, feste Größen, Cache auf Platte, Grenzen. Vorlage für die heutigen Größen: `frontend/src/rueder/helpers/ImageProxy.ts`. Fertig, wenn Tests falsche Signaturen, Nicht-Bilder, zu große Bilder und interne Adressen ablehnen.
@@ -185,7 +186,8 @@ Ergebnis: Der neue Server läuft neben dem alten gegen echte Feeds. Die API-Test
 - [ ] **2.8 API-Typen für das Frontend.** TypeScript-Typen aus den Rust-Typen erzeugen; die CI prüft, dass die eingecheckten Typen aktuell sind.
 - [ ] **2.9 Härtung (A3).** Content-Security-Policy und weitere Header, Prüfung des `Origin`-Headers, Rate-Limits, Limits je Konto, `cargo audit` und `cargo deny` in der CI.
 - [ ] **2.10 Betrieb.** Container-Image mit Server und Frontend, Compose-Datei mit PostgreSQL, Anleitung zur Installation.
-- [ ] **2.11 Security-Review** gegen die Tabelle in [architecture.md](architecture.md#security). Befunde werden behoben oder mit Begründung dort vermerkt.
+- [ ] **2.11 Fuzzing (A3).** Targets in `server/fuzz/` (`cargo-fuzz`) für Bereinigung, Feed-Verarbeitung und Bild-Proxy mit den Eigenschaften aus [architecture.md](architecture.md#fuzzing), Startkorpus aus `backend/test/data/` und den Fällen der Cleaner-Tests, dazu ein Test, der den Korpus mit stabilem Rust abspielt. Starten mit `cargo +nightly fuzz run <target> -- -max_total_time=1800`. Fertig, wenn jedes Target eine halbe Stunde ohne Fund gelaufen ist, die Funde davor behoben sind und im Korpus liegen und der Korpus-Test in der CI läuft.
+- [ ] **2.12 Security-Review** gegen die Tabelle in [architecture.md](architecture.md#security). Befunde werden behoben oder mit Begründung dort vermerkt.
 
 ### Schritt 3: Frontend
 
@@ -207,7 +209,7 @@ Ergebnis: Die Produktion läuft auf dem neuen rueder, der alte Code ist entfernt
 - [ ] **4.2 Lesestand und Labels aus dem Browser.** Das neue Frontend liest beim ersten Login die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte.
 - [ ] **4.3 Konten.** Umzug der htpasswd-Konten wie in den [Detailfragen](plan.md#detailfragen) entschieden.
 - [ ] **4.4 Parallelbetrieb und Umschalten.** Kurzer Parallelbetrieb, letzter Import, Umschalten des Reverse-Proxy, Weg zurück festhalten.
-- [ ] **4.5 Zweites Security-Review.**
+- [ ] **4.5 Zweites Security-Review.** Davor laufen die Fuzz-Targets aus Paket 2.11 noch einmal, je eine halbe Stunde.
 - [ ] **4.6 Abbau.** `backend/`, `frontend/`, die alten Workflows, Compose-Dateien und `config/` entfernen, README neu schreiben.
 
 ## Import der alten Daten

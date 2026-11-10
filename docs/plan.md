@@ -78,6 +78,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Bild-Proxy | Selbst in Rust: prüfen, cachen, verkleinern mit dem `image`-Crate. Kein imgproxy mehr. | Ein Dienst weniger, dafür eigener Code an einer Angriffsfläche. |
 | User-Agent beim Abruf | Ehrlich als „rueder“, je Feed umstellbar. | Manche Seiten sperren unbekannte Clients. |
 | Oberfläche | Der klickbare Entwurf in `web/` ist abgenommen („sieht perfekt aus“). | Schritt 3 baut ihn aus, statt neu zu entwerfen. |
+| Fuzzing | Ja, gezielt dort, wo eigener Code über Sicherheit entscheidet: Bereinigung, Feed-Verarbeitung und Bild-Proxy bekommen Fuzz-Targets, die Adressprüfung des HTTP-Clients einen Property-Test. Kein Fuzz-Target für jeden Parser. | Arbeitspaket in Schritt 2, läuft vor beiden Security-Reviews. |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
 
@@ -91,7 +92,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft ist, und Messwerte, die die Speicherstrategie bestätigen oder korrigieren.
 
-2. **Backend.** Abruf mit Versionen, Bereinigung mit Filterlisten, Bild-Proxy, Login und Sitzungen, API für Lesen, Lesestand, Ordner und Filterregeln, Live-Updates. Am Ende das Security-Review.
+2. **Backend.** Abruf mit Versionen, Bereinigung mit Filterlisten, Bild-Proxy, Login und Sitzungen, API für Lesen, Lesestand, Ordner und Filterregeln, Live-Updates. Am Ende Fuzzing und das Security-Review.
 
    Ergebnis: Der neue Server läuft neben dem alten gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
@@ -103,7 +104,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: Die Produktion läuft auf dem neuen rueder, der alte Code ist entfernt.
 
-Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) steht am Ende von Schritt 2 und noch einmal vor dem Umstieg.
+Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) steht am Ende von Schritt 2 und noch einmal vor dem Umstieg. Vor beiden wird [gefuzzt](architecture.md#fuzzing).
 
 ## Messziel
 
@@ -125,7 +126,7 @@ Bewusst zurückgestellt, damit der Umstieg nicht daran hängt:
 |---|---|
 | Die Messung an erzeugten Daten trifft die Produktion nicht (andere Verteilung der Feedgrößen und Textlängen). | Der Generator bildet schiefe Verteilungen nach (wenige sehr große Feeds, viele kleine). Vor dem Umstieg läuft der Import einmal zur Probe auf einer Kopie der Produktion, mit denselben Messungen. |
 | Der Lesestand liegt nur in den Browsern der User und geht beim Umstieg verloren. | Das neue Frontend liest beim ersten Login den alten `localStorage` und schickt ihn an den Server (Schritt 4). Dafür muss das neue Frontend unter derselben Adresse (Origin) laufen wie das alte. |
-| Eigener Bild-Proxy und eigener HTTP-Client sind Angriffsflächen. | Je eine zentrale, getestete Komponente, feste Grenzen, zwei Security-Reviews. |
+| Eigener Bild-Proxy und eigener HTTP-Client sind Angriffsflächen. | Je eine zentrale, getestete Komponente, feste Grenzen, Fuzzing, zwei Security-Reviews. |
 | Scheinversionen: Feeds ändern bei jedem Abruf Kleinigkeiten (Werbe-Token, Zeitstempel) und füllen das Archiv. | Prüfsumme über den normalisierten Inhalt, Obergrenze von 20 Versionen je Artikel. |
 | Seiten sperren den ehrlichen User-Agent. | Je Feed umstellbar; Abruffehler sind in der Oberfläche sichtbar. |
 | Der Parallelbetrieb von altem und neuem System belastet die Quellen doppelt. | Bedingte Abrufe (ETag, Last-Modified), kurzer Parallelbetrieb. |
