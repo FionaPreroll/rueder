@@ -1,0 +1,8 @@
+# Only the hardened client in src/http_client.rs reaches out to the internet.
+# Building another one would go around its rules against SSRF.
+disallowed-methods = [
+    { path = "reqwest::Client::new", reason = "use rueder::http_client::HttpClient" },
+    { path = "reqwest::Client::builder", reason = "use rueder::http_client::HttpClient" },
+    { path = "reqwest::ClientBuilder::new", reason = "use rueder::http_client::HttpClient" },
+    { path = "reqwest::get", reason = "use rueder::http_client::HttpClient" },
+]

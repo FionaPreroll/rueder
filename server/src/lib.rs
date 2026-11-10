@@ -1,5 +1,6 @@
 pub mod articles;
 pub mod bench;
+pub mod http_client;
 pub mod import;
 pub mod reading;
 

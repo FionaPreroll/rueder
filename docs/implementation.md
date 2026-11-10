@@ -31,19 +31,19 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 |---|---|---|
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
 | 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
-| 2 Backend | Offen | |
+| 2 Backend | Begonnen am 2026-11-10: Paket 2.1 (gehärteter HTTP-Client) ist fertig | `server/src/http_client.rs` |
 | 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
 | 4 Umstieg | Offen | |
 
 Was es heute gibt:
 
 - `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank und dem Mess-Werkzeug. 37 Tests gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug und dem gehärteten HTTP-Client, den noch nichts benutzt. 62 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
 - Das alte System in `backend/` und `frontend/`, unverändert und lauffähig.
 
-Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das ist Schritt 2.
+Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das ist der Rest von Schritt 2, als Nächstes Paket 2.2.
 
 ## Repository
 
@@ -74,7 +74,7 @@ Der alte Code wird nicht mehr weiterentwickelt, nur noch gelesen: als Vorlage f�
 - `sqlx` mit PostgreSQL, ohne ORM. Abfragen mit `sqlx::query!` und Verwandten, beim Kompilieren gegen das Schema geprüft. Der Cache in `server/.sqlx/` wird eingecheckt; die CI baut mit `SQLX_OFFLINE=true`.
 - Migrationen als `server/migrations/000N_name.sql`, angewendet beim Start. Eine Migration, die auf `main` liegt, wird nicht mehr geändert, Änderungen kommen als neue Datei.
 - Kein `unsafe`: Das Crate verbietet es (`[lints.rust]` in `Cargo.toml`). Was von außen kommt (Anfragen, Feeds, die alte Datenbank), darf den Server nicht zum Absturz bringen: kein `unwrap`, `expect` oder `panic!` darauf außerhalb von Tests.
-- `reqwest` mit `rustls` für alle Abrufe nach außen, nur über den gehärteten Client.
+- `reqwest` mit `rustls` für alle Abrufe nach außen, nur über den gehärteten Client (`rueder::http_client::HttpClient`). `server/clippy.toml` lässt den Bau eines anderen `reqwest`-Clients scheitern.
 - `argon2` für Passwörter, `time` für Zeiten, `uuid` für die alten IDs, `anyhow` für Fehler im Inneren. Nach außen ein Fehlertyp mit festen Antworten (nicht gefunden, ungültige Anfrage, intern), der keine Interna verrät.
 - Konfiguration über Umgebungsvariablen, lokal aus `server/.env` (Vorlage `server/.env.example`).
 - Tests: Integrationstests in `server/tests/` mit `#[sqlx::test]`, das je Test eine frische Datenbank anlegt. Property-Tests mit `proptest`, wo ein einfaches Modell als Vergleich taugt (Lesestand, Baum). Der Test des Imports braucht keine zweite Datenbank: Die nachgebaute alte Datenbank liegt in einem eigenen Schema (`legacy`) der Testdatenbank, und der Import liest sie über eine Verbindung mit diesem `search_path`.
@@ -174,10 +174,10 @@ Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft
 
 ### Schritt 2: Backend
 
-Ergebnis: Der neue Server läuft neben dem alten gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
+Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
-- [ ] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse, und ein Property-Test mit `proptest` zeigt, dass die Adressprüfung in keiner Schreibweise eine interne Adresse durchlässt (siehe [Fuzzing](architecture.md#fuzzing)). Dieses Paket zuerst, alle folgenden Abrufe hängen daran.
-- [ ] **2.2 Abruf mit Versionen (A2).** Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden.
+- [x] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse, und ein Property-Test mit `proptest` zeigt, dass die Adressprüfung in keiner Schreibweise eine interne Adresse durchlässt (siehe [Fuzzing](architecture.md#fuzzing)). Dieses Paket zuerst, alle folgenden Abrufe hängen daran. Fertig am 2026-11-10, beschrieben unter [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client). Dazugekommen ist eine Ausnahme, mit der ein Betreiber einzelne interne Netze freigibt. Nicht im Test: TLS gegen echte Server, das zeigt sich mit dem ersten echten Abruf in Paket 2.2.
+- [ ] **2.2 Abruf mit Versionen (A2).** Der HTTP-Client wird in `serve` einmal gebaut, mit den freigegebenen Netzen des Betreibers aus der Umgebung. Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden.
 - [ ] **2.3 Bereinigung (A10).** `ammonia` mit Allowlist, die Regeln aus `frontend/src/rueder/helpers/ArticleCleaner.ts`, Listen als Datendateien, Befehl zum erneuten Bereinigen aus `article_versions`. Fertig, wenn die Fälle aus `ArticleCleaner.test.ts` übertragen und grün sind.
 - [ ] **2.4 Bild-Proxy (A11).** Signierte Adressen, Formatprüfung, feste Größen, Cache auf Platte, Grenzen. Vorlage für die heutigen Größen: `frontend/src/rueder/helpers/ImageProxy.ts`. Fertig, wenn Tests falsche Signaturen, Nicht-Bilder, zu große Bilder und interne Adressen ablehnen.
 - [ ] **2.5 Konten und Sitzungen (A3).** Argon2id, Sitzungs-Cookie, Login mit Rate-Limit, Befehle zum Anlegen von Konten und Setzen von Passwörtern, danach OpenID Connect. Fertig, wenn Tests Login, Ablauf, Abmelden und die Cookie-Attribute prüfen.
@@ -191,7 +191,7 @@ Ergebnis: Der neue Server läuft neben dem alten gegen echte Feeds. Die API-Test
 
 ### Schritt 3: Frontend
 
-Ergebnis: rueder ist auf der importierten Datenbank täglich benutzbar.
+Ergebnis: rueder ist täglich benutzbar.
 
 - [ ] **3.1 Anbindung.** Eine Fassung der Klasse `Reader`, die aus der API liest und schreibt, an Stelle von `web/src/lib/demo/reader.svelte.ts`. Änderungen am Lesestand wirken sofort und werden bei Ablehnung zurückgenommen. Dazu die Login-Seite. Die erfundenen Daten bleiben für Tests und die Ein-Datei-Fassung.
 - [ ] **3.2 Live-Updates (A6).** SSE-Verbindung, Hinweis „N neue Artikel“, Lesestand von anderen Geräten, Wiederverbinden und Neuabgleich.
@@ -203,14 +203,17 @@ Ergebnis: rueder ist auf der importierten Datenbank täglich benutzbar.
 
 ### Schritt 4: Umstieg
 
-Ergebnis: Die Produktion läuft auf dem neuen rueder, der alte Code ist entfernt.
+Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
 
-- [ ] **4.1 Probelauf.** Import einer Kopie der Produktion, dieselben Messungen wie in Schritt 1, Dauer des Imports notieren.
-- [ ] **4.2 Lesestand und Labels aus dem Browser.** Das neue Frontend liest beim ersten Login die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte.
-- [ ] **4.3 Konten.** Umzug der htpasswd-Konten wie in den [Detailfragen](plan.md#detailfragen) entschieden.
-- [ ] **4.4 Parallelbetrieb und Umschalten.** Kurzer Parallelbetrieb, letzter Import, Umschalten des Reverse-Proxy, Weg zurück festhalten.
-- [ ] **4.5 Zweites Security-Review.** Davor laufen die Fuzz-Targets aus Paket 2.11 noch einmal, je eine halbe Stunde.
-- [ ] **4.6 Abbau.** `backend/`, `frontend/`, die alten Workflows, Compose-Dateien und `config/` entfernen, README neu schreiben.
+Es gibt keinen Parallelbetrieb: Die alte Produktion ist abgeschaltet, ihre Daten liegen in einem Backup. Der neue rueder geht ohne alte Daten in Betrieb, die alten Daten kommen später einmalig dazu (Entscheidung vom 2026-11-10, siehe [plan.md](plan.md#entscheidungen)).
+
+- [ ] **4.1 Zweites Security-Review** vor der Inbetriebnahme. Davor laufen die Fuzz-Targets aus Paket 2.11 noch einmal, je eine halbe Stunde.
+- [ ] **4.2 Inbetriebnahme.** Der neue rueder läuft in der Produktion, mit neu angelegten Konten und neu abonnierten Feeds. Backup der neuen Datenbank einrichten.
+- [ ] **4.3 Import in den laufenden Bestand.** Den Import so erweitern, dass er alte Daten mit Konten, Feeds und Artikeln zusammenführt, die es schon gibt, wie unter [Einmaliger Import in den laufenden Bestand](#einmaliger-import-in-den-laufenden-bestand) beschrieben. Fertig, wenn ein Test eine nachgebaute alte Datenbank in eine Datenbank importiert, die schon Konten, Abos, Artikel und Lesestand hat, und Reihenfolge, Nummern, Lesestand, Ordner und Abos prüft, auch für ein Konto unter anderem Namen.
+- [ ] **4.4 Probelauf.** Das Backup der alten Produktion in ein PostgreSQL einspielen und in eine Kopie der neuen Produktion importieren. Dieselben Messungen wie in Schritt 1, Dauer des Imports notieren.
+- [ ] **4.5 Einmaliger Import in der Produktion.** Server anhalten, Backup, Import, Start. Weg zurück festhalten (das Backup von davor).
+- [ ] **4.6 Lesestand und Labels aus dem Browser.** Das neue Frontend liest nach dem Import die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte und der Browser den Speicher noch hat. Weil der Import nach der Inbetriebnahme kommt, bietet das Frontend die Übernahme an, sobald das Konto importierte Daten hat, nicht beim ersten Login.
+- [ ] **4.7 Abbau.** `backend/`, `frontend/`, die alten Workflows, Compose-Dateien und `config/` entfernen, README neu schreiben.
 
 ## Import der alten Daten
 
@@ -224,23 +227,37 @@ Die alte Datenbank ist PostgreSQL, das Schema steht in `backend/migrations/` (Fi
 | `user_feeds` (`user_id`, `feed_id`) | `subscriptions` | Ein Abo, das in keinem Ordner steht, landet auf oberster Ebene hinter den Ordnern. |
 | `user_states` | nichts | Die Tabelle wird vom alten System nicht benutzt. Der Import meldet, wenn sie Zeilen enthält. |
 | `labels` | nichts | Im alten Go-Code gibt es kein Modell dazu, die Labels liegen im Browser. Der Import meldet, wenn die Tabelle Zeilen enthält. |
-| `localStorage` im Browser: `feedstate`, `labels` | Lesemarke, Ausnahmen, `labels`, `article_labels` | Nicht Teil des Imports, sondern von Paket 4.2. `readAllUntil` wird die Lesemarke, `readArticles` (Nummern im Feed) werden Ausnahmen, Artikel von Labels werden über ihre UUID (`legacy_id`) gefunden. |
+| `localStorage` im Browser: `feedstate`, `labels` | Lesemarke, Ausnahmen, `labels`, `article_labels` | Nicht Teil des Imports, sondern von Paket 4.6. `readAllUntil` wird die Lesemarke, `readArticles` (Nummern im Feed) werden Ausnahmen, Artikel von Labels werden über ihre UUID (`legacy_id`) gefunden. |
 
 Nach dem Import und vor der Übernahme aus dem Browser hat ein Konto keinen Lesestand. Gebaut ist der Vorschlag: Der Import setzt die Lesemarke jedes neuen Abos auf `last_seq` (nichts ist ungelesen), und die Übernahme aus dem Browser setzt den genauen Stand einmalig. Wer keinen alten Browser-Speicher mehr hat, beginnt dann mit null ungelesenen Artikeln statt mit zehntausenden.
 
 ### Wiederholung
 
-Der Import lässt sich beliebig oft starten: einmal zum Ausprobieren, noch einmal direkt vor dem Umschalten, und nach einem Abbruch einfach erneut.
+So ist der Import heute gebaut. Gebraucht wird davon nur noch der Neustart nach einem Abbruch: Seit der Entscheidung vom 2026-11-10 gibt es keinen Parallelbetrieb und nur einen einmaligen Import (siehe [unten](#einmaliger-import-in-den-laufenden-bestand)).
+
+Der Import lässt sich beliebig oft starten: einmal zum Ausprobieren und nach einem Abbruch einfach erneut.
 
 - Ein Lauf fügt nur hinzu, was der neuen Datenbank fehlt, erkannt an den alten UUIDs: Feeds, Artikel, Konten und Abos. Er ändert und löscht nichts, was schon da ist. Umbenannte Feeds, verschobene Abos und der Lesestand bleiben.
 - Neue Artikel eines bekannten Feeds werden hinten angehängt und sind für bestehende Abos ungelesen.
 - Der Baum eines Kontos wird nur beim Anlegen des Kontos übernommen. Abonniert ein schon importierter User im alten rueder später einen weiteren Feed, kommt das Abo ans Ende der obersten Ebene, auch wenn es im alten rueder in einem Ordner liegt.
 - Geschrieben wird in kleinen Transaktionen (2.000 Artikel). Fügt währenddessen jemand anderes Artikel in einen Feed ein, bricht der Import mit einem Hinweis ab; der neue Server sollte beim Import nicht abrufen.
-- Hat der neue rueder zwischen zwei Läufen selbst abgerufen (Parallelbetrieb, Paket 4.4), erkennt der Import Artikel, die es schon gibt, an ihrer Kennung im Feed und legt sie nicht doppelt an. Später importierte Artikel stehen dann hinter den selbst abgerufenen. In so einem Feed können die Nummern von denen des alten rueder abweichen, und der Lesestand aus dem Browser (Paket 4.2) passt für ihn nicht mehr. Der Import nennt diese Feeds am Ende. Wer das vermeiden will, lässt den neuen rueder im Parallelbetrieb nicht abrufen oder übernimmt den Lesestand vorher.
+- Hat der neue rueder zwischen zwei Läufen selbst abgerufen, erkennt der Import Artikel, die es schon gibt, an ihrer Kennung im Feed und legt sie nicht doppelt an. Später importierte Artikel stehen dann hinter den selbst abgerufenen, also in der falschen Reihenfolge, und die Nummern weichen von denen des alten rueder ab. Der Import nennt diese Feeds am Ende. Für den einmaligen Import in den laufenden Bestand reicht das nicht; Paket 4.3 ändert es.
 
 Am Ende gibt der Import aus, was er hinzugefügt und was er ausgelassen hat: Feeds ohne Adresse, Abos auf Feeds, die es nicht gibt, Artikel und Ordner, deren JSON er nicht lesen konnte (sie kommen ohne Text beziehungsweise ohne Ordner), geänderte Login-Namen, und ob `user_states` oder `labels` Zeilen enthalten.
 
-Gemessen am 2026-11-10 an einer nachgebauten alten Datenbank mit 1 Million Artikeln (1,4 GB): 3 Minuten 50 Sekunden, also rund 4.300 Artikel je Sekunde und hochgerechnet etwa 40 Minuten für 10 Millionen. Ein zweiter Lauf ohne Neues dauert 35 Sekunden. Das Ergebnis stimmte in Nummern, Reihenfolge, Titeln und Texten aller Artikel mit der Quelle überein (Prüfsumme über beide Datenbanken). Die Dauer an echten Daten gehört zu Paket 4.1.
+Gemessen am 2026-11-10 an einer nachgebauten alten Datenbank mit 1 Million Artikeln (1,4 GB): 3 Minuten 50 Sekunden, also rund 4.300 Artikel je Sekunde und hochgerechnet etwa 40 Minuten für 10 Millionen. Ein zweiter Lauf ohne Neues dauert 35 Sekunden. Das Ergebnis stimmte in Nummern, Reihenfolge, Titeln und Texten aller Artikel mit der Quelle überein (Prüfsumme über beide Datenbanken). Die Dauer an echten Daten gehört zu Paket 4.4.
+
+### Einmaliger Import in den laufenden Bestand
+
+Geplant, noch nicht gebaut (Paket 4.3). Der neue rueder läuft schon, mit neuen Konten und Feeds, wenn die alten Daten aus dem Backup dazukommen. Der heutige Import erkennt Bekanntes nur an den alten UUIDs und hängt Artikel hinten an. Für diesen Fall gilt stattdessen:
+
+- **Ablauf.** Das Backup der alten Produktion wird in ein PostgreSQL eingespielt, das der Import erreicht. Der neue Server steht während des Imports, davor gibt es ein Backup der neuen Datenbank. Ein Lauf mit `--dry-run` zeigt vorab, welche Konten und Feeds zusammengeführt und welche neu angelegt würden.
+- **Feeds.** Ein alter Feed wird mit einem vorhandenen zusammengeführt, wenn die Adresse gleich ist. Der vorhandene behält Titel, Intervall und Abrufstand und bekommt die alte UUID. Alle anderen Feeds kommen neu dazu.
+- **Artikel eines zusammengeführten Feeds.** Die alten Artikel sind älter als alles, was der neue rueder abgerufen hat, und müssen in den Listen davor stehen. Sie bekommen deshalb die Nummern 1 bis n in ihrer alten Reihenfolge und IDs unterhalb aller vorhandenen. Die vorhandenen Artikel des Feeds rücken um n nach hinten, zusammen mit Lesemarken, Ausnahmen und Labels ihrer Abonnenten. Das ist die einzige Stelle, an der vergebene Nummern sich ändern; sie ist vertretbar, weil der Server steht und es einmal geschieht. Ein Artikel, den beide Seiten haben (gleiche Kennung im Feed), bleibt, wie der neue rueder ihn hat, und wird nicht doppelt angelegt. Seine alte UUID zeigt danach auf ihn.
+- **Konten.** Ein alter User wird mit dem Konto gleichen Namens zusammengeführt (Groß- und Kleinschreibung zählt nicht) oder mit dem Konto, das der Aufruf nennt: `--account <alter Name>=<neuer Name>`, mehrfach möglich. Alte User ohne Gegenstück bekommen ein neues Konto ohne Passwort.
+- **Ordner und Abos beim Zusammenführen.** Was das Konto im neuen rueder eingerichtet hat, bleibt: Ein Abo, das es schon hat, behält Ordner, Titel und Platz. Die übrigen alten Abos kommen mit ihren alten Ordnern dazu; ein alter Ordner, den es auf oberster Ebene mit gleichem Titel schon gibt, geht in diesem auf.
+- **Lesestand.** Alte Artikel gelten als gelesen, bis der Stand aus dem Browser kommt (Paket 4.6). Für ein vorhandenes Abo rückt der Lesestand nur mit den Nummern mit. Bei einem Abo, das der Import neu anlegt, steht die Lesemarke am Ende der alten Artikel: Was der neue rueder seither für andere abgerufen hat, ist ungelesen.
+- **Zuordnung für den Browser.** Der alte Browser-Speicher nennt Artikel mit ihrer alten Nummer im Feed. Wo Artikel doppelt waren, stimmt sie nicht mehr mit der neuen überein. `legacy_articles` bekommt deshalb die alte Nummer als Spalte, in einer neuen Migration.
 
 ## Messung
 
@@ -279,7 +296,7 @@ Alle Abfragen bleiben unter 50 ms, auch im 99. Perzentil und auch direkt nach ei
 
 Die ersten drei Spalten sind 10 Millionen Artikel mit warmem Cache. „Nach Neustart“ ist dieselbe Datenbank nach einem Neustart von PostgreSQL mit geleertem Cache des Betriebssystems. Einzelne Läufe lagen über dem Ziel, wenn eine Seite erst von der Platte kam: Der langsamste von 21.000 Läufen brauchte 139 ms.
 
-**Zehnfache Artikelzahl:** 100 Millionen Artikel brauchen rund 180 GB, die Messmaschine hat 30 GB Platte. Statt nach oben wurde deshalb nach unten verglichen: Dieselben Abfragen brauchen bei 1 Million und bei 10 Millionen Artikeln gleich lang (die beiden rechten Spalten gegen die linken). Die Abfragen lesen je Feed und je Zeile der Seite eine feste Zahl von Indexseiten, die Tiefe des Index wächst mit dem Zehnfachen um höchstens eine Ebene. Die Wiederholung mit mehr Daten gehört zum Probelauf auf einer Kopie der Produktion (Paket 4.1).
+**Zehnfache Artikelzahl:** 100 Millionen Artikel brauchen rund 180 GB, die Messmaschine hat 30 GB Platte. Statt nach oben wurde deshalb nach unten verglichen: Dieselben Abfragen brauchen bei 1 Million und bei 10 Millionen Artikeln gleich lang (die beiden rechten Spalten gegen die linken). Die Abfragen lesen je Feed und je Zeile der Seite eine feste Zahl von Indexseiten, die Tiefe des Index wächst mit dem Zehnfachen um höchstens eine Ebene. Die Wiederholung mit mehr Daten gehört zum Probelauf auf einer Kopie der Produktion (Paket 4.4).
 
 Größe auf der Platte bei 10 Millionen Artikeln, zusammen 18 GB:
 
@@ -300,7 +317,7 @@ Die erzeugten Texte sind Zufallszeichen und lassen sich kaum komprimieren. Echte
 - **Der Lesestand wird je Zeile nachgeschlagen**, nicht mit allen Zuständen des Kontos verbunden. Für ein Konto mit zehntausenden Sternen und ausgeblendeten Artikeln kostet eine Seite deshalb nicht mehr als für jedes andere.
 - **Ungelesen-Zahlen** brauchen 7 ms für alle Feeds eines Kontos und werden aus Lesemarke und Ausnahmen berechnet, wie geplant. Verdichten hält die Ausnahmen klein: Je Abo sind es im Schnitt 54.
 - **Alte Versionen stören nicht.** Das Öffnen eines Artikels liest nur `articles` und `article_content` über ihre Primärschlüssel und ist bei jedem Alter gleich schnell.
-- **Nicht gemessen:** der Index für eine Volltextsuche (Detailfrage in [plan.md](plan.md#detailfragen)). Das gehört zu Paket 2.6, bevor die Suche gebaut wird. Ebenfalls offen ist die Messung an echten Daten (Paket 4.1).
+- **Nicht gemessen:** der Index für eine Volltextsuche (Detailfrage in [plan.md](plan.md#detailfragen)). Das gehört zu Paket 2.6, bevor die Suche gebaut wird. Ebenfalls offen ist die Messung an echten Daten (Paket 4.4).
 - **Reserve, falls es später eng wird:** Die Übersetzung der Lesemarke und die wieder ungelesenen Artikel unter der Marke kosten je Feed einen Zugriff auf die Tabelle. Ein Index auf `(feed_id, seq)`, der die ID mitführt, würde ihn sparen. Bei den gemessenen Zeiten lohnt das den größeren Index nicht.
 
 ## Wissen über das Altsystem
