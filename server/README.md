@@ -14,12 +14,15 @@ What is here:
   serves the lists of a feed, a folder and all feeds.
 - What an account has read (`src/reading.rs`): a mark per subscription plus the
   exceptions; unread counts are worked out from them, never stored.
+- The import of the old rueder's database (`src/import.rs`): feeds, articles,
+  accounts, folders and subscriptions. It only adds what is missing, so it can
+  run more than once.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
 - `GET /api/health`, and the built frontend from `../web/build`.
 
-Still to come in this step: the import of the old database. Fetching, cleaning,
-login and the rest of the API follow in step 2.
+This is step 1 of the plan. Fetching, cleaning, login and the rest of the API
+follow in step 2.
 
 ## Commands
 
@@ -41,6 +44,18 @@ with `cargo install sqlx-cli`.
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 (default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).
 
+## Importing the old database
+
+```sh
+cargo run --release -- import-legacy --from postgres://user:password@host/rueder
+```
+
+The old database is only read. The address can also come from
+`LEGACY_DATABASE_URL`. Stop the new server's fetching while the import runs. At
+the end it prints what it added and what it left out. What it brings over and
+what a second run does is in
+[docs/implementation.md](../docs/implementation.md#import-der-alten-daten).
+
 ## Measuring
 
 ```sh
@@ -49,5 +64,7 @@ cargo run --release -- bench measure    # times the queries, prints a table
 ```
 
 `bench generate` wants an empty database and takes `--accounts`, `--feeds` and
-`--articles`. Results and how they were measured are in
+`--articles`; 10 million articles take about 17 minutes and 18 GB. `bench measure`
+puts back what its writing queries changed, so it can run again. Results and how
+they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).

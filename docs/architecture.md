@@ -2,7 +2,7 @@
 
 Stand 2026-11-10. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
 
-Der Server existiert noch nicht. Was hier steht, ist der Entwurf, nach dem gebaut wird. Sobald ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Lesestand, Filterregeln und Ordnerbaum heute schon die Modelle in `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
+Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand und der Import. Alles andere hier ist der Entwurf, nach dem gebaut wird. Sobald ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für Filterregeln und Ordnerbaum die Modelle in `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
 
 - [Überblick](#überblick)
 - [Bausteine](#bausteine)
@@ -73,7 +73,7 @@ Das Programm hat Unterbefehle: `rueder serve` (Standard) startet Server und Abru
 
 ## Datenmodell
 
-Die Tabellen im Überblick. Die genauen Spalten legt die erste Migration fest (Schritt 1); Abweichungen von dieser Liste werden hier nachgetragen.
+Die Tabellen im Überblick. Die genauen Spalten stehen in der ersten Migration, `server/migrations/0001_initial.sql`.
 
 | Bereich | Tabellen | Idee |
 |---|---|---|
@@ -85,7 +85,7 @@ Die Tabellen im Überblick. Die genauen Spalten legt die erste Migration fest (S
 | Regeln | `filter_rules` | Filterregeln je Konto, siehe [Filterregeln](#filterregeln). |
 | Labels | `labels`, `article_labels` | Labels mit Farbe je Konto und ihre Zuordnung zu Artikeln. Der Stern ist kein Label, sondern eine Ausnahme in `article_states`. |
 
-Schlüssel sind fortlaufende Zahlen (`bigint`), keine UUIDs: Sie halten Zeilen und Indizes schmal, und neue Artikel liegen im Index beieinander. Feeds, Artikel und Konten behalten ihre alte UUID in einer Spalte `legacy_id`, damit der Import wiederholbar ist und der Lesestand aus dem Browser zugeordnet werden kann.
+Schlüssel sind fortlaufende Zahlen (`bigint`), keine UUIDs: Sie halten Zeilen und Indizes schmal, und neue Artikel liegen im Index beieinander. Feeds und Konten behalten ihre alte UUID in einer Spalte `legacy_id`, Artikel in der Tabelle `legacy_articles`, damit der Import wiederholbar ist und Lesestand und Labels aus dem Browser zugeordnet werden können. Die Tabelle statt einer Spalte hält die heiße Artikeltabelle schmal und kann nach dem Umstieg weg.
 
 ## Artikelspeicher und Versionen
 
@@ -111,10 +111,10 @@ Regeln, auf die sich der Rest verlässt:
 - **Nummern sind lückenlos und werden nie neu vergeben.** Ein Feed vergibt `last_seq + 1` in derselben Transaktion, in der der Artikel eingefügt wird; je Feed läuft immer nur ein Abruf. Die Ungelesen-Zahl rechnet mit `last_seq`, eine Lücke würde als ungelesener Artikel zählen.
 - **Ein Artikel wird über seine Kennung im Feed wiedererkannt** (GUID, ersatzweise der Link), eindeutig je Feed.
 - **Eine neue Version ändert den Lesestand nicht.** Der Artikel bleibt gelesen; die heiße Zeile bekommt die neue Versionsnummer und den Zeitpunkt, daraus macht die Oberfläche den Hinweis „aktualisiert“.
-- **Höchstens 20 Versionen je Artikel.** Was bei der 21. geschieht, ist eine [offene Detailfrage](plan.md#offene-detailfragen).
+- **Höchstens 20 Versionen je Artikel.** Bei der 21. bleiben die Erstfassung und die 19 neuesten, die zweitälteste fällt weg.
 - **Partitionen entstehen im Voraus.** Der Server legt beim Start und danach regelmäßig die Partitionen für den laufenden und den nächsten Monat an.
 
-Gemischte Listen (ein Ordner, „Alle Artikel“) brauchen eine Reihenfolge über Feeds hinweg. Das ist die Reihenfolge des Eintreffens, also die fortlaufende ID des Artikels; innerhalb eines Feeds stimmt sie mit `seq` überein. Die Abfrage holt je Feed die obersten Zeilen über den Index und führt sie zusammen. Ob das bei 300 Feeds unter dem [Messziel](plan.md#messziel) bleibt und welche Indizes es dafür braucht, klärt die Messung in Schritt 1.
+Gemischte Listen (ein Ordner, „Alle Artikel“) brauchen eine Reihenfolge über Feeds hinweg. Das ist die Reihenfolge des Eintreffens, also die fortlaufende ID des Artikels; innerhalb eines Feeds stimmt sie mit `seq` überein. Die Abfrage führt die Feeds zusammen wie sortierte Listen: Der Index `(feed_id, id)` liefert je Feed den neuesten passenden Artikel, der neueste davon kommt auf die Seite, und sein Feed liefert den nächsten. Das kostet einen Schritt in den Index je Feed und einen je Zeile der Seite, unabhängig von der Größe der Feeds. Bei „nur ungelesen“ ist die Lesemarke jedes Abos eine Untergrenze, unter der der Index nicht gelesen wird; wieder ungelesene Artikel unter der Marke kommen aus `article_states` dazu. Ein Feed, ein Ordner und alle Feeds sind dieselbe Abfrage. Bei 300 Feeds und 10 Millionen Artikeln bleibt sie mit 18 ms im 99. Perzentil unter dem [Messziel](plan.md#messziel), siehe [Messung](implementation.md#messung).
 
 Beim Import wird der heutige Text jedes Artikels zu Version 1. Die laufenden Nummern werden so vergeben, wie das alte System sie heute bei jeder Abfrage berechnet (`row_number() over (partition by feed_id order by seq)`), damit der Lesestand aus dem Browser weiter passt.
 
@@ -235,7 +235,7 @@ Ereignisse tragen fortlaufende Nummern. Nach einem Verbindungsabbruch meldet sic
 - Das Frontend sieht nie ein Token. JWTs entfallen.
 - Rate-Limit auf dem Login je Konto und je Adresse.
 
-Wie die bestehenden Konten umziehen, steht bei den [offenen Detailfragen](plan.md#offene-detailfragen).
+Wie die bestehenden Konten umziehen, steht bei den [Detailfragen](plan.md#detailfragen): Der Import legt sie ohne Passwort an und verknüpft sie über den alten Login-Namen.
 
 ## Security
 

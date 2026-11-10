@@ -23,14 +23,14 @@ Wer ein Arbeitspaket abschließt, hakt es hier ab und trägt den Stand nach, im 
 3. Den Entwurf der Oberfläche starten und durchklicken: `cd web && pnpm install && pnpm dev`. Er zeigt, was der Server am Ende können muss.
 4. In der Tabelle [Stand](#stand) den laufenden Schritt suchen und unter [Arbeitspakete](#arbeitspakete) das nächste offene Paket nehmen. Jedes Paket nennt, woran man erkennt, dass es fertig ist, und wo im alten Code die Vorlage liegt.
 
-Fachliche Entscheidungen trifft Fiona. Die [offenen Detailfragen](plan.md#offene-detailfragen) haben je einen Vorschlag, nach dem gebaut wird, bis anders entschieden ist.
+Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) sind nach den Vorschlägen entschieden.
 
 ## Stand
 
 | Schritt | Stand | Wo |
 |---|---|---|
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
-| 1 Fundament und Daten | In Arbeit seit 2026-11-10 | `server/` (entsteht) |
+| 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
 | 2 Backend | Offen | |
 | 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
 | 4 Umstieg | Offen | |
@@ -38,19 +38,22 @@ Fachliche Entscheidungen trifft Fiona. Die [offenen Detailfragen](plan.md#offene
 Was es heute gibt:
 
 - `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `docs/`: Plan, Architektur und dieses Dokument.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank und dem Mess-Werkzeug. 37 Tests gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
+- `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
+- `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
 - Das alte System in `backend/` und `frontend/`, unverändert und lauffähig.
 
-Was es noch nicht gibt: den Rust-Server, das neue Schema, das Importprogramm, Messwerte.
+Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das ist Schritt 2.
 
 ## Repository
 
 | Pfad | Was |
 |---|---|
-| `server/` | Neu, entsteht in Schritt 1. Rust: HTTP-Server mit `axum`, `sqlx` und PostgreSQL. Dasselbe Programm hat die Kommandozeile (Import, Konten, Messdaten). |
+| `server/` | Neu. Rust: HTTP-Server mit `axum`, `sqlx` und PostgreSQL. Dasselbe Programm hat die Kommandozeile (Import, Messdaten, später Konten). Siehe [server/README.md](../server/README.md). |
+| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `import.rs` Import der alten Datenbank, `bench.rs` Messdaten und Messung, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
 | `server/migrations/` | SQL-Migrationen, laufen beim Start von selbst. |
 | `server/.sqlx/` | Cache der geprüften Abfragen, damit das Programm ohne Datenbank baut (`cargo sqlx prepare`). |
-| `server/tests/` | Integrationstests gegen PostgreSQL, Fixtures in `tests/fixtures/`. |
+| `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/`. |
 | `web/` | Neu. SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
 | `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`), erfundene Daten (`demo/`). |
 | `docs/` | Diese Dokumente. `user_data.md` beschreibt die Daten des alten Frontends im Browser. |
@@ -68,11 +71,12 @@ Der alte Code wird nicht mehr weiterentwickelt, nur noch gelesen: als Vorlage f�
 - Rust stable, Edition 2024. Ein Crate, ein Programm mit Unterbefehlen (`clap`), `serve` ist der Standard.
 - `axum` auf `tokio`, `tower-http` für statische Dateien und Tracing, `tracing` für Logs.
 - `sqlx` mit PostgreSQL, ohne ORM. Abfragen mit `sqlx::query!` und Verwandten, beim Kompilieren gegen das Schema geprüft. Der Cache in `server/.sqlx/` wird eingecheckt; die CI baut mit `SQLX_OFFLINE=true`.
-- Migrationen als `server/migrations/000N_name.sql`, angewendet beim Start. Eine veröffentlichte Migration wird nicht mehr geändert, Änderungen kommen als neue Datei.
+- Migrationen als `server/migrations/000N_name.sql`, angewendet beim Start. Eine Migration, die auf `main` liegt, wird nicht mehr geändert, Änderungen kommen als neue Datei.
+- Kein `unsafe`: Das Crate verbietet es (`[lints.rust]` in `Cargo.toml`). Was von außen kommt (Anfragen, Feeds, die alte Datenbank), darf den Server nicht zum Absturz bringen: kein `unwrap`, `expect` oder `panic!` darauf außerhalb von Tests.
 - `reqwest` mit `rustls` für alle Abrufe nach außen, nur über den gehärteten Client.
 - `argon2` für Passwörter, `time` für Zeiten, `uuid` für die alten IDs, `anyhow` für Fehler im Inneren. Nach außen ein Fehlertyp mit festen Antworten (nicht gefunden, ungültige Anfrage, intern), der keine Interna verrät.
 - Konfiguration über Umgebungsvariablen, lokal aus `server/.env` (Vorlage `server/.env.example`).
-- Tests: Integrationstests in `server/tests/` mit `#[sqlx::test]`, das je Test eine frische Datenbank anlegt. Property-Tests mit `proptest`, wo ein einfaches Modell als Vergleich taugt (Lesestand, Baum). Tests, die eine zweite Datenbank brauchen (Import), laufen nur, wenn deren Variable gesetzt ist; die CI setzt sie.
+- Tests: Integrationstests in `server/tests/` mit `#[sqlx::test]`, das je Test eine frische Datenbank anlegt. Property-Tests mit `proptest`, wo ein einfaches Modell als Vergleich taugt (Lesestand, Baum). Der Test des Imports braucht keine zweite Datenbank: Die nachgebaute alte Datenbank liegt in einem eigenen Schema (`legacy`) der Testdatenbank, und der Import liest sie über eine Verbindung mit diesem `search_path`.
 - Checks: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, Tests mit Abdeckung (`cargo llvm-cov`).
 
 ### Frontend (web/)
@@ -109,15 +113,23 @@ pnpm build:single    # die ganze Anwendung als eine build/index.html
 
 `pnpm build:single` packt alles in eine HTML-Datei, die ohne Server läuft. Die CI hängt sie an jeden Lauf als Artefakt `rueder-ui-draft`; so lässt sich ein Stand der Oberfläche herumreichen.
 
-Der Server, sobald Schritt 1 ihn angelegt hat (die Befehle werden dann hier bestätigt):
+Der Server:
 
 ```sh
-cp server/.env.example server/.env   # DATABASE_URL und weitere Einstellungen
+cp server/.env.example server/.env   # DATABASE_URL
 cd server
-cargo run                            # wendet Migrationen an, startet API und Abruf
-cargo test                           # braucht eine erreichbare PostgreSQL
+cargo run                            # wendet Migrationen an, lauscht auf http://127.0.0.1:3000
+cargo test                           # legt je Test eine Datenbank auf dem Server aus DATABASE_URL an
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo sqlx prepare -- --all-targets  # nach jeder geänderten Abfrage: Cache in .sqlx/ erneuern
+
+cargo run --release -- import-legacy --from postgres://user:passwort@host/rueder   # alte Datenbank übernehmen
+cargo run --release -- bench generate   # 10 Konten, 300 Feeds, 10 Millionen Artikel in eine leere Datenbank
+cargo run --release -- bench measure    # misst die Abfragen und gibt die Tabellen aus
 ```
+
+Abfragen werden beim Kompilieren gegen die Datenbank aus `DATABASE_URL` geprüft; sie muss dafür das Schema haben (einmal `cargo run`), oder der Build nutzt mit `SQLX_OFFLINE=true` den Cache in `.sqlx/`, wie die CI. `cargo sqlx` kommt mit `cargo install sqlx-cli`. Das Konto der Datenbank muss Datenbanken anlegen dürfen, sonst laufen die Tests nicht.
 
 Das alte System startet wie im [README](../README.md) beschrieben.
 
@@ -126,7 +138,7 @@ Das alte System startet wie im [README](../README.md) beschrieben.
 | Workflow | Was er prüft |
 |---|---|
 | `ci.yml`, Job `web` | Neues Frontend: Lint, svelte-check, Tests mit Abdeckung, Build, dazu die Ein-Datei-Fassung als Artefakt. |
-| `ci.yml`, Job `server` | Kommt mit Schritt 1: PostgreSQL 16 als Dienst, `cargo fmt --check`, `cargo clippy -- -D warnings`, Tests mit `cargo llvm-cov`. |
+| `ci.yml`, Job `server` | Neuer Server: PostgreSQL 16 als Dienst, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, Tests mit Abdeckung (`cargo llvm-cov`). Gebaut wird mit `SQLX_OFFLINE=true`. |
 | `backend-lint.yml`, `backend-test.yml`, `frontend-lint.yml`, `frontend-test.yml` | Das alte System. Bleiben bis zum Umstieg. |
 | `gitleaks.yml`, `codeql-analysis.yml` | Geheimnisse im Repository und statische Analyse. Bleiben. |
 
@@ -137,6 +149,7 @@ In Schritt 2 kommen `cargo audit` und `cargo deny` dazu, außerdem ein Job, der 
 ## Arbeitsweise
 
 - Jede Änderung kommt als Pull Request auf `main`. Die CI muss grün sein.
+- Jedes Arbeitspaket und jeder Fix bekommt einen eigenen Branch von `origin/main`, benannt `feature/<name_in_snake_case>` oder `fix/<name_in_snake_case>`. Auf `main` wird nie direkt gepusht.
 - Lieber ein Pull Request je Arbeitspaket als ein großer je Schritt.
 - Vor dem Push laufen die Checks des betroffenen Teils lokal (siehe oben).
 - Neuer Code kommt mit Tests. Ein Test wird nicht abgeschaltet, um die CI grün zu bekommen.
@@ -149,14 +162,14 @@ Die Kürzel A1 bis A12 verweisen auf die [Anforderungen](plan.md#anforderungen).
 
 ### Schritt 1: Fundament und Daten
 
-Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft ist, und Messwerte, die die Speicherstrategie bestätigen oder korrigieren.
+Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft ist, und Messwerte, die die Speicherstrategie bestätigen oder korrigieren. Abgeschlossen am 2026-11-10.
 
-- [ ] **1.1 Grundgerüst.** Crate `server/` mit `serve`, Konfiguration, Logs, Fehlertyp, `GET /api/health`, Auslieferung von `web/build` mit Rückfall auf `index.html`. Fertig, wenn `cargo run` den Entwurf der Oberfläche ausliefert und der CI-Job `server` grün ist.
-- [ ] **1.2 Schema.** Erste Migration mit den Tabellen aus [architecture.md](architecture.md#datenmodell): Konten, Sitzungen, Feeds, Ordner, Abos, die drei Artikeltabellen mit Monatspartitionen, Lesestand, Filterregeln, Labels. Fertig, wenn die Regeln des Modells als Constraints in der Datenbank stehen und getestet sind (eindeutige Nummer je Feed, höchstens fünf Ebenen, Position je Ebene).
-- [ ] **1.3 Abfragen (A1, A7).** Liste eines Feeds vor einer Nummer, gemischte Liste für Ordner und alles, Artikel öffnen, Ungelesen-Zahlen aller Feeds eines Kontos, lesen, wieder ungelesen, alle als gelesen, verdichten. Fertig, wenn die Tests dieselben Fälle prüfen wie `web/src/lib/unread.test.ts` und ein Property-Test den Lesestand gegen ein einfaches Modell vergleicht.
-- [ ] **1.4 Import.** Unterbefehl, der die alte Datenbank liest und die neue füllt, nach der Tabelle unter [Import der alten Daten](#import-der-alten-daten). Wiederholbar über `legacy_id`. Fertig, wenn ein Test eine nachgebaute alte Datenbank (Schema aus `backend/migrations/`) importiert und Feeds, Artikel, Nummern, Konten, Ordner und Abos prüft.
-- [ ] **1.5 Messung (A1, A2).** Generator für 10 User, 300 Feeds und 10 Millionen Artikel mit schiefer Verteilung der Feedgrößen, Messung der Abfragen aus 1.3 gegen das [Messziel](plan.md#messziel), Wiederholung mit zehnfacher Artikelzahl, soweit die Maschine es zulässt. Fertig, wenn die Werte unter [Messung](#messung) stehen und das Schema, falls nötig, danach korrigiert ist.
-- [ ] **1.6 CI.** Job `server` in `ci.yml`, Flag `server` in `codecov.yml`, kurzes `server/README.md`.
+- [x] **1.1 Grundgerüst.** Crate `server/` mit `serve`, Konfiguration, Logs, Fehlertyp, `GET /api/health`, Auslieferung von `web/build` mit Rückfall auf `index.html`. Fertig, wenn `cargo run` den Entwurf der Oberfläche ausliefert und der CI-Job `server` grün ist.
+- [x] **1.2 Schema.** Erste Migration mit den Tabellen aus [architecture.md](architecture.md#datenmodell): Konten, Sitzungen, Feeds, Ordner, Abos, die drei Artikeltabellen mit Monatspartitionen, Lesestand, Filterregeln, Labels. Fertig, wenn die Regeln des Modells als Constraints in der Datenbank stehen und getestet sind (eindeutige Nummer je Feed, höchstens fünf Ebenen, Position je Ebene).
+- [x] **1.3 Abfragen (A1, A7).** Liste eines Feeds vor einer Nummer, gemischte Liste für Ordner und alles, Artikel öffnen, Ungelesen-Zahlen aller Feeds eines Kontos, lesen, wieder ungelesen, alle als gelesen, verdichten. Fertig, wenn die Tests dieselben Fälle prüfen wie `web/src/lib/unread.test.ts` und ein Property-Test den Lesestand gegen ein einfaches Modell vergleicht.
+- [x] **1.4 Import.** Unterbefehl, der die alte Datenbank liest und die neue füllt, nach der Tabelle unter [Import der alten Daten](#import-der-alten-daten). Wiederholbar über `legacy_id`. Fertig, wenn ein Test eine nachgebaute alte Datenbank (Schema aus `backend/migrations/`) importiert und Feeds, Artikel, Nummern, Konten, Ordner und Abos prüft.
+- [x] **1.5 Messung (A1, A2).** Generator für 10 User, 300 Feeds und 10 Millionen Artikel mit schiefer Verteilung der Feedgrößen, Messung der Abfragen aus 1.3 gegen das [Messziel](plan.md#messziel), Wiederholung mit zehnfacher Artikelzahl, soweit die Maschine es zulässt. Fertig, wenn die Werte unter [Messung](#messung) stehen und das Schema, falls nötig, danach korrigiert ist. Ergebnis: Ziel erreicht, nachdem die Listenabfrage umgebaut wurde; das Schema blieb. Die zehnfache Menge passte nicht auf die Platte, verglichen wurde stattdessen mit einem Zehntel.
+- [x] **1.6 CI.** Job `server` in `ci.yml`, Flag `server` in `codecov.yml`, kurzes `server/README.md`.
 
 ### Schritt 2: Backend
 
@@ -192,26 +205,40 @@ Ergebnis: Die Produktion läuft auf dem neuen rueder, der alte Code ist entfernt
 
 - [ ] **4.1 Probelauf.** Import einer Kopie der Produktion, dieselben Messungen wie in Schritt 1, Dauer des Imports notieren.
 - [ ] **4.2 Lesestand und Labels aus dem Browser.** Das neue Frontend liest beim ersten Login die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte.
-- [ ] **4.3 Konten.** Umzug der htpasswd-Konten nach dem Vorschlag in den [offenen Detailfragen](plan.md#offene-detailfragen).
+- [ ] **4.3 Konten.** Umzug der htpasswd-Konten wie in den [Detailfragen](plan.md#detailfragen) entschieden.
 - [ ] **4.4 Parallelbetrieb und Umschalten.** Kurzer Parallelbetrieb, letzter Import, Umschalten des Reverse-Proxy, Weg zurück festhalten.
 - [ ] **4.5 Zweites Security-Review.**
 - [ ] **4.6 Abbau.** `backend/`, `frontend/`, die alten Workflows, Compose-Dateien und `config/` entfernen, README neu schreiben.
 
 ## Import der alten Daten
 
-Die alte Datenbank ist PostgreSQL, das Schema steht in `backend/migrations/` (Fizz), die Modelle in `backend/pkg/repository/pop/models/`. Der Import liest sie über eine zweite Verbindung und ändert sie nicht.
+Die alte Datenbank ist PostgreSQL, das Schema steht in `backend/migrations/` (Fizz), die Modelle in `backend/pkg/repository/pop/models/`. Der Import (`rueder import-legacy --from <Adresse der alten Datenbank>`, Code in `server/src/import.rs`) liest sie über eine zweite Verbindung in einer einzigen Nur-Lese-Transaktion und ändert sie nicht.
 
 | Alt | Neu | Hinweise |
 |---|---|---|
-| `feeds` (`id`, `feed_url`, `site_url`, `title`, `icon`, `fetched_at`, `fetch_delay_s`, `fetcher_state` als JSON mit `etag`, `last_modified`, `working`, `last_success`, `last_error`, `message`) | `feeds` | Die UUID wandert nach `legacy_id`. ETag und Abrufstand werden übernommen, damit der erste Abruf bedingt bleibt. `last_seq` ist die Zahl der Artikel des Feeds. |
-| `articles` (`id`, `seq` als globaler Zähler, `feed_id`, `site_guid`, `posted_at`, `link`, `thumbnail`, `image`, `image_title`, `title`, `teaser`, `content` als JSON mit `authors`, `tags`, `enclosures`, `text`) | `articles`, `article_content`, `article_versions` | Die neue Nummer im Feed ist `row_number() over (partition by feed_id order by seq)`, genau wie das alte System `feed_seq` berechnet. Die Reihenfolge des alten `seq` bleibt die Reihenfolge der neuen IDs. Der heutige Text wird Version 1: im Original nach `article_versions`, als aktueller Text nach `article_content`. Sobald die neue Bereinigung steht (Paket 2.3), läuft sie einmal über den Bestand. |
-| `users` (`id`, `auth_origin`, `auth_subject`, `folders` als JSON) | `accounts`, `account_identities`, `folders`, `subscriptions` | `auth_subject` wird der Login-Name. Die Ordner haben eine Ebene; ihre Reihenfolge und die der Feeds darin kommt aus der Reihenfolge im JSON. |
-| `user_feeds` (`user_id`, `feed_id`) | `subscriptions` | Ein Abo, das in keinem Ordner steht, landet auf oberster Ebene. |
+| `feeds` (`id`, `feed_url`, `site_url`, `title`, `icon`, `fetched_at`, `fetch_delay_s`, `fetcher_state` als JSON mit `etag`, `last_modified`, `working`, `last_success`, `last_error`, `message`) | `feeds` | Die UUID wandert nach `legacy_id`. ETag und Abrufstand werden übernommen, damit der erste Abruf bedingt bleibt; er ist fällig, wenn der alte rueder wieder abgerufen hätte. Das Intervall wird auf 15 Minuten bis 12 Stunden begrenzt. Die Fehlermeldung kommt nur mit, wenn der Feed zuletzt nicht ging. `last_seq` ist die Zahl der Artikel des Feeds. Ein Feed ohne Adresse bleibt samt Artikeln weg und wird gemeldet. |
+| `articles` (`id`, `seq` als globaler Zähler, `feed_id`, `site_guid`, `posted_at`, `link`, `thumbnail`, `image`, `image_title`, `title`, `teaser`, `content` als JSON mit `authors`, `tags`, `enclosures`, `text`) | `articles`, `article_content`, `article_versions` | Die neue Nummer im Feed ist `row_number() over (partition by feed_id order by seq)`, genau wie das alte System `feed_seq` berechnet. Das alte `seq` wird die neue ID, die Reihenfolge des Eintreffens bleibt also. Der heutige Text wird Version 1: im Original nach `article_versions` (Abrufzeit ist das alte `created_at`), als aktueller Text nach `article_content`. Die UUID steht in der Tabelle `legacy_articles`, nicht in einer Spalte, damit die heiße Tabelle schmal bleibt und die Zuordnung nach dem Umstieg wegkann. Sobald die neue Bereinigung steht (Paket 2.3), läuft sie einmal über den Bestand. |
+| `users` (`id`, `auth_origin`, `auth_subject`, `folders` als JSON) | `accounts`, `account_identities`, `folders`, `subscriptions` | `auth_subject` wird der Login-Name; ist er vergeben (Namen unterscheiden keine Groß- und Kleinschreibung) oder leer, bekommt das Konto einen anderen, und der Import meldet es. `auth_origin` und `auth_subject` stehen in `account_identities`. Die Ordner haben eine Ebene; ihre Reihenfolge und die der Feeds darin kommt aus der Reihenfolge im JSON. Hat ein User einem Feed einen eigenen Namen gegeben, wird er der Titel des Abos. |
+| `user_feeds` (`user_id`, `feed_id`) | `subscriptions` | Ein Abo, das in keinem Ordner steht, landet auf oberster Ebene hinter den Ordnern. |
 | `user_states` | nichts | Die Tabelle wird vom alten System nicht benutzt. Der Import meldet, wenn sie Zeilen enthält. |
 | `labels` | nichts | Im alten Go-Code gibt es kein Modell dazu, die Labels liegen im Browser. Der Import meldet, wenn die Tabelle Zeilen enthält. |
 | `localStorage` im Browser: `feedstate`, `labels` | Lesemarke, Ausnahmen, `labels`, `article_labels` | Nicht Teil des Imports, sondern von Paket 4.2. `readAllUntil` wird die Lesemarke, `readArticles` (Nummern im Feed) werden Ausnahmen, Artikel von Labels werden über ihre UUID (`legacy_id`) gefunden. |
 
-Nach dem Import und vor der Übernahme aus dem Browser hat ein Konto keinen Lesestand. Vorschlag: Der Import setzt die Lesemarke jedes Abos auf `last_seq` (nichts ist ungelesen), und die Übernahme aus dem Browser setzt den genauen Stand einmalig. Wer keinen alten Browser-Speicher mehr hat, beginnt dann mit null ungelesenen Artikeln statt mit zehntausenden.
+Nach dem Import und vor der Übernahme aus dem Browser hat ein Konto keinen Lesestand. Gebaut ist der Vorschlag: Der Import setzt die Lesemarke jedes neuen Abos auf `last_seq` (nichts ist ungelesen), und die Übernahme aus dem Browser setzt den genauen Stand einmalig. Wer keinen alten Browser-Speicher mehr hat, beginnt dann mit null ungelesenen Artikeln statt mit zehntausenden.
+
+### Wiederholung
+
+Der Import lässt sich beliebig oft starten: einmal zum Ausprobieren, noch einmal direkt vor dem Umschalten, und nach einem Abbruch einfach erneut.
+
+- Ein Lauf fügt nur hinzu, was der neuen Datenbank fehlt, erkannt an den alten UUIDs: Feeds, Artikel, Konten und Abos. Er ändert und löscht nichts, was schon da ist. Umbenannte Feeds, verschobene Abos und der Lesestand bleiben.
+- Neue Artikel eines bekannten Feeds werden hinten angehängt und sind für bestehende Abos ungelesen.
+- Der Baum eines Kontos wird nur beim Anlegen des Kontos übernommen. Abonniert ein schon importierter User im alten rueder später einen weiteren Feed, kommt das Abo ans Ende der obersten Ebene, auch wenn es im alten rueder in einem Ordner liegt.
+- Geschrieben wird in kleinen Transaktionen (2.000 Artikel). Fügt währenddessen jemand anderes Artikel in einen Feed ein, bricht der Import mit einem Hinweis ab; der neue Server sollte beim Import nicht abrufen.
+- Hat der neue rueder zwischen zwei Läufen selbst abgerufen (Parallelbetrieb, Paket 4.4), erkennt der Import Artikel, die es schon gibt, an ihrer Kennung im Feed und legt sie nicht doppelt an. Später importierte Artikel stehen dann hinter den selbst abgerufenen. In so einem Feed können die Nummern von denen des alten rueder abweichen, und der Lesestand aus dem Browser (Paket 4.2) passt für ihn nicht mehr. Der Import nennt diese Feeds am Ende. Wer das vermeiden will, lässt den neuen rueder im Parallelbetrieb nicht abrufen oder übernimmt den Lesestand vorher.
+
+Am Ende gibt der Import aus, was er hinzugefügt und was er ausgelassen hat: Feeds ohne Adresse, Abos auf Feeds, die es nicht gibt, Artikel und Ordner, deren JSON er nicht lesen konnte (sie kommen ohne Text beziehungsweise ohne Ordner), geänderte Login-Namen, und ob `user_states` oder `labels` Zeilen enthalten.
+
+Gemessen am 2026-11-10 an einer nachgebauten alten Datenbank mit 1 Million Artikeln (1,4 GB): 3 Minuten 50 Sekunden, also rund 4.300 Artikel je Sekunde und hochgerechnet etwa 40 Minuten für 10 Millionen. Ein zweiter Lauf ohne Neues dauert 35 Sekunden. Das Ergebnis stimmte in Nummern, Reihenfolge, Titeln und Texten aller Artikel mit der Quelle überein (Prüfsumme über beide Datenbanken). Die Dauer an echten Daten gehört zu Paket 4.1.
 
 ## Messung
 
@@ -221,9 +248,58 @@ Methode für Paket 1.5:
 - Gemessen wird an der Datenbank, mit warmem Cache und nach einem Neustart: Liste eines Feeds (erste Seite und eine Seite tief im Feed, im größten Feed), gemischte Liste über alle Abos, Artikel öffnen, Ungelesen-Zahlen aller Feeds eines Kontos, „alle als gelesen“.
 - Je Abfrage Median, 95. und 99. Perzentil über viele Läufe mit wechselnden Parametern, dazu der Plan aus `EXPLAIN (ANALYZE, BUFFERS)`.
 - Ziel: jeweils unter 50 ms. Dazu die Größe der Tabellen und Indizes auf der Platte.
-- Wiederholung mit zehnfacher Artikelzahl, um zu sehen, ob die Zeiten von der Gesamtgröße unabhängig bleiben.
+- Wiederholung mit zehnfacher Artikelzahl, um zu sehen, ob die Zeiten von der Gesamtgröße unabhängig bleiben; passt das nicht auf die Maschine, mit einem Zehntel.
 
-Ergebnisse: folgen mit Paket 1.5 an dieser Stelle, mit Datum, Maschine und Datenmenge.
+### Ergebnisse vom 2026-11-10
+
+Alle Abfragen bleiben unter 50 ms, auch im 99. Perzentil und auch direkt nach einem Neustart. Die Zeiten hängen nicht von der Gesamtzahl der Artikel ab. Die Speicherstrategie mit drei Tabellen ist damit bestätigt, das Schema blieb, wie es war; korrigiert wurde die Listenabfrage (siehe [Auswertung](#auswertung)).
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher, virtuelle Platte. PostgreSQL 16.15 mit `shared_buffers = 2GB`, sonst Standardwerte; `jit = off` setzt der Server selbst. Server und Datenbank auf derselben Maschine.
+- **Daten:** `rueder bench generate`: 10 Konten, 300 Feeds, 10.000.000 Artikel über zehn Jahre. Die Feedgrößen folgen einer Zipf-Verteilung, der größte Feed hat 1.592.179 Artikel, der kleinste rund 5.000. Das erste Konto abonniert alle Feeds, die anderen sechs von zehn, zusammen 1.893 Abos in vier Ordnerebenen. Lesestand von „alles gelesen“ bis „nie geöffnet“ mit 101.674 Ausnahmen. Jeder zwanzigste Artikel hat eine zweite Version, jeder hundertste eine dritte. Das Erzeugen dauert 17 Minuten.
+- **Messung:** `rueder bench measure`: jede Abfrage 500-mal mit wechselnden Konten, Feeds und Stellen in der Liste, Seiten zu 50 Artikeln. Gemessen wird im Rust-Programm, also mit dem Weg zur Datenbank und zurück; die Zeit an der Datenbank allein ist kürzer. „Tief in der Liste“ heißt: vor einer zufälligen Stelle in zehn Jahren. Die Messung setzt den Lesestand danach zurück, ein zweiter Lauf misst also dasselbe.
+
+| Abfrage | Median | p95 | p99 | Nach Neustart: Median | Nach Neustart: p99 | 1 Mio. Artikel: Median | 1 Mio. Artikel: p99 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Ein Feed, erste Seite | 1,8 ms | 2,9 ms | 4,5 ms | 2,2 ms | 6,1 ms | 1,7 ms | 5,2 ms |
+| Ein Feed, nur ungelesen | 1,3 ms | 2,2 ms | 2,5 ms | 1,8 ms | 4,3 ms | 1,1 ms | 3,0 ms |
+| Größter Feed, tief in der Liste | 1,9 ms | 2,4 ms | 3,1 ms | 3,0 ms | 6,2 ms | 1,8 ms | 3,0 ms |
+| Ein Ordner, nur ungelesen | 2,6 ms | 3,2 ms | 3,7 ms | 2,2 ms | 4,5 ms | 2,7 ms | 4,7 ms |
+| Alle Feeds, erste Seite | 7,1 ms | 10,5 ms | 12,9 ms | 7,1 ms | 13,5 ms | 7,2 ms | 13,8 ms |
+| Alle Feeds, nur ungelesen | 8,6 ms | 15,5 ms | 17,9 ms | 8,8 ms | 29,7 ms | 9,5 ms | 17,4 ms |
+| Alle Feeds, tief in der Liste | 10,8 ms | 14,1 ms | 17,5 ms | 19,7 ms | 34,0 ms | 9,9 ms | 15,5 ms |
+| Alle Feeds, nur ungelesen, tief in der Liste | 11,4 ms | 14,1 ms | 15,9 ms | 16,2 ms | 26,2 ms | 11,9 ms | 24,9 ms |
+| Ungelesen-Zahlen aller Feeds eines Kontos | 7,1 ms | 11,7 ms | 14,7 ms | 7,2 ms | 13,3 ms | 7,4 ms | 18,7 ms |
+| Neuen Artikel öffnen | 0,3 ms | 0,6 ms | 0,7 ms | 0,4 ms | 2,1 ms | 0,2 ms | 0,5 ms |
+| Artikel beliebigen Alters öffnen | 0,3 ms | 0,5 ms | 0,7 ms | 0,5 ms | 1,5 ms | 0,2 ms | 0,4 ms |
+| Versionen eines Artikels beliebigen Alters | 1,7 ms | 3,3 ms | 7,0 ms | 3,4 ms | 15,4 ms | 1,5 ms | 6,2 ms |
+| Einen Artikel als gelesen markieren | 0,7 ms | 1,2 ms | 1,5 ms | 0,7 ms | 1,8 ms | 0,7 ms | 2,0 ms |
+| Einen Feed als gelesen markieren | 1,0 ms | 1,9 ms | 2,2 ms | 1,0 ms | 2,6 ms | 1,1 ms | 4,3 ms |
+
+Die ersten drei Spalten sind 10 Millionen Artikel mit warmem Cache. „Nach Neustart“ ist dieselbe Datenbank nach einem Neustart von PostgreSQL mit geleertem Cache des Betriebssystems. Einzelne Läufe lagen über dem Ziel, wenn eine Seite erst von der Platte kam: Der langsamste von 21.000 Läufen brauchte 139 ms.
+
+**Zehnfache Artikelzahl:** 100 Millionen Artikel brauchen rund 180 GB, die Messmaschine hat 30 GB Platte. Statt nach oben wurde deshalb nach unten verglichen: Dieselben Abfragen brauchen bei 1 Million und bei 10 Millionen Artikeln gleich lang (die beiden rechten Spalten gegen die linken). Die Abfragen lesen je Feed und je Zeile der Seite eine feste Zahl von Indexseiten, die Tiefe des Index wächst mit dem Zehnfachen um höchstens eine Ebene. Die Wiederholung mit mehr Daten gehört zum Probelauf auf einer Kopie der Produktion (Paket 4.1).
+
+Größe auf der Platte bei 10 Millionen Artikeln, zusammen 18 GB:
+
+| Tabelle | Daten | Indizes | Anmerkung |
+|---|---:|---:|---|
+| `articles` (heiß) | 4,2 GB | 0,6 GB | Rund 420 Byte je Artikel, davon Titel, Anriss und zwei Adressen. Listen lesen daraus nur die neuesten Seiten je Feed. |
+| `article_content` (warm) | 7,7 GB | 1,3 GB | Der Index auf die Kennung im Feed, den der Abruf braucht, macht 1,1 GB aus. |
+| `article_versions` (kalt) | 4,5 GB | (enthalten) | 10,6 Millionen Versionen in 124 Monatspartitionen. |
+| `article_states` | 9 MB | 9 MB | 101.674 Ausnahmen für 1.893 Abos. |
+
+Die erzeugten Texte sind Zufallszeichen und lassen sich kaum komprimieren. Echtes HTML wird in `article_content` (lz4) und `article_versions` (zstd) deutlich kleiner; die Werte für diese beiden Tabellen sind also eine Obergrenze für diese Textmenge.
+
+### Auswertung
+
+- **Die Listenabfrage wurde umgebaut, weil sie das Ziel verfehlte.** Die erste Fassung holte je Feed die neuesten Artikel als Stichprobe, leitete daraus eine Untergrenze ab und las alle Feeds bis dorthin. Hatten nur wenige Feeds etwas zu zeigen, gab es keine Untergrenze, und sie las aus jedem eine ganze Seite. „Alle Feeds, nur ungelesen, tief in der Liste“ brauchte so 31 ms im Median, 66 ms im 95. und 89 ms im 99. Perzentil. Die jetzige Fassung führt die Feeds zusammen wie sortierte Listen: ein Schritt in den Index je Feed für dessen neuesten passenden Artikel, dann je Zeile der Seite ein weiterer Schritt für den Nachfolger im selben Feed. Der Aufwand hängt nur noch von der Zahl der Feeds und der Länge der Seite ab.
+- **Der Plan** (`EXPLAIN (ANALYZE, BUFFERS)`, alle 300 Feeds, nur ungelesen): Die Abos des Kontos kommen über ihren Primärschlüssel, die Lesemarke wird je Feed über `articles_pkey` in eine Stelle der Ankunftsreihenfolge übersetzt. Darauf folgt eine rekursive Vereinigung: je Feed und je Zeile ein rückwärts laufender Index-Scan auf `articles_arrival`, der nach dem ersten Treffer endet, und je gelesenem Artikel ein Schritt in `article_states_pkey`. Die 50 Zeilen der Seite kommen am Ende über `articles_arrival` aus der Tabelle. Es gibt keinen Scan einer ganzen Tabelle und keine Sortierung über mehr als die Köpfe der Feeds. Eine Seite über alle 300 Feeds fasst rund 3.700 Puffer an, eine Seite eines Feeds rund 700, alle aus dem Cache.
+- **Planen kostete mehr als Ausführen.** PostgreSQL plante die Listenabfrage bei jedem Aufruf neu, rund 3 ms. Die Abfrage läuft jetzt mit einem festen Plan je Verbindung (`plan_cache_mode = force_generic_plan`, nur für diese Abfrage gesetzt). Bitmap-Scans sind für sie abgeschaltet, weil der Planer nicht weiß, wie wenige Zeilen ein Schritt liest.
+- **Der Lesestand wird je Zeile nachgeschlagen**, nicht mit allen Zuständen des Kontos verbunden. Für ein Konto mit zehntausenden Sternen und ausgeblendeten Artikeln kostet eine Seite deshalb nicht mehr als für jedes andere.
+- **Ungelesen-Zahlen** brauchen 7 ms für alle Feeds eines Kontos und werden aus Lesemarke und Ausnahmen berechnet, wie geplant. Verdichten hält die Ausnahmen klein: Je Abo sind es im Schnitt 54.
+- **Alte Versionen stören nicht.** Das Öffnen eines Artikels liest nur `articles` und `article_content` über ihre Primärschlüssel und ist bei jedem Alter gleich schnell.
+- **Nicht gemessen:** der Index für eine Volltextsuche (Detailfrage in [plan.md](plan.md#detailfragen)). Das gehört zu Paket 2.6, bevor die Suche gebaut wird. Ebenfalls offen ist die Messung an echten Daten (Paket 4.1).
+- **Reserve, falls es später eng wird:** Die Übersetzung der Lesemarke und die wieder ungelesenen Artikel unter der Marke kosten je Feed einen Zugriff auf die Tabelle. Ein Index auf `(feed_id, seq)`, der die ID mitführt, würde ihn sparen. Bei den gemessenen Zeiten lohnt das den größeren Index nicht.
 
 ## Wissen über das Altsystem
 

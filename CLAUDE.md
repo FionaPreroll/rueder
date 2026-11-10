@@ -11,7 +11,7 @@ The README describes the old rueder for the people who run it. `docs/` holds the
 ## Docs
 
 - Whoever finishes a work package ticks it off in `docs/implementation.md` and brings the state there up to date, in the same pull request.
-- Whoever departs from the plan or the architecture changes `docs/plan.md` or `docs/architecture.md` in the same pull request and gives the reason. What Fiona decided stays decided until she decides otherwise; the open questions in `docs/plan.md` each have a proposal to build by.
+- Whoever departs from the plan or the architecture changes `docs/plan.md` or `docs/architecture.md` in the same pull request and gives the reason. What Fiona decided stays decided until she decides otherwise, the detail questions at the end of `docs/plan.md` included.
 - Measurements go into "Messung" in `docs/implementation.md`, with date, amount of data and machine.
 - Code, comments in code, READMEs and commit messages are in English. Comments in SQL migrations and the three documents above are in German.
 

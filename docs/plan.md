@@ -11,7 +11,7 @@ Stand 2026-11-10. Dieses Dokument sagt, was gebaut wird, warum, in welcher Reihe
 - [Messziel](#messziel)
 - [Nach dem Umstieg](#nach-dem-umstieg)
 - [Risiken](#risiken)
-- [Offene Detailfragen](#offene-detailfragen)
+- [Detailfragen](#detailfragen)
 
 ## Ziel und Anlass
 
@@ -40,7 +40,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 
 ## Ausgangslage
 
-Der bestehende rueder hat rund 6.300 Zeilen Go (`backend/`) und 7.400 Zeilen Svelte und TypeScript (`frontend/`). Vieles Gewünschte ist im Ansatz da, aber der Aufwand der Artikelliste wächst mit der Größe des Feeds. Das ist aus dem Code abgeleitet und nicht an Produktionsdaten gemessen; die Messung ist Teil von Schritt 1.
+Der bestehende rueder hat rund 6.300 Zeilen Go (`backend/`) und 7.400 Zeilen Svelte und TypeScript (`frontend/`). Vieles Gewünschte ist im Ansatz da, aber der Aufwand der Artikelliste wächst mit der Größe des Feeds. Das ist aus dem Code abgeleitet und nicht an Produktionsdaten gemessen; gemessen wurde in Schritt 1 das neue Schema an erzeugten Daten.
 
 | Bereich | Stand heute | Folge |
 |---|---|---|
@@ -87,7 +87,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
 **Vorarbeit: klickbarer Entwurf der Oberfläche** (fertig). Die Oberfläche wurde vor dem Server entworfen, damit Aussehen und Bedienung früh feststehen. Der Entwurf liegt in `web/`, läuft mit erfundenen Feeds ganz im Browser und ist abgenommen.
 
-1. **Fundament und Daten.** Rust-Grundgerüst, neues Schema, Importprogramm für die alte Datenbank. Die Abfragen für Liste, Artikel und Ungelesen-Zahlen werden an erzeugten Daten in Produktionsgröße gemessen.
+1. **Fundament und Daten** (fertig). Rust-Grundgerüst, neues Schema, Importprogramm für die alte Datenbank. Die Abfragen für Liste, Artikel und Ungelesen-Zahlen werden an erzeugten Daten in Produktionsgröße gemessen.
 
    Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft ist, und Messwerte, die die Speicherstrategie bestätigen oder korrigieren.
 
@@ -109,6 +109,8 @@ Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#secur
 
 Liste, Artikel und Ungelesen-Zahlen brauchen an der Datenbank jeweils unter 50 ms. Gemessen wird an erzeugten Daten in der Größe der Produktion (10 User, 300 Feeds, 10 Millionen Artikel) und noch einmal mit zehnfacher Artikelzahl, um zu sehen, ob die Zeiten von der Gesamtgröße unabhängig bleiben. Verfehlt eine Abfrage das Ziel, wird das Schema in Schritt 1 angepasst, bevor darauf gebaut wird. Methode und Ergebnisse: [implementation.md](implementation.md#messung).
 
+Ergebnis vom 2026-11-10: Das Ziel ist erreicht. Mit 10 Millionen Artikeln brauchen die Abfragen höchstens 11 ms im Median und 18 ms im 99. Perzentil, direkt nach einem Neustart höchstens 34 ms. Dafür wurde die Listenabfrage umgebaut, das Schema blieb. Abweichung vom Plan: 100 Millionen Artikel passten nicht auf die Platte der Messmaschine. Verglichen wurde stattdessen mit 1 Million Artikeln, mit gleichen Zeiten; die Messung mit mehr Daten folgt beim Probelauf auf einer Kopie der Produktion.
+
 ## Nach dem Umstieg
 
 Bewusst zurückgestellt, damit der Umstieg nicht daran hängt:
@@ -128,11 +130,11 @@ Bewusst zurückgestellt, damit der Umstieg nicht daran hängt:
 | Seiten sperren den ehrlichen User-Agent. | Je Feed umstellbar; Abruffehler sind in der Oberfläche sichtbar. |
 | Der Parallelbetrieb von altem und neuem System belastet die Quellen doppelt. | Bedingte Abrufe (ETag, Last-Modified), kurzer Parallelbetrieb. |
 
-## Offene Detailfragen
+## Detailfragen
 
-Keine davon hält Schritt 1 auf. Zu jeder gibt es einen Vorschlag, nach dem gebaut wird, bis jemand anders entscheidet.
+Fiona hat die Vorschläge am 2026-11-10 angenommen. Gebaut wird danach.
 
-| Frage | Vorschlag |
+| Frage | Entscheidung |
 |---|---|
 | Was geschieht bei der 21. Version eines Artikels? | Die Erstfassung und die 19 neuesten bleiben, die zweitälteste fällt weg. |
 | Wie viele Artikel sind bei einem neuen Abo ungelesen? | Die 10 neuesten, alles davor gilt als gelesen. Heute ist alles ungelesen. |
