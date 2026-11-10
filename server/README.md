@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching, cleaning and images
+## State: foundation, data, fetching, cleaning, images and login
 
 What is here:
 
@@ -31,12 +31,18 @@ What is here:
   the images of articles, so readers' browsers ask rueder and not the sites.
   Addresses are signed, only PNG, JPEG, GIF and WebP pass, large images are
   made to fit, and what was fetched is kept in a cache on disk.
+- Accounts, sessions and the login (`src/accounts.rs`, `src/sessions.rs`,
+  `src/login.rs`, `src/oidc.rs`): passwords as Argon2id hashes, a session cookie
+  scripts cannot read, a limit on wrong passwords, and optionally the login
+  through an OpenID Connect provider. The image proxy answers logged-in
+  readers only.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
-- `GET /api/health`, and the built frontend from `../web/build`.
+- `GET /api/health`, `POST /api/login`, `POST /api/logout`, `GET /api/me`, and
+  the built frontend from `../web/build`.
 
-This is step 1 of the plan and the first four work packages of step 2. Login
-and the API follow.
+This is step 1 of the plan and the first five work packages of step 2. The API
+for feeds, articles and what was read follows.
 
 ## Commands
 
@@ -57,6 +63,34 @@ with `cargo install sqlx-cli`.
 
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 (default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).
+
+## Accounts and login
+
+Nobody can register. Accounts are made on the command line:
+
+```sh
+cargo run -- account add ada            # asks for the password; --admin for an admin
+cargo run -- account password ada       # a new password, which ends ada's sessions
+cargo run -- account list
+```
+
+Without a terminal the password is read as one line from the input, for
+scripts. The session cookie is `Secure`, so logging in needs HTTPS in front of
+the server; `http://localhost:3000` works for development.
+
+Wrong passwords are counted per name and per address. Behind a reverse proxy
+set `CLIENT_IP_HEADER` to the header the proxy puts the sender's address in
+(e.g. `X-Forwarded-For`), or all readers count as one address. Do not set it if
+no proxy sets that header: senders could then name any address.
+
+For the login through an OpenID Connect provider set `OIDC_ISSUER`,
+`OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_REDIRECT_URL` (the address of
+`/api/oidc/callback` as browsers reach it), and send browsers to
+`/api/oidc/start`. The provider must be reached over https. Logging in there
+makes no account: tie an identity to an account with
+`cargo run -- account link ada <subject>`, or log in with the password and open
+`/api/oidc/start?link`. A provider inside your own network needs
+`FETCH_ALLOW_NETS`.
 
 ## Cleaning
 

@@ -1,6 +1,6 @@
 # rueder: Umsetzung und Übergabe
 
-Stand 2026-11-10. Dieses Dokument sagt, was fertig ist, wie gearbeitet wird und welche Arbeitspakete offen sind. Es ist so geschrieben, dass jemand Neues die Arbeit übernehmen kann. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), den Aufbau des neuen Systems [architecture.md](architecture.md).
+Stand 2026-11-11. Dieses Dokument sagt, was fertig ist, wie gearbeitet wird und welche Arbeitspakete offen sind. Es ist so geschrieben, dass jemand Neues die Arbeit übernehmen kann. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), den Aufbau des neuen Systems [architecture.md](architecture.md).
 
 Wer ein Arbeitspaket abschließt, hakt es hier ab und trägt den Stand nach, im selben Pull Request.
 
@@ -31,26 +31,26 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 |---|---|---|
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
 | 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
-| 2 Backend | Begonnen am 2026-11-10: Pakete 2.1 (gehärteter HTTP-Client), 2.2 (Abruf mit Versionen), 2.3 (Bereinigung) und 2.4 (Bild-Proxy) sind fertig | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs`, `server/src/cleaning.rs`, `server/src/images.rs` |
+| 2 Backend | Begonnen am 2026-11-10: Pakete 2.1 (gehärteter HTTP-Client), 2.2 (Abruf mit Versionen), 2.3 (Bereinigung), 2.4 (Bild-Proxy) und 2.5 (Konten und Sitzungen) sind fertig | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs`, `server/src/cleaning.rs`, `server/src/images.rs`, `server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs` |
 | 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
 | 4 Umstieg | Offen | |
 
 Was es heute gibt:
 
 - `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client, dem Abruf der Feeds, der mit `serve` läuft, der Bereinigung der Artikeltexte mit eigenen Regeln und dem Bild-Proxy unter `/img/`. 108 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client, dem Abruf der Feeds, der mit `serve` läuft, der Bereinigung der Artikeltexte mit eigenen Regeln, dem Bild-Proxy unter `/img/`, Konten mit Passwort, Sitzungen und dem Login, auch über OpenID Connect. 128 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es `GET /api/health`, Login, Logout und `GET /api/me`; ausgeliefert wird das gebaute Frontend.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
 - Das alte System in `backend/` und `frontend/`, unverändert und lauffähig.
 
-Was es noch nicht gibt: Login und die API. Das ist der Rest von Schritt 2, als Nächstes Paket 2.5. Abonnieren lässt sich ein Feed bis zur API nur direkt in der Datenbank.
+Was es noch nicht gibt: die API für Feeds, Artikel und Lesestand. Das ist der Rest von Schritt 2, als Nächstes Paket 2.6. Abonnieren lässt sich ein Feed bis dahin nur direkt in der Datenbank.
 
 ## Repository
 
 | Pfad | Was |
 |---|---|
 | `server/` | Neu. Rust: HTTP-Server mit `axum`, `sqlx` und PostgreSQL. Dasselbe Programm hat die Kommandozeile (Import, Messdaten, später Konten). Siehe [server/README.md](../server/README.md). |
-| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `http_client.rs` der gehärtete HTTP-Client, `feeds.rs` und `fetch.rs` Abruf, `cleaning.rs` Bereinigung, `reclean.rs` erneutes Bereinigen des Bestands, `images.rs` Bild-Proxy, `import.rs` Import der alten Datenbank, `bench.rs` Messdaten und Messung, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
+| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `http_client.rs` der gehärtete HTTP-Client, `feeds.rs` und `fetch.rs` Abruf, `cleaning.rs` Bereinigung, `reclean.rs` erneutes Bereinigen des Bestands, `images.rs` Bild-Proxy, `accounts.rs` Konten und Passwörter, `sessions.rs` Sitzungen und der Extraktor für eingeloggte Anfragen, `login.rs` Login, Logout und Rate-Limit, `oidc.rs` Login über OpenID Connect, `import.rs` Import der alten Datenbank, `bench.rs` Messdaten und Messung, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
 | `server/rules/` | Die Listen der Bereinigung als Daten: gesperrte Adressen und Tracking-Parameter, eine Regel je Zeile. |
 | `server/migrations/` | SQL-Migrationen, laufen beim Start von selbst. |
 | `server/.sqlx/` | Cache der geprüften Abfragen, damit das Programm ohne Datenbank baut (`cargo sqlx prepare`). |
@@ -127,12 +127,18 @@ cargo clippy --all-targets -- -D warnings
 cargo sqlx prepare -- --all-targets  # nach jeder geänderten Abfrage: Cache in .sqlx/ erneuern
 
 cargo run --release -- import-legacy --from postgres://user:passwort@host/rueder   # alte Datenbank übernehmen
+cargo run -- account add <name>         # Konto anlegen, fragt nach dem Passwort; --admin für ein Admin-Konto
+cargo run -- account password <name>    # neues Passwort setzen, beendet die Sitzungen des Kontos
+cargo run -- account link <name> <subject>   # Konto mit einem Subject des Anbieters aus OIDC_ISSUER verknüpfen
+cargo run -- account list               # Konten auflisten
 cargo run --release -- reclean          # alle Artikel aus ihren Versionen neu bereinigen, mit --feed <id> nur einen Feed
 cargo run --release -- bench generate   # 10 Konten, 300 Feeds, 10 Millionen Artikel in eine leere Datenbank
 cargo run --release -- bench measure    # misst die Abfragen und gibt die Tabellen aus
 ```
 
 Abfragen werden beim Kompilieren gegen die Datenbank aus `DATABASE_URL` geprüft; sie muss dafür das Schema haben (einmal `cargo run`), oder der Build nutzt mit `SQLX_OFFLINE=true` den Cache in `.sqlx/`, wie die CI. `cargo sqlx` kommt mit `cargo install sqlx-cli`. Das Konto der Datenbank muss Datenbanken anlegen dürfen, sonst laufen die Tests nicht.
+
+Einstellungen des Logins: `CLIENT_IP_HEADER` nennt hinter einem Reverse-Proxy den Header mit der Adresse des Absenders, für das Rate-Limit. `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` und `OIDC_REDIRECT_URL` schalten den Login über OpenID Connect ein; beim Anbieter wird `<Adresse von rueder>/api/oidc/callback` als Redirect-Adresse eingetragen. Der Sitzungs-Cookie verlangt HTTPS, zum Entwickeln geht `http://localhost:3000`. Das Passwort liest `account add` ohne Terminal als eine Zeile von der Eingabe, für Skripte.
 
 Einstellungen der Bereinigung: `CLEANING_RULES_DIR` nennt ein Verzeichnis mit eigenen Listen (`blocked-links.txt`, `tracking-parameters.txt`) an Stelle der eingebauten aus `server/rules/`. Nach einer Änderung der Listen oder der Regeln bringt `reclean` den Bestand auf den neuen Stand; ohne das holt ihn der nächste Abruf nur für die Artikel nach, die der Feed noch führt.
 
@@ -186,7 +192,7 @@ Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übern
 - [x] **2.2 Abruf mit Versionen (A2).** Der HTTP-Client wird in `serve` einmal gebaut, mit den freigegebenen Netzen des Betreibers aus der Umgebung. Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden. Fertig am 2026-11-10, beschrieben unter [Abruf](architecture.md#abruf). Offen geblieben und dort vermerkt: Wechselnde Tracking-Parameter galten noch als Änderung (mit 2.3 erledigt), Filterregeln und Live-Meldung hängen an 2.6 und 2.7, und TLS gegen echte Server ist weiter ungetestet, weil die Entwicklungsumgebung keinen direkten Weg ins Internet hat.
 - [x] **2.3 Bereinigung (A10).** `ammonia` mit Allowlist, die Regeln aus `frontend/src/rueder/helpers/ArticleCleaner.ts`, Listen als Datendateien, Befehl zum erneuten Bereinigen aus `article_versions`. Fertig, wenn die Fälle aus `ArticleCleaner.test.ts` übertragen und grün sind. Fertig am 2026-11-10, beschrieben unter [Bereinigung](architecture.md#bereinigung); die Fälle aus `ArticleCleaner.test.ts` und die für Tracking-Parameter aus `url.test.ts` stehen in `server/tests/cleaning.rs`. Dabei gefunden und behoben: Der HTML-Parser braucht für tief verschachtelte Texte quadratisch viel Zeit und kann aus wenig Text sehr viel Baum machen. Das betraf auch den Abruf aus Paket 2.2 und ist jetzt begrenzt. Die Prüfsumme für neue Versionen geht seither über den bereinigten Text, wechselnde Tracking-Parameter erzeugen also keine Version mehr. Geprüft an den echten Feeds von tagesschau.de, cre.fm und github.com, die über den Proxy der Entwicklungsumgebung geladen wurden. Offen geblieben: Bilder zeigen bis Paket 2.4 auf ihre Quelle. TLS des eigenen HTTP-Clients gegen echte Server bleibt ungetestet: Die Entwicklungsumgebung lässt nur ihren eigenen Proxy nach außen, der TLS selbst beendet, und der gehärtete Client verbindet sich mit Absicht direkt.
 - [x] **2.4 Bild-Proxy (A11).** Signierte Adressen, Formatprüfung, feste Größen, Cache auf Platte, Grenzen. Vorlage für die heutigen Größen: `frontend/src/rueder/helpers/ImageProxy.ts`. Fertig, wenn Tests falsche Signaturen, Nicht-Bilder, zu große Bilder und interne Adressen ablehnen. Fertig am 2026-11-10, beschrieben unter [Bild-Proxy](architecture.md#bild-proxy). Wie entschieden, setzt der Server die Adresse des Proxy erst beim Ausliefern ein; weil es noch keinen Endpunkt gibt, der Artikel ausliefert, stehen dafür `Signer::in_html` und `Signer::address` bereit, und Paket 2.6 ruft sie auf. Geprüft auch an echten Bildern von cre.fm. Offen geblieben: Der Proxy verlangt noch keinen Login (kommt mit 2.5), `.ico`-Dateien werden abgelehnt, und wie beim Abruf ist der Weg zu echten Servern hier nicht testbar.
-- [ ] **2.5 Konten und Sitzungen (A3).** Argon2id, Sitzungs-Cookie, Login mit Rate-Limit, Befehle zum Anlegen von Konten und Setzen von Passwörtern, danach OpenID Connect. Fertig, wenn Tests Login, Ablauf, Abmelden und die Cookie-Attribute prüfen. Dazu gehört, dass der Bild-Proxy unter `/img/` nur noch mit Sitzung antwortet.
+- [x] **2.5 Konten und Sitzungen (A3).** Argon2id, Sitzungs-Cookie, Login mit Rate-Limit, Befehle zum Anlegen von Konten und Setzen von Passwörtern, danach OpenID Connect. Fertig, wenn Tests Login, Ablauf, Abmelden und die Cookie-Attribute prüfen. Dazu gehört, dass der Bild-Proxy unter `/img/` nur noch mit Sitzung antwortet. Fertig am 2026-11-11, beschrieben unter [Login und Sitzungen](architecture.md#login-und-sitzungen). OpenID Connect ist gegen einen nachgebauten Anbieter getestet, nicht gegen einen echten. Abweichung: Die Signatur des ID-Tokens wird nicht eigens geprüft, weil das Token direkt vom Anbieter über TLS kommt; dafür muss der Anbieter https sein. Offen geblieben und dort vermerkt: eine Liste der eigenen Sitzungen, Konten anlegen durch einen Admin in der Oberfläche und der Einmal-Link für Konten ohne Passwort (zu 2.6), die Prüfung des `Origin`-Headers (2.9).
 - [ ] **2.6 API (A4 bis A9, A12).** Baum, Listen, Artikel, Versionen, Lesestand, Regeln mit Vorschau, Labels, Einstellungen, Abonnieren mit Feed-Suche, OPML. Fertig, wenn es zu jedem Endpunkt einen Test gibt, der auch prüft, dass ein anderes Konto nichts davon sieht. Was die API ausliefert, zeigt bei Bildern immer auf den Bild-Proxy: der Text eines Artikels über `Signer::in_html`, Vorschaubild, Aufmacherbild und Icon über `Signer::address`. Ein Test prüft an jedem Endpunkt, der Bilder nennt, dass keine fremde Adresse hinausgeht.
 - [ ] **2.7 Live-Updates (A6).** `GET /api/events` mit den Ereignissen aus [architecture.md](architecture.md#live-updates), Nachliefern nach `Last-Event-ID`. Fertig, wenn ein Test zwei Verbindungen desselben Kontos und eine fremde öffnet und nur die richtigen Ereignisse sieht.
 - [ ] **2.8 API-Typen für das Frontend.** TypeScript-Typen aus den Rust-Typen erzeugen; die CI prüft, dass die eingecheckten Typen aktuell sind.

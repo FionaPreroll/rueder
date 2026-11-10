@@ -130,13 +130,18 @@ pub fn no_cookie() -> String {
 
 /// The token a request brings along, if any.
 pub fn token(headers: &HeaderMap) -> Option<&str> {
+    cookie_value(headers, COOKIE)
+}
+
+/// The value of the cookie of this name among the ones a request brings.
+pub fn cookie_value<'a>(headers: &'a HeaderMap, cookie: &str) -> Option<&'a str> {
     headers
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(';'))
         .filter_map(|pair| pair.trim().split_once('='))
-        .find_map(|(name, value)| (name == COOKIE).then_some(value))
+        .find_map(|(name, value)| (name == cookie).then_some(value))
 }
 
 impl FromRequestParts<AppState> for Session {

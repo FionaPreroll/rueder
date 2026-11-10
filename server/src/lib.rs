@@ -8,6 +8,7 @@ pub mod http_client;
 pub mod images;
 pub mod import;
 pub mod login;
+pub mod oidc;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
@@ -27,6 +28,7 @@ use sqlx::PgPool;
 use crate::{
     images::{ImageProxy, Refused},
     login::Limiter,
+    oidc::Oidc,
     sessions::Session,
 };
 use tower_http::{
@@ -44,6 +46,8 @@ pub struct AppState {
     /// The header a reverse proxy in front of the server names the sender's
     /// address in. Without one, the address of the connection counts.
     pub client_ip_header: Option<HeaderName>,
+    /// The login through an OpenID Connect provider, if this server has one.
+    pub oidc: Option<Arc<Oidc>>,
 }
 
 impl AppState {
@@ -53,6 +57,14 @@ impl AppState {
             images: None,
             logins: Arc::default(),
             client_ip_header: None,
+            oidc: None,
+        }
+    }
+
+    pub fn with_oidc(self, oidc: Arc<Oidc>) -> Self {
+        Self {
+            oidc: Some(oidc),
+            ..self
         }
     }
 
@@ -90,6 +102,8 @@ fn api() -> Router<AppState> {
         .route("/login", post(login::login))
         .route("/logout", post(login::logout))
         .route("/me", get(login::me))
+        .route("/oidc/start", get(oidc::start))
+        .route("/oidc/callback", get(oidc::callback))
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

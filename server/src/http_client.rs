@@ -237,6 +237,11 @@ pub struct Request<'a> {
     /// A smaller limit for the body than [`Config::max_body`]; a larger one
     /// counts as that.
     pub max_body: Option<usize>,
+    /// Fields to send as a form. With them the request is a POST, and one
+    /// that is never sent on to where a redirect points.
+    pub form: Option<&'a [(&'a str, &'a str)]>,
+    /// An `Authorization` header. It goes to the host of `url` only.
+    pub authorization: Option<&'a str>,
 }
 
 impl<'a> Request<'a> {
@@ -248,6 +253,8 @@ impl<'a> Request<'a> {
             etag: None,
             last_modified: None,
             max_body: None,
+            form: None,
+            authorization: None,
         }
     }
 }
@@ -335,6 +342,10 @@ impl HttpClient {
         for _ in 0..=self.config.max_redirects {
             let mut response = self.send(&url, request).await?;
             if let Some(target) = redirect(&response) {
+                // What was posted, and a password, stay with whom they were for.
+                if request.form.is_some() || request.authorization.is_some() {
+                    return Err(Error::BadRedirect);
+                }
                 url = url.join(target?).map_err(|_| Error::BadRedirect)?;
                 url.set_fragment(None);
                 self.rules.check_url(&url)?;
@@ -369,11 +380,20 @@ impl HttpClient {
             Agent::Rueder => AGENT_RUEDER,
             Agent::Browser => AGENT_BROWSER,
         };
-        let mut builder = self
-            .inner
-            .get(url.clone())
-            .header(header::USER_AGENT, agent);
+        let mut builder = match request.form {
+            None => self.inner.get(url.clone()),
+            Some(fields) => {
+                let mut form = url::form_urlencoded::Serializer::new(String::new());
+                form.extend_pairs(fields);
+                self.inner
+                    .post(url.clone())
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(form.finish())
+            }
+        };
+        builder = builder.header(header::USER_AGENT, agent);
         let optional = [
+            (header::AUTHORIZATION, request.authorization),
             (header::ACCEPT, request.accept),
             (header::IF_NONE_MATCH, request.etag),
             (header::IF_MODIFIED_SINCE, request.last_modified),

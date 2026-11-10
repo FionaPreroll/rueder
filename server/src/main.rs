@@ -15,7 +15,9 @@ use rueder::{
     fetch,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import, reclean, router, sessions,
+    import, oidc,
+    oidc::Oidc,
+    reclean, router, sessions,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -75,6 +77,9 @@ enum AccountCommand {
     },
     /// Give an account a new password, which ends its sessions.
     Password { name: String },
+    /// Let an account log in through the OpenID Connect provider of
+    /// OIDC_ISSUER, as the one the provider calls by this subject.
+    Link { name: String, subject: String },
     /// List the accounts.
     List,
 }
@@ -182,6 +187,20 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                 name.trim()
             );
         }
+        AccountCommand::Link { name, subject } => {
+            let config = oidc::Config::from_env()?.context("OIDC_ISSUER is not set")?;
+            if !oidc::link(db, &name, &config.issuer, &subject).await? {
+                anyhow::bail!(
+                    "there is no account {}, or this identity has an account already",
+                    name.trim()
+                );
+            }
+            println!(
+                "Account {} can log in through {}.",
+                name.trim(),
+                config.issuer
+            );
+        }
         AccountCommand::List => {
             for account in accounts::list(db).await? {
                 println!(
@@ -280,7 +299,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         .ok()
         .filter(|key| !key.is_empty())
         .map(String::into_bytes);
-    let images = Arc::new(ImageProxy::open(images, client)?);
+    let images = Arc::new(ImageProxy::open(images, client.clone())?);
     // Once an hour, what the cache holds too much of goes.
     let cache = images.clone();
     tokio::spawn(async move {
@@ -305,6 +324,12 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     });
 
     let mut state = AppState::new(db).with_images(images);
+    // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
+    // the login through an OpenID Connect provider.
+    if let Some(config) = oidc::Config::from_env()? {
+        tracing::info!("login through {} is on", config.issuer);
+        state = state.with_oidc(Arc::new(Oidc::new(config, client)?));
+    }
     // Behind a reverse proxy every connection comes from the proxy.
     // CLIENT_IP_HEADER names the header it puts the sender's address in, e.g.
     // X-Forwarded-For. Only set it if a proxy really sets that header.

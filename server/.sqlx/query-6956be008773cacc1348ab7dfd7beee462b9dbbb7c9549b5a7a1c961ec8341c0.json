@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO account_identities (issuer, subject, account_id) VALUES ($1, $2, $3)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6956be008773cacc1348ab7dfd7beee462b9dbbb7c9549b5a7a1c961ec8341c0"
+}
