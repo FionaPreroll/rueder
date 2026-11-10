@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 15bcb829237d216b020a21cd5e446790f54b0d49144752bfa2779efddfe70ce4 # shrinks to pieces = ["<a href=\"", "<a href='#x'>", "javascript:alert(1)", "<a href=\"", "<p>"]
+cc 9e1e259026b3dcdaa90e1d4380e6aec7f4374c50690da19f9287e79ed1b45c85 # shrinks to pieces = ["<span>", "<script>"]
+cc 941781d59780e44a93cc7fc726960f885605be040fe724579b1ffdd5c6ef42e4 # shrinks to pieces = ["<p>", "<math><mtext>", "<table>"]

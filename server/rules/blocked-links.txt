@@ -1,0 +1,14 @@
+# Links and images that are left out of articles: share buttons, counters and
+# other things that only serve the site they point to.
+#
+# One rule per line: a domain, which also stands for all its subdomains. A piece
+# of text after it, behind a blank, narrows the rule to addresses that contain
+# it somewhere behind the domain.
+
+# Slashdot's counters and share buttons
+fsdn.com
+facebook.com
+# "Share this as a status" links
+twitter.com status=
+# FeedBurner's row of share buttons
+feeds.feedburner.com /~ff/

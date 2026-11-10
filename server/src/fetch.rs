@@ -16,6 +16,7 @@ use time::OffsetDateTime;
 use tokio::{sync::Semaphore, task::JoinSet};
 
 use crate::{
+    cleaning::Rules,
     feeds::{self, Stored},
     http_client::{Agent, HttpClient, Request},
 };
@@ -70,7 +71,12 @@ fn spread(feed_id: i32) -> f64 {
 
 /// Fetches one feed and writes down how it went. An error from here means the
 /// database failed; a feed that cannot be fetched is an [`Outcome::Failed`].
-pub async fn fetch_feed(db: &PgPool, client: &HttpClient, feed_id: i32) -> anyhow::Result<Outcome> {
+pub async fn fetch_feed(
+    db: &PgPool,
+    client: &HttpClient,
+    rules: &Arc<Rules>,
+    feed_id: i32,
+) -> anyhow::Result<Outcome> {
     let feed = sqlx::query!(
         "SELECT feed_url, fetch_agent, etag, last_modified FROM feeds WHERE id = $1",
         feed_id
@@ -117,9 +123,16 @@ pub async fn fetch_feed(db: &PgPool, client: &HttpClient, feed_id: i32) -> anyho
         )
         .await;
     }
-    let parsed = match feeds::parse(&response.body, response.url.as_str(), now) {
-        Ok(parsed) => parsed,
-        Err(err) => return failed(db, feed_id, format!("{err:#}")).await,
+    // Reading and cleaning a large feed takes a while, so it runs where it
+    // keeps nothing else waiting.
+    let reading = {
+        let (rules, body, url) = (rules.clone(), response.body.clone(), response.url.clone());
+        tokio::task::spawn_blocking(move || feeds::parse(&body, url.as_str(), now, &rules))
+    };
+    let parsed = match reading.await {
+        Ok(Ok(parsed)) => parsed,
+        Ok(Err(err)) => return failed(db, feed_id, format!("{err:#}")).await,
+        Err(_) => return failed(db, feed_id, "the feed could not be read".into()).await,
     };
 
     let mut tx = db.begin().await?;
@@ -179,7 +192,11 @@ async fn failed(db: &PgPool, feed_id: i32, message: String) -> anyhow::Result<Ou
 /// Fetches the feeds that are due and have somebody reading them, and returns
 /// how many that were. At most [`AT_ONCE`] at a time, and never two from the
 /// same host at once.
-pub async fn fetch_due(db: &PgPool, client: &HttpClient) -> anyhow::Result<usize> {
+pub async fn fetch_due(
+    db: &PgPool,
+    client: &HttpClient,
+    rules: &Arc<Rules>,
+) -> anyhow::Result<usize> {
     // Taking a feed moves its next fetch away, so a second server or a round
     // that overlaps does not take it too. The fetch sets the real time.
     let due = sqlx::query!(
@@ -214,12 +231,13 @@ pub async fn fetch_due(db: &PgPool, client: &HttpClient) -> anyhow::Result<usize
     let mut fetches = JoinSet::new();
     for feeds in hosts.into_values() {
         let (db, client, at_once) = (db.clone(), client.clone(), at_once.clone());
+        let rules = rules.clone();
         fetches.spawn(async move {
             for feed_id in feeds {
                 let Ok(_permit) = at_once.acquire().await else {
                     return;
                 };
-                match fetch_feed(&db, &client, feed_id).await {
+                match fetch_feed(&db, &client, &rules, feed_id).await {
                     Ok(Outcome::Failed(why)) => tracing::info!(feed_id, "fetch failed: {why}"),
                     Ok(outcome) => tracing::debug!(feed_id, ?outcome, "fetched"),
                     Err(err) => tracing::error!(feed_id, "fetching: {err:#}"),
@@ -232,11 +250,11 @@ pub async fn fetch_due(db: &PgPool, client: &HttpClient) -> anyhow::Result<usize
 }
 
 /// Fetches what is due, again and again, for as long as the server runs.
-pub async fn run(db: PgPool, client: HttpClient) {
+pub async fn run(db: PgPool, client: HttpClient, rules: Arc<Rules>) {
     let mut every = tokio::time::interval(Duration::from_secs(30));
     loop {
         every.tick().await;
-        if let Err(err) = fetch_due(&db, &client).await {
+        if let Err(err) = fetch_due(&db, &client, &rules).await {
             tracing::error!("fetching feeds: {err:#}");
         }
     }
