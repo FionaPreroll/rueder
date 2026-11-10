@@ -2,6 +2,19 @@
 
 ![rueder logo: a gopher with glasses reading a newspaper](docs/images/rueder3gopher_s.png)
 
+## Rewrite in Rust
+
+rueder is being rewritten as a single Rust server with a new Svelte frontend. The new
+code lives in `server/` (to come) and `web/`; the Go backend and the old frontend
+described below stay runnable until the switch. The plan and the design notes are
+in German:
+
+- [Plan](docs/plan.md): goals, requirements, decisions and the four steps
+- [Architecture](docs/architecture.md): how the new system is built, data model,
+  security
+- [Implementation](docs/implementation.md): where the work stands, conventions and
+  the open work packages, for anyone taking over
+
 ## Dependencies
 
 - Docker or podman. Everything is contained in docker images.
