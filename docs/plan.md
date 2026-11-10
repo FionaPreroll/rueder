@@ -62,7 +62,7 @@ Der bestehende rueder hat rund 6.300 Zeilen Go (`backend/`) und 7.400 Zeilen Sve
 - **Schnell trotz wachsender Artikelzahl:** Die Artikelliste liest nur eine schmale Tabelle. Der aktuelle Text liegt getrennt daneben. Alte Versionen liegen komprimiert in einem kalten Archiv, das nach Monaten geteilt ist.
 - **Verlässliche Ungelesen-Zahlen:** Der Lesestand zieht vom Browser auf den Server um. Die Zahl wird aus einer Lesemarke je Feed und wenigen Ausnahmen berechnet; es gibt keinen Zähler, der auseinanderlaufen kann.
 - **Security von Anfang an:** Sitzungs-Cookies statt Token im Browser-Speicher, ein gehärteter HTTP-Client für jeden Abruf fremder Adressen, Bereinigung und Bild-Proxy auf dem Server.
-- **Daten bleiben erhalten:** Feeds, Artikel, User und Ordner werden aus der Produktionsdatenbank übernommen, der Lesestand aus dem Browser.
+- **Daten bleiben erhalten:** Feeds, Artikel, User und Ordner werden einmalig aus einem Backup der alten Produktion übernommen, auch nachträglich in einen neuen rueder, der schon läuft. Der Lesestand kommt aus dem Browser.
 
 ## Entscheidungen
 
@@ -78,6 +78,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Bild-Proxy | Selbst in Rust: prüfen, cachen, verkleinern mit dem `image`-Crate. Kein imgproxy mehr. | Ein Dienst weniger, dafür eigener Code an einer Angriffsfläche. |
 | User-Agent beim Abruf | Ehrlich als „rueder“, je Feed umstellbar. | Manche Seiten sperren unbekannte Clients. |
 | Oberfläche | Der klickbare Entwurf in `web/` ist abgenommen („sieht perfekt aus“). | Schritt 3 baut ihn aus, statt neu zu entwerfen. |
+| Umstieg und alte Daten | Kein Parallelbetrieb von altem und neuem rueder. Die alte Produktion ist abgeschaltet, ihre Daten kommen aus einem Backup von vor der Abschaltung. Der neue rueder geht ohne alte Daten in Betrieb, mit neuen Usern und Feeds. Später werden die alten Daten einmalig importiert und mit den Konten zusammengeführt, die es dann gibt, bei Bedarf unter anderem Namen. Mehrfache Importe sind nicht nötig. | Schritt 4 und der Import: Er muss in einen Bestand schreiben können, der schon Konten, Feeds und Artikel hat. |
 | Fuzzing | Ja, gezielt dort, wo eigener Code über Sicherheit entscheidet: Bereinigung, Feed-Verarbeitung und Bild-Proxy bekommen Fuzz-Targets, die Adressprüfung des HTTP-Clients einen Property-Test. Kein Fuzz-Target für jeden Parser. | Arbeitspaket in Schritt 2, läuft vor beiden Security-Reviews. |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
@@ -94,17 +95,17 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
 2. **Backend.** Abruf mit Versionen, Bereinigung mit Filterlisten, Bild-Proxy, Login und Sitzungen, API für Lesen, Lesestand, Ordner und Filterregeln, Live-Updates. Am Ende Fuzzing und das Security-Review.
 
-   Ergebnis: Der neue Server läuft neben dem alten gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
+   Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
 3. **Frontend.** Der Entwurf wird an die API angeschlossen und ausgebaut: Listen- und Volltextansicht, Tastatur, Ordnerbaum mit Drag & Drop, Live-Updates, Einstellungen, Filterregeln, Versionsvergleich, Labels, OPML.
 
-   Ergebnis: rueder ist auf der importierten Datenbank täglich benutzbar.
+   Ergebnis: rueder ist täglich benutzbar.
 
-4. **Umstieg.** Probelauf der Migration, Übernahme des Lesestands und der Labels aus dem Browser beim ersten Login, Parallelbetrieb, Umschalten, Abbau des alten Systems.
+4. **Umstieg.** Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach, am Ende wird das alte System abgebaut.
 
-   Ergebnis: Die Produktion läuft auf dem neuen rueder, der alte Code ist entfernt.
+   Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
 
-Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) steht am Ende von Schritt 2 und noch einmal vor dem Umstieg. Vor beiden wird [gefuzzt](architecture.md#fuzzing).
+Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) steht am Ende von Schritt 2 und noch einmal vor der Inbetriebnahme. Vor beiden wird [gefuzzt](architecture.md#fuzzing).
 
 ## Messziel
 
@@ -124,12 +125,12 @@ Bewusst zurückgestellt, damit der Umstieg nicht daran hängt:
 
 | Risiko | Gegenmaßnahme |
 |---|---|
-| Die Messung an erzeugten Daten trifft die Produktion nicht (andere Verteilung der Feedgrößen und Textlängen). | Der Generator bildet schiefe Verteilungen nach (wenige sehr große Feeds, viele kleine). Vor dem Umstieg läuft der Import einmal zur Probe auf einer Kopie der Produktion, mit denselben Messungen. |
-| Der Lesestand liegt nur in den Browsern der User und geht beim Umstieg verloren. | Das neue Frontend liest beim ersten Login den alten `localStorage` und schickt ihn an den Server (Schritt 4). Dafür muss das neue Frontend unter derselben Adresse (Origin) laufen wie das alte. |
+| Die Messung an erzeugten Daten trifft die Produktion nicht (andere Verteilung der Feedgrößen und Textlängen). | Der Generator bildet schiefe Verteilungen nach (wenige sehr große Feeds, viele kleine). Bevor die alten Daten in die Produktion kommen, läuft der Import einmal zur Probe auf einer Kopie, mit denselben Messungen. |
+| Der Lesestand liegt nur in den Browsern der User und geht beim Umstieg verloren. | Das neue Frontend liest nach dem Import den alten `localStorage` und schickt ihn an den Server (Schritt 4). Dafür muss das neue Frontend unter derselben Adresse (Origin) laufen wie das alte, und der Browser muss den Speicher noch haben. Je später der Import, desto eher fehlt er; dann gilt alles Alte als gelesen. |
 | Eigener Bild-Proxy und eigener HTTP-Client sind Angriffsflächen. | Je eine zentrale, getestete Komponente, feste Grenzen, Fuzzing, zwei Security-Reviews. |
 | Scheinversionen: Feeds ändern bei jedem Abruf Kleinigkeiten (Werbe-Token, Zeitstempel) und füllen das Archiv. | Prüfsumme über den normalisierten Inhalt, Obergrenze von 20 Versionen je Artikel. |
 | Seiten sperren den ehrlichen User-Agent. | Je Feed umstellbar; Abruffehler sind in der Oberfläche sichtbar. |
-| Der Parallelbetrieb von altem und neuem System belastet die Quellen doppelt. | Bedingte Abrufe (ETag, Last-Modified), kurzer Parallelbetrieb. |
+| Der einmalige Import schreibt in eine Datenbank, die schon benutzt wird, und lässt sich nicht einfach wiederholen. | Der Server steht währenddessen. Davor ein Backup der neuen Datenbank, ein Lauf, der nur zeigt, was er täte, und ein Probelauf auf einer Kopie. Nach einem Abbruch lässt sich der Import fortsetzen. |
 
 ## Detailfragen
 
@@ -140,6 +141,6 @@ Fiona hat die Vorschläge am 2026-11-10 angenommen. Gebaut wird danach.
 | Was geschieht bei der 21. Version eines Artikels? | Die Erstfassung und die 19 neuesten bleiben, die zweitälteste fällt weg. |
 | Wie viele Artikel sind bei einem neuen Abo ungelesen? | Die 10 neuesten, alles davor gilt als gelesen. Heute ist alles ungelesen. |
 | Wer darf den User-Agent eines Feeds umstellen? Ein Feed gehört allen seinen Abonnenten gemeinsam. | Jeder Abonnent; die Einstellung gilt für den Feed. |
-| Wie ziehen die htpasswd-Konten um? | Der Import legt die Konten ohne Passwort an und verknüpft sie über den alten Login-Namen. Ein Kommandozeilenbefehl setzt ein Passwort oder erzeugt einen Einmal-Link. Die Hashes aus htpasswd werden nicht übernommen. |
+| Wie ziehen die htpasswd-Konten um? | Die Hashes aus htpasswd werden nicht übernommen. Geändert am 2026-11-10: Weil der neue rueder vor dem Import in Betrieb geht, gibt es die Konten dann meist schon. Der Import führt einen alten User mit dem Konto gleichen Namens zusammen oder mit dem Konto, das ihm beim Aufruf zugeordnet wird. Nur für alte User ohne Gegenstück legt er ein Konto ohne Passwort an; ein Kommandozeilenbefehl setzt ein Passwort oder erzeugt einen Einmal-Link. |
 | Werden Artikel irgendwann gelöscht? | Nein. Alte Artikel kosten nur Plattenplatz. Eine Aufbewahrungsgrenze ließe sich später am unteren Ende eines Feeds ergänzen. |
 | Volltextsuche über alle Artikel? | Der Entwurf durchsucht die gezeigte Liste. Eine Suche auf dem Server über die eigenen Abos (PostgreSQL-Volltextsuche) kommt in Schritt 2 dazu, wenn die Messung zeigt, dass der Index tragbar ist. |
