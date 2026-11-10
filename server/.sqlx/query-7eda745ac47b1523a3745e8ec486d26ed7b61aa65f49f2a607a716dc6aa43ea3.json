@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.version, v.fetched_at, v.raw\n         FROM subscriptions s\n         JOIN article_versions v ON v.feed_id = s.feed_id\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND v.seq = $3\n         ORDER BY v.version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "article_versions",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "fetched_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "article_versions",
+            "name": "fetched_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "raw",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "article_versions",
+            "name": "raw"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7eda745ac47b1523a3745e8ec486d26ed7b61aa65f49f2a607a716dc6aa43ea3"
+}

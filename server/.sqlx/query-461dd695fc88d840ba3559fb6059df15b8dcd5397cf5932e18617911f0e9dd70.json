@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT set_config('plan_cache_mode', 'force_generic_plan', true) AS plan,\n                set_config('enable_bitmapscan', 'off', true) AS scan",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "plan",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "scan",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "461dd695fc88d840ba3559fb6059df15b8dcd5397cf5932e18617911f0e9dd70"
+}

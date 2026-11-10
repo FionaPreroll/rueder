@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE article_states\n         SET read = false, kept_unread = hidden AND NOT read\n         WHERE account_id = $1 AND feed_id = $2 AND seq > $3 AND seq <= $4\n           AND (read OR hidden)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dd9bcd61169853d82411adcf017d6d6c3e8c74fe50f5370a9f24dcc63e2e7991"
+}

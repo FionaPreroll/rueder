@@ -6,8 +6,51 @@ on:
   pull_request:
 
 jobs:
-  # The new frontend in web/. The Rust server gets a job of its own here once it
-  # exists; the workflows of the Go backend and the old frontend stay until the switch.
+  # The new server in server/ and the new frontend in web/. The workflows of the Go
+  # backend and the old frontend stay until the switch.
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Builds use the committed .sqlx cache; tests need a server to create per-test databases.
+      SQLX_OFFLINE: "true"
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      # Runs the tests (like cargo test) with coverage instrumentation, for Codecov.
+      - run: cargo llvm-cov --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: server/lcov.info
+          flags: server
+
   web:
     runs-on: ubuntu-latest
     defaults:

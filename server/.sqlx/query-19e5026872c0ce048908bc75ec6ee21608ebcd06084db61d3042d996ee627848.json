@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT max(run.seq) AS \"seq\"\n            FROM (\n                SELECT x.seq, row_number() OVER (ORDER BY x.seq) AS n\n                FROM (\n                    SELECT seq FROM article_states\n                    WHERE account_id = $1 AND feed_id = $2 AND seq > $3 AND (read OR hidden)\n                    ORDER BY seq LIMIT $4\n                ) x\n            ) run\n            WHERE run.seq = $3 + run.n\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "19e5026872c0ce048908bc75ec6ee21608ebcd06084db61d3042d996ee627848"
+}

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO feeds\n                 (feed_url, site_url, title, icon_url, fetch_interval_s, next_fetch_at, fetched_at,\n                  etag, last_modified, last_success_at, last_error_at, error_message, legacy_id,\n                  created_at)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, coalesce($14, now()))\n             ON CONFLICT (legacy_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4f599f89f662e82669e76490016a8f6fbfb85ae857f2eda274d580116c6d4b08"
+}

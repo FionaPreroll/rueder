@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ensure_versions_partition(d.day)\n         FROM unnest($1::date[]) AS d (day)\n         WHERE to_regclass('article_versions_' || to_char(d.day, 'YYYY_MM')) IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ensure_versions_partition",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "DateArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bd4e3d0c2f1d45967ab16ea97d8281230c97f03511a342786f5753f517672582"
+}
