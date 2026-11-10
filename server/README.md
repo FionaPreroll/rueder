@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching and cleaning
+## State: foundation, data, fetching, cleaning and images
 
 What is here:
 
@@ -27,12 +27,16 @@ What is here:
   and images get whole addresses without tracking parameters, share buttons and
   counting pixels go, audio and video become enclosures, and a fixed list says
   which markup may stay. `reclean` does it again for what is stored.
+- The image proxy (`src/images.rs`): `/img/<signature>/<size>/<address>` serves
+  the images of articles, so readers' browsers ask rueder and not the sites.
+  Addresses are signed, only PNG, JPEG, GIF and WebP pass, large images are
+  made to fit, and what was fetched is kept in a cache on disk.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
 - `GET /api/health`, and the built frontend from `../web/build`.
 
-This is step 1 of the plan and the first three work packages of step 2. The
-image proxy, login and the API follow.
+This is step 1 of the plan and the first four work packages of step 2. Login
+and the API follow.
 
 ## Commands
 
@@ -70,6 +74,18 @@ cargo run --release -- reclean --feed 12  # only the articles of one feed
 Every version of an article is kept as it was fetched, so `reclean` brings
 stored articles up to the rules and lists of today. It changes neither versions
 nor what anybody has read.
+
+## Images
+
+The proxy keeps what it fetched in `IMAGE_CACHE_DIR` (default `image-cache` in
+the working directory), up to `IMAGE_CACHE_MB` megabytes (default 1024); beyond
+that, the files unused longest go. This directory is the only place the server
+writes files to.
+
+The addresses of the proxy are signed with `IMAGE_PROXY_KEY`, a secret of 32
+characters or more. If there is none, the server makes one on first start and
+keeps it in the file `key` of the cache directory. Losing the key loses
+nothing: the addresses are made anew whenever an article is delivered.
 
 ## Importing the old database
 
