@@ -5,4 +5,15 @@ disallowed-methods = [
     { path = "reqwest::Client::builder", reason = "use rueder::http_client::HttpClient" },
     { path = "reqwest::ClientBuilder::new", reason = "use rueder::http_client::HttpClient" },
     { path = "reqwest::get", reason = "use rueder::http_client::HttpClient" },
+    # Only src/cleaning.rs reads HTML that somebody else wrote. Its parser is kept
+    # within limits for the depth and the size of the tree; without them a text of
+    # a megabyte can keep the server busy for minutes or fill its memory.
+    { path = "ammonia::clean", reason = "use rueder::cleaning" },
+    { path = "ammonia::clean_text", reason = "use rueder::cleaning" },
+    { path = "ammonia::Builder::clean", reason = "use rueder::cleaning" },
+    { path = "ammonia::Builder::clean_from_reader", reason = "use rueder::cleaning" },
+    { path = "html5ever::parse_fragment", reason = "use rueder::cleaning" },
+    { path = "html5ever::parse_document", reason = "use rueder::cleaning" },
+    { path = "html5ever::driver::parse_fragment", reason = "use rueder::cleaning" },
+    { path = "html5ever::driver::parse_document", reason = "use rueder::cleaning" },
 ]

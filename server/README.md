@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data and fetching
+## State: foundation, data, fetching and cleaning
 
 What is here:
 
@@ -23,12 +23,16 @@ What is here:
 - Fetching (`src/feeds.rs`, `src/fetch.rs`): `serve` fetches the feeds that are
   due and have a reader, with conditional requests, and stores new articles and
   new versions of changed ones.
+- Cleaning (`src/cleaning.rs`): what an article's text keeps for reading. Links
+  and images get whole addresses without tracking parameters, share buttons and
+  counting pixels go, audio and video become enclosures, and a fixed list says
+  which markup may stay. `reclean` does it again for what is stored.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
 - `GET /api/health`, and the built frontend from `../web/build`.
 
-This is step 1 of the plan and the first two work packages of step 2. Cleaning
-with rueder's own rules, the image proxy, login and the API follow.
+This is step 1 of the plan and the first three work packages of step 2. The
+image proxy, login and the API follow.
 
 ## Commands
 
@@ -49,6 +53,23 @@ with `cargo install sqlx-cli`.
 
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 (default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).
+
+## Cleaning
+
+The lists the cleaning works with are in `rules/`: `blocked-links.txt` (domains
+whose links and images are left out) and `tracking-parameters.txt` (parameters
+that are taken out of addresses), one rule per line. They are built into the
+program. To use lists of your own, put both files into a directory and name it
+in `CLEANING_RULES_DIR`.
+
+```sh
+cargo run --release -- reclean            # clean all stored articles again
+cargo run --release -- reclean --feed 12  # only the articles of one feed
+```
+
+Every version of an article is kept as it was fetched, so `reclean` brings
+stored articles up to the rules and lists of today. It changes neither versions
+nor what anybody has read.
 
 ## Importing the old database
 

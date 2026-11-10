@@ -320,7 +320,7 @@ pub fn clean(html: &str, base: Base<'_>, rules: &Rules) -> Cleaned {
         html = again;
     }
     Cleaned {
-        html: ALLOWED.clean(&without_markup(&html)).to_string(),
+        html: allowed_only(&without_markup(&html)),
         enclosures,
     }
 }
@@ -331,7 +331,16 @@ const ROUNDS: usize = 4;
 /// Both steps, once.
 fn round(html: &str, bases: &Bases, rules: &Rules) -> (String, Vec<Enclosure>) {
     let (html, enclosures) = apply_rules(html, bases, rules);
-    (ALLOWED.clean(&html).to_string(), enclosures)
+    (allowed_only(&html), enclosures)
+}
+
+/// The second step. What it is given was written out by the first step or has
+/// no tags at all, so the tree it builds for itself stays as small as the one
+/// that was counted.
+fn allowed_only(html: &str) -> String {
+    #[expect(clippy::disallowed_methods)]
+    let document = ALLOWED.clean(html);
+    document.to_string()
 }
 
 /// The tags that may stay.
@@ -615,6 +624,8 @@ fn read_within_limits(html: &str) -> Option<Handle> {
         depths: RefCell::default(),
     };
     let context = QualName::new(None, ns!(html), LocalName::from("div"));
+    // The one place that reads HTML from outside; `clippy.toml` forbids it elsewhere.
+    #[expect(clippy::disallowed_methods)]
     let mut parser = parse_fragment(sink, ParseOpts::default(), context, Vec::new(), false);
     let mut rest = html;
     while !rest.is_empty() {
