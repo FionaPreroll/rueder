@@ -31,19 +31,19 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 |---|---|---|
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
 | 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
-| 2 Backend | Offen | |
+| 2 Backend | Begonnen am 2026-11-10: Paket 2.1 (gehärteter HTTP-Client) ist fertig | `server/src/http_client.rs` |
 | 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
 | 4 Umstieg | Offen | |
 
 Was es heute gibt:
 
 - `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank und dem Mess-Werkzeug. 37 Tests gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug und dem gehärteten HTTP-Client, den noch nichts benutzt. 62 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
 - Das alte System in `backend/` und `frontend/`, unverändert und lauffähig.
 
-Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das ist Schritt 2.
+Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das ist der Rest von Schritt 2, als Nächstes Paket 2.2.
 
 ## Repository
 
@@ -74,7 +74,7 @@ Der alte Code wird nicht mehr weiterentwickelt, nur noch gelesen: als Vorlage f�
 - `sqlx` mit PostgreSQL, ohne ORM. Abfragen mit `sqlx::query!` und Verwandten, beim Kompilieren gegen das Schema geprüft. Der Cache in `server/.sqlx/` wird eingecheckt; die CI baut mit `SQLX_OFFLINE=true`.
 - Migrationen als `server/migrations/000N_name.sql`, angewendet beim Start. Eine Migration, die auf `main` liegt, wird nicht mehr geändert, Änderungen kommen als neue Datei.
 - Kein `unsafe`: Das Crate verbietet es (`[lints.rust]` in `Cargo.toml`). Was von außen kommt (Anfragen, Feeds, die alte Datenbank), darf den Server nicht zum Absturz bringen: kein `unwrap`, `expect` oder `panic!` darauf außerhalb von Tests.
-- `reqwest` mit `rustls` für alle Abrufe nach außen, nur über den gehärteten Client.
+- `reqwest` mit `rustls` für alle Abrufe nach außen, nur über den gehärteten Client (`rueder::http_client::HttpClient`). `server/clippy.toml` lässt den Bau eines anderen `reqwest`-Clients scheitern.
 - `argon2` für Passwörter, `time` für Zeiten, `uuid` für die alten IDs, `anyhow` für Fehler im Inneren. Nach außen ein Fehlertyp mit festen Antworten (nicht gefunden, ungültige Anfrage, intern), der keine Interna verrät.
 - Konfiguration über Umgebungsvariablen, lokal aus `server/.env` (Vorlage `server/.env.example`).
 - Tests: Integrationstests in `server/tests/` mit `#[sqlx::test]`, das je Test eine frische Datenbank anlegt. Property-Tests mit `proptest`, wo ein einfaches Modell als Vergleich taugt (Lesestand, Baum). Der Test des Imports braucht keine zweite Datenbank: Die nachgebaute alte Datenbank liegt in einem eigenen Schema (`legacy`) der Testdatenbank, und der Import liest sie über eine Verbindung mit diesem `search_path`.
@@ -176,8 +176,8 @@ Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft
 
 Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
-- [ ] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse, und ein Property-Test mit `proptest` zeigt, dass die Adressprüfung in keiner Schreibweise eine interne Adresse durchlässt (siehe [Fuzzing](architecture.md#fuzzing)). Dieses Paket zuerst, alle folgenden Abrufe hängen daran.
-- [ ] **2.2 Abruf mit Versionen (A2).** Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden.
+- [x] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse, und ein Property-Test mit `proptest` zeigt, dass die Adressprüfung in keiner Schreibweise eine interne Adresse durchlässt (siehe [Fuzzing](architecture.md#fuzzing)). Dieses Paket zuerst, alle folgenden Abrufe hängen daran. Fertig am 2026-11-10, beschrieben unter [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client). Dazugekommen ist eine Ausnahme, mit der ein Betreiber einzelne interne Netze freigibt. Nicht im Test: TLS gegen echte Server, das zeigt sich mit dem ersten echten Abruf in Paket 2.2.
+- [ ] **2.2 Abruf mit Versionen (A2).** Der HTTP-Client wird in `serve` einmal gebaut, mit den freigegebenen Netzen des Betreibers aus der Umgebung. Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden.
 - [ ] **2.3 Bereinigung (A10).** `ammonia` mit Allowlist, die Regeln aus `frontend/src/rueder/helpers/ArticleCleaner.ts`, Listen als Datendateien, Befehl zum erneuten Bereinigen aus `article_versions`. Fertig, wenn die Fälle aus `ArticleCleaner.test.ts` übertragen und grün sind.
 - [ ] **2.4 Bild-Proxy (A11).** Signierte Adressen, Formatprüfung, feste Größen, Cache auf Platte, Grenzen. Vorlage für die heutigen Größen: `frontend/src/rueder/helpers/ImageProxy.ts`. Fertig, wenn Tests falsche Signaturen, Nicht-Bilder, zu große Bilder und interne Adressen ablehnen.
 - [ ] **2.5 Konten und Sitzungen (A3).** Argon2id, Sitzungs-Cookie, Login mit Rate-Limit, Befehle zum Anlegen von Konten und Setzen von Passwörtern, danach OpenID Connect. Fertig, wenn Tests Login, Ablauf, Abmelden und die Cookie-Attribute prüfen.
