@@ -388,30 +388,35 @@ pub struct Page {
 /// with whether it is read and starred. One feed, a folder's feeds and all feeds
 /// are the same query.
 ///
-/// The cost does not depend on how many articles the feeds hold. An index gives
-/// the newest few articles of each feed, enough to hold a page between them; the
-/// `limit`-th newest of those is a floor under which no article of the page can
-/// lie, and only the feeds reaching above the floor are read, down to it. With
-/// `unread_only`, the read mark of each subscription is a second floor, so what
-/// lies under it is never looked at.
+/// The cost does not depend on how many articles the feeds hold, only on the
+/// number of feeds and the length of the page. The feeds are merged the way
+/// sorted lists are: an index gives each feed's newest article that belongs on
+/// the list, the newest of these goes onto the page, and its feed gives its next
+/// one. That is one step into the index per feed and one per line of the page.
+/// With `unread_only`, the read mark of each subscription is a floor under which
+/// the index is never looked at.
 pub async fn page(
     db: &PgPool,
     account_id: i32,
     feed_ids: &[i32],
     page: Page,
 ) -> anyhow::Result<Vec<ListItem>> {
-    // The floors are only known while the query runs, so the planner cannot tell
-    // "the newest 50 of this feed" from "a handful of rows" and at times prefers a
-    // bitmap scan, which reads all of a feed to sort it. Walking the index
-    // backwards and stopping early is right for every one of these scans.
     let mut tx = db.begin().await?;
-    sqlx::query!("SET LOCAL enable_bitmapscan = off")
-        .execute(&mut *tx)
-        .await?;
+    // The plan is the same whatever the feeds and the place in the list: walk
+    // each index backwards and stop early. So it is made once per connection
+    // and kept, which saves more time than the query takes to run. And the
+    // planner, not knowing how few rows a step reads, must not think of a
+    // bitmap scan, which would read all of a feed to sort it.
+    sqlx::query!(
+        "SELECT set_config('plan_cache_mode', 'force_generic_plan', true) AS plan,
+                set_config('enable_bitmapscan', 'off', true) AS scan"
+    )
+    .fetch_one(&mut *tx)
+    .await?;
     let items = sqlx::query_as!(
         ListItem,
         r#"
-        WITH subs AS (
+        WITH RECURSIVE subs AS MATERIALIZED (
             SELECT s.feed_id, s.read_upto,
                    CASE WHEN $5 THEN coalesce(
                        (SELECT m.id FROM articles m
@@ -419,59 +424,73 @@ pub async fn page(
                    ELSE 0 END AS floor
             FROM subscriptions s
             WHERE s.account_id = $1 AND s.feed_id = ANY($2)
-        ), samples AS (
-            -- The newest few of each feed, enough to hold a page between them.
-            SELECT subs.feed_id, a.id
+        ), merge AS (
+            -- Every feed's newest article that belongs on the list.
+            SELECT array_agg(subs.feed_id) AS feeds, array_agg(subs.floor) AS floors,
+                   array_agg(head.id) AS heads, 0::bigint AS n, NULL::integer AS feed_id,
+                   NULL::bigint AS id
             FROM subs CROSS JOIN LATERAL (
-                SELECT a.id FROM articles a
-                WHERE a.feed_id = subs.feed_id AND a.id > subs.floor AND a.id < $3
-                  AND NOT EXISTS (
-                      SELECT 1 FROM article_states x
-                      WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
-                        AND (x.hidden OR ($5 AND x.read)))
-                ORDER BY a.id DESC
-                LIMIT (SELECT ($4::bigint + count(*) - 1) / greatest(count(*), 1) FROM subs)
-            ) a
-        ), threshold AS (
-            SELECT coalesce((
-                SELECT s.id FROM samples s
-                ORDER BY s.id DESC OFFSET $4::bigint - 1 LIMIT 1), 0) AS t
-        ), found AS (
-            SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
-                   a.teaser, a.author, a.url, a.thumbnail_url, subs.read_upto
-            FROM subs CROSS JOIN threshold CROSS JOIN LATERAL (
-                SELECT a.* FROM articles a
-                WHERE a.feed_id = subs.feed_id AND a.id > subs.floor AND a.id >= threshold.t
-                  AND a.id < $3
-                  AND NOT EXISTS (
-                      SELECT 1 FROM article_states x
-                      WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
-                        AND (x.hidden OR ($5 AND x.read)))
-                ORDER BY a.id DESC LIMIT $4
-            ) a
-            WHERE subs.feed_id IN (SELECT s.feed_id FROM samples s WHERE s.id >= threshold.t)
+                SELECT (SELECT a.id FROM articles a
+                        WHERE a.feed_id = subs.feed_id AND a.id > subs.floor AND a.id < $3
+                          AND NOT EXISTS (
+                              SELECT 1 FROM article_states x
+                              WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
+                                AND (x.hidden OR ($5 AND x.read))
+                              OFFSET 0)
+                        ORDER BY a.id DESC LIMIT 1) AS id
+            ) head
+          UNION ALL
+            -- The newest of them goes onto the page, and its feed's next one
+            -- takes its place.
+            SELECT m.feeds, m.floors,
+                   m.heads[:newest.at - 1] || next.id || m.heads[newest.at + 1:],
+                   m.n + 1, m.feeds[newest.at], m.heads[newest.at]
+            FROM merge m
+            CROSS JOIN LATERAL (
+                SELECT h.at FROM unnest(m.heads) WITH ORDINALITY AS h (id, at)
+                WHERE h.id IS NOT NULL
+                ORDER BY h.id DESC LIMIT 1
+            ) newest
+            CROSS JOIN LATERAL (
+                SELECT (SELECT a.id FROM articles a
+                        WHERE a.feed_id = m.feeds[newest.at] AND a.id > m.floors[newest.at]
+                          AND a.id < m.heads[newest.at]
+                          AND NOT EXISTS (
+                              SELECT 1 FROM article_states x
+                              WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
+                                AND (x.hidden OR ($5 AND x.read))
+                              OFFSET 0)
+                        ORDER BY a.id DESC LIMIT 1) AS id
+            ) next
+            WHERE m.n < $4
+        ), picked AS (
+            SELECT m.feed_id, m.id FROM merge m WHERE m.n > 0
           UNION ALL
             -- Set back to unread under the read mark: few, found from their state.
-            SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
-                   a.teaser, a.author, a.url, a.thumbnail_url, subs.read_upto
+            SELECT a.feed_id, a.id
             FROM subs
             JOIN article_states k ON k.account_id = $1 AND k.feed_id = subs.feed_id
                 AND k.kept_unread AND NOT k.hidden AND k.seq <= subs.read_upto
             JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq
             WHERE $5 AND a.id < $3
+            ORDER BY id DESC
+            LIMIT $4
         )
-        SELECT f.feed_id AS "feed_id!", f.seq AS "seq!", f.id AS "id!",
-               f.published_at AS "published_at!", f.updated_at, f.version AS "version!",
-               f.title AS "title!", f.teaser AS "teaser!", f.author AS "author!", f.url,
-               f.thumbnail_url,
-               CASE WHEN f.seq <= f.read_upto THEN NOT coalesce(st.kept_unread, false)
+        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
+               a.teaser, a.author, a.url, a.thumbnail_url,
+               CASE WHEN a.seq <= subs.read_upto THEN NOT coalesce(st.kept_unread, false)
                     ELSE coalesce(st.read, false) END AS "read!",
                coalesce(st.starred, false) AS "starred!"
-        FROM found f
-        LEFT JOIN article_states st
-            ON st.account_id = $1 AND st.feed_id = f.feed_id AND st.seq = f.seq
-        ORDER BY f.id DESC
-        LIMIT $4
+        FROM picked p
+        JOIN subs ON subs.feed_id = p.feed_id
+        JOIN articles a ON a.feed_id = p.feed_id AND a.id = p.id
+        -- One step into the index per line; never the whole of the account's states.
+        LEFT JOIN LATERAL (
+            SELECT x.read, x.kept_unread, x.starred FROM article_states x
+            WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
+            OFFSET 0
+        ) st ON true
+        ORDER BY a.id DESC
         "#,
         account_id,
         feed_ids,

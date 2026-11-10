@@ -44,7 +44,24 @@ async fn made_up_data_can_be_measured(db: PgPool) {
     .unwrap();
     assert_eq!(misplaced, 0);
 
+    let read = || async {
+        let marks: Vec<(i32, i32, i32)> = sqlx::query_as(
+            "SELECT account_id, feed_id, read_upto FROM subscriptions ORDER BY 1, 2",
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap();
+        let states: Vec<(i32, i32, i32, bool, bool, bool, bool)> =
+            sqlx::query_as("SELECT * FROM article_states ORDER BY 1, 2, 3")
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        (marks, states)
+    };
+    let before = read().await;
     let report = bench::measure(&db, 3).await.unwrap();
+    // Measuring leaves what was read as it found it, so it can be repeated.
+    assert!(read().await == before);
     assert_eq!(
         (report.accounts, report.feeds, report.articles),
         (3, 12, 3000)

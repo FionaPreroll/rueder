@@ -415,7 +415,7 @@ impl Random {
 
 /// Times the reader's queries on whatever the database holds, each `runs` times
 /// with changing accounts, feeds and places in the lists. The queries that write
-/// come last, since they change what was read.
+/// come last, and what they changed is put back.
 pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
     let runs = runs.max(1);
     let mut random = Random(0x2545_F491_4F6C_DD1D);
@@ -550,6 +550,16 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         .fetch_all(db)
         .await?
     });
+    // The last two change what was read. It is put back after them, so that a
+    // second run measures the same thing as the first.
+    sqlx::raw_sql(
+        "DROP TABLE IF EXISTS bench_marks, bench_states;
+         CREATE UNLOGGED TABLE bench_marks AS
+             SELECT account_id, feed_id, read_upto FROM subscriptions;
+         CREATE UNLOGGED TABLE bench_states AS TABLE article_states",
+    )
+    .execute(db)
+    .await?;
     time!("Mark one article as read", {
         let sub = random.pick(&subs);
         let seq = sub.last_seq - random.below(i64::from(sub.last_seq.min(300))) as i32;
@@ -559,6 +569,23 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         let sub = random.pick(&subs);
         reading::mark_all_read(db, sub.account_id, sub.feed_id, sub.last_seq).await?
     });
+    sqlx::raw_sql(
+        "BEGIN;
+         DELETE FROM article_states;
+         INSERT INTO article_states TABLE bench_states;
+         UPDATE subscriptions s SET read_upto = m.read_upto FROM bench_marks m
+         WHERE s.account_id = m.account_id AND s.feed_id = m.feed_id
+           AND s.read_upto <> m.read_upto;
+         DROP TABLE bench_marks, bench_states;
+         COMMIT",
+    )
+    .execute(db)
+    .await?;
+    for table in ["article_states", "subscriptions"] {
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("VACUUM (ANALYZE) {table}")))
+            .execute(db)
+            .await?;
+    }
 
     let count = |table: &'static str| async move {
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
