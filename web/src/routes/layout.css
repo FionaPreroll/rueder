@@ -1,0 +1,184 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+
+/* `dark:` follows the theme the settings pick, not only the system setting. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* The colors of the page by what they are for. Components use these (bg-paper,
+   text-soft, border-line …) and no fixed grays, so the themes below only repaint
+   the variables. Text colors keep a contrast of 4.5:1 on paper and panel. */
+@theme {
+	--color-paper: #ffffff;
+	--color-panel: #f4f5f7;
+	--color-line: #dde1e6;
+	--color-ink: #1f2328;
+	--color-soft: #59626d;
+	--color-link: #1a55c4;
+	--color-hover: #e9ecf1;
+	--color-chosen: #dfe8fb;
+	--color-accent: #c8402e;
+	--color-on-accent: #ffffff;
+	--color-star: #d99a00;
+	--color-warn: #a8500a;
+	--color-live: #1a7f43;
+	--color-added: #d6f3dc;
+	--color-removed: #fbdcdc;
+}
+
+:root {
+	color-scheme: light;
+
+	/* Set by the settings through data attributes on <html>, see below. */
+	--row-pad: 0.3rem;
+	--reader-size: 1.0625rem;
+	--reader-font: var(--font-sans);
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	--color-paper: #15171b;
+	--color-panel: #1c1f25;
+	--color-line: #30353d;
+	--color-ink: #e7e9ec;
+	--color-soft: #a4acb8;
+	--color-link: #8cb4ff;
+	--color-hover: #262b33;
+	--color-chosen: #25324f;
+	--color-star: #f0b429;
+	--color-warn: #f0a35c;
+	--color-live: #4cc37d;
+	--color-added: #17402a;
+	--color-removed: #55232a;
+}
+
+/* Accent colors: the Subscribe button, the cursor in the list, what is switched on.
+   White text is readable on each of them. */
+:root[data-accent='blue'] {
+	--color-accent: #1a62d0;
+}
+:root[data-accent='green'] {
+	--color-accent: #1a7a40;
+}
+:root[data-accent='orange'] {
+	--color-accent: #b84c0c;
+}
+:root[data-accent='purple'] {
+	--color-accent: #7a3fc0;
+}
+:root[data-accent='graphite'] {
+	--color-accent: #4b5563;
+}
+:root[data-theme='dark'][data-accent='graphite'] {
+	--color-accent: #66707f;
+}
+
+:root[data-density='comfortable'] {
+	--row-pad: 0.6rem;
+}
+
+:root[data-text-size='small'] {
+	--reader-size: 0.9375rem;
+}
+:root[data-text-size='large'] {
+	--reader-size: 1.1875rem;
+}
+
+:root[data-reading-font='serif'] {
+	--reader-font: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+}
+
+@layer base {
+	body {
+		@apply bg-paper text-ink;
+	}
+
+	/* One focus ring everywhere, visible on both themes. */
+	:focus-visible {
+		outline: 2px solid var(--color-link);
+		outline-offset: 1px;
+	}
+
+	/* The forms plugin paints fields white with gray borders; these repaint them in the
+	   theme's colors. `:root` in front makes them win over the plugin's own selectors. */
+	:root :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+		background-color: var(--color-paper);
+		border-color: var(--color-line);
+		color: var(--color-ink);
+	}
+	:root :is(input, textarea)::placeholder {
+		color: var(--color-soft);
+		opacity: 1;
+	}
+	:root :is([type='checkbox'], [type='radio']):not(:checked) {
+		background-color: var(--color-paper);
+		border-color: var(--color-soft);
+	}
+
+	kbd {
+		@apply rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-xs text-ink;
+	}
+}
+
+@layer components {
+	/* A quiet button of the toolbars. */
+	.tool {
+		@apply inline-flex h-8 cursor-pointer items-center gap-1.5 rounded border border-line bg-paper px-2.5 text-sm whitespace-nowrap text-ink hover:bg-hover disabled:cursor-default disabled:opacity-50;
+	}
+	.tool[aria-pressed='true'] {
+		@apply bg-chosen;
+	}
+
+	/* A button without a frame, for icons in rows. */
+	.plain {
+		@apply inline-flex cursor-pointer items-center justify-center rounded text-soft hover:bg-hover hover:text-ink;
+	}
+
+	.menu-item {
+		@apply flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-hover;
+	}
+
+	/* The text of an article: what the server's cleaner lets through, set for reading. */
+	.article-body {
+		font-family: var(--reader-font);
+		font-size: var(--reader-size);
+		line-height: 1.6;
+		max-width: 44rem;
+		overflow-wrap: anywhere;
+	}
+	.article-body :where(p, ul, ol, blockquote, pre, figure) {
+		margin-block: 0.85em;
+	}
+	.article-body :where(a) {
+		color: var(--color-link);
+		text-decoration: underline;
+	}
+	.article-body :where(img, video) {
+		max-width: 100%;
+		height: auto;
+		border-radius: 0.375rem;
+	}
+	.article-body :where(blockquote) {
+		border-left: 3px solid var(--color-line);
+		padding-left: 1em;
+		color: var(--color-soft);
+	}
+	.article-body :where(ul) {
+		list-style: disc;
+		padding-left: 1.4em;
+	}
+	.article-body :where(ol) {
+		list-style: decimal;
+		padding-left: 1.4em;
+	}
+	.article-body :where(pre, code) {
+		font-family: var(--font-mono);
+		font-size: 0.9em;
+	}
+	.article-body :where(pre) {
+		overflow-x: auto;
+		border-radius: 0.375rem;
+		background: var(--color-panel);
+		padding: 0.75em 1em;
+	}
+}
