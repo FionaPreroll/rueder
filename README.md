@@ -4,6 +4,8 @@
 
 ## Rewrite in Rust
 
+[![CI](https://github.com/FionaPreroll/rueder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FionaPreroll/rueder/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/FionaPreroll/rueder/graph/badge.svg?branch=main)](https://codecov.io/gh/FionaPreroll/rueder)
+
 rueder is being rewritten as a single Rust server with a new Svelte frontend. The new
 code lives in `server/` (to come) and `web/`; the Go backend and the old frontend
 described below stay runnable until the switch. The plan and the design notes are
