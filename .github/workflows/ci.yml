@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The new frontend in web/. The Rust server gets a job of its own here once it
+  # exists; the workflows of the Go backend and the old frontend stay until the switch.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The pnpm version pinned in package.json (packageManager).
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run check
+      # Unit and component tests with coverage, for Codecov.
+      - run: pnpm run test:coverage
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: web/coverage/lcov.info
+          flags: web
+      - run: pnpm run build
+      # The interface as one HTML file that runs without a server, to try a change
+      # by opening the file: download it from the run's artifacts.
+      - run: pnpm run build:single
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rueder-ui-draft
+          path: web/build/index.html
+          if-no-files-found: error

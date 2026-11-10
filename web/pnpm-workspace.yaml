@@ -1,0 +1,8 @@
+# pnpm settings for the frontend (a single package, not a workspace).
+# pnpm 11+ already waits a day before installing a freshly published version
+# (minimumReleaseAge) and refuses dependencies whose build scripts are not
+# decided on below.
+engineStrict: true
+allowBuilds:
+  # Optional file watching on macOS; ships a prebuilt binary.
+  fsevents: false

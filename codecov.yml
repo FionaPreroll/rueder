@@ -1,0 +1,16 @@
+# Coverage is shown on PRs and on the badge, but never fails a check.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+comment:
+  layout: "condensed_header, diff, flags"
+# One upload per CI job; each flag covers its part of the repository.
+flags:
+  web:
+    paths:
+      - web/
