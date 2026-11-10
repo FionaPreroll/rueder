@@ -27,7 +27,11 @@ use sqlx::{Connection, PgConnection, PgPool};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
-use crate::articles::{self, NewArticle, Original, Placed, guid_hash};
+use crate::{
+    articles::{self, NewArticle, Original, Placed, guid_hash},
+    cleaning::{self, Base, Rules},
+    feeds::add_inline,
+};
 
 /// Articles read and written in one go.
 const BATCH: i64 = 2000;
@@ -96,14 +100,14 @@ impl fmt::Display for Report {
 
 /// Imports what the new database does not have yet. `legacy` is a connection to
 /// the old rueder's database.
-pub async fn run(db: &PgPool, legacy: &mut PgConnection) -> anyhow::Result<Report> {
+pub async fn run(db: &PgPool, legacy: &mut PgConnection, rules: &Rules) -> anyhow::Result<Report> {
     let mut old = legacy
         .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .await
         .context("starting to read the old database")?;
     let mut report = Report::default();
     let mut feeds = import_feeds(db, &mut old, &mut report).await?;
-    import_articles(db, &mut old, &mut feeds, &mut report).await?;
+    import_articles(db, &mut old, &mut feeds, rules, &mut report).await?;
     import_accounts(db, &mut old, &feeds, &mut report).await?;
     note_unused_tables(&mut old, &mut report).await?;
     old.rollback().await?;
@@ -114,6 +118,8 @@ pub async fn run(db: &PgPool, legacy: &mut PgConnection) -> anyhow::Result<Repor
 struct Target {
     id: i32,
     title: String,
+    /// Where the feed is fetched from, for the links in its articles.
+    feed_url: String,
     /// The number of the feed's newest article in the new database.
     last_seq: i32,
     /// How many of the feed's old articles the import has come past. This is the
@@ -235,10 +241,11 @@ async fn import_feeds(
         let target = Target {
             id: row.id,
             title: if title.is_empty() {
-                row.feed_url
+                row.feed_url.clone()
             } else {
                 title
             },
+            feed_url: row.feed_url,
             last_seq: row.last_seq,
             seen: 0,
             renumbered: false,
@@ -302,6 +309,7 @@ async fn import_articles(
     db: &PgPool,
     old: &mut PgConnection,
     feeds: &mut HashMap<Uuid, Target>,
+    rules: &Rules,
     report: &mut Report,
 ) -> anyhow::Result<()> {
     // As long as every article of the new database came from the old one, the
@@ -387,6 +395,18 @@ async fn import_articles(
                 // The old rueder noted when it stored an article, which is as
                 // close to the time of the fetch as it gets.
                 let fetched_at = row.created_at.or(row.posted_at).unwrap_or(now);
+                // The old rueder took scripts out when it fetched a text and did
+                // the rest in the browser, on every reading. Here the text is
+                // cleaned once, like one that is fetched today.
+                let url = filled(row.link).map(|link| rules.clean_url(&link));
+                let base = Base {
+                    article: url.as_deref(),
+                    feed: Some(&target.feed_url),
+                };
+                let cleaned = cleaning::clean(&content.text, base, rules);
+                let mut enclosures = content.enclosures;
+                add_inline(&mut enclosures, cleaned.enclosures);
+                let address = |url: Option<String>| filled(url).map(|url| rules.clean_url(&url));
                 arrivals.push(Arrival {
                     legacy_id: row.id,
                     feed_id: target.id,
@@ -398,18 +418,16 @@ async fn import_articles(
                         fetched_at,
                         original: Original {
                             title: row.title.unwrap_or_default(),
-                            // The old rueder cleaned the text when it fetched it.
-                            // The new cleaning runs over all of it once it is there.
-                            content: content.text.clone(),
+                            content: content.text,
                             authors: content.authors,
                             tags: content.tags,
-                            url: filled(row.link),
+                            url,
                         },
                         teaser: row.teaser.unwrap_or_default(),
-                        thumbnail_url: filled(row.thumbnail),
-                        html: content.text,
-                        enclosures: content.enclosures.into(),
-                        image_url: filled(row.image),
+                        thumbnail_url: address(row.thumbnail),
+                        html: cleaned.html,
+                        enclosures: enclosures.into(),
+                        image_url: address(row.image),
                         image_title: filled(row.image_title),
                     },
                 });

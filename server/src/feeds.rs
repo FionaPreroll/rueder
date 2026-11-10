@@ -2,9 +2,9 @@
 //!
 //! [`parse`] reads RSS, Atom and JSON Feed and turns every entry into an article:
 //! with the id it has in its feed, the text as it came (kept as the version) and
-//! the text cleaned for reading. [`store`] then sorts out what the feed already
-//! has: unknown ids are new articles, known ones with another checksum get a new
-//! version, the rest is left alone.
+//! the text cleaned for reading (see [`crate::cleaning`]). [`store`] then sorts
+//! out what the feed already has: unknown ids are new articles, known ones that
+//! read differently get a new version, the rest is left alone.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
 use time::OffsetDateTime;
 
-use crate::articles::{self, NewArticle, Original, guid_hash};
+use crate::{
+    articles::{self, NewArticle, Original, guid_hash},
+    cleaning::{self, Base, Rules, text},
+};
 
 /// How many articles one fetch takes from a feed, counted from its top.
 pub const MAX_ARTICLES: usize = 500;
@@ -38,7 +41,15 @@ pub struct Parsed {
 }
 
 /// Reads a feed. `url` is where it came from, for links relative to it.
-pub fn parse(body: &[u8], url: &str, fetched_at: OffsetDateTime) -> anyhow::Result<Parsed> {
+///
+/// This takes as long as the feed is large and its texts are tangled; inside
+/// the server it belongs on a thread that may be kept busy.
+pub fn parse(
+    body: &[u8],
+    url: &str,
+    fetched_at: OffsetDateTime,
+    rules: &Rules,
+) -> anyhow::Result<Parsed> {
     let parser = feed_rs::parser::Builder::new()
         .base_uri(Some(url))
         // The library would make up a random id where a feed gives none, and the
@@ -53,7 +64,7 @@ pub fn parse(body: &[u8], url: &str, fetched_at: OffsetDateTime) -> anyhow::Resu
         .entries
         .into_iter()
         .take(MAX_ARTICLES)
-        .filter_map(|entry| article(entry, fetched_at))
+        .filter_map(|entry| article(entry, url, fetched_at, rules))
         .collect();
     let skipped = listed - articles.len();
     articles.reverse();
@@ -66,14 +77,19 @@ pub fn parse(body: &[u8], url: &str, fetched_at: OffsetDateTime) -> anyhow::Resu
             .title
             .map(|title| text(&title.content))
             .filter(|title| !title.is_empty()),
-        site_url: link(&feed.links),
+        site_url: link(&feed.links).map(|url| rules.clean_url(&url)),
         icon_url: feed.icon.or(feed.logo).and_then(|image| web(&image.uri)),
         articles,
         skipped,
     })
 }
 
-fn article(entry: Entry, fetched_at: OffsetDateTime) -> Option<NewArticle> {
+fn article(
+    entry: Entry,
+    feed_url: &str,
+    fetched_at: OffsetDateTime,
+    rules: &Rules,
+) -> Option<NewArticle> {
     let title = entry
         .title
         .as_ref()
@@ -88,8 +104,11 @@ fn article(entry: Entry, fetched_at: OffsetDateTime) -> Option<NewArticle> {
     if content.len() > MAX_CONTENT {
         return None;
     }
+    // The id is taken from the link as the feed gives it: that is what the old
+    // rueder knows its articles by.
     let url = link(&entry.links);
     let guid = guid(&entry.id, url.as_deref(), &title, &content)?;
+    let url = url.map(|url| rules.clean_url(&url));
 
     // A date in the future would keep the article on top of every list.
     let published_at = entry
@@ -103,6 +122,7 @@ fn article(entry: Entry, fetched_at: OffsetDateTime) -> Option<NewArticle> {
         .iter()
         .flat_map(|media| &media.thumbnails)
         .find_map(|thumbnail| web(&thumbnail.image.uri))
+        .map(|url| rules.clean_url(&url))
         .or_else(|| {
             let images = media.iter().flat_map(|media| &media.content);
             images
@@ -113,16 +133,23 @@ fn article(entry: Entry, fetched_at: OffsetDateTime) -> Option<NewArticle> {
                         .is_some_and(|kind| kind.ty().as_str() == "image")
                 })
                 .find_map(|content| web(content.url.as_ref()?.as_str()))
+                .map(|url| rules.clean_url(&url))
         });
-    let enclosures: Vec<_> = media
+    let mut enclosures: Vec<_> = media
         .iter()
         .flat_map(|media| &media.content)
         .filter_map(|content| {
-            let url = web(content.url.as_ref()?.as_str())?;
+            let url = rules.clean_url(&web(content.url.as_ref()?.as_str())?);
             let kind = content.content_type.as_ref().map(ToString::to_string);
             Some(serde_json::json!({ "url": url, "type": kind, "length": content.size }))
         })
         .collect();
+    let base = Base {
+        article: url.as_deref(),
+        feed: Some(feed_url),
+    };
+    let cleaned = cleaning::clean(&content, base, rules);
+    add_inline(&mut enclosures, cleaned.enclosures);
 
     let mut tags: Vec<String> = Vec::new();
     for category in entry.categories {
@@ -145,9 +172,7 @@ fn article(entry: Entry, fetched_at: OffsetDateTime) -> Option<NewArticle> {
         fetched_at,
         teaser: teaser(summary.as_deref().unwrap_or(&content)),
         thumbnail_url: thumbnail_url.clone(),
-        // The cleaning with rueder's own rules (work package 2.3) builds on this:
-        // only markup that is known to be harmless stays.
-        html: ammonia::clean(&content),
+        html: cleaned.html,
         enclosures: enclosures.into(),
         image_url: thumbnail_url,
         image_title: None,
@@ -202,31 +227,22 @@ fn web(url: &str) -> Option<String> {
     matches!(scheme.as_str(), "http" | "https").then(|| url.to_owned())
 }
 
-/// The words of a piece of HTML, without markup, with single blanks.
-fn text(html: &str) -> String {
-    // Where a paragraph or a line ends, words must not run together.
-    let mut spaced = html.to_owned();
-    for block in [
-        "<p",
-        "</p",
-        "<br",
-        "<div",
-        "</div",
-        "<li",
-        "<h",
-        "<td",
-        "<tr",
-        "<blockquote",
-    ] {
-        spaced = spaced.replace(block, &format!(" {block}"));
+/// Adds the audio and video files that stood in an article's text to the
+/// ones its feed lists, each file once. They are marked, so that cleaning the
+/// text again can tell them from the feed's own.
+pub(crate) fn add_inline(
+    enclosures: &mut Vec<serde_json::Value>,
+    inline: Vec<cleaning::Enclosure>,
+) {
+    for found in inline {
+        let listed = enclosures
+            .iter()
+            .any(|enclosure| enclosure["url"].as_str() == Some(found.url.as_str()));
+        if !listed {
+            enclosures
+                .push(serde_json::json!({ "url": found.url, "type": found.kind, "inline": true }));
+        }
     }
-    let bare = ammonia::Builder::empty().clean(&spaced).to_string();
-    let bare = bare
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&");
-    bare.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn teaser(html: &str) -> String {
@@ -286,8 +302,18 @@ pub async fn store(
         }
         match known.get(hash) {
             None => new.push(article.clone()),
-            Some((seq, checksum)) if *checksum != article.original.checksum() => {
-                if articles::add_version(conn, feed_id, *seq, article)
+            Some((seq, checksum)) if *checksum != article.checksum() => {
+                // It reads differently. If it was sent as before, only the
+                // rules of the cleaning have changed since, and the text is
+                // put in place again without a new version.
+                let before = articles::current_original(conn, feed_id, *seq).await?;
+                let as_before = before.is_some_and(|before| {
+                    before.title == article.original.title
+                        && before.content == article.original.content
+                });
+                if as_before {
+                    articles::recleaned(conn, feed_id, *seq, article).await?;
+                } else if articles::add_version(conn, feed_id, *seq, article)
                     .await?
                     .is_some()
                 {

@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.seq, c.html, c.checksum, c.enclosures, v.raw\n                 FROM article_content c\n                 JOIN articles a ON a.feed_id = c.feed_id AND a.seq = c.seq\n                 JOIN article_versions v\n                     ON v.feed_id = a.feed_id AND v.seq = a.seq AND v.version = a.version\n                 WHERE c.feed_id = $1 AND c.seq > $2 AND c.seq <= $3\n                   AND v.feed_id = $1 AND v.seq > $2 AND v.seq <= $3\n                 ORDER BY c.seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "html",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "html"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "checksum",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "checksum"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "enclosures",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "enclosures"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "raw",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "article_versions",
+            "name": "raw"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4edc1d092d37505aba68f4cbab0d1aa31f344475cc058ee639a1c6b7153782ae"
+}

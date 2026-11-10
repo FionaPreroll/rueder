@@ -6,6 +6,7 @@ mod common;
 
 use rueder::{
     articles::{self, Page},
+    cleaning::Rules,
     import::{self, Report},
     reading,
 };
@@ -19,6 +20,10 @@ const ALL: Page = Page {
     limit: 50,
     unread_only: false,
 };
+
+fn rules() -> Rules {
+    Rules::built_in().unwrap()
+}
 
 /// An empty old database, and a connection to it.
 async fn legacy(db: &PgPool) -> PgConnection {
@@ -246,7 +251,7 @@ async fn brings_over_feeds_articles_accounts_folders_and_subscriptions(db: PgPoo
     let (a, b, c) = old_rueder(&mut old).await;
     let before = OffsetDateTime::now_utc();
 
-    let report = import::run(&db, &mut old).await.unwrap();
+    let report = import::run(&db, &mut old, &rules()).await.unwrap();
     assert_eq!(
         report,
         Report {
@@ -532,12 +537,12 @@ async fn brings_over_feeds_articles_accounts_folders_and_subscriptions(db: PgPoo
 async fn a_second_run_adds_only_what_is_new(db: PgPool) {
     let mut old = legacy(&db).await;
     let (old_a, old_b, _) = old_rueder(&mut old).await;
-    import::run(&db, &mut old).await.unwrap();
+    import::run(&db, &mut old, &rules()).await.unwrap();
     let (a, b) = (new_feed(&db, old_a).await, new_feed(&db, old_b).await);
     let alice = new_account(&db, "alice").await;
 
     // Right away, a second run finds nothing to do.
-    let again = import::run(&db, &mut old).await.unwrap();
+    let again = import::run(&db, &mut old, &rules()).await.unwrap();
     assert_eq!(
         again,
         Report {
@@ -577,7 +582,7 @@ async fn a_second_run_adds_only_what_is_new(db: PgPool) {
     old_subscription(&mut old, 3, old_d).await;
     old_subscription(&mut old, 1, old_d).await;
 
-    let report = import::run(&db, &mut old).await.unwrap();
+    let report = import::run(&db, &mut old, &rules()).await.unwrap();
     assert_eq!(
         report,
         Report {
@@ -665,7 +670,7 @@ async fn a_second_run_adds_only_what_is_new(db: PgPool) {
 async fn articles_the_new_rueder_fetched_itself_come_only_once(db: PgPool) {
     let mut old = legacy(&db).await;
     let (old_a, old_b, _) = old_rueder(&mut old).await;
-    import::run(&db, &mut old).await.unwrap();
+    import::run(&db, &mut old, &rules()).await.unwrap();
     let (a, b) = (new_feed(&db, old_a).await, new_feed(&db, old_b).await);
 
     // Both run side by side for a while. The new one fetches two articles of
@@ -684,7 +689,7 @@ async fn articles_the_new_rueder_fetched_itself_come_only_once(db: PgPool) {
     old_article(&mut old, 11, old_a, "a-6", text("a-6")).await;
     old_article(&mut old, 12, old_b, "b-3", text("b-3")).await;
 
-    let report = import::run(&db, &mut old).await.unwrap();
+    let report = import::run(&db, &mut old, &rules()).await.unwrap();
     assert_eq!(
         (
             report.articles_added,
@@ -724,7 +729,7 @@ async fn articles_the_new_rueder_fetched_itself_come_only_once(db: PgPool) {
     assert_eq!(mapped, (a, 5));
 
     // And once more: nothing left to bring.
-    let again = import::run(&db, &mut old).await.unwrap();
+    let again = import::run(&db, &mut old, &rules()).await.unwrap();
     assert_eq!(
         (
             again.articles_added,
@@ -774,7 +779,7 @@ async fn odd_data_does_not_stop_the_import(db: PgPool) {
     .await
     .unwrap();
 
-    let report = import::run(&db, &mut old).await.unwrap();
+    let report = import::run(&db, &mut old, &rules()).await.unwrap();
     assert_eq!(
         (
             report.feeds_added,
@@ -820,15 +825,75 @@ async fn odd_data_does_not_stop_the_import(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn texts_are_cleaned_on_the_way_in(db: PgPool) {
+    let mut old = legacy(&db).await;
+    let feed = old_feed(&mut old, 1, "a", json!({ "working": true })).await;
+    // The old rueder took scripts out when it fetched; the rest it left to the browser.
+    let content = json!({
+        "text": "<p>Text. <a href=\"/more?utm_source=feed\">more</a> <a href=\"#top\">up</a></p>\
+                 <img src=\"https://a.fsdn.com/sd/count.gif\"><video src=\"clip.mp4\"></video>",
+        "enclosures": [{ "url": "https://a.example/one.mp3", "length": "9", "type": "audio/mpeg" }]
+    });
+    old_article(&mut old, 1, feed, "a-1", content).await;
+    sqlx::query(
+        "UPDATE articles SET link = 'https://blog.example/posts/a-1?utm_campaign=x&id=7',
+                             thumbnail = 'https://blog.example/a-1.jpg?utm_source=feed'",
+    )
+    .execute(&mut old)
+    .await
+    .unwrap();
+    old_user(&mut old, 1, "htpasswd", "alice", json!([])).await;
+    old_subscription(&mut old, 1, feed).await;
+    import::run(&db, &mut old, &rules()).await.unwrap();
+
+    let (feed, alice) = (new_feed(&db, feed).await, new_account(&db, "alice").await);
+    let opened = articles::open(&db, alice, feed, 1).await.unwrap().unwrap();
+    assert_eq!(
+        opened.html,
+        "<p>Text. <a href=\"https://blog.example/more\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">more</a> \
+         <a href=\"https://blog.example/posts/a-1?id=7#top\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">up</a></p>"
+    );
+    assert_eq!(
+        opened.url.as_deref(),
+        Some("https://blog.example/posts/a-1?id=7")
+    );
+    assert_eq!(
+        opened.enclosures,
+        json!([
+            { "url": "https://a.example/one.mp3", "length": "9", "type": "audio/mpeg" },
+            { "url": "https://blog.example/posts/clip.mp4", "type": null, "inline": true },
+        ])
+    );
+    let list = articles::page(&db, alice, &[feed], ALL).await.unwrap();
+    assert_eq!(
+        list[0].thumbnail_url.as_deref(),
+        Some("https://blog.example/a-1.jpg")
+    );
+    // The version keeps the text as the old rueder had it.
+    let versions = articles::versions(&db, alice, feed, 1).await.unwrap();
+    assert!(
+        versions[0]
+            .original
+            .content
+            .contains("/more?utm_source=feed")
+    );
+}
+
+#[sqlx::test]
 async fn an_empty_old_database_brings_nothing(db: PgPool) {
     let mut old = legacy(&db).await;
-    assert_eq!(import::run(&db, &mut old).await.unwrap(), Report::default());
+    assert_eq!(
+        import::run(&db, &mut old, &rules()).await.unwrap(),
+        Report::default()
+    );
     // Without the old rueder's tables there is nothing to import from.
     sqlx::query("DROP TABLE articles")
         .execute(&mut old)
         .await
         .unwrap();
-    let failed = import::run(&db, &mut old).await.unwrap_err();
+    let failed = import::run(&db, &mut old, &rules()).await.unwrap_err();
     assert!(format!("{failed:#}").contains("reading the old articles"));
     // Tables the old rueder got late may be missing.
     let mut older = {
@@ -843,7 +908,7 @@ async fn an_empty_old_database_brings_nothing(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        import::run(&db, &mut older).await.unwrap(),
+        import::run(&db, &mut older, &rules()).await.unwrap(),
         Report::default()
     );
 }

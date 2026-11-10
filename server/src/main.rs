@@ -2,15 +2,18 @@ use std::{
     env,
     io::{self, IsTerminal},
     path::PathBuf,
+    sync::Arc,
     time::Duration,
 };
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use rueder::{
-    AppState, articles, bench, fetch,
+    AppState, articles, bench,
+    cleaning::Rules,
+    fetch,
     http_client::{self, HttpClient},
-    import, router,
+    import, reclean, router,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -38,6 +41,13 @@ enum Command {
     /// queries the reader lives on.
     #[command(subcommand)]
     Bench(BenchCommand),
+    /// Clean the text of all articles again, from the versions as they were
+    /// fetched. For after the rules of the cleaning or its lists have changed.
+    Reclean {
+        /// Only the articles of this feed.
+        #[arg(long)]
+        feed: Option<i32>,
+    },
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
     /// old rueder. Adds what is not there yet, so it can run more than once.
     ImportLegacy {
@@ -111,11 +121,16 @@ async fn main() -> anyhow::Result<()> {
             };
             bench::generate(&db, size).await
         }
+        Command::Reclean { feed } => {
+            let report = reclean::run(&db, &Rules::from_env()?, feed).await?;
+            println!("{report}");
+            Ok(())
+        }
         Command::ImportLegacy { from } => {
             let mut legacy = PgConnection::connect(&from)
                 .await
                 .context("connecting to the old database")?;
-            let report = import::run(&db, &mut legacy).await?;
+            let report = import::run(&db, &mut legacy, &Rules::from_env()?).await?;
             println!("{report}");
             Ok(())
         }
@@ -166,7 +181,10 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
             allow,
             ..Default::default()
         })?;
-        tokio::spawn(fetch::run(db.clone(), client));
+        // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
+        // that come with rueder.
+        let rules = Arc::new(Rules::from_env()?);
+        tokio::spawn(fetch::run(db.clone(), client, rules));
     }
 
     let app = router(AppState::new(db), &static_dir);

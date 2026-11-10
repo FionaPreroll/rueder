@@ -1,0 +1,22 @@
+# Parameters that are taken out of the addresses of links and images, because
+# they tell a site where its reader came from and nothing else.
+#
+# One rule per line:
+#   name          the parameter of that name
+#   name*         every parameter whose name starts like this
+#   name=value    the parameter, if it has exactly this value
+#   name=*value*  the parameter, if its value contains this
+
+# Facebook and Instagram
+fbclid
+igshid
+efg
+# Used by many sites
+utm_*
+from=rss
+# heise.de
+wt_*
+# medium.com
+source=*rss*
+# theguardian.com
+CMP

@@ -32,32 +32,35 @@ pub struct Original {
     pub authors: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// The article's page, without tracking parameters.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
-impl Original {
-    /// Tells two versions apart. Runs of white space count as one blank, so a feed
-    /// that only reflows its markup does not make a new version. Leaving out what
-    /// changes on every fetch (tracking parameters) is the fetcher's part.
-    pub fn checksum(&self) -> Vec<u8> {
-        let mut hasher = Sha256::new();
-        for part in [&self.title, &self.content] {
-            for word in part.split_whitespace() {
-                hasher.update(word.as_bytes());
-                hasher.update(b" ");
-            }
-            hasher.update([0]);
+/// Tells two versions of an article apart: by its title and by the text as it
+/// is read, not as it was sent. What the cleaning takes out does not count, so
+/// a feed that puts a new tracking token into its links on every fetch does
+/// not make a new version every time, and neither does one that only reflows
+/// its markup: runs of white space count as one blank.
+pub fn checksum(title: &str, html: &str) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    for part in [title, html] {
+        for word in part.split_whitespace() {
+            hasher.update(word.as_bytes());
+            hasher.update(b" ");
         }
-        hasher.finalize().to_vec()
+        hasher.update([0]);
     }
+    hasher.finalize().to_vec()
+}
 
+impl Original {
     fn compress(&self) -> anyhow::Result<Vec<u8>> {
         let json = serde_json::to_vec(self)?;
         Ok(zstd::encode_all(json.as_slice(), ZSTD_LEVEL)?)
     }
 
-    fn decompress(raw: &[u8]) -> anyhow::Result<Self> {
+    pub(crate) fn decompress(raw: &[u8]) -> anyhow::Result<Self> {
         let json = zstd::decode_all(raw).context("decompressing a version")?;
         serde_json::from_slice(&json).context("reading a version")
     }
@@ -90,6 +93,11 @@ pub struct NewArticle {
 impl NewArticle {
     fn author(&self) -> String {
         self.original.authors.join(", ")
+    }
+
+    /// See [`checksum`].
+    pub fn checksum(&self) -> Vec<u8> {
+        checksum(&self.original.title, &self.html)
     }
 }
 
@@ -180,7 +188,7 @@ pub(crate) async fn write(conn: &mut PgConnection, placed: &[Placed<'_>]) -> any
 
     let guids: Vec<_> = articles().map(|a| a.guid.clone()).collect();
     let guid_hashes: Vec<_> = articles().map(|a| guid_hash(&a.guid)).collect();
-    let checksums: Vec<_> = articles().map(|a| a.original.checksum()).collect();
+    let checksums: Vec<_> = articles().map(NewArticle::checksum).collect();
     let html: Vec<_> = articles().map(|a| a.html.clone()).collect();
     let tags = articles()
         .map(|a| serde_json::to_string(&a.original.tags))
@@ -277,7 +285,7 @@ pub async fn add_version(
     seq: i32,
     article: &NewArticle,
 ) -> anyhow::Result<Option<i16>> {
-    let checksum = article.original.checksum();
+    let checksum = article.checksum();
     let changed = sqlx::query_scalar!(
         "UPDATE article_content
          SET checksum = $3, html = $4,
@@ -348,6 +356,47 @@ pub async fn add_version(
     .execute(&mut *conn)
     .await?;
     Ok(Some(version))
+}
+
+/// The article as its current version was fetched, if the feed has it.
+pub(crate) async fn current_original(
+    conn: &mut PgConnection,
+    feed_id: i32,
+    seq: i32,
+) -> anyhow::Result<Option<Original>> {
+    let raw = sqlx::query_scalar!(
+        "SELECT v.raw FROM articles a
+         JOIN article_versions v ON v.feed_id = a.feed_id AND v.seq = a.seq AND v.version = a.version
+         WHERE a.feed_id = $1 AND a.seq = $2",
+        feed_id,
+        seq,
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    raw.map(|raw| Original::decompress(&raw)).transpose()
+}
+
+/// Puts the text of an article's current version in place again, cleaned
+/// anew. Nothing about the article changed, only the rules it is cleaned by,
+/// so it gets no new version.
+pub(crate) async fn recleaned(
+    conn: &mut PgConnection,
+    feed_id: i32,
+    seq: i32,
+    article: &NewArticle,
+) -> anyhow::Result<()> {
+    sqlx::query!(
+        "UPDATE article_content SET checksum = $3, html = $4, enclosures = $5::text::jsonb
+         WHERE feed_id = $1 AND seq = $2",
+        feed_id,
+        seq,
+        article.checksum(),
+        article.html,
+        article.enclosures.to_string(),
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 /// One line of a list.

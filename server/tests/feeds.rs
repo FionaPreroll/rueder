@@ -5,6 +5,7 @@ mod common;
 
 use rueder::{
     articles::{self, Page},
+    cleaning::Rules,
     feeds::{self, MAX_ARTICLES, Stored},
 };
 use sqlx::PgPool;
@@ -36,7 +37,13 @@ fn rss(entries: &[(&str, &str, &str)]) -> Vec<u8> {
 }
 
 fn parse(body: &[u8]) -> feeds::Parsed {
-    feeds::parse(body, "https://example.org/feed.xml", NOW).unwrap()
+    feeds::parse(
+        body,
+        "https://example.org/feed.xml",
+        NOW,
+        &Rules::built_in().unwrap(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -232,7 +239,15 @@ fn limits_hold_and_nonsense_is_an_error() {
         b"{\"a\": 1}",
         &[0xff, 0xfe, 0x00][..],
     ] {
-        assert!(feeds::parse(nonsense, "https://example.org/", NOW).is_err());
+        assert!(
+            feeds::parse(
+                nonsense,
+                "https://example.org/",
+                NOW,
+                &Rules::built_in().unwrap()
+            )
+            .is_err()
+        );
     }
 }
 
@@ -345,4 +360,197 @@ async fn storing_into_a_feed_that_is_not_there_fails(db: PgPool) {
     let parsed = parse(&rss(&[("a", "Title", "text")]));
     let mut tx = db.begin().await.unwrap();
     assert!(feeds::store(&mut tx, 4711, &parsed.articles).await.is_err());
+}
+
+#[test]
+fn texts_come_out_of_a_feed_cleaned() {
+    let text = r##"<p>Read <a href="/more?utm_source=feed&amp;page=2">more</a> or go <a href="#top">up</a>.</p>
+        <img src="img/a.png?utm_medium=rss" alt="A">
+        <img src="https://count.example.net/p.gif" width="1" height="1">
+        <a href="https://www.facebook.com/sharer.php?u=x">Share</a>
+        <video controls><source src="clip.mp4" type="video/mp4"></video>
+        <script>track()</script>"##;
+    let body = format!(
+        "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Example</title>\
+         <link>https://example.org/?utm_source=feed</link><item>\
+         <link>https://example.org/posts/1?utm_campaign=x&amp;id=7</link><title>One</title>\
+         <enclosure url=\"https://example.org/posts/clip.mp4\" length=\"5\" type=\"video/mp4\"/>\
+         <enclosure url=\"https://example.org/one.mp3?utm_source=feed\" length=\"9\" type=\"audio/mpeg\"/>\
+         <description><![CDATA[{text}]]></description></item></channel></rss>"
+    );
+    let parsed = feeds::parse(
+        body.as_bytes(),
+        "https://feeds.example.net/example.xml",
+        NOW,
+        &Rules::built_in().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(parsed.site_url.as_deref(), Some("https://example.org/"));
+    let article = &parsed.articles[0];
+
+    // The link loses what only tracks. The id is the link as the feed gave it,
+    // which is what the old rueder knows the article by.
+    assert_eq!(
+        article.original.url.as_deref(),
+        Some("https://example.org/posts/1?id=7")
+    );
+    assert_eq!(
+        article.guid,
+        "https://example.org/posts/1?utm_campaign=x&id=7"
+    );
+    // What is kept as the version is the text as it came.
+    assert_eq!(article.original.content, text);
+    // Addresses are taken from the article's page, not from where the feed lies.
+    assert_eq!(
+        article
+            .html
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+        "<p>Read <a href=\"https://example.org/more?page=2\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">more</a> or go \
+         <a href=\"https://example.org/posts/1?id=7#top\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">up</a>.</p> \
+         <img src=\"https://example.org/posts/img/a.png\" alt=\"A\" title=\"A\" loading=\"lazy\">"
+    );
+    assert_eq!(article.teaser, "Read more or go up. Share");
+    // The feed's own enclosures, then what stood in the text and is not among them.
+    assert_eq!(
+        article.enclosures,
+        serde_json::json!([
+            { "url": "https://example.org/posts/clip.mp4", "type": "video/mp4", "length": 5 },
+            { "url": "https://example.org/one.mp3", "type": "audio/mpeg", "length": 9 },
+        ])
+    );
+
+    // An article without a page of its own takes addresses from the feed.
+    let body = "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><item><guid>a</guid>\
+        <description><![CDATA[<img src=\"a.png\"><audio src=\"/a.mp3\"></audio>]]></description>\
+        </item></channel></rss>";
+    let parsed = feeds::parse(
+        body.as_bytes(),
+        "https://feeds.example.net/dir/example.xml",
+        NOW,
+        &Rules::built_in().unwrap(),
+    )
+    .unwrap();
+    let article = &parsed.articles[0];
+    assert_eq!(
+        article.html,
+        "<img src=\"https://feeds.example.net/dir/a.png\" loading=\"lazy\">"
+    );
+    assert_eq!(
+        article.enclosures,
+        serde_json::json!([{ "url": "https://feeds.example.net/a.mp3", "type": null, "inline": true }])
+    );
+}
+
+#[test]
+fn a_feed_that_means_harm_is_read_all_the_same() {
+    // Tags nested far deeper than any article has them, in every place that
+    // is read as HTML.
+    let deep = format!(
+        "{}words{}",
+        "<div><b>".repeat(20_000),
+        "</b></div>".repeat(20_000)
+    );
+    let body = format!(
+        "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title><![CDATA[{deep}]]></title>\
+         <item><guid>a</guid><title><![CDATA[{deep}]]></title>\
+         <description><![CDATA[{deep}]]></description></item></channel></rss>"
+    );
+    let started = std::time::Instant::now();
+    let parsed = parse(body.as_bytes());
+    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+    assert_eq!(parsed.title.as_deref(), Some("words"));
+    let article = &parsed.articles[0];
+    assert_eq!(article.original.title, "words");
+    assert_eq!(article.teaser, "words");
+    // The text is kept, the markup that cannot be trusted is not.
+    assert_eq!(article.html.trim(), "words");
+}
+
+#[sqlx::test]
+async fn a_tracking_token_that_changes_is_no_new_version(db: PgPool) {
+    let (account, feed) = common::reader(&db, "ada", 0).await;
+    let store = async |token: &str, text: &str| {
+        let content = format!(
+            "<p>{text} <a href=\"https://example.org/a?utm_source={token}\">more</a></p>\
+             <img src=\"https://count.example.net/p.gif?t={token}\" width=\"1\" height=\"1\">"
+        );
+        let parsed = parse(&rss(&[("a", "Title", &content)]));
+        let mut tx = db.begin().await.unwrap();
+        let stored = feeds::store(&mut tx, feed, &parsed.articles).await.unwrap();
+        tx.commit().await.unwrap();
+        stored
+    };
+    assert_eq!(store("first", "Text.").await.new, 1);
+    // Sent differently on every fetch, read the same: nothing happens.
+    assert_eq!(store("second", "Text.").await, Stored::default());
+    assert_eq!(store("third", "Text.").await, Stored::default());
+    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    assert_eq!(versions.len(), 1);
+    assert!(versions[0].original.content.contains("utm_source=first"));
+
+    // A real change is still one, and its version keeps the text as it came.
+    assert_eq!(store("fourth", "Corrected text.").await.updated, 1);
+    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    assert_eq!(versions.len(), 2);
+    assert!(versions[1].original.content.contains("utm_source=fourth"));
+    let opened = articles::open(&db, account, feed, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        opened.html,
+        "<p>Corrected text. <a href=\"https://example.org/a\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">more</a></p>"
+    );
+}
+
+#[sqlx::test]
+async fn other_rules_are_no_new_version(db: PgPool) {
+    let (account, feed) = common::reader(&db, "ada", 0).await;
+    let content = "<p>Text. <a href=\"https://example.org/a?ref=feed\">more</a></p>\
+                   <img src=\"https://ads.example.net/banner.png\">";
+    let body = rss(&[("a", "Title", content)]);
+    let store = async |rules: &Rules| {
+        let parsed = feeds::parse(&body, "https://example.org/feed.xml", NOW, rules).unwrap();
+        let mut tx = db.begin().await.unwrap();
+        let stored = feeds::store(&mut tx, feed, &parsed.articles).await.unwrap();
+        tx.commit().await.unwrap();
+        stored
+    };
+    let text = async || {
+        let opened = articles::open(&db, account, feed, 1).await.unwrap();
+        opened.unwrap().html
+    };
+    assert_eq!(store(&Rules::built_in().unwrap()).await.new, 1);
+    assert!(text().await.contains("banner.png"));
+
+    // The operator's lists grow. The article was sent as before, so what is
+    // read is put right, and that is all.
+    let stricter = Rules::parse("ads.example.net\n", "ref\n").unwrap();
+    assert_eq!(store(&stricter).await, Stored::default());
+    assert_eq!(
+        text().await,
+        "<p>Text. <a href=\"https://example.org/a\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">more</a></p>"
+    );
+    assert_eq!(
+        articles::versions(&db, account, feed, 1)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    let page = Page {
+        before: None,
+        limit: 10,
+        unread_only: false,
+    };
+    let list = articles::page(&db, account, &[feed], page).await.unwrap();
+    assert_eq!((list[0].version, list[0].updated_at), (1, None));
+    // From here on nothing is left to do.
+    assert_eq!(store(&stricter).await, Stored::default());
 }
