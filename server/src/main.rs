@@ -13,6 +13,7 @@ use rueder::{
     cleaning::Rules,
     fetch,
     http_client::{self, HttpClient},
+    images::{self, ImageProxy},
     import, reclean, router,
 };
 use sqlx::{
@@ -161,33 +162,62 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         }
     });
 
-    // Feeds are fetched by the server itself, through the one client that may
-    // reach out. FETCH_ALLOW_NETS opens internal networks for it, e.g.
-    // "192.168.1.0/24, fd00::/8"; FETCH=off keeps the server from fetching.
+    // Feeds and images are fetched by the server itself, through the one
+    // client that may reach out. FETCH_ALLOW_NETS opens internal networks for
+    // it, e.g. "192.168.1.0/24, fd00::/8".
+    let allow = env::var("FETCH_ALLOW_NETS").unwrap_or_default();
+    let allow = allow
+        .split(',')
+        .map(str::trim)
+        .filter(|net| !net.is_empty())
+        .map(|net| {
+            net.parse()
+                .map_err(|err: String| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let client = HttpClient::new(http_client::Config {
+        allow,
+        ..Default::default()
+    })?;
+
+    // FETCH=off keeps the server from fetching feeds.
     if env::var("FETCH").is_ok_and(|value| value == "off") {
         tracing::info!("not fetching feeds (FETCH=off)");
     } else {
-        let allow = env::var("FETCH_ALLOW_NETS").unwrap_or_default();
-        let allow = allow
-            .split(',')
-            .map(str::trim)
-            .filter(|net| !net.is_empty())
-            .map(|net| {
-                net.parse()
-                    .map_err(|err: String| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        let client = HttpClient::new(http_client::Config {
-            allow,
-            ..Default::default()
-        })?;
         // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
         // that come with rueder.
         let rules = Arc::new(Rules::from_env()?);
-        tokio::spawn(fetch::run(db.clone(), client, rules));
+        tokio::spawn(fetch::run(db.clone(), client.clone(), rules));
     }
 
-    let app = router(AppState::new(db), &static_dir);
+    // Images reach readers through the proxy. IMAGE_CACHE_DIR is where it keeps
+    // them, IMAGE_CACHE_MB how much of them; IMAGE_PROXY_KEY is the secret for
+    // its addresses, which it makes itself if there is none.
+    let mut images =
+        images::Config::new(env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| "image-cache".into()));
+    if let Ok(megabytes) = env::var("IMAGE_CACHE_MB") {
+        let megabytes: u64 = megabytes
+            .parse()
+            .context("IMAGE_CACHE_MB is not a number")?;
+        images.cache_bytes = megabytes.saturating_mul(1024 * 1024);
+    }
+    images.key = env::var("IMAGE_PROXY_KEY")
+        .ok()
+        .filter(|key| !key.is_empty())
+        .map(String::into_bytes);
+    let images = Arc::new(ImageProxy::open(images, client)?);
+    // Once an hour, what the cache holds too much of goes.
+    let cache = images.clone();
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            every.tick().await;
+            let cache = cache.clone();
+            let _ = tokio::task::spawn_blocking(move || cache.cache().sweep()).await;
+        }
+    });
+
+    let app = router(AppState::new(db).with_images(images), &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on http://{listen_addr}");
     axum::serve(listener, app)

@@ -75,7 +75,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Login | Heute loginsrv mit htpasswd. Künftig lokale Konten mit Argon2id, OpenID Connect muss möglich sein. | Bestimmt, wie bestehende Konten umziehen. |
 | Ordner | Verschachtelt, höchstens 5 Ebenen. | Datenmodell und Drag & Drop. |
 | Versionen | Höchstens 20 Versionen je Artikel. Ein aktualisierter Artikel bleibt gelesen und bekommt den Hinweis „aktualisiert“. | Speicherbedarf und Ungelesen-Zahlen. |
-| Bild-Proxy | Selbst in Rust: prüfen, cachen, verkleinern mit dem `image`-Crate. Kein imgproxy mehr. | Ein Dienst weniger, dafür eigener Code an einer Angriffsfläche. |
+| Bild-Proxy | Selbst in Rust: prüfen, cachen, verkleinern mit dem `image`-Crate. Kein imgproxy mehr. Die Adresse des Proxy kommt erst beim Ausliefern in den Text, nicht schon beim Bereinigen. | Ein Dienst weniger, dafür eigener Code an einer Angriffsfläche. |
 | User-Agent beim Abruf | Ehrlich als „rueder“, je Feed umstellbar. | Manche Seiten sperren unbekannte Clients. |
 | Oberfläche | Der klickbare Entwurf in `web/` ist abgenommen („sieht perfekt aus“). | Schritt 3 baut ihn aus, statt neu zu entwerfen. |
 | Umstieg und alte Daten | Kein Parallelbetrieb von altem und neuem rueder. Die alte Produktion ist abgeschaltet, ihre Daten kommen aus einem Backup von vor der Abschaltung. Der neue rueder geht ohne alte Daten in Betrieb, mit neuen Usern und Feeds. Später werden die alten Daten einmalig importiert und mit den Konten zusammengeführt, die es dann gibt, bei Bedarf unter anderem Namen. Mehrfache Importe sind nicht nötig. | Schritt 4 und der Import: Er muss in einen Bestand schreiben können, der schon Konten, Feeds und Artikel hat. |

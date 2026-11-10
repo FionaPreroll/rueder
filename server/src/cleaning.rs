@@ -818,12 +818,46 @@ fn apply_rules(html: &str, bases: &Bases, rules: &Rules) -> (String, Vec<Enclosu
         .filter(|enclosure| seen.insert(enclosure.url.clone()))
         .collect();
 
+    (written(root), enclosures)
+}
+
+/// What is in a tree, written down as HTML.
+fn written(root: Handle) -> String {
     let mut out = Vec::new();
     let root: SerializableHandle = root.into();
     if serialize(&mut out, &root, SerializeOpts::default()).is_err() {
-        return (String::new(), Vec::new());
+        return String::new();
     }
-    (String::from_utf8(out).unwrap_or_default(), enclosures)
+    String::from_utf8(out).unwrap_or_default()
+}
+
+/// A cleaned text with other addresses for its images: `address` is asked for
+/// each image's own and says what to put in its place. An image it has no
+/// address for goes.
+///
+/// This is for a text as [`clean`] left it and puts nothing else right.
+pub fn with_images(html: &str, address: impl Fn(&str) -> Option<String>) -> String {
+    let root = read(html);
+    let mut waiting = vec![root.clone()];
+    while let Some(node) = waiting.pop() {
+        let mut children = node.children.borrow_mut();
+        children.retain(|child| match &child.data {
+            NodeData::Element { name, attrs, .. } if &*name.local == "img" => {
+                let mut attrs = attrs.borrow_mut();
+                let new = attribute(&attrs, "src").and_then(|own| address(&own));
+                match new {
+                    Some(new) => {
+                        set_attribute(&mut attrs, "src", &new);
+                        true
+                    }
+                    None => false,
+                }
+            }
+            _ => true,
+        });
+        waiting.extend(children.iter().cloned());
+    }
+    written(root)
 }
 
 fn element_name(node: &Handle) -> Option<&str> {
