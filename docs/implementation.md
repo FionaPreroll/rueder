@@ -31,19 +31,19 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 |---|---|---|
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
 | 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
-| 2 Backend | Begonnen am 2026-11-10: Paket 2.1 (gehärteter HTTP-Client) ist fertig | `server/src/http_client.rs` |
+| 2 Backend | Begonnen am 2026-11-10: Pakete 2.1 (gehärteter HTTP-Client) und 2.2 (Abruf mit Versionen) sind fertig | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs` |
 | 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
 | 4 Umstieg | Offen | |
 
 Was es heute gibt:
 
 - `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug und dem gehärteten HTTP-Client, den noch nichts benutzt. 62 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client und dem Abruf der Feeds, der mit `serve` läuft. 77 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es nur `GET /api/health`; ausgeliefert wird das gebaute Frontend.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
 - Das alte System in `backend/` und `frontend/`, unverändert und lauffähig.
 
-Was es noch nicht gibt: Abruf, Bereinigung, Bild-Proxy, Login und die API. Das ist der Rest von Schritt 2, als Nächstes Paket 2.2.
+Was es noch nicht gibt: die Bereinigung mit eigenen Regeln, Bild-Proxy, Login und die API. Das ist der Rest von Schritt 2, als Nächstes Paket 2.3. Abonnieren lässt sich ein Feed bis zur API nur direkt in der Datenbank.
 
 ## Repository
 
@@ -117,7 +117,7 @@ pnpm build:single    # die ganze Anwendung als eine build/index.html
 Der Server:
 
 ```sh
-cp server/.env.example server/.env   # DATABASE_URL
+cp server/.env.example server/.env   # DATABASE_URL, dazu Einstellungen für den Abruf
 cd server
 cargo run                            # wendet Migrationen an, lauscht auf http://127.0.0.1:3000
 cargo test                           # legt je Test eine Datenbank auf dem Server aus DATABASE_URL an
@@ -177,7 +177,7 @@ Ergebnis: ein Importprogramm, das an einer nachgebauten alten Datenbank geprüft
 Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
 - [x] **2.1 Gehärteter HTTP-Client (A3).** Nur http und https, eigene DNS-Auflösung, Sperre für private, lokale und Link-Local-Adressen (IPv4 und IPv6), Verbindung genau zur geprüften IP, jede Weiterleitung neu geprüft, Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Fertig, wenn Tests jede Sperre einzeln belegen, auch die Weiterleitung auf eine interne Adresse, und ein Property-Test mit `proptest` zeigt, dass die Adressprüfung in keiner Schreibweise eine interne Adresse durchlässt (siehe [Fuzzing](architecture.md#fuzzing)). Dieses Paket zuerst, alle folgenden Abrufe hängen daran. Fertig am 2026-11-10, beschrieben unter [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client). Dazugekommen ist eine Ausnahme, mit der ein Betreiber einzelne interne Netze freigibt. Nicht im Test: TLS gegen echte Server, das zeigt sich mit dem ersten echten Abruf in Paket 2.2.
-- [ ] **2.2 Abruf mit Versionen (A2).** Der HTTP-Client wird in `serve` einmal gebaut, mit den freigegebenen Netzen des Betreibers aus der Umgebung. Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden.
+- [x] **2.2 Abruf mit Versionen (A2).** Der HTTP-Client wird in `serve` einmal gebaut, mit den freigegebenen Netzen des Betreibers aus der Umgebung. Planer, bedingte Abrufe, `feed-rs`, Kennung und Prüfsumme je Artikel, neue Artikel und neue Versionen in einer Transaktion, höchstens 20 Versionen, Intervall nach Aktivität, Fehler am Feed, User-Agent je Feed. Vorlage für das Verhalten: `backend/pkg/worker/feed.go` und `backend/pkg/worker/scheduler/`. Fertig, wenn Tests mit aufgezeichneten Feeds neue Artikel, unveränderte Artikel, Scheinänderungen und echte Änderungen unterscheiden. Fertig am 2026-11-10, beschrieben unter [Abruf](architecture.md#abruf). Offen geblieben und dort vermerkt: Wechselnde Tracking-Parameter gelten noch als Änderung (kommt mit 2.3), Filterregeln und Live-Meldung hängen an 2.6 und 2.7, und TLS gegen echte Server ist weiter ungetestet, weil die Entwicklungsumgebung keinen direkten Weg ins Internet hat.
 - [ ] **2.3 Bereinigung (A10).** `ammonia` mit Allowlist, die Regeln aus `frontend/src/rueder/helpers/ArticleCleaner.ts`, Listen als Datendateien, Befehl zum erneuten Bereinigen aus `article_versions`. Fertig, wenn die Fälle aus `ArticleCleaner.test.ts` übertragen und grün sind.
 - [ ] **2.4 Bild-Proxy (A11).** Signierte Adressen, Formatprüfung, feste Größen, Cache auf Platte, Grenzen. Vorlage für die heutigen Größen: `frontend/src/rueder/helpers/ImageProxy.ts`. Fertig, wenn Tests falsche Signaturen, Nicht-Bilder, zu große Bilder und interne Adressen ablehnen.
 - [ ] **2.5 Konten und Sitzungen (A3).** Argon2id, Sitzungs-Cookie, Login mit Rate-Limit, Befehle zum Anlegen von Konten und Setzen von Passwörtern, danach OpenID Connect. Fertig, wenn Tests Login, Ablauf, Abmelden und die Cookie-Attribute prüfen.

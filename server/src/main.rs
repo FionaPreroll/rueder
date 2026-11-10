@@ -7,7 +7,11 @@ use std::{
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use rueder::{AppState, articles, bench, import, router};
+use rueder::{
+    AppState, articles, bench, fetch,
+    http_client::{self, HttpClient},
+    import, router,
+};
 use sqlx::{
     Connection, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -141,6 +145,29 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
             }
         }
     });
+
+    // Feeds are fetched by the server itself, through the one client that may
+    // reach out. FETCH_ALLOW_NETS opens internal networks for it, e.g.
+    // "192.168.1.0/24, fd00::/8"; FETCH=off keeps the server from fetching.
+    if env::var("FETCH").is_ok_and(|value| value == "off") {
+        tracing::info!("not fetching feeds (FETCH=off)");
+    } else {
+        let allow = env::var("FETCH_ALLOW_NETS").unwrap_or_default();
+        let allow = allow
+            .split(',')
+            .map(str::trim)
+            .filter(|net| !net.is_empty())
+            .map(|net| {
+                net.parse()
+                    .map_err(|err: String| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let client = HttpClient::new(http_client::Config {
+            allow,
+            ..Default::default()
+        })?;
+        tokio::spawn(fetch::run(db.clone(), client));
+    }
 
     let app = router(AppState::new(db), &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;
