@@ -1,6 +1,7 @@
 use std::{
     env,
     io::{self, IsTerminal},
+    net::SocketAddr,
     path::PathBuf,
     sync::Arc,
     time::Duration,
@@ -9,12 +10,12 @@ use std::{
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use rueder::{
-    AppState, articles, bench,
+    AppState, accounts, articles, bench,
     cleaning::Rules,
     fetch,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import, reclean, router,
+    import, reclean, router, sessions,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -49,6 +50,9 @@ enum Command {
         #[arg(long)]
         feed: Option<i32>,
     },
+    /// Make accounts and set their passwords. There is no other way to get one.
+    #[command(subcommand)]
+    Account(AccountCommand),
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
     /// old rueder. Adds what is not there yet, so it can run more than once.
     ImportLegacy {
@@ -57,6 +61,22 @@ enum Command {
         #[arg(long, env = "LEGACY_DATABASE_URL", hide_env_values = true)]
         from: String,
     },
+}
+
+#[derive(Subcommand)]
+enum AccountCommand {
+    /// Make an account. Asks for its password, or reads it as one line when
+    /// the input is not a terminal.
+    Add {
+        name: String,
+        /// The account may manage the server.
+        #[arg(long)]
+        admin: bool,
+    },
+    /// Give an account a new password, which ends its sessions.
+    Password { name: String },
+    /// List the accounts.
+    List,
 }
 
 #[derive(Subcommand)]
@@ -122,6 +142,7 @@ async fn main() -> anyhow::Result<()> {
             };
             bench::generate(&db, size).await
         }
+        Command::Account(command) => account(&db, command).await,
         Command::Reclean { feed } => {
             let report = reclean::run(&db, &Rules::from_env()?, feed).await?;
             println!("{report}");
@@ -141,6 +162,60 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
+    match command {
+        AccountCommand::Add { name, admin } => {
+            accounts::check_name(&name)?;
+            let password = ask_password()?;
+            accounts::create(db, &name, Some(&password), admin).await??;
+            println!("Account {} is there.", name.trim());
+        }
+        AccountCommand::Password { name } => {
+            let password = ask_password()?;
+            if !accounts::set_password(db, &name, &password).await?? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            println!(
+                "Account {} has a new password. Its sessions are over.",
+                name.trim()
+            );
+        }
+        AccountCommand::List => {
+            for account in accounts::list(db).await? {
+                println!(
+                    "{}\t{}\t{}",
+                    account.username,
+                    if account.is_admin { "admin" } else { "reader" },
+                    if account.has_password {
+                        "password"
+                    } else {
+                        "no password"
+                    },
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A password from the terminal, asked for twice and not shown, or the first
+/// line of the input when a script pipes it in.
+fn ask_password() -> anyhow::Result<String> {
+    if io::stdin().is_terminal() {
+        let password = rpassword::prompt_password("Password: ")?;
+        accounts::check_password(&password)?;
+        if rpassword::prompt_password("Once more: ")? != password {
+            anyhow::bail!("the two passwords differ");
+        }
+        return Ok(password);
+    }
+    let mut line = String::new();
+    io::stdin().read_line(&mut line)?;
+    let password = line.trim_end_matches(['\r', '\n']).to_owned();
+    accounts::check_password(&password)?;
+    Ok(password)
 }
 
 async fn serve(db: PgPool) -> anyhow::Result<()> {
@@ -217,12 +292,39 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         }
     });
 
-    let app = router(AppState::new(db).with_images(images), &static_dir);
+    // Once an hour, the sessions that have run out go.
+    let sessions = db.clone();
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            every.tick().await;
+            if let Err(err) = sessions::sweep(&sessions).await {
+                tracing::error!("removing old sessions: {err:#}");
+            }
+        }
+    });
+
+    let mut state = AppState::new(db).with_images(images);
+    // Behind a reverse proxy every connection comes from the proxy.
+    // CLIENT_IP_HEADER names the header it puts the sender's address in, e.g.
+    // X-Forwarded-For. Only set it if a proxy really sets that header.
+    if let Ok(name) = env::var("CLIENT_IP_HEADER")
+        && !name.is_empty()
+    {
+        let name = name
+            .parse()
+            .context("CLIENT_IP_HEADER is not the name of a header")?;
+        state = state.with_client_ip_header(name);
+    }
+    let app = router(state, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on http://{listen_addr}");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown())
+    .await?;
     Ok(())
 }
 

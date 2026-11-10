@@ -25,7 +25,7 @@ use rueder::{
     cleaning::{Base, Rules, clean},
     http_client::{self, HttpClient},
     images::{Cache, Config, Format, ImageProxy, Picture, Refused, Signer, Size, fit},
-    router,
+    router, sessions,
 };
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -364,10 +364,33 @@ fn proxy(name: &str, local: bool) -> Arc<ImageProxy> {
     Arc::new(ImageProxy::open(config, client).unwrap())
 }
 
+/// Asks as a logged-in reader: nobody else gets images.
 async fn get_path(state: AppState, path: &str) -> (StatusCode, HeaderMap, Vec<u8>) {
+    let reader: i32 = sqlx::query_scalar(
+        "INSERT INTO accounts (username) VALUES ('reader')
+         ON CONFLICT (lower(username)) DO UPDATE SET username = excluded.username
+         RETURNING id",
+    )
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+    let token = sessions::start(&state.db, reader).await.unwrap();
+    let cookie = format!("{}={token}", sessions::COOKIE);
+    get_path_as(state, path, Some(&cookie)).await
+}
+
+async fn get_path_as(
+    state: AppState,
+    path: &str,
+    cookie: Option<&str>,
+) -> (StatusCode, HeaderMap, Vec<u8>) {
     let app = router(state, "missing".as_ref());
+    let mut request = Request::get(path);
+    if let Some(cookie) = cookie {
+        request = request.header(header::COOKIE, cookie);
+    }
     let response = app
-        .oneshot(Request::get(path).body(Body::empty()).unwrap())
+        .oneshot(request.body(Body::empty()).unwrap())
         .await
         .unwrap();
     let (status, headers) = (response.status(), response.headers().clone());
@@ -709,4 +732,45 @@ async fn a_delivered_text_has_its_images_from_the_proxy(db: PgPool) {
     );
     assert_eq!(signer.in_html(""), "");
     assert_eq!(signer.in_html("no images here"), "no images here");
+}
+
+#[sqlx::test]
+async fn only_logged_in_readers_get_images(db: PgPool) {
+    let (at, site) = site(&[(
+        "a.png",
+        StatusCode::OK,
+        "image/png",
+        picture(40, 30, ImageFormat::Png),
+    )])
+    .await;
+    let images = proxy("logged-in", true);
+    let state = AppState::new(db.clone()).with_images(images.clone());
+    let address = images
+        .signer()
+        .address(Size::Image, &format!("{at}/a.png"))
+        .unwrap();
+
+    // A right address is not enough, and the source is not even asked.
+    let reader = sqlx::query_scalar("INSERT INTO accounts (username) VALUES ('ada') RETURNING id")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    let token = sessions::start(&db, reader).await.unwrap();
+    let cookie = format!("{}={token}", sessions::COOKIE);
+    let forged = format!("{}={}", sessions::COOKIE, "A".repeat(43));
+    for cookie in [None, Some(forged.as_str()), Some("other=1")] {
+        let (status, _, body) = get_path_as(state.clone(), &address, cookie).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{cookie:?}");
+        assert!(!body.starts_with(b"\x89PNG"));
+    }
+    assert_eq!(asked(&site, "a.png"), 0);
+
+    let (status, _, _) = get_path_as(state.clone(), &address, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(asked(&site, "a.png"), 1);
+
+    // Not from the cache either, once the session is over.
+    sessions::end(&db, &token).await.unwrap();
+    let (status, _, _) = get_path_as(state, &address, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

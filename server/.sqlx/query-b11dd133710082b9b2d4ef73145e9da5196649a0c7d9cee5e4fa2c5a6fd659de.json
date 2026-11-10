@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sessions\n             SET last_seen_at = now(), expires_at = now() + $2::float8 * interval '1 second'\n             WHERE token_hash = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b11dd133710082b9b2d4ef73145e9da5196649a0c7d9cee5e4fa2c5a6fd659de"
+}

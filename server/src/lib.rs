@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod articles;
 pub mod bench;
 pub mod cleaning;
@@ -6,8 +7,10 @@ pub mod fetch;
 pub mod http_client;
 pub mod images;
 pub mod import;
+pub mod login;
 pub mod reading;
 pub mod reclean;
+pub mod sessions;
 
 use std::{path::Path, sync::Arc};
 
@@ -16,12 +19,16 @@ use axum::{
     extract::{Path as UrlPath, State},
     http::{HeaderName, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use serde::Serialize;
 use sqlx::PgPool;
 
-use crate::images::{ImageProxy, Refused};
+use crate::{
+    images::{ImageProxy, Refused},
+    login::Limiter,
+    sessions::Session,
+};
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -32,11 +39,28 @@ pub struct AppState {
     pub db: PgPool,
     /// The image proxy, if this server has one.
     pub images: Option<Arc<ImageProxy>>,
+    /// The count of wrong passwords.
+    pub logins: Arc<Limiter>,
+    /// The header a reverse proxy in front of the server names the sender's
+    /// address in. Without one, the address of the connection counts.
+    pub client_ip_header: Option<HeaderName>,
 }
 
 impl AppState {
     pub fn new(db: PgPool) -> Self {
-        Self { db, images: None }
+        Self {
+            db,
+            images: None,
+            logins: Arc::default(),
+            client_ip_header: None,
+        }
+    }
+
+    pub fn with_client_ip_header(self, name: HeaderName) -> Self {
+        Self {
+            client_ip_header: Some(name),
+            ..self
+        }
     }
 
     pub fn with_images(self, images: Arc<ImageProxy>) -> Self {
@@ -63,6 +87,9 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
 fn api() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
+        .route("/login", post(login::login))
+        .route("/logout", post(login::logout))
+        .route("/me", get(login::me))
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 
@@ -82,10 +109,11 @@ async fn health(State(state): State<AppState>) -> Result<Json<Health>, AppError>
     }))
 }
 
-/// An image through the proxy. The address says which one and proves that the
-/// server itself asked for it; see [`images`].
+/// An image through the proxy, for logged-in readers only. The address says
+/// which one and proves that the server itself asked for it; see [`images`].
 async fn image(
     State(state): State<AppState>,
+    _session: Session,
     UrlPath((signature, size, address)): UrlPath<(String, String, String)>,
 ) -> Response {
     let Some(images) = state.images else {
