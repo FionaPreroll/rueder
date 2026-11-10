@@ -194,6 +194,18 @@ Das Intervall passt sich wie heute der Aktivität des Feeds an, zwischen 15 Minu
 
 Die Feed-Suche auf Webseiten (heute der Dienst `feedfinder`) und der OPML-Import nutzen denselben Client.
 
+Gebaut in Paket 2.2 (`server/src/feeds.rs` liest und speichert, `server/src/fetch.rs` ruft ab):
+
+- **Runde.** `serve` sieht alle 30 Sekunden nach fälligen Feeds mit mindestens einem Abo, höchstens 100 je Runde. Ein genommener Feed ist für zehn Minuten vergeben, damit ihn keine zweite Runde und kein zweiter Server nimmt. Höchstens acht Abrufe laufen gleichzeitig, je Host einer.
+- **Kennung.** Die ID, die der Feed dem Eintrag gibt, sonst sein Link, sonst eine Prüfsumme aus Titel und Text. Sie ist bei jedem Abruf dieselbe; ein Eintrag ohne alles wird ausgelassen.
+- **Änderung.** Die Prüfsumme geht über Titel und Text, Folgen von Leerraum zählen als ein Leerzeichen. Ein nur neu umbrochener Text ist also keine neue Version. Noch nicht herausgerechnet sind Tracking-Parameter, die sich bei jedem Abruf ändern; das kommt mit den Regeln der Bereinigung (Paket 2.3).
+- **Grenzen.** 500 Artikel je Abruf, gezählt vom Anfang des Feeds, 1 MB je Text; was darüber liegt, bleibt weg. Der Feed selbst ist durch den HTTP-Client auf 20 MB begrenzt.
+- **Text zum Lesen.** Bis Paket 2.3 bereinigt `ammonia` mit seiner Standard-Allowlist. Das Original bleibt als Version erhalten, die eigenen Regeln lassen sich also nachträglich anwenden.
+- **Fehler.** Der Grund steht am Feed (`error_message`), jeder Fehlschlag verdoppelt das Intervall bis zwölf Stunden, der erste Erfolg setzt es zurück.
+- **Einstellungen.** `FETCH_ALLOW_NETS` gibt interne Netze frei (siehe [Gehärteter HTTP-Client](#gehärteter-http-client)), `FETCH=off` startet den Server ohne Abruf.
+
+Abweichungen vom Entwurf oben: Schritt 6 wendet noch keine Filterregeln an und Schritt 7 meldet nichts, beides gibt es erst mit den Paketen 2.6 und 2.7. Anders als der alte rueder probiert der Abruf bei einer http-Adresse nicht zuerst https, und eine dauerhafte Weiterleitung ändert die gespeicherte Adresse des Feeds nicht.
+
 ## Bereinigung
 
 Die Bereinigung läuft **einmal je Version auf dem Server** statt bei jedem Anzeigen im Browser.

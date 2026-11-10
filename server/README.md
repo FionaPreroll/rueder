@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data and the HTTP client
+## State: foundation, data and fetching
 
 What is here:
 
@@ -19,13 +19,16 @@ What is here:
   run more than once.
 - The hardened HTTP client (`src/http_client.rs`), the one way out to the
   internet: only http and https, no address inside the own network however it is
-  written or reached, limits for time, redirects and size. Nothing uses it yet.
+  written or reached, limits for time, redirects and size.
+- Fetching (`src/feeds.rs`, `src/fetch.rs`): `serve` fetches the feeds that are
+  due and have a reader, with conditional requests, and stores new articles and
+  new versions of changed ones.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
 - `GET /api/health`, and the built frontend from `../web/build`.
 
-This is step 1 of the plan and the first work package of step 2. Fetching,
-cleaning, login and the rest of the API follow in step 2.
+This is step 1 of the plan and the first two work packages of step 2. Cleaning
+with rueder's own rules, the image proxy, login and the API follow.
 
 ## Commands
 
