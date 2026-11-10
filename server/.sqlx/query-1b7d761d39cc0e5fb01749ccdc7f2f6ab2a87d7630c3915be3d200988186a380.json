@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds\n         SET title = coalesce($2, title), site_url = coalesce($3, site_url),\n             icon_url = coalesce($4, icon_url), etag = $5, last_modified = $6,\n             fetched_at = $7, last_success_at = $7, error_message = NULL,\n             fetch_interval_s = $8, next_fetch_at = $7::timestamptz + ($8::integer + $9::float8) * interval '1 second'\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b7d761d39cc0e5fb01749ccdc7f2f6ab2a87d7630c3915be3d200988186a380"
+}

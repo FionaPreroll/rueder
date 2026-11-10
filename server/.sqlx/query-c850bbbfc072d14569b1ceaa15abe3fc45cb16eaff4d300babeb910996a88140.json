@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds\n         SET fetched_at = now(), last_error_at = now(), error_message = $2,\n             fetch_interval_s = least(fetch_interval_s * 2, $3),\n             next_fetch_at = now() + (least(fetch_interval_s * 2, $3) + $4::float8) * interval '1 second'\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c850bbbfc072d14569b1ceaa15abe3fc45cb16eaff4d300babeb910996a88140"
+}
