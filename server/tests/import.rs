@@ -825,6 +825,63 @@ async fn odd_data_does_not_stop_the_import(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn texts_are_cleaned_on_the_way_in(db: PgPool) {
+    let mut old = legacy(&db).await;
+    let feed = old_feed(&mut old, 1, "a", json!({ "working": true })).await;
+    // The old rueder took scripts out when it fetched; the rest it left to the browser.
+    let content = json!({
+        "text": "<p>Text. <a href=\"/more?utm_source=feed\">more</a> <a href=\"#top\">up</a></p>\
+                 <img src=\"https://a.fsdn.com/sd/count.gif\"><video src=\"clip.mp4\"></video>",
+        "enclosures": [{ "url": "https://a.example/one.mp3", "length": "9", "type": "audio/mpeg" }]
+    });
+    old_article(&mut old, 1, feed, "a-1", content).await;
+    sqlx::query(
+        "UPDATE articles SET link = 'https://blog.example/posts/a-1?utm_campaign=x&id=7',
+                             thumbnail = 'https://blog.example/a-1.jpg?utm_source=feed'",
+    )
+    .execute(&mut old)
+    .await
+    .unwrap();
+    old_user(&mut old, 1, "htpasswd", "alice", json!([])).await;
+    old_subscription(&mut old, 1, feed).await;
+    import::run(&db, &mut old, &rules()).await.unwrap();
+
+    let (feed, alice) = (new_feed(&db, feed).await, new_account(&db, "alice").await);
+    let opened = articles::open(&db, alice, feed, 1).await.unwrap().unwrap();
+    assert_eq!(
+        opened.html,
+        "<p>Text. <a href=\"https://blog.example/more\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">more</a> \
+         <a href=\"https://blog.example/posts/a-1?id=7#top\" target=\"_blank\" \
+         rel=\"nofollow noopener noreferrer\">up</a></p>"
+    );
+    assert_eq!(
+        opened.url.as_deref(),
+        Some("https://blog.example/posts/a-1?id=7")
+    );
+    assert_eq!(
+        opened.enclosures,
+        json!([
+            { "url": "https://a.example/one.mp3", "length": "9", "type": "audio/mpeg" },
+            { "url": "https://blog.example/posts/clip.mp4", "type": null, "inline": true },
+        ])
+    );
+    let list = articles::page(&db, alice, &[feed], ALL).await.unwrap();
+    assert_eq!(
+        list[0].thumbnail_url.as_deref(),
+        Some("https://blog.example/a-1.jpg")
+    );
+    // The version keeps the text as the old rueder had it.
+    let versions = articles::versions(&db, alice, feed, 1).await.unwrap();
+    assert!(
+        versions[0]
+            .original
+            .content
+            .contains("/more?utm_source=feed")
+    );
+}
+
+#[sqlx::test]
 async fn an_empty_old_database_brings_nothing(db: PgPool) {
     let mut old = legacy(&db).await;
     assert_eq!(
