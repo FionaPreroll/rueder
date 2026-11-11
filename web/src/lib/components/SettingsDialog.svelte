@@ -146,7 +146,7 @@
 		{/if}
 
 		{#if tab === 'look' || tab === 'reading'}
-			<p class="mt-5 text-xs text-soft">{m.settings.note}</p>
+			<p class="mt-5 text-xs text-soft">{reader.demo ? m.settings.noteDemo : m.settings.note}</p>
 		{/if}
 	</div>
 </Dialog>

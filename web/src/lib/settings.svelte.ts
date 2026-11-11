@@ -1,6 +1,7 @@
 // How the reader looks and behaves for one person: theme, accent color, density,
-// text size, view and so on. The draft keeps them in the browser; later they are
-// saved with the account, so every device shows the same.
+// text size, view and so on. They are kept in the browser, so the page looks right
+// before the server answers, and with a server also with the account, so every
+// device shows the same (see the reader's `saveSettings`).
 
 import { languages, useLanguage, type Language } from './i18n/locale.svelte.ts';
 
@@ -53,13 +54,20 @@ const choices: { [K in keyof Settings]?: readonly string[] } = {
 
 /** The stored settings, with the default for everything missing or not understood. */
 export function parse(stored: string | null): Settings {
-	let found: Record<string, unknown> = {};
 	try {
-		const parsed: unknown = JSON.parse(stored ?? '{}');
-		if (parsed && typeof parsed === 'object') found = parsed as Record<string, unknown>;
+		return understood(JSON.parse(stored ?? '{}'));
 	} catch {
 		// Not JSON: the defaults.
+		return { ...defaults };
 	}
+}
+
+/** Settings as somebody stored them, the server for one: what is not understood is the default. */
+export function understood(stored: unknown): Settings {
+	const found: Record<string, unknown> =
+		stored && typeof stored === 'object' && !Array.isArray(stored)
+			? (stored as Record<string, unknown>)
+			: {};
 	const settings: Record<string, unknown> = { ...defaults };
 	for (const key of Object.keys(defaults) as (keyof Settings)[]) {
 		const value = found[key];

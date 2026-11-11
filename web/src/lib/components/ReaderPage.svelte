@@ -60,6 +60,9 @@
 
 	const narrow = () => window.matchMedia?.('(max-width: 767px)').matches ?? false;
 
+	// Whatever changes in the settings is kept with the account, where there is one.
+	$effect(() => reader.saveSettings({ ...settings }));
+
 	onMount(() => {
 		// On a phone the sidebar lies over the list, so it starts closed.
 		if (narrow()) sidebarOpen = false;

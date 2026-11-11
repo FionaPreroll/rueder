@@ -188,7 +188,8 @@ const en = {
 		views: { list: 'List', expanded: 'Expanded' },
 		markOnScroll: 'Mark articles as read while scrolling past them in the expanded view',
 		teasers: 'Show the first words of the text after the title in the list',
-		note: 'Changes apply at once and stay in this browser. Later they are saved with your account and follow you to every device.'
+		note: 'Changes apply at once and are saved with your account, so they follow you to every device.',
+		noteDemo: 'Changes apply at once and stay in this browser.'
 	},
 
 	rules: {

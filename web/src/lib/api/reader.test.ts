@@ -6,6 +6,7 @@ import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TreeNode } from '#lib/model.ts';
 import { MAX_OPML } from '#lib/reader.ts';
+import { defaults, settings } from '#lib/settings.svelte.ts';
 import { TAB } from './client.ts';
 import { PAGE, ServerReader, toTree } from './reader.svelte.ts';
 import { FakeServer } from './test/fake-server.ts';
@@ -1533,5 +1534,69 @@ describe('live updates', () => {
 		server.dropStreams();
 		await settle();
 		expect(session.expired).toHaveBeenCalledOnce();
+	});
+});
+
+describe('settings', () => {
+	afterEach(() => {
+		Object.assign(settings, defaults);
+	});
+
+	/** Lets settings that changed be sent, and what follows from it. */
+	async function saved() {
+		await new Promise((resolve) => setTimeout(resolve, 550));
+		await settle();
+	}
+
+	const puts = () => server.requests.filter((r) => r.method === 'PUT' && r.path === '/settings');
+
+	it('takes the settings of the account into the page', async () => {
+		server.settings = { theme: 'dark', accent: 'green', view: 'nonsense', unknown: 1 };
+		const reader = await started();
+		expect([settings.theme, settings.accent, settings.view]).toEqual(['dark', 'green', 'list']);
+		// Taking them in sends nothing back.
+		reader.saveSettings({ ...settings });
+		await saved();
+		expect(puts()).toEqual([]);
+	});
+
+	it('gives a new account the settings this browser had', async () => {
+		server.settings = {};
+		settings.theme = 'dark';
+		const reader = await started();
+		reader.saveSettings({ ...settings });
+		await saved();
+		expect(puts()).toHaveLength(1);
+		expect(server.settings).toMatchObject({ theme: 'dark', accent: 'red' });
+	});
+
+	it('sends what changes once it rests, and nothing before those of the account are there', async () => {
+		server.settings = { theme: 'light' };
+		const release = server.hold(/^\/settings$/);
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		reader.start();
+		reader.saveSettings({ ...settings, theme: 'dark' });
+		release();
+		await settle();
+		expect(settings.theme).toBe('light');
+		for (const textSize of ['small', 'large'] as const) {
+			settings.textSize = textSize;
+			reader.saveSettings({ ...settings });
+		}
+		await saved();
+		expect(puts().map((r) => (r.body as { textSize: string }).textSize)).toEqual(['large']);
+		expect(server.settings).toMatchObject({ theme: 'light', textSize: 'large' });
+	});
+
+	it('loads them anew when another tab changed them', async () => {
+		server.settings = { theme: 'light' };
+		await started();
+		server.settings = { theme: 'dark' };
+		server.emit({ event: 'settings', data: { by: TAB } });
+		await settle();
+		expect(settings.theme).toBe('light');
+		server.emit({ event: 'settings', data: { by: 'another-tab' } });
+		await settle();
+		expect(settings.theme).toBe('dark');
 	});
 });

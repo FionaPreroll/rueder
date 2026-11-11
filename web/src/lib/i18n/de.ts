@@ -187,7 +187,8 @@ const de: Messages = {
 		views: { list: 'Liste', expanded: 'Erweitert' },
 		markOnScroll: 'Artikel in der erweiterten Ansicht beim Vorbeiscrollen als gelesen markieren',
 		teasers: 'In der Liste nach dem Titel die ersten Worte des Textes zeigen',
-		note: 'Änderungen gelten sofort und bleiben in diesem Browser. Später liegen sie bei deinem Konto und gelten auf jedem Gerät.'
+		note: 'Änderungen gelten sofort, liegen bei deinem Konto und gelten auf jedem Gerät.',
+		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.'
 	},
 
 	rules: {

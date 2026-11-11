@@ -22,6 +22,7 @@ import type {
 	TreeNode
 } from '#lib/model.ts';
 import type { FilterRule } from '#lib/filters.ts';
+import { settings as shown, understood, type Settings } from '#lib/settings.svelte.ts';
 import {
 	MAX_OPML,
 	type Abilities,
@@ -82,6 +83,8 @@ const SETTLE_AFTER = 300;
 const RECONNECT_AFTER = 30_000;
 /** The longest list the server gives at once, for loading what is shown anew. */
 const MAX_PAGE = 200;
+/** Settings that change, as while a slider is dragged, are saved once they rest this long. */
+const SAVE_SETTINGS_AFTER = 500;
 
 /** Where the closed folders are kept in the browser. */
 const CLOSED_KEY = 'rueder.closed';
@@ -295,6 +298,8 @@ export class ServerReader implements Reader {
 	private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 	/** Asking anew for what events said changed, a moment after the last of them. */
 	private settling = new Map<string, ReturnType<typeof setTimeout>>();
+	/** The settings as the account has them; null until they are loaded, so none are sent before. */
+	private savedSettings: string | null = null;
 
 	/** Texts being fetched, waiting to be fetched, and fetched. */
 	private fetching = new Set<string>();
@@ -326,6 +331,7 @@ export class ServerReader implements Reader {
 	start() {
 		this.stopped = false;
 		this.connect();
+		void this.loadSettings();
 		void this.loadTree();
 		void this.loadRules();
 		void this.loadList();
@@ -1041,6 +1047,49 @@ export class ServerReader implements Reader {
 		return this.rules.find((rule) => rule.id === article.hiddenBy) ?? null;
 	}
 
+	// Settings
+
+	/**
+	 * Takes the account's settings into the page. An account that has none yet,
+	 * a new one, gets what this browser had.
+	 */
+	private async loadSettings() {
+		try {
+			const stored = await this.api.settings();
+			const empty =
+				!stored || typeof stored !== 'object' || Object.keys(stored as object).length === 0;
+			if (empty) {
+				this.savedSettings = '';
+				this.saveSettings({ ...shown });
+				return;
+			}
+			const settings = understood(stored);
+			this.savedSettings = JSON.stringify(settings);
+			Object.assign(shown, settings);
+		} catch (error) {
+			this.failed(error, 'unreachable');
+		}
+	}
+
+	/** Sends changed settings once they rest a moment; nothing before the account's are loaded. */
+	saveSettings(settings: Settings) {
+		if (this.savedSettings === null) return;
+		const json = JSON.stringify(settings);
+		if (json === this.savedSettings) return;
+		this.soon(
+			'settings',
+			() => {
+				this.savedSettings = json;
+				this.write(
+					'settings',
+					() => this.api.saveSettings(settings),
+					() => {}
+				);
+			},
+			SAVE_SETTINGS_AFTER
+		);
+	}
+
 	// Live updates
 
 	/**
@@ -1080,14 +1129,14 @@ export class ServerReader implements Reader {
 	}
 
 	/** Runs `ask` once, a moment after the last time it was asked for. */
-	private soon(key: string, ask: () => void) {
+	private soon(key: string, ask: () => void, after = SETTLE_AFTER) {
 		clearTimeout(this.settling.get(key));
 		this.settling.set(
 			key,
 			setTimeout(() => {
 				this.settling.delete(key);
 				if (!this.stopped) ask();
-			}, SETTLE_AFTER)
+			}, after)
 		);
 	}
 
@@ -1186,9 +1235,11 @@ export class ServerReader implements Reader {
 			case 'session':
 				void this.checkSession();
 				return;
-			// Labels (3.4) and settings on the server (3.3) are not in the page yet.
-			case 'labels':
 			case 'settings':
+				if (!own) void this.loadSettings();
+				return;
+			// Labels (3.4) are not in the page yet.
+			case 'labels':
 				return;
 		}
 	}
