@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The row of buttons over the list, in Google Reader's order: refresh, what to
 	// show, mark all as read, the two views, previous and next.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { settings } from '#lib/settings.svelte.ts';
 	import Icon from './Icon.svelte';
@@ -41,45 +41,62 @@
 		{/snippet}
 		{@render option(m.toolbar.showAll, !reader.unreadOnly, () => (reader.unreadOnly = false))}
 		{@render option(m.toolbar.showUnread, reader.unreadOnly, () => (reader.unreadOnly = true))}
-		<hr class="my-1 border-line" />
-		{@render option(m.toolbar.newestFirst, reader.newestFirst, () => (reader.newestFirst = true))}
-		{@render option(m.toolbar.oldestFirst, !reader.newestFirst, () => (reader.newestFirst = false))}
+		{#if reader.can.oldestFirst}
+			<hr class="my-1 border-line" />
+			{@render option(m.toolbar.newestFirst, reader.newestFirst, () => (reader.newestFirst = true))}
+			{@render option(
+				m.toolbar.oldestFirst,
+				!reader.newestFirst,
+				() => (reader.newestFirst = false)
+			)}
+		{/if}
 	</Menu>
 
 	<div class="flex">
 		<button
 			type="button"
-			class="tool rounded-r-none"
+			class={['tool', reader.can.markOlder && 'rounded-r-none']}
 			title={m.toolbar.markAllRead}
 			onclick={() => reader.markAllRead()}
 		>
 			<Icon name="check" />
 			<span class="hidden lg:inline">{m.toolbar.markAllRead}</span>
 		</button>
-		<Menu class="tool rounded-l-none border-l-0 px-1.5" align="right" label={m.toolbar.markOptions}>
-			{#snippet button()}
-				<Icon name="down" class="size-3.5" />
-			{/snippet}
-			<button type="button" role="menuitem" class="menu-item" onclick={() => reader.markAllRead()}>
-				{m.toolbar.markEverything}
-			</button>
-			<button
-				type="button"
-				role="menuitem"
-				class="menu-item"
-				onclick={() => reader.markAllRead(DAY)}
+		{#if reader.can.markOlder}
+			<Menu
+				class="tool rounded-l-none border-l-0 px-1.5"
+				align="right"
+				label={m.toolbar.markOptions}
 			>
-				{m.toolbar.markOlderDay}
-			</button>
-			<button
-				type="button"
-				role="menuitem"
-				class="menu-item"
-				onclick={() => reader.markAllRead(7 * DAY)}
-			>
-				{m.toolbar.markOlderWeek}
-			</button>
-		</Menu>
+				{#snippet button()}
+					<Icon name="down" class="size-3.5" />
+				{/snippet}
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					onclick={() => reader.markAllRead()}
+				>
+					{m.toolbar.markEverything}
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					onclick={() => reader.markAllRead(DAY)}
+				>
+					{m.toolbar.markOlderDay}
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					class="menu-item"
+					onclick={() => reader.markAllRead(7 * DAY)}
+				>
+					{m.toolbar.markOlderWeek}
+				</button>
+			</Menu>
+		{/if}
 	</div>
 
 	<div class="flex" role="group" aria-label={m.settings.view}>

@@ -44,6 +44,8 @@ const en = {
 		liveOn: 'New articles arrive by themselves. Click to pause.',
 		liveOff: 'Paused. Click to let new articles arrive again.',
 		paused: 'Paused',
+		account: (name: string) => `Logged in as ${name}`,
+		logout: 'Log out',
 		unread: (count: number) => `${n(count)} unread`,
 		fetchFailed: (reason: string) => `The last fetch failed: ${reason}`,
 		moveHint: 'Drag to sort, or press Alt with the arrow keys',
@@ -87,7 +89,33 @@ const en = {
 		updatedTitle: (count: number) =>
 			`Changed since it was first fetched; ${n(count)} earlier ${plural(count, { one: 'version', other: 'versions' })}`,
 		compare: 'Compare versions',
-		hiddenBy: (rule: string) => `Hidden by the rule: ${rule}`
+		hiddenBy: (rule: string) => `Hidden by the rule: ${rule}`,
+		loading: 'Loading the text …',
+		loadingList: 'Loading …'
+	},
+
+	notice: {
+		unreachable: 'The server does not answer. What you see may be out of date.',
+		notSaved: 'The server did not take your last change. It was undone here.'
+	},
+
+	login: {
+		title: 'Log in to rueder',
+		name: 'Name',
+		password: 'Password',
+		submit: 'Log in',
+		checking: 'One moment …',
+		wrong: 'Wrong name or password.',
+		tooMany: (minutes: number) =>
+			`Too many wrong tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
+		unreachable: 'The server does not answer. Try again in a moment.',
+		retry: 'Try again',
+		or: 'or',
+		oidc: 'Log in with single sign-on',
+		oidcFailed: 'The login through single sign-on did not work. Try again.',
+		oidcDenied: 'The login through single sign-on was cancelled.',
+		oidcUnknown: 'No account here belongs to that login. Ask whoever runs this rueder to link it.',
+		note: 'There is no sign-up. Accounts are made by whoever runs this rueder.'
 	},
 
 	home: {
@@ -172,6 +200,7 @@ const en = {
 			`Applies to ${n(count)} of ${n(total)} articles here now.`,
 		invalid: 'This is not a valid regular expression.',
 		empty: 'Enter the text to look for.',
+		checking: 'Looking what it would catch …',
 		hits: (count: number) => `${n(count)} ${plural(count, { one: 'hit', other: 'hits' })}`,
 		summary: (field: string, match: string, pattern: string, action: string) =>
 			`${field} ${match} “${pattern}”: ${action}`

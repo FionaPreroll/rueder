@@ -36,6 +36,18 @@ export type Me = {
 };
 
 /**
+ * The ways to log in this server has besides name and password.
+ *
+ * `GET /api/login/ways` answers with it, to anybody.
+ */
+export type LoginWays = {
+	/**
+	 * Through the OpenID Connect provider, at `/api/oidc/start`.
+	 */
+	oidc: boolean,
+};
+
+/**
  * One place a reader is logged in.
  *
  * `GET /api/sessions` answers with a list of them; `DELETE /api/sessions/{id}`

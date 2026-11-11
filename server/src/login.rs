@@ -156,7 +156,7 @@ impl FromRequestParts<AppState> for Sender {
 
 /// The types this module sends and reads, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
-    types.add::<Credentials>().add::<Me>();
+    types.add::<Credentials>().add::<Me>().add::<Ways>();
 }
 
 /// What `POST /api/login` reads. It answers with `Me` and sets the session's
@@ -175,6 +175,24 @@ pub struct Me {
     id: i32,
     username: String,
     is_admin: bool,
+}
+
+/// The ways to log in this server has besides name and password.
+///
+/// `GET /api/login/ways` answers with it, to anybody.
+#[derive(Serialize, TS)]
+#[ts(rename = "LoginWays")]
+pub struct Ways {
+    /// Through the OpenID Connect provider, at `/api/oidc/start`.
+    oidc: bool,
+}
+
+/// What the login page asks before anybody is logged in, to know whether to
+/// offer the way through the provider. It says nothing about any account.
+pub async fn ways(State(state): State<AppState>) -> Json<Ways> {
+    Json(Ways {
+        oidc: state.oidc.is_some(),
+    })
 }
 
 pub async fn login(

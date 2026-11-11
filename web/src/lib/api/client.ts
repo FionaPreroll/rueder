@@ -1,0 +1,188 @@
+// The server's API as functions: one per endpoint the page uses. The shapes of
+// what the server sends and reads come from types.ts, which the server writes
+// out of its Rust types (see server/src/typescript.rs).
+//
+// The session is a cookie the browser keeps and scripts cannot read, so nothing
+// here knows a token. Every address is rueder's own.
+
+import type { Stream } from '#lib/model.ts';
+import type { DropPosition } from '#lib/tree.ts';
+import type {
+	Article,
+	ArticleVersion,
+	Created,
+	Credentials,
+	Feed,
+	Folder,
+	List,
+	ListItem,
+	LoginWays,
+	Me,
+	Move,
+	NewFolder,
+	NodeRef,
+	Rename,
+	Rule,
+	RuleOutcome,
+	RulePreview,
+	RuleScope,
+	StateChange,
+	Tree,
+	Upto,
+	Versions
+} from './types.ts';
+
+/** A request the server refused, or one it did not answer (`status` 0). */
+export class ApiError extends Error {
+	constructor(
+		readonly status: number,
+		message: string,
+		/** Seconds to wait, if the server said so (429). */
+		readonly retryAfter: number | null = null
+	) {
+		super(message);
+		this.name = 'ApiError';
+	}
+
+	/** The session is over, or there never was one. */
+	get signedOut() {
+		return this.status === 401;
+	}
+}
+
+// The shapes of what the server sends, under the names the page knows them by.
+// They are the server's own: types.ts is written out of its Rust types.
+export type ApiAccount = Me;
+export type ApiLoginWays = LoginWays;
+export type ApiFolder = Folder;
+export type ApiFeed = Feed;
+export type ApiTree = Tree;
+export type ApiListItem = ListItem;
+export type ApiArticle = Article;
+export type ApiVersion = ArticleVersion;
+export type ApiRuleScope = RuleScope;
+export type ApiRule = Rule;
+/** A new rule is sent without its id. */
+export type ApiNewRule = Omit<Rule, 'id'>;
+export type ApiRulePreview = RulePreview;
+export type ApiNode = NodeRef;
+
+/** Which part of a list is asked for. */
+export interface PageQuery {
+	/** Only what arrived before the article of this id. */
+	before?: number;
+	limit: number;
+	/** Leave out what was read. */
+	unread?: boolean;
+}
+
+/** The lists of articles: a feed's, a folder's, everything, the starred and the hidden. */
+export type ListStream = Exclude<Stream, { kind: 'home' }>;
+
+/** The number in an id of the page: 12 for "feed-12", which is feed 12 of the server. */
+export const serverId = (id: string) => Number(id.slice(id.lastIndexOf('-') + 1));
+
+const listPath = (stream: ListStream) => {
+	switch (stream.kind) {
+		case 'all':
+			return '/articles';
+		case 'starred':
+			return '/starred';
+		case 'hidden':
+			return '/hidden';
+		case 'feed':
+			return `/feeds/${serverId(stream.id)}/articles`;
+		case 'folder':
+			return `/folders/${serverId(stream.id)}/articles`;
+	}
+};
+
+/** Marking as read goes by feed, by folder or for everything. */
+const readPath = (stream: ListStream) => {
+	switch (stream.kind) {
+		case 'feed':
+			return `/feeds/${serverId(stream.id)}/read`;
+		case 'folder':
+			return `/folders/${serverId(stream.id)}/read`;
+		default:
+			return '/read';
+	}
+};
+
+/** How much of a refusal's text is kept. */
+const MAX_REASON = 300;
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+	let response: Response;
+	try {
+		response = await fetch(`/api${path}`, {
+			method,
+			credentials: 'same-origin',
+			headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+			body: body === undefined ? undefined : JSON.stringify(body)
+		});
+	} catch {
+		throw new ApiError(0, 'the server did not answer');
+	}
+	if (!response.ok) {
+		const reason = (await response.text().catch(() => '')).slice(0, MAX_REASON);
+		const wait = Number(response.headers.get('Retry-After'));
+		throw new ApiError(response.status, reason, wait > 0 ? wait : null);
+	}
+	if (response.status === 204) return undefined as T;
+	try {
+		return (await response.json()) as T;
+	} catch {
+		// Something else answered in the server's place, a proxy's error page for one.
+		throw new ApiError(0, 'the answer was not what the server sends');
+	}
+}
+
+export const api = {
+	me: () => call<ApiAccount>('GET', '/me'),
+	loginWays: () => call<ApiLoginWays>('GET', '/login/ways'),
+	login: (username: string, password: string) =>
+		call<ApiAccount>('POST', '/login', { username, password } satisfies Credentials),
+	logout: () => call<void>('POST', '/logout'),
+
+	tree: () => call<ApiTree>('GET', '/tree'),
+
+	list: async (stream: ListStream, page: PageQuery) => {
+		const query = new URLSearchParams({ limit: String(page.limit) });
+		if (page.before !== undefined) query.set('before', String(page.before));
+		if (page.unread) query.set('unread', 'true');
+		const list = await call<List>('GET', `${listPath(stream)}?${query}`);
+		return list.articles;
+	},
+
+	article: (feedId: number, seq: number) =>
+		call<ApiArticle>('GET', `/feeds/${feedId}/articles/${seq}`),
+
+	versions: async (feedId: number, seq: number) => {
+		const kept = await call<Versions>('GET', `/feeds/${feedId}/articles/${seq}/versions`);
+		return kept.versions;
+	},
+
+	setState: (feedId: number, seq: number, change: { read?: boolean; starred?: boolean }) =>
+		call<void>('PUT', `/feeds/${feedId}/articles/${seq}/state`, change satisfies StateChange),
+
+	/** Marks as read what arrived in the stream up to the article of this id. */
+	readUpto: (stream: ListStream, uptoId: number) =>
+		call<void>('POST', readPath(stream), { upto_id: uptoId } satisfies Upto),
+
+	move: (node: ApiNode, target: ApiNode, position: DropPosition) =>
+		call<void>('POST', '/tree/move', { node, target, position } satisfies Move),
+	addFolder: (title: string) => call<Created>('POST', '/folders', { title } satisfies NewFolder),
+	renameFolder: (id: number, title: string) =>
+		call<void>('PATCH', `/folders/${id}`, { title } satisfies Rename),
+	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`),
+
+	rules: () => call<ApiRule[]>('GET', '/rules'),
+	addRule: (rule: ApiNewRule) => call<RuleOutcome>('POST', '/rules', rule),
+	changeRule: (id: number, rule: ApiNewRule) => call<RuleOutcome>('PUT', `/rules/${id}`, rule),
+	removeRule: (id: number) => call<RuleOutcome>('DELETE', `/rules/${id}`),
+	/** Tries a rule without storing it; a pattern that cannot be used is refused with 400. */
+	previewRule: (rule: ApiNewRule) => call<ApiRulePreview>('POST', '/rules/preview', rule)
+};
+
+export type Api = typeof api;

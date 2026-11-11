@@ -1,6 +1,6 @@
 // A filter rule in words, in the page's language.
 
-import type { Reader } from './demo/reader.svelte.ts';
+import type { Reader } from './reader.ts';
 import type { FilterRule, RuleScope } from './filters.ts';
 import { m } from './i18n/index.ts';
 

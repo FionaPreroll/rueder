@@ -41,6 +41,8 @@ const de: Messages = {
 		liveOn: 'Neue Artikel kommen von selbst an. Klick zum Anhalten.',
 		liveOff: 'Angehalten. Klick, damit wieder neue Artikel ankommen.',
 		paused: 'Angehalten',
+		account: (name) => `Angemeldet als ${name}`,
+		logout: 'Abmelden',
 		unread: (count) => `${n(count)} ungelesen`,
 		fetchFailed: (reason) => `Der letzte Abruf ist fehlgeschlagen: ${reason}`,
 		moveHint: 'Zum Sortieren ziehen, oder Alt mit den Pfeiltasten drücken',
@@ -84,7 +86,35 @@ const de: Messages = {
 		updatedTitle: (count) =>
 			`Seit dem ersten Abruf geändert; ${n(count)} ${plural(count, { one: 'frühere Version', other: 'frühere Versionen' })}`,
 		compare: 'Versionen vergleichen',
-		hiddenBy: (rule) => `Ausgeblendet von der Regel: ${rule}`
+		hiddenBy: (rule) => `Ausgeblendet von der Regel: ${rule}`,
+		loading: 'Der Text wird geladen …',
+		loadingList: 'Wird geladen …'
+	},
+
+	notice: {
+		unreachable: 'Der Server antwortet nicht. Was du siehst, ist vielleicht nicht mehr aktuell.',
+		notSaved:
+			'Der Server hat deine letzte Änderung nicht angenommen. Sie wurde hier zurückgenommen.'
+	},
+
+	login: {
+		title: 'Bei rueder anmelden',
+		name: 'Name',
+		password: 'Passwort',
+		submit: 'Anmelden',
+		checking: 'Einen Moment …',
+		wrong: 'Name oder Passwort stimmt nicht.',
+		tooMany: (minutes) =>
+			`Zu viele falsche Versuche. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
+		unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.',
+		retry: 'Noch einmal versuchen',
+		or: 'oder',
+		oidc: 'Mit Single Sign-on anmelden',
+		oidcFailed: 'Die Anmeldung über Single Sign-on hat nicht geklappt. Versuch es noch einmal.',
+		oidcDenied: 'Die Anmeldung über Single Sign-on wurde abgebrochen.',
+		oidcUnknown:
+			'Zu dieser Anmeldung gehört hier kein Konto. Bitte die Person, die diesen rueder betreibt, es zu verknüpfen.',
+		note: 'Registrieren kann man sich nicht. Konten legt an, wer diesen rueder betreibt.'
 	},
 
 	home: {
@@ -168,6 +198,7 @@ const de: Messages = {
 		preview: (count, total) => `Trifft jetzt auf ${n(count)} von ${n(total)} Artikeln hier zu.`,
 		invalid: 'Das ist kein gültiger regulärer Ausdruck.',
 		empty: 'Gib den gesuchten Text ein.',
+		checking: 'Es wird nachgesehen, was die Regel träfe …',
 		hits: (count) => `${n(count)} Treffer`,
 		summary: (field, match, pattern, action) => `${field} ${match} „${pattern}“: ${action}`
 	},

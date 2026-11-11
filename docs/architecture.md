@@ -337,7 +337,7 @@ Gebaut in Paket 2.5 (`server/src/accounts.rs`, `server/src/sessions.rs`, `server
 - **Lokale Konten** mit Passwort-Hash nach Argon2id (19 MiB, 2 Durchläufe, ein Salt je Hash). Es gibt keine offene Registrierung: Konten legt die Kommandozeile an (`rueder account add`, `password`, `link`, `list`). Ein Name ist höchstens 64 Zeichen lang und unterscheidet keine Groß- und Kleinschreibung, ein Passwort hat mindestens 8 Zeichen und höchstens 1024 Byte. Höchstens vier Hashes werden gleichzeitig gerechnet, damit Login-Versuche den Speicher nicht füllen.
 - **Sitzung** als zufälliges Token (32 Byte) im Cookie `__Host-rueder` mit `HttpOnly`, `Secure`, `SameSite=Lax` und `Path=/`. In der Datenbank liegt nur der SHA-256 des Tokens. Eine Sitzung endet nach 30 Tagen ohne Nutzung, beim Abmelden und sobald das Konto ein neues Passwort bekommt; ein neuer Login ersetzt die Sitzung, die der Browser noch hatte. Dass eine Sitzung genutzt wurde, schreibt der Server höchstens einmal je Stunde auf. Abgelaufene Sitzungen räumt er stündlich weg.
 - **Wer eingeloggt ist**, sagt der Extraktor `Session` mit der Nummer des Kontos. Jeder Handler, der ihn nimmt, antwortet ohne Sitzung mit 401; an seine Kontonummer binden die Endpunkte aus Paket 2.6 ihre Abfragen. Der Bild-Proxy unter `/img/` nimmt ihn schon.
-- **Login** über `POST /api/login` mit Name und Passwort als JSON, `POST /api/logout`, `GET /api/me`. Ein falscher Name, ein falsches Passwort und ein Konto ohne Passwort bekommen dieselbe Antwort nach derselben Arbeit: Für einen Namen, den es nicht gibt, wird gegen einen Hash geprüft, dessen Passwort niemand kennt.
+- **Login** über `POST /api/login` mit Name und Passwort als JSON, `POST /api/logout`, `GET /api/me`. `GET /api/login/ways` sagt der Login-Seite ohne Sitzung, welche Wege es außer Name und Passwort gibt (`{"oidc": true}`), und sonst nichts. Ein falscher Name, ein falsches Passwort und ein Konto ohne Passwort bekommen dieselbe Antwort nach derselben Arbeit: Für einen Namen, den es nicht gibt, wird gegen einen Hash geprüft, dessen Passwort niemand kennt.
 - **Rate-Limit** auf falsche Passwörter: 10 je Name und 30 je Adresse in 15 Minuten, danach 429 mit `Retry-After`, auch für das richtige Passwort. Bei IPv6 zählt ein /64 als eine Adresse. Ein Login, der klappt, setzt den Zähler des Namens zurück. Gezählt wird im Speicher des Servers, für höchstens 10.000 Namen und Adressen. Hinter einem Reverse-Proxy kommt jede Verbindung vom Proxy; `CLIENT_IP_HEADER` nennt den Header, in den der Proxy die Adresse des Absenders schreibt (etwa `X-Forwarded-For`), und es zählt dessen letzter Eintrag, also der, für den der Proxy selbst bürgt.
 - **OpenID Connect** als Option, eingestellt über `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` und `OIDC_REDIRECT_URL`. Authorization Code Flow mit PKCE: `GET /api/oidc/start` schickt den Browser zum Anbieter, `GET /api/oidc/callback` tauscht den Code gegen das ID-Token. State, Nonce und Code-Verifier eines Logins liegen zehn Minuten lang in einem eigenen Cookie (`__Host-rueder-oidc`, dieselben Attribute). Geprüft werden State, Aussteller, Empfänger (`aud`, `azp`), Ablauf und Nonce. Der Weg endet mit einer Weiterleitung auf `/`, bei einem Fehler auf `/?oidc=failed`, `denied` oder `unknown`.
 - **Niemand bekommt durch OpenID Connect ein Konto.** `account_identities` sagt, welches Konto zu Aussteller und Subject gehört. Die Verknüpfung entsteht auf der Kommandozeile (`rueder account link <name> <subject>`) oder dadurch, dass jemand eingeloggt ist und den Weg mit `/api/oidc/start?link` beginnt. Ein unbekanntes Subject wird abgewiesen.
@@ -418,7 +418,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 | Bereich | Endpunkte |
 |---|---|
 | Zustand | `GET /api/health` |
-| Sitzung | `POST /api/login`, `POST /api/logout`, `GET /api/me`, `GET /api/oidc/start`, `GET /api/oidc/callback` |
+| Sitzung | `POST /api/login`, `GET /api/login/ways`, `POST /api/logout`, `GET /api/me`, `GET /api/oidc/start`, `GET /api/oidc/callback` |
 | Konto | `GET /api/sessions`, `DELETE /api/sessions`, `DELETE /api/sessions/{id}`, `PUT /api/password`; für Admins `GET` und `POST /api/accounts` |
 | Baum | `GET /api/tree` (Ordner, Abos, Feeds mit `last_seq`, Lesemarken, Ungelesen-Zahlen und dem Fehler des letzten Abrufs), `POST /api/tree/move`, `POST /api/folders`, `PATCH` und `DELETE /api/folders/{id}` |
 | Abos | `POST /api/feeds/find`, `POST /api/feeds`, `PATCH` und `DELETE /api/feeds/{id}`, `PUT /api/feeds/{id}/agent`, `GET` und `POST /api/opml` |
@@ -478,11 +478,30 @@ Der abgenommene Entwurf in `web/` enthält bereits:
 | Einstellungen (Thema, Akzentfarbe, Dichte, Schrift, Ansicht) | `web/src/lib/settings.svelte.ts` |
 | Texte auf Englisch und Deutsch | `web/src/lib/i18n/` |
 | Komponenten (Baum, Liste, Artikel, Werkzeugleiste, Dialoge) | `web/src/lib/components/` |
+| Die Naht zur Datenquelle | `web/src/lib/reader.ts` |
+| Anbindung an den Server: API, Reader, Sitzung | `web/src/lib/api/` |
 | Stellvertreter für den Server mit erfundenen Daten | `web/src/lib/demo/` |
 
-Die Naht zum Server ist die Klasse `Reader` in `web/src/lib/demo/reader.svelte.ts`: Die Komponenten holen ihre Daten nur von ihr. In Schritt 3 tritt an ihre Stelle eine Fassung, die dieselben Eigenschaften und Methoden aus der API und der SSE-Verbindung füllt. Die Modelle für Lesestand, Regeln und Baum bleiben im Frontend, damit Änderungen sofort wirken, bevor der Server bestätigt.
+Die Naht zum Server ist das Interface `Reader` in `web/src/lib/reader.ts`: Die Komponenten holen ihre Daten nur von einem `Reader`. Es gibt zwei. `ServerReader` (`web/src/lib/api/reader.svelte.ts`) füllt es aus der API, `DemoReader` (`web/src/lib/demo/reader.svelte.ts`) aus erfundenen Daten im Browser, für die Tests, für `pnpm dev:demo` und für die Ein-Datei-Fassung.
 
-Was der Entwurf noch nicht hat und Schritt 3 ergänzt: Login, Labels, OPML, eine virtualisierte Liste für sehr lange Feeds, Vorladen des nächsten Artikels, Einstellungen auf dem Server, änderbare Tastaturbelegung.
+Gebaut in Paket 3.1 (`web/src/lib/api/`):
+
+- **Die Seite.** `src/routes/+page.svelte` fragt mit `GET /api/me`, wer da ist, und zeigt den Reader oder die Login-Seite. Die Seite selbst ist die Komponente `ReaderPage`, die ihren `Reader` gereicht bekommt; die Fassungen ohne Server (`src/single`) geben ihr den `DemoReader`.
+- **Login.** Name und Passwort gehen an `POST /api/login`; die Sitzung ist das Cookie, von dem das Frontend nichts sieht. `GET /api/login/ways` sagt, ob es den Weg über OpenID Connect gibt, dann zeigt die Seite den Knopf dafür. Antwortet irgendein Endpunkt mit 401, ist die Sitzung zu Ende, und die Login-Seite erscheint wieder.
+- **Die API im Frontend** ist `client.ts`: eine Funktion je Endpunkt, mit den Formen der Antworten. Die Formen kommen aus `types.ts`, das der Server aus seinen Rust-Typen schreibt (siehe [Typen für das Frontend](#typen-für-das-frontend)); `client.ts` gibt ihnen nur die Namen, unter denen die Seite sie kennt. Feeds und Ordner heißen in der Seite `feed-12` und `folder-3`, weil der Baum beide in einer Liste führt und ihre Nummern sich überschneiden.
+- **Listen** kommen seitenweise (40 Artikel, Anker `before`) und ohne Texte. Der Text eines Artikels wird geholt, wenn er gezeigt wird, höchstens vier zugleich; die erweiterte Ansicht fragt für eine ganze Seite auf einmal. Die Suche durchsucht, was geladen ist.
+- **Änderungen wirken sofort.** Lesen, Stern, alle als gelesen und jeder Zug im Baum zeigen sich gleich und gehen im Hintergrund an den Server, eine nach der anderen in der Reihenfolge, in der sie gemacht wurden. Lehnt der Server eine ab, wird sie zurückgenommen, eine Zeile über der Liste sagt es, und Baum und Zahlen werden neu geholt. Eine abgelehnte Änderung, die eine spätere schon überholt hat, wird nicht zurückgenommen.
+- **Filterregeln** kommen aus `/api/rules`. Eine Änderung zeigt sich in der Liste der Regeln sofort; was sie ausblendet und als gelesen markiert, rechnet der Server, deshalb werden Baum und Liste danach neu geholt. Während eine Regel geschrieben wird, fragt der Editor `POST /api/rules/preview`, sobald das Tippen eine Viertelsekunde ruht: So erfährt er, was die Regel träfe und ob ihr Muster eines ist, denn die regulären Ausdrücke des Servers sind nicht die des Browsers.
+- **Eine Antwort, die zu spät kommt,** wird verworfen: Wer schnell von Feed zu Feed klickt, sieht nie die Liste des vorigen.
+
+Abweichungen vom Entwurf:
+
+- **Die Ungelesen-Zahlen rechnet der `ServerReader` nicht selbst.** Der Entwurf sah vor, dass das Modell aus `unread.ts` (Lesemarke und Ausnahmen) im Frontend bleibt. Die API liefert aber je Feed die fertige Zahl und je Artikel „gelesen“ und „Stern“, nicht die Ausnahmen. Der `ServerReader` übernimmt die Zahl des Servers und bewegt sie bei einer eigenen Änderung um eins; nach „alle als gelesen“ und nach jeder Ablehnung fragt er den Server neu. So gibt es weiterhin keine zweite Stelle, die zählt. Das Modell `unread.ts` bleibt das des `DemoReader` und der Maßstab für den Server.
+- **Ein neuer Ordner erscheint erst, wenn der Server ihn hat,** weil der Server seine Nummer vergibt. Alle anderen Änderungen am Baum wirken sofort.
+- **Welche Ordner zugeklappt sind,** merkt sich der Browser (`localStorage`), nicht der Server.
+- Was die Oberfläche mit Server noch weglässt, steht bei [Paket 3.1](implementation.md#schritt-3-frontend).
+
+Was noch fehlt und Schritt 3 ergänzt: Labels, OPML, eine virtualisierte Liste für sehr lange Feeds, Vorladen des nächsten Artikels, Einstellungen auf dem Server, änderbare Tastaturbelegung.
 
 ## Betrieb
 

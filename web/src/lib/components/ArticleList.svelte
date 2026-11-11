@@ -2,7 +2,7 @@
 	// The articles of what is picked in the sidebar, in one of two views: a dense list
 	// whose rows open in place, or every article in full, one card after the other.
 	import { tick, untrack } from 'svelte';
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
 	import { settings } from '#lib/settings.svelte.ts';
@@ -93,7 +93,9 @@
 
 	{#if reader.visible.length === 0}
 		<div class="p-10 text-center text-soft">
-			{#if reader.query.trim()}
+			{#if reader.loading}
+				<p role="status">{m.list.loadingList}</p>
+			{:else if reader.query.trim()}
 				<p>{m.list.emptySearch}</p>
 			{:else if feedIsEmpty}
 				<p>{m.list.emptyFeed}</p>
@@ -138,7 +140,7 @@
 		</ul>
 	{/if}
 
-	{#if reader.list.length > reader.visible.length}
+	{#if reader.hasMore}
 		<div class="flex justify-center p-4">
 			<button type="button" class="tool" use:whenSeen onclick={() => reader.showMore()}>
 				{m.list.more}

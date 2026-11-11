@@ -1,21 +1,21 @@
 <script lang="ts">
 	// The filter rules of the account: a list to switch them on and off, and a form to
 	// add or change one, which says how many articles the rule would catch right now.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
-	import { compile, MAX_PATTERN_LENGTH, type FilterRule, type RuleScope } from '#lib/filters.ts';
+	import type { Reader, RuleBook, RulePreview } from '#lib/reader.ts';
+	import { MAX_PATTERN_LENGTH, type FilterRule, type RuleScope } from '#lib/filters.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { TreeNode } from '#lib/model.ts';
 	import { ruleText, scopeText } from '#lib/rule-text.ts';
 	import Icon from './Icon.svelte';
 
-	let { reader }: { reader: Reader } = $props();
+	let { reader, book }: { reader: Reader; book: RuleBook } = $props();
 
 	const fields = ['any', 'title', 'content', 'author', 'tag'] as const;
 	const matches = ['contains', 'word', 'regex'] as const;
 	const actions = ['hide', 'read'] as const;
 
 	/** The rule in the form, or null while the form is closed. */
-	let draft: FilterRule | null = $state(null);
+	let draft = $state<FilterRule | null>(null);
 
 	/** The folders and feeds as options, indented by their depth: "folder:id" or "feed:id". */
 	const scopes = $derived.by(() => {
@@ -43,12 +43,37 @@
 		draft.scope = kind === 'folder' || kind === 'feed' ? { kind, id } : { kind: 'all' };
 	}
 
-	const valid = $derived(draft !== null && compile(draft) !== null);
-	const hits = $derived(draft && valid ? reader.countMatches(draft) : 0);
+	/** What the rule in the form would catch; null while that is being asked. */
+	let preview = $state<RulePreview | null>(null);
+
+	// Every change to the rule in the form is tried at once. A reader with a server
+	// answers later, and an answer to what the form no longer says is dropped.
+	$effect(() => {
+		if (!draft || draft.pattern.trim() === '') {
+			preview = null;
+			return;
+		}
+		const answer = book.preview({ ...draft, scope: { ...draft.scope } });
+		if (!(answer instanceof Promise)) {
+			preview = answer;
+			return;
+		}
+		preview = null;
+		let late = false;
+		void answer.then((answered) => {
+			if (!late) preview = answered;
+		});
+		return () => {
+			late = true;
+		};
+	});
+
+	const found = $derived(typeof preview === 'object' ? preview : null);
+	const valid = $derived(draft !== null && draft.pattern.trim() !== '' && found !== null);
 
 	function add() {
 		draft = {
-			id: reader.newRuleId(),
+			id: book.newRuleId(),
 			enabled: true,
 			scope: { kind: 'all' },
 			field: 'title',
@@ -61,7 +86,7 @@
 	function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft || !valid) return;
-		reader.saveRule({ ...draft, scope: { ...draft.scope }, pattern: draft.pattern.trim() });
+		book.saveRule({ ...draft, scope: { ...draft.scope }, pattern: draft.pattern.trim() });
 		draft = null;
 	}
 </script>
@@ -69,21 +94,22 @@
 <p class="text-sm text-soft">{m.rules.intro}</p>
 
 <ul class="mt-3 divide-y divide-line rounded-md border border-line">
-	{#each reader.rules as rule (rule.id)}
+	{#each book.rules as rule (rule.id)}
 		<li class="flex items-center gap-3 px-3 py-2 text-sm">
 			<label class="flex cursor-pointer items-center gap-1.5" title={m.rules.on}>
 				<input
 					type="checkbox"
 					class="rounded text-accent"
 					checked={rule.enabled}
-					onchange={(event) => reader.saveRule({ ...rule, enabled: event.currentTarget.checked })}
+					onchange={(event) => book.saveRule({ ...rule, enabled: event.currentTarget.checked })}
 				/>
 				<span class="sr-only">{m.rules.on}: {ruleText(rule)}</span>
 			</label>
 			<div class={['min-w-0 flex-1', !rule.enabled && 'text-soft']}>
 				<p class="truncate">{ruleText(rule)}</p>
 				<p class="text-xs text-soft">
-					{scopeText(reader, rule.scope)} · {m.rules.hits(reader.countMatches(rule))}
+					{scopeText(reader, rule.scope)}
+					{#if book.countMatches}· {m.rules.hits(book.countMatches(rule))}{/if}
 				</p>
 			</div>
 			<button
@@ -98,7 +124,7 @@
 				class="plain size-7"
 				aria-label="{m.common.delete}: {ruleText(rule)}"
 				title={m.common.delete}
-				onclick={() => reader.deleteRule(rule.id)}
+				onclick={() => book.deleteRule(rule.id)}
 			>
 				<Icon name="close" />
 			</button>
@@ -158,12 +184,16 @@
 			</label>
 		</div>
 		<p class="mt-3 text-sm" role="status">
-			{#if valid}
-				{m.rules.preview(hits, reader.countIn(draft.scope))}
-			{:else if draft.pattern.trim() === ''}
+			{#if draft.pattern.trim() === ''}
 				<span class="text-soft">{m.rules.empty}</span>
-			{:else}
+			{:else if found}
+				{m.rules.preview(found.matches, found.of)}
+			{:else if preview === 'invalid'}
 				<span class="text-warn">{m.rules.invalid}</span>
+			{:else if preview === 'unreachable'}
+				<span class="text-warn">{m.notice.unreachable}</span>
+			{:else}
+				<span class="text-soft">{m.rules.checking}</span>
 			{/if}
 		</p>
 		<div class="mt-3 flex gap-2">

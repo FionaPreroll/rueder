@@ -6,16 +6,27 @@
 	import { textOf } from '#lib/filters.ts';
 	import { formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import type { Article } from '#lib/model.ts';
+	import type { Article, ArticleVersion } from '#lib/model.ts';
 	import Dialog from './Dialog.svelte';
 
-	let { article, onclose }: { article: Article; onclose: () => void } = $props();
+	let {
+		article,
+		versions,
+		onclose
+	}: {
+		article: Article;
+		/** The article's earlier versions, oldest first. */
+		versions: ArticleVersion[];
+		onclose: () => void;
+	} = $props();
 
 	// The newest of the earlier versions first: that is the latest change.
-	let rev = $state(untrack(() => article.versions.at(-1)?.rev ?? 0));
+	let rev = $state(untrack(() => versions.at(-1)?.rev ?? 0));
 
-	const earlier = $derived(article.versions.find((version) => version.rev === rev));
-	const parts = $derived(earlier ? diffWords(textOf(earlier.html), textOf(article.html)) : []);
+	const earlier = $derived(versions.find((version) => version.rev === rev));
+	const parts = $derived(
+		earlier ? diffWords(textOf(earlier.html), textOf(article.html ?? '')) : []
+	);
 	const changed = $derived(parts.some((part) => part.kind !== 'same'));
 </script>
 
@@ -25,7 +36,7 @@
 	<label class="mt-3 block text-sm">
 		<span class="font-medium">{m.versions.compareWith}</span>
 		<select class="mt-1 block rounded py-1 text-sm" bind:value={rev}>
-			{#each article.versions.toReversed() as version (version.rev)}
+			{#each versions.toReversed() as version (version.rev)}
 				<option value={version.rev}>
 					{m.versions.version(version.rev)}, {m.versions.fetched(formatFull(version.fetchedAt))}
 				</option>
