@@ -1,7 +1,7 @@
 <script lang="ts">
 	// An open article: title to the original, where it is from, the text, and the row
 	// of actions under it. Used inside the list view and as a card of the expanded view.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
@@ -23,20 +23,29 @@
 	const read = $derived(reader.isRead(article));
 	const starred = $derived(reader.isStarred(article));
 	const feed = $derived(reader.feeds[article.feedId]);
-	const rule = $derived(reader.isHidden(article) ? reader.hidingRule(article) : null);
+	const rule = $derived(reader.isHidden(article) ? reader.filters.hidingRule(article) : null);
+
+	// A list comes without the texts; the text is fetched when the article is shown.
+	$effect(() => {
+		if (article.html === null) reader.load(article);
+	});
 </script>
 
 <div class="px-4 pt-3 pb-4 sm:px-6">
 	<header>
 		<h2 class="text-xl leading-snug font-semibold">
-			<a
-				class="text-link hover:underline"
-				href={article.link}
-				target="_blank"
-				rel="noopener noreferrer"
-			>
+			{#if article.link}
+				<a
+					class="text-link hover:underline"
+					href={article.link}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					{article.title}
+				</a>
+			{:else}
 				{article.title}
-			</a>
+			{/if}
 		</h2>
 		<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-soft">
 			<span>
@@ -44,21 +53,21 @@
 				<button
 					type="button"
 					class="cursor-pointer text-link hover:underline"
-					onclick={() => reader.show({ kind: 'feed', id: feed.id })}
+					onclick={() => reader.show({ kind: 'feed', id: article.feedId })}
 				>
-					{feed.title}
+					{feed?.title}
 				</button>
-				{m.list.by(article.author)}
+				{#if article.author}{m.list.by(article.author)}{/if}
 			</span>
 			<span aria-hidden="true">·</span>
 			<time datetime={new Date(article.publishedAt).toISOString()}>
 				{formatFull(article.publishedAt)} ({formatAgo(article.publishedAt, now)})
 			</time>
-			{#if article.versions.length > 0}
+			{#if article.changes > 0}
 				<button
 					type="button"
 					class="inline-flex cursor-pointer items-center gap-1 rounded border border-line px-1.5 text-xs hover:bg-hover hover:text-ink"
-					title={m.list.updatedTitle(article.versions.length)}
+					title={m.list.updatedTitle(article.changes)}
 					onclick={() => onversions(article)}
 				>
 					<Icon name="versions" class="size-3.5" />
@@ -74,9 +83,13 @@
 		{/if}
 	</header>
 
-	<!-- The text comes cleaned from the server; in the draft it is made up in the browser. -->
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-	<div class="article-body mt-3">{@html article.html}</div>
+	{#if article.html === null}
+		<p class="mt-3 text-sm text-soft" role="status">{m.list.loading}</p>
+	{:else}
+		<!-- The text comes cleaned from the server; with made-up data it is made up in the browser. -->
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+		<div class="article-body mt-3">{@html article.html}</div>
+	{/if}
 
 	<footer
 		class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-sm text-soft"
@@ -102,7 +115,7 @@
 			/>
 			{m.list.keepUnread}
 		</label>
-		{#if article.versions.length > 0}
+		{#if article.changes > 0}
 			<button
 				type="button"
 				class="inline-flex cursor-pointer items-center gap-1 hover:text-ink"
@@ -112,15 +125,17 @@
 				{m.list.compare}
 			</button>
 		{/if}
-		<a
-			class="inline-flex items-center gap-1 hover:text-ink"
-			href={article.link}
-			target="_blank"
-			rel="noopener noreferrer"
-		>
-			<Icon name="external" />
-			{m.list.openOriginal}
-		</a>
+		{#if article.link}
+			<a
+				class="inline-flex items-center gap-1 hover:text-ink"
+				href={article.link}
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<Icon name="external" />
+				{m.list.openOriginal}
+			</a>
+		{/if}
 		<span class="ml-auto flex gap-1">
 			{#each article.tags as tag (tag)}
 				<span class="rounded bg-panel px-1.5 py-0.5 text-xs">{tag}</span>

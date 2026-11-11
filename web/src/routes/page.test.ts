@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import Layout from './+layout.svelte';
-import Page from './+page.svelte';
+// The page with made-up data: the one of the builds that run without a server.
+import Page from '../single/+page.svelte';
 import LayoutHarness from './test/LayoutHarness.svelte';
 
 beforeEach(() => {

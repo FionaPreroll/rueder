@@ -1,13 +1,13 @@
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { Reader } from '#lib/demo/reader.svelte.ts';
+import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import RulesEditor from './RulesEditor.svelte';
 
 const now = Date.parse('2026-11-10T14:30:00Z');
 const setup = () => {
-	const reader = new Reader(() => now);
-	render(RulesEditor, { reader });
+	const reader = new DemoReader(() => now);
+	render(RulesEditor, { reader, book: reader });
 	return reader;
 };
 

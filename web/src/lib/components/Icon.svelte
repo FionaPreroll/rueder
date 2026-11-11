@@ -23,6 +23,8 @@
 		more: 'M5 12h.01M12 12h.01M19 12h.01',
 		keyboard: 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8',
 		versions: 'M12 7v5l3 2M12 21a9 9 0 1 0-9-9M3 5v4h4',
+		user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20a8 8 0 0 1 16 0',
+		logout: 'M10 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4M15 8l4 4-4 4M19 12H9',
 		pause: 'M8 5v14M16 5v14',
 		play: 'M7 5l12 7-12 7z'
 	} as const;

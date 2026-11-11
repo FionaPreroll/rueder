@@ -395,7 +395,7 @@ const toHtml = (paras: string[], image: string | null, alt: string) =>
 	paras.map((p) => `<p>${p}</p>`).join('');
 
 /** One article of a feed, made up from the feed's seed and the article's number. */
-function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): Article {
+function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): DemoArticle {
 	const rng = random(seq * 7919 + seed.hue * 31 + seed.title.length);
 	const lang = seed.lang;
 	const isAd = !!seed.adEvery && seq % seed.adEvery === 0;
@@ -436,18 +436,26 @@ function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): Article 
 		link: `${seed.site}/${seq}`,
 		publishedAt,
 		html: toHtml(current, image, title),
+		changes: versions.length,
 		versions,
 		updatedAt
 	};
+}
+
+/** A made-up article has its text and its earlier versions with it from the start. */
+export interface DemoArticle extends Article {
+	html: string;
+	/** Earlier versions, oldest first; empty for an article that never changed. */
+	versions: ArticleVersion[];
 }
 
 export interface DemoData {
 	tree: TreeNode[];
 	feeds: Record<string, Feed>;
 	/** Articles per feed, oldest first. */
-	articles: Record<string, Article[]>;
+	articles: Record<string, DemoArticle[]>;
 	/** The next article of a feed, as if it had just been fetched. */
-	nextArticle: (feedId: string, seq: number, now: number) => Article;
+	nextArticle: (feedId: string, seq: number, now: number) => DemoArticle;
 	/** How many articles a feed gets per day, for the made-up live updates. */
 	pace: Record<string, number>;
 }
@@ -508,14 +516,14 @@ const tree = (): TreeNode[] => [
 /** The made-up feeds with their articles, the newest ones shortly before `now`. */
 export function demoData(now: number): DemoData {
 	const feeds: Record<string, Feed> = {};
-	const articles: Record<string, Article[]> = {};
+	const articles: Record<string, DemoArticle[]> = {};
 	const pace: Record<string, number> = {};
 	const byId = new Map(seeds.map((seed) => [seed.id, seed]));
 
 	for (const seed of seeds) {
 		const gap = (24 * HOUR) / seed.perDay;
 		const rng = random(seed.hue + seed.count);
-		const list: Article[] = [];
+		const list: DemoArticle[] = [];
 		// A feed with an error got its last article a few days ago.
 		let at = now - (seed.error ? 3 * 24 * HOUR : rng() * Math.min(gap, 5 * HOUR));
 		for (let seq = seed.count; seq >= 1; seq--) {

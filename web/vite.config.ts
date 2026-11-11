@@ -13,11 +13,21 @@ if (process.env.VITEST) {
 }
 
 // `pnpm build:single` packs the whole app into one index.html that runs from any
-// address, or straight from a file: for handing the draft of the interface around
-// while there is no server to serve it.
+// address, or straight from a file: for handing the interface around without a
+// server to serve it.
 // It finds its page by the part of the address after the #, and takes its routes from
-// src/single: the same page without `ssr = false`, which SvelteKit refuses there.
+// src/single: the reader with made-up data, without `ssr = false`, which SvelteKit
+// refuses there.
 const singleFile = !!process.env.RUEDER_SINGLE_FILE;
+
+// `pnpm dev:demo` runs the same reader with made-up data in the dev server, to see
+// the interface without a rueder server next to it.
+const demo = singleFile || !!process.env.RUEDER_DEMO;
+
+// `pnpm dev` passes what is the server's on to a rueder server on this machine
+// (`cargo run` in server/), so the page and the API share one address as they do
+// in production. RUEDER_SERVER names another one.
+const server = process.env.RUEDER_SERVER ?? 'http://127.0.0.1:3000';
 
 export default defineConfig({
 	plugins: [
@@ -30,18 +40,16 @@ export default defineConfig({
 			},
 			// SPA build: the Rust server will serve build/ and fall back to index.html.
 			adapter: adapter(singleFile ? {} : { fallback: 'index.html' }),
+			...(demo ? { files: { routes: 'src/single' } } : {}),
 			...(singleFile
-				? {
-						output: { bundleStrategy: 'inline' as const },
-						router: { type: 'hash' as const },
-						files: { routes: 'src/single' }
-					}
+				? { output: { bundleStrategy: 'inline' as const }, router: { type: 'hash' as const } }
 				: {})
 		}),
 		// Only under Vitest: Svelte's browser build and a clean DOM after each test.
 		svelteTesting()
 	],
 	build: singleFile ? { assetsInlineLimit: Infinity } : {},
+	server: { proxy: { '/api': server, '/img': server } },
 	test: {
 		environment: 'happy-dom',
 		include: ['src/**/*.test.ts'],

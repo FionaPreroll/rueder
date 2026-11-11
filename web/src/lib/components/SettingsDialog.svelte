@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
 	// rules and the keyboard shortcuts. Everything applies as it is changed.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
 	import {
 		accents,
@@ -140,7 +140,7 @@
 				</label>
 			</div>
 		{:else if tab === 'rules'}
-			<RulesEditor {reader} />
+			<RulesEditor {reader} book={reader.filters} />
 		{:else}
 			<Shortcuts />
 		{/if}

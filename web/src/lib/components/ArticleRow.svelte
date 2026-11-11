@@ -1,7 +1,7 @@
 <script lang="ts">
 	// One line of the list view: star, feed, title with the first words of the text,
 	// time. Unread is bold on paper, read is quiet on gray, as in Google Reader.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { formatFull, formatWhen } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
@@ -45,7 +45,7 @@
 	>
 		{#if showFeed}
 			<span class={['hidden w-40 shrink-0 truncate md:block', read ? 'text-soft' : 'text-ink']}>
-				{feed.title}
+				{feed?.title}
 			</span>
 		{/if}
 		<span class="min-w-0 flex-1 truncate">
@@ -54,10 +54,10 @@
 				<span class="text-soft"> – {article.teaser}</span>
 			{/if}
 		</span>
-		{#if article.versions.length > 0}
+		{#if article.changes > 0}
 			<span
 				class="shrink-0 rounded border border-line px-1 text-xs text-soft"
-				title={m.list.updatedTitle(article.versions.length)}
+				title={m.list.updatedTitle(article.changes)}
 			>
 				{m.list.updated}
 			</span>
