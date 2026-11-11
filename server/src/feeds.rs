@@ -21,6 +21,7 @@ use quick_xml::{
 use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
 use time::OffsetDateTime;
+use url::Url;
 
 use crate::{
     articles::{self, NewArticle, Original, guid_hash},
@@ -64,6 +65,8 @@ pub fn parse(
         // article would be new on every fetch. Leave it empty; see `guid`.
         .id_generator(|_, _, _| String::new())
         .build();
+    let decoded = utf_8(body);
+    let body = decoded.as_deref().unwrap_or(body);
     let written = atom_1(body);
     let body = written.as_deref().unwrap_or(body);
     let feed = parser.parse(body).context("not a feed that can be read")?;
@@ -87,7 +90,9 @@ pub fn parse(
             .title
             .map(|title| text(&title.content))
             .filter(|title| !title.is_empty()),
-        site_url: link(&feed.links).map(|url| rules.clean_url(&url)),
+        site_url: link(&feed.links)
+            .and_then(web)
+            .map(|url| rules.clean_url(&url)),
         icon_url: feed.icon.or(feed.logo).and_then(|image| web(&image.uri)),
         articles,
         skipped,
@@ -116,9 +121,9 @@ fn article(
     }
     // The id is taken from the link as the feed gives it: that is what the old
     // rueder knows its articles by.
-    let url = link(&entry.links);
-    let guid = guid(&entry.id, url.as_deref(), &title, &content)?;
-    let url = url.map(|url| rules.clean_url(&url));
+    let link = link(&entry.links);
+    let guid = guid(&entry.id, link, &title, &content)?;
+    let url = link.and_then(web).map(|url| rules.clean_url(&url));
 
     // A date in the future would keep the article on top of every list.
     let published_at = entry
@@ -222,19 +227,24 @@ fn guid(id: &str, url: Option<&str>, title: &str, content: &str) -> Option<Strin
     )
 }
 
-/// The link to read at: the one marked as the page itself, else the first.
-fn link(links: &[Link]) -> Option<String> {
+/// The link to read at, as the feed gives it: the one marked as the page
+/// itself, else the first, if it names `http` or `https`.
+fn link(links: &[Link]) -> Option<&str> {
     let page = links
         .iter()
         .find(|link| link.rel.as_deref().is_none_or(|rel| rel == "alternate"));
-    page.or(links.first()).and_then(|link| web(&link.href))
+    let href = page.or(links.first())?.href.trim();
+    let scheme = href.split_once(':')?.0.to_ascii_lowercase();
+    matches!(scheme.as_str(), "http" | "https").then_some(href)
 }
 
-/// The address, if it is one a browser may be sent to.
+/// The address, if it is one a browser may be sent to: a whole `http` or
+/// `https` address with a host.
 fn web(url: &str) -> Option<String> {
     let url = url.trim();
-    let scheme = url.split_once(':')?.0.to_ascii_lowercase();
-    matches!(scheme.as_str(), "http" | "https").then(|| url.to_owned())
+    let parsed = Url::parse(url).ok()?;
+    let is_web = matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some();
+    is_web.then(|| url.to_owned())
 }
 
 /// Adds the audio and video files that stood in an article's text to the
@@ -363,6 +373,85 @@ fn kind(media: Option<&str>, mode: Option<&str>) -> Kind {
         "xml" if media.contains("html") => Kind::Xhtml,
         _ => Kind::Text,
     }
+}
+
+/// A feed in XML as UTF-8 and without its declaration, in the encoding its byte
+/// order mark or its declaration names.
+///
+/// The library switches its decoding when it meets a declaration that names
+/// another encoding, and panics if that comes later than the first 64 bytes:
+/// a long declaration does it, and so does a second one further down. So it
+/// gets a text in UTF-8 without them.
+///
+/// `None` where nothing needs to change: a feed in UTF-8 whose declarations
+/// name no other encoding, and a JSON Feed.
+fn utf_8(body: &[u8]) -> Option<Vec<u8>> {
+    let detected = quick_xml::encoding::detect_encoding(body);
+    let bom = detected.as_ref().map_or(0, |detected| detected.bom_len());
+    let rest = body.get(bom..)?;
+    if rest.trim_ascii_start().starts_with(b"{") {
+        return None;
+    }
+    let found = detected
+        .as_ref()
+        .map_or(encoding_rs::UTF_8, |detected| detected.encoding());
+    // A byte order mark says it all. Otherwise the declaration names the
+    // encoding, as long as its own letters are ASCII.
+    let encoding = if bom > 0 || !found.is_ascii_compatible() {
+        found
+    } else {
+        let mut reader = quick_xml::Reader::from_reader(rest);
+        match reader.read_event_into(&mut Vec::new()) {
+            Ok(Event::Decl(declaration)) => declaration
+                .encoder()
+                .filter(|named| named.is_ascii_compatible())
+                .unwrap_or(found),
+            _ => found,
+        }
+    };
+    let (text, _) = encoding.decode_without_bom_handling(rest);
+
+    // Where a declaration names another encoding than UTF-8, as the library
+    // would meet it: also after markup it would read past.
+    let mut reader = quick_xml::Reader::from_str(&text);
+    reader.config_mut().check_end_names = false;
+    let mut declarations = Vec::new();
+    loop {
+        let start = reader.buffer_position();
+        let event = reader.read_event();
+        let end = reader.buffer_position();
+        match event {
+            Ok(Event::Decl(declaration))
+                if declaration
+                    .encoder()
+                    .is_some_and(|named| named != encoding_rs::UTF_8) =>
+            {
+                declarations.push(start..end);
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => {}
+            // Further on, if it can; the library may read on, too.
+            Err(_) if end > start => {}
+            Err(_) => break,
+        }
+    }
+    if bom == 0 && encoding == encoding_rs::UTF_8 && declarations.is_empty() {
+        return None;
+    }
+    let mut written = Vec::with_capacity(text.len());
+    let mut from = 0;
+    for declaration in declarations {
+        let (Ok(start), Ok(end)) = (
+            usize::try_from(declaration.start),
+            usize::try_from(declaration.end),
+        ) else {
+            return None;
+        };
+        written.extend_from_slice(text.as_bytes().get(from..start)?);
+        from = end;
+    }
+    written.extend_from_slice(text.as_bytes().get(from..)?);
+    Some(written)
 }
 
 /// A feed in Atom 0.3 written as Atom 1.0: its namespace, the names that

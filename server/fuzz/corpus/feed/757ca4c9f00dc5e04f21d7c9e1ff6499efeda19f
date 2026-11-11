@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<rss version="2.0" escription>
+<content:encoded><!enclosure url="https://example.org/a.mp3" length="1" type="audio/mpeg"/></ite2m>
+<item><title>No guid</title><link>https://example.org/b</link></item>
+<item><description>Neither</description></item>
+</channel></rss>

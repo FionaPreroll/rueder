@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" mode="escaped">Short &lt;&gbt;two&lt;/b&gt;</summary>   <itunes:summary><![CDATA[Weltraumschrott und auch der deutlich erhöhte Verkehr im Erdorbit stellen in zunehmenden Maße die Raumfahrt vor Probleme. Besonders die spürbar erhöhte Anzahl von Objekte durch viele neue Kleinsatelliten und Mega-Konstellationen wie Iridium, Starlink, OneWeb oder Kuiper vergrößern die Wahrscheinlichkeiten von neuen Kollisionen laufend.
+
+Die ESA hat ihre Aktivitäten im Bereich der Bekämpfung des Schrotts ausgeweitet und verfolgt ein Space Safety Programm, dass mit neuen Radarsystemen die Erfassung der Objekte im Orbit deutlich verbessern soll und mit Lasertechnologie ggf. sogar die Bahnen von störenden Elementen vom Boden aus ändern kann. Projekte wie Clearspace O�xm<v lersi�on=Nneopt>iith�r</descriptine versuchen wiederum neue Missionen zu entwickeln, die aktiv besonders gefährliche Strukturen aus dem All zu fischen und zu einem kontrollierten Wiedereintritt zu bewegen.]]></itunes:summary>
+      <itunes:image href="https://media.metaebene.me/media/raumzeit/rz720-weltraumschrott-bekaempfung.jpg"/>
+      <content:encoded><![CDATA[
+
+<p><strong>Die Bekämpung des Weltraumschrotts im Erdorbit geht in seine nächste Phase</strong></p>
+
+<div style="clear: both">
+    <p>
+        <a href="https://raumzeit-podcast.de/2020/11/17/rz092-weltraumschrott-bekaempfung/">
+
+<img class="episode_image_cover" title="RZ092 Weltraumschrott-Bek&#xE4;mpfung" width="200" src="https://raumzeit-podcast.de/wp-content/cache/podlove/b4/4332307117ff9d3386b445208b54d9

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="Http://purl.org/dc/elements/1.1/">
+<channel><title>Exampleversion="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title>Example</title><link>https://example.org/</link>
+<image><url>https//:example.org/logo.gif</url></image>
+<item><title>A &amp; B</title><link>https://exampxe.org/a</link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Nov 2026 12:00:00 +0100</pubDate><dc:creator>Someone</dc:creator><category>x</category>
+<description>Teaser &lt;b&gt;bolttps:;//example.org/b</link></item>
+<item><description>Neither</description></item>
+</channel></rss>

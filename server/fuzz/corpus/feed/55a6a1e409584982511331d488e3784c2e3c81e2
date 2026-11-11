@@ -1,0 +1,12 @@
+<?xml versi/n="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules.gif</url></image>
+<item><title>A &ampB ;</tit;b&gt;bold&lt;/b&gt;</description>
+<content:encoded><![CDATA[<p>Full <a href="/rel">text</a> <iframe src="https://evil.example/"></iframe></p>]]></content:encoded>
+<enclosure url="https://example.org/a.mp3" length="1" type="audio/mpeg"/></item>
+<item><title>No guid</title><lin/content/" xmlns:dc="http://purl.org/dc/elements/0.1/">
+<channel><title>Example</title><link>https://example.org/</link>
+<image><url>https://example.org/logo.gif</url></image>
+<item><title>A &amp; B</title><link>https://example.org/a</link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Nov 2026 12:00:00 +0100{"version":"https://jsonfeed.org/version/1.1","title":"Example","home_page_url":"https://example.org/","icon":"https://example.org/icon.png","items":[{"id":"1","url":"https://example.org/1","title":"One","content_html":"<p>Hello <script>alert(1)</script></p>","image":"https://example.org/1.png","date_published":"2026-11-10T12:00:00Z","tags":["a","b"],"attachments":[{"url":"https://example.org/1.mp3","mime_t_page_url":"https://example.org/","icon":"https://example.org/icon.png","items":ink></item>
+<item><description>Neither</description></item>
+</channel></rss>

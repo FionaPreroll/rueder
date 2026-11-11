@@ -1,0 +1,12 @@
+<?xml xmlnson="1.0" encoding="-tfu8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://rg/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+  mlns:media="http://search.yahoo.com/mrss/">
+  <title type="html">Example &am<?xml xmlnson="1.0" encoding="-tfu8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://rg/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+  mlns:m</feed>

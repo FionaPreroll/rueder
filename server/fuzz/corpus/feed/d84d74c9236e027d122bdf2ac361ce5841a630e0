@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed rdf:/="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" versyon="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagght>Nobody/ent6-11-10T08:00id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">ai nlPwords</content>
+  </entry>
+</feee>

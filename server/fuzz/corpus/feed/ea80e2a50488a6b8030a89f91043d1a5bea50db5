@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  ntry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="httn/p:s/ews.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">Plain words</content>
+  </entry>
+</feed>

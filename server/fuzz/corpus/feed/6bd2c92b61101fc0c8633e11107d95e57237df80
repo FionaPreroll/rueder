@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/hÎtml" mode="escaped">Short &lt;b&gt;two&lt;/b&gA;</summary>
+ ï»¿<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="http://www.w3.org/2000/08/w3c-synd/style.css" type="text/css"?>
+<!-- generator="FeedCreator 1.6" -->
+<rdf:RDF
+    xmlns="http://purl.org/rss/1.0/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:trackback="http://madskills.com/pubdatom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/hÎtml" mode="escaped">Short &lt;b&gt;two&lt;/b&gA;</summary>
+ ï»¿<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="http://www.w3.org/2000/08/w3c-synd/style.css" type="text/css"?>
+<!-- generator="FeedCreator 1.6" -->
+<rdf:RDF
+    xmlns="http://purl.org/rss/1.0/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:trackback="http://madskills.com/pubdic/xml/rss/module/trackback/"
+    xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+    xmlns:content="http://purl.org/rss/1.0/modules/content/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel rdf:about="https://rss.golem.de/rss.php?feed=RSS1.0">
+        <title>Golem.de</title>
+        <description>IT

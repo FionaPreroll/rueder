@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" ve+rsion="0.3">
+ href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" mode="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt;]]&gt;</content>
+    <dc:date>2026-11-10T08:00:00Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="https://news.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">ai nlPwords</content>
+  </entry>
+</feed>

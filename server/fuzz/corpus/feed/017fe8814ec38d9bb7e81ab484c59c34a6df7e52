@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" modf="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt;]]&gt;</content>
+xmlns    <dc:date>2026-11-10T08:00:00Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="h00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" modf="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt;]]&gt;</content>
+xmlns    <dc:date>2026-11-10T08:00:00Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="https://news.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issuettps://news.example/1.html" />
+    <id>1</id>
+    <"150" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="http://www.w3.org/2000/08/w3c-synd/style.css" type="text/css"?>
+<!-- generator="FeedCreator 1.6" -->
+<rdf:RDF
+    xmlns="http://purl.org/rss/1.0/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/"
+    xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+    xmlns:content="ht/p/utrp:l.org/rss/1.0/modules/content/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel rdf:about="https://rss.golem.de/rss.php?feed=RSS1.0">
+        <title>Golem.de</title

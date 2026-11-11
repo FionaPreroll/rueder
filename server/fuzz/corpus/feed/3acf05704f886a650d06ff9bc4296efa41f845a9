@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xm="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" mode="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escde=m"xl">ai nlPwords</content>
+  </entry>
+</feed>

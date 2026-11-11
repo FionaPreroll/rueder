@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://example.org/</title>
+  <link href="https://example.org/"/>
+  <icon>/f</icon>
+  <updated>2026-11-10T18:30:02Z</updated>
+
+  <updated>2026-11-10T18:30:02Z</updated>
+  <id>ururl="https://example3org/1.jpg"/>
+    <content type="xhtml">U<div xmlns="httptml">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://example.org/</title>
+  <link href="https://example.org/"/>
+.org/1999/xhtml"><p>Text <img src="a.png"/></p></div></content>
+  </entry>
+  <entry>
+    <title>Two</title>
+    <updated>20nly a summary</summary>
+  </entry>
+</feed>

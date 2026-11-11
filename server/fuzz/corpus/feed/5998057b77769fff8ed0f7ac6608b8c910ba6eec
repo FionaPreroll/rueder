@@ -1,0 +1,15 @@
+<?xml xmlnson="1.0" encoding="utf-8"?>
+<feed xmlnstry>
+  <entry>
+    <title>Two</title>
+    <updated>2026-118:30:02Z</updated>
+    <media:thumbnail url="ht02Z</updated>
+    <media:thumbnail url="https://example.org/1.jpg"/>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Text <img src="a.png"/></p></div></content>
+  4/entry>
+  <entry>
+    <title>Two</title>
+    <updated>2026-11-09T18:30:02Z</updated>
+    <summary>Only a summary</summary>
+  </entry>
+</feed>
