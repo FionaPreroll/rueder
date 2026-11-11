@@ -18,6 +18,7 @@ beforeEach(() => {
 	server.addArticles(tech, 3);
 	server.addArticles(server.addFeed('Lone', null, { error: 'timed out' }), 1);
 	vi.stubGlobal('fetch', server.fetch);
+	vi.stubGlobal('EventSource', server.EventSource);
 });
 
 afterEach(() => {
@@ -128,6 +129,19 @@ describe('the page with a server', () => {
 		const dialog = await screen.findByRole('dialog', { name: 'Versions of this article' });
 		const added = [...dialog.querySelectorAll('.article-body ins')].map((el) => el.textContent);
 		expect(added.join('').trim()).toBe('With an addition.');
+	});
+
+	it('says what arrived while reading, and brings it in on request', async () => {
+		await reading();
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		await screen.findByRole('button', { name: /Article 3 of feed/ });
+		server.addArticles(tech, 2);
+		server.emit({ event: 'articles', data: { feed_id: tech, last_seq: 5, new: 2 } });
+		const arrived = await screen.findByRole('button', { name: /2 new articles/ });
+		expect(screen.queryByRole('button', { name: /Article 5 of feed/ })).toBeNull();
+		await userEvent.click(arrived);
+		expect(await screen.findByRole('button', { name: /Article 5 of feed/ })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /new articles/ })).toBeNull();
 	});
 
 	it('says when a feed waits for its first fetch', async () => {

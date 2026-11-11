@@ -124,6 +124,26 @@ const MAX_REASON = 300;
 const OPML = 'text/x-opml';
 
 /**
+ * This tab's name, which every request carries in `X-Rueder-Tab`. The server
+ * names it again in the event a change brings (`by`), so the tab knows its own
+ * changes when they come back.
+ */
+export const TAB = Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
+	byte.toString(16).padStart(2, '0')
+).join('');
+
+/** What the page needs of an `EventSource`; the tests put a made-up one in its place. */
+export interface EventStream {
+	addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void;
+	close(): void;
+	readonly readyState: number;
+	onerror: ((event: Event) => void) | null;
+}
+
+/** The `readyState` of a stream that will not come back by itself. */
+export const CLOSED = 2;
+
+/**
  * Sends a request and gives back the answer, if the server took it. A body is
  * sent as JSON, a `Blob` as it is, as an OPML file.
  */
@@ -134,8 +154,10 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
 		response = await fetch(`/api${path}`, {
 			method,
 			credentials: 'same-origin',
-			headers:
-				body === undefined ? undefined : { 'Content-Type': file ? OPML : 'application/json' },
+			headers: {
+				'X-Rueder-Tab': TAB,
+				...(body === undefined ? {} : { 'Content-Type': file ? OPML : 'application/json' })
+			},
 			body: body === undefined ? undefined : file ? body : JSON.stringify(body)
 		});
 	} catch {
@@ -171,6 +193,15 @@ async function text(method: string, path: string): Promise<string> {
 }
 
 export const api = {
+	/** This tab's name, as the requests carry it. */
+	tab: TAB,
+	/**
+	 * The live updates: one connection that stays open and comes back by itself
+	 * after a break, saying the last event it got. Null where the browser has none.
+	 */
+	events: (): EventStream | null =>
+		typeof EventSource === 'undefined' ? null : new EventSource('/api/events'),
+
 	me: () => call<ApiAccount>('GET', '/me'),
 	loginWays: () => call<ApiLoginWays>('GET', '/login/ways'),
 	login: (username: string, password: string) =>

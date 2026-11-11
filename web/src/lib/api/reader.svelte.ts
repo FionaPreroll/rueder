@@ -6,6 +6,11 @@
 // the server refuses is taken back and said in a line over the list. The unread
 // counts are the server's; a change moves them here by one until the server is
 // asked again. It can do everything the page offers (`can`).
+//
+// What changes elsewhere comes as live updates (`GET /api/events`): the
+// connection opens before anything is loaded, so nothing that happens in between
+// is lost. An event says what changed, and the reader asks the server anew for
+// that part; its own changes it knows by the tab's name and leaves alone.
 
 import type {
 	Article,
@@ -48,13 +53,16 @@ import {
 	api as theApi,
 	ApiError,
 	serverId,
+	CLOSED,
 	type Api,
 	type ApiListItem,
+	type EventStream,
 	type ApiNewRule,
 	type ApiRule,
 	type ApiTree,
 	type ListStream
 } from './client.ts';
+import type { ServerEvent } from './types.ts';
 
 /** How many articles a page of a list has. */
 export const PAGE = 40;
@@ -68,6 +76,12 @@ const TEXTS_KEPT = 300;
 const AHEAD = 5;
 /** A rule that is being typed is tried once the typing has paused this long. */
 const PREVIEW_AFTER = 250;
+/** Events that come close together ask the server once, after this long. */
+const SETTLE_AFTER = 300;
+/** A connection for live updates that the server ended is opened anew after this long. */
+const RECONNECT_AFTER = 30_000;
+/** The longest list the server gives at once, for loading what is shown anew. */
+const MAX_PAGE = 200;
 
 /** Where the closed folders are kept in the browser. */
 const CLOSED_KEY = 'rueder.closed';
@@ -101,6 +115,21 @@ export interface SessionEnds {
 }
 
 const feedKey = (id: number) => `feed-${id}`;
+
+/** The events of the live updates this reader listens to. */
+const EVENTS: ServerEvent['event'][] = [
+	'hello',
+	'resync',
+	'articles',
+	'updated',
+	'feed',
+	'reading',
+	'tree',
+	'labels',
+	'settings',
+	'rules',
+	'session'
+];
 const folderKey = (id: number) => `folder-${id}`;
 const ruleKey = (id: number) => `rule-${id}`;
 
@@ -225,8 +254,8 @@ export class ServerReader implements Reader {
 	/** How many articles the rules hide, as the server counted them. */
 	hiddenCount = $state(0);
 
-	// What comes with a later work package: live updates (3.2).
-	readonly pending = 0;
+	/** Articles that arrived in what is shown since the list was loaded. */
+	pending = $state(0);
 	/** The filter rules are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = null;
@@ -258,6 +287,15 @@ export class ServerReader implements Reader {
 	/** A step with the keyboard that waits for the list to arrive. */
 	private waitingStep: { by: 1 | -1; open: boolean } | null = null;
 
+	/** The connection for live updates, and what keeps it going. */
+	private events: EventStream | null = null;
+	private stopped = false;
+	/** The connection was opened anew and may have missed events. */
+	private reopened = false;
+	private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Asking anew for what events said changed, a moment after the last of them. */
+	private settling = new Map<string, ReturnType<typeof setTimeout>>();
+
 	/** Texts being fetched, waiting to be fetched, and fetched. */
 	private fetching = new Set<string>();
 	private wanted: Article[] = [];
@@ -281,12 +319,24 @@ export class ServerReader implements Reader {
 		this.api = api;
 	}
 
-	/** Loads the tree, the rules and the start page. There is nothing to stop yet. */
+	/**
+	 * Opens the connection for live updates, then loads the tree, the rules and
+	 * the start page. Returns how to close the connection again.
+	 */
 	start() {
+		this.stopped = false;
+		this.connect();
 		void this.loadTree();
 		void this.loadRules();
 		void this.loadList();
-		return () => {};
+		return () => {
+			this.stopped = true;
+			this.events?.close();
+			this.events = null;
+			clearTimeout(this.reconnectTimer);
+			for (const timer of this.settling.values()) clearTimeout(timer);
+			this.settling.clear();
+		};
 	}
 
 	signOut() {
@@ -470,10 +520,16 @@ export class ServerReader implements Reader {
 		return articles;
 	}
 
-	private async loadList(more = false) {
+	/**
+	 * Loads the list from its start, or with `more` its next page. With `again`
+	 * the list is loaded anew as long as it is, without saying it is on its way:
+	 * an event said that something in it changed.
+	 */
+	private async loadList(more = false, again = false) {
 		const stream = this.stream;
 		const run = ++this.listRun;
-		if (!more) this.loading = true;
+		if (!more && !again) this.loading = true;
+		const length = again ? Math.min(MAX_PAGE, Math.max(PAGE, this.items.length)) : PAGE;
 		try {
 			if (stream.kind === 'home') {
 				const [unread, starred] = await Promise.all([
@@ -493,7 +549,7 @@ export class ServerReader implements Reader {
 				const [rows, newest] = await Promise.all([
 					this.api.list(stream, {
 						...page,
-						limit: PAGE,
+						limit: length,
 						unread: this.onlyUnread && stream.kind !== 'starred' && stream.kind !== 'hidden'
 					}),
 					oldestFirst && !more ? this.api.list(stream, { limit: 1 }) : null
@@ -501,8 +557,12 @@ export class ServerReader implements Reader {
 				if (run !== this.listRun) return;
 				const articles = this.take(rows, stream.kind === 'hidden');
 				this.items = more ? [...this.items, ...articles] : articles;
-				this.hasMore = rows.length === PAGE;
-				if (!more) this.newest = (newest ?? rows)[0]?.id ?? null;
+				this.hasMore = rows.length === length;
+				if (!more) {
+					this.newest = (newest ?? rows)[0]?.id ?? null;
+					// What arrived is in the list now.
+					this.pending = 0;
+				}
 				// A step that was asked for while the list was on its way is taken now.
 				const waiting = this.waitingStep;
 				this.waitingStep = null;
@@ -527,6 +587,7 @@ export class ServerReader implements Reader {
 	show(stream: Stream) {
 		this.stream = stream;
 		this.waitingStep = null;
+		this.pending = 0;
 		this.cursor = null;
 		this.open = null;
 		this.query = '';
@@ -536,7 +597,7 @@ export class ServerReader implements Reader {
 		this.reload();
 	}
 
-	/** Until live updates say what arrived (work package 3.2), this loads the list anew. */
+	/** Brings in what arrived: the list is loaded anew from its start. */
 	showNew() {
 		this.reload();
 	}
@@ -978,6 +1039,158 @@ export class ServerReader implements Reader {
 	/** The rule that hides the article, as the server named it with the article's text. */
 	hidingRule(article: Article) {
 		return this.rules.find((rule) => rule.id === article.hiddenBy) ?? null;
+	}
+
+	// Live updates
+
+	/**
+	 * Opens the connection. The browser opens it again by itself after a break
+	 * and says the last event it got, so nothing is missed. One that the server
+	 * ended for good, refusing it, is opened anew after a while, and what came
+	 * meanwhile is asked for anew.
+	 */
+	private connect() {
+		if (this.stopped) return;
+		const events = this.api.events();
+		if (!events) return;
+		this.events = events;
+		for (const name of EVENTS) {
+			events.addEventListener(name, (message) => {
+				let data: unknown;
+				try {
+					data = JSON.parse(message.data);
+				} catch {
+					return;
+				}
+				// The name of the event says which shape its data has.
+				this.hear({ event: name, data } as ServerEvent);
+			});
+		}
+		events.onerror = () => {
+			if (events.readyState !== CLOSED || this.events !== events) return;
+			this.events = null;
+			// The server may have refused it because the session is over.
+			void this.checkSession();
+			clearTimeout(this.reconnectTimer);
+			this.reconnectTimer = setTimeout(() => {
+				this.reopened = true;
+				this.connect();
+			}, RECONNECT_AFTER);
+		};
+	}
+
+	/** Runs `ask` once, a moment after the last time it was asked for. */
+	private soon(key: string, ask: () => void) {
+		clearTimeout(this.settling.get(key));
+		this.settling.set(
+			key,
+			setTimeout(() => {
+				this.settling.delete(key);
+				if (!this.stopped) ask();
+			}, SETTLE_AFTER)
+		);
+	}
+
+	/** Whether the list on show has articles of this feed. */
+	private shows(feedId: string) {
+		return this.stream.kind === 'home' || this.feedsOf(this.stream).includes(feedId);
+	}
+
+	/** Loads the list on show anew, as long as it is, once the changes on their way are through. */
+	private relist() {
+		this.soon('list', () => {
+			this.sending = this.sending.then(() => this.loadList(false, true));
+		});
+	}
+
+	/** Loads everything anew: events were missed. */
+	private catchUp() {
+		void this.loadRules();
+		this.resync();
+		this.relist();
+	}
+
+	private async checkSession() {
+		try {
+			await this.api.me();
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+		}
+	}
+
+	/** What an event means for what this tab shows. */
+	private hear(event: ServerEvent) {
+		const own = 'by' in event.data && event.data.by === this.api.tab;
+		switch (event.event) {
+			case 'hello':
+				if (this.reopened) {
+					this.reopened = false;
+					this.catchUp();
+				}
+				return;
+			case 'resync':
+				this.catchUp();
+				return;
+			case 'articles': {
+				const { feed_id, last_seq, new: count } = event.data;
+				const id = feedKey(feed_id);
+				const feed = this.feeds[id];
+				if (!feed) return;
+				this.feeds = { ...this.feeds, [id]: { ...feed, lastSeq: last_seq, waiting: false } };
+				// The counts are the server's, rules and all.
+				this.soon('tree', () => this.resync());
+				if (this.stream.kind === 'home') this.relist();
+				else if (
+					this.shows(id) &&
+					this.stream.kind !== 'starred' &&
+					this.stream.kind !== 'hidden'
+				) {
+					this.pending += count;
+				}
+				return;
+			}
+			case 'updated':
+				if (this.shows(feedKey(event.data.feed_id))) this.relist();
+				return;
+			case 'feed': {
+				const id = feedKey(event.data.feed_id);
+				const feed = this.feeds[id];
+				if (feed) {
+					const error = event.data.error;
+					this.feeds = { ...this.feeds, [id]: { ...feed, error, waiting: false } };
+				}
+				return;
+			}
+			case 'reading': {
+				if (own) return;
+				const { feed } = event.data;
+				if (feed) {
+					const id = feedKey(feed.feed_id);
+					if (!this.feeds[id] || this.waiting.size > 0) this.resync();
+					else this.counts = { ...this.counts, [id]: feed.unread };
+				} else {
+					this.soon('tree', () => this.resync());
+				}
+				if (!feed || this.shows(feedKey(feed.feed_id))) this.relist();
+				return;
+			}
+			case 'tree':
+				if (!own) this.soon('tree', () => this.resync());
+				return;
+			case 'rules':
+				if (own) return;
+				void this.loadRules();
+				this.soon('tree', () => this.resync());
+				this.relist();
+				return;
+			case 'session':
+				void this.checkSession();
+				return;
+			// Labels (3.4) and settings on the server (3.3) are not in the page yet.
+			case 'labels':
+			case 'settings':
+				return;
+		}
 	}
 
 	// Subscribing and OPML
