@@ -24,7 +24,8 @@ export function demoStatus(now: number): ServerStatus {
 		hints: [
 			{ kind: 'slow_route', route: 'POST /api/feeds/find', p95_ms: 2380 },
 			{ kind: 'feeds_failing', failing: 7, subscribed: 31 },
-			{ kind: 'errors', count: 1 }
+			{ kind: 'errors', count: 1 },
+			{ kind: 'browser_errors', errors: 1 }
 		],
 		counts: {
 			accounts: 3,
@@ -134,6 +135,34 @@ export function demoStatus(now: number): ServerStatus {
 					count: 2,
 					first: ago(5400),
 					last: ago(2100)
+				}
+			]
+		},
+		browsers: {
+			available: true,
+			consenting: 2,
+			errors: [
+				{
+					kind: 'error',
+					message: "TypeError: Cannot read properties of undefined (reading 'feedId')",
+					stack: '_app/immutable/chunks/reader.js:812:31\n_app/immutable/nodes/2.js:44:9',
+					count: 3,
+					accounts: 2,
+					versions: ['1762899600000'],
+					browsers: ['Chrome 141', 'Firefox 140'],
+					first: ago(7 * 3600),
+					last: ago(2 * 3600)
+				},
+				{
+					kind: 'request',
+					message: 'GET /feeds/<n>/articles: 502',
+					stack: '',
+					count: 1,
+					accounts: 1,
+					versions: ['1762899600000'],
+					browsers: ['Safari 18'],
+					first: ago(3 * 86_400),
+					last: ago(3 * 86_400)
 				}
 			]
 		}

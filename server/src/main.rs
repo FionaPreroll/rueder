@@ -20,7 +20,7 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    reclean, router, sessions,
+    reclean, reports, router, sessions,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -386,7 +386,8 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         }
     });
 
-    // Once an hour, the sessions that have run out go.
+    // Once an hour, the sessions that have run out go, and the reports of
+    // errors in browsers that are older than 30 days.
     let sessions = db.clone();
     tokio::spawn(async move {
         let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
@@ -394,6 +395,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             every.tick().await;
             if let Err(err) = sessions::sweep(&sessions).await {
                 tracing::error!("removing old sessions: {err:#}");
+            }
+            if let Err(err) = reports::sweep(&sessions).await {
+                tracing::error!("removing old reports of errors: {err:#}");
             }
         }
     });
@@ -420,6 +424,12 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             .parse()
             .context("CLIENT_IP_HEADER is not the name of a header")?;
         state = state.with_client_ip_header(name);
+    }
+    // CLIENT_REPORTS=off takes no reports of errors from browsers, whoever
+    // agreed to send them.
+    if env::var("CLIENT_REPORTS").is_ok_and(|value| value == "off") {
+        tracing::info!("taking no reports of errors from browsers (CLIENT_REPORTS=off)");
+        state = state.without_reports();
     }
     let app = router(state, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;

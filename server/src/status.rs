@@ -21,7 +21,7 @@ use ts_rs::TS;
 use crate::{
     AppError, AppState,
     monitor::{self, Severity, Timing},
-    profile,
+    profile, reports,
     sessions::Session,
 };
 
@@ -66,6 +66,8 @@ struct Status {
     finder: Finder,
     images: Images,
     problems: Problems,
+    /// Errors in the browsers of readers who agreed to send them.
+    browsers: reports::Summary,
 }
 
 /// How long things took in the last hour, in milliseconds. The times are null
@@ -118,6 +120,8 @@ enum Hint {
     Errors { count: u64 },
     /// Readers were turned away for asking too much.
     Limited { count: u64 },
+    /// Browsers reported errors in the last day.
+    BrowserErrors { errors: usize },
 }
 
 /// How much there is.
@@ -467,7 +471,8 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         too_large: served.too_large,
     };
 
-    let hints = hints(
+    let browsers = reports::summary(&state.db, state.reports).await?;
+    let mut hints = hints(
         &routes,
         &all,
         &database,
@@ -476,6 +481,12 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         &images,
         problems.errors,
     );
+    let day_ago = OffsetDateTime::now_utc() - time::Duration::DAY;
+    let lately = browsers.errors.iter().filter(|error| error.last > day_ago);
+    let errors = lately.count();
+    if errors > 0 {
+        hints.push(Hint::BrowserErrors { errors });
+    }
     let requests = Requests {
         all: Durations::from(&all.timing),
         answers: all.answers,
@@ -522,6 +533,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
             warnings_last_hour: problems.warnings,
             recent: recent.collect(),
         },
+        browsers,
     }))
 }
 

@@ -8,7 +8,7 @@ import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
-import type { ServerStatus } from './api/types.ts';
+import type { ReportKind, ServerStatus } from './api/types.ts';
 
 export type { ServerStatus };
 
@@ -46,6 +46,8 @@ export interface Abilities {
 	opml: boolean;
 	/** The status of the server can be shown: for admins. */
 	status: boolean;
+	/** Errors of the browser can be reported to the server, if the reader agrees. */
+	reports: boolean;
 }
 
 /** A feed found at an address. */
@@ -267,4 +269,14 @@ export interface Reader {
 
 	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
 	status(): Promise<ServerStatus | null>;
+
+	/**
+	 * Whether the server takes reports of errors from browsers and whether this
+	 * account sends them (`can.reports`); null until known.
+	 */
+	readonly reportsConsent: { available: boolean; on: boolean } | null;
+	/** Agrees to send reports of errors, or no longer; no longer deletes what was sent. */
+	setReportsConsent(on: boolean): void;
+	/** Notes an error of the page, if the account sends reports. */
+	noteError(kind: ReportKind, error: unknown): void;
 }

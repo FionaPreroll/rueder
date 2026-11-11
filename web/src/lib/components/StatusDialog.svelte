@@ -76,6 +76,8 @@
 				return hints.errors(h.count);
 			case 'limited':
 				return hints.limited(h.count);
+			case 'browser_errors':
+				return hints.browserErrors(h.errors);
 		}
 	}
 
@@ -352,6 +354,43 @@
 						</li>
 					{/each}
 				</ul>
+			{/if}
+		</section>
+
+		<section class="mt-4" aria-labelledby="status-browsers">
+			<h3 id="status-browsers" class="text-sm font-semibold">{m.status.browsers.title}</h3>
+			{#if !s.browsers.available}
+				<p class="mt-1 text-sm text-soft">{m.status.browsers.off}</p>
+			{:else}
+				<p class="mt-1 text-sm text-soft">{m.status.browsers.consenting(s.browsers.consenting)}</p>
+				{#if s.browsers.errors.length === 0}
+					<p class="mt-2 text-sm text-soft">{m.status.browsers.none}</p>
+				{:else}
+					<ul class="mt-2 divide-y divide-line rounded border border-line">
+						{#each s.browsers.errors as error, i (i)}
+							<li class="px-3 py-2 text-sm">
+								<p class="flex flex-wrap items-baseline gap-x-2">
+									<span class="text-xs font-semibold text-warn">
+										{m.status.browsers.kinds[error.kind]}
+									</span>
+									<span
+										class="ml-auto text-xs text-soft"
+										title={formatFull(Date.parse(error.last))}
+									>
+										{m.status.browsers.hits(error.count, error.accounts, ago(error.last))}
+									</span>
+								</p>
+								<p class="mt-1 font-mono text-xs break-words">{error.message}</p>
+								{#if error.stack}
+									<pre class="mt-1 overflow-x-auto font-mono text-xs text-soft">{error.stack}</pre>
+								{/if}
+								<p class="mt-1 text-xs text-soft">
+									{m.status.browsers.where(error.versions.join(', '), error.browsers.join(', '))}
+								</p>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{/if}
 		</section>
 	{/if}

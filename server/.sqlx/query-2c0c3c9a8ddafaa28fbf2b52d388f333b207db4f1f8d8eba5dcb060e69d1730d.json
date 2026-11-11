@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT min(kind) AS \"kind!\", min(message) AS \"message!\", min(stack) AS \"stack!\",\n                  sum(count)::bigint AS \"count!\", count(DISTINCT account_id) AS \"accounts!\",\n                  array_agg(DISTINCT version ORDER BY version) AS \"versions!\",\n                  array_agg(DISTINCT browser ORDER BY browser) AS \"browsers!\",\n                  min(first_at) AS \"first!\", max(last_at) AS \"last!\"\n           FROM client_reports\n           GROUP BY fingerprint\n           ORDER BY max(last_at) DESC, fingerprint\n           LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "message!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "stack!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "accounts!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "versions!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "browsers!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "first!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "last!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "2c0c3c9a8ddafaa28fbf2b52d388f333b207db4f1f8d8eba5dcb060e69d1730d"
+}

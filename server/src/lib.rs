@@ -20,6 +20,7 @@ pub mod profile;
 pub mod rate;
 pub mod reading;
 pub mod reclean;
+pub mod reports;
 pub mod sessions;
 pub mod status;
 pub mod subscribe;
@@ -84,6 +85,9 @@ pub struct AppState {
     pub rates: Arc<Rates>,
     /// What the server notices about itself, for the status page.
     pub monitor: Arc<Monitor>,
+    /// Whether the server takes reports of errors from the browsers of
+    /// readers who agreed to send them.
+    pub reports: bool,
 }
 
 impl AppState {
@@ -99,6 +103,15 @@ impl AppState {
             client: None,
             rates: Arc::default(),
             monitor: Arc::default(),
+            reports: true,
+        }
+    }
+
+    /// Takes no reports of errors from browsers, as with `CLIENT_REPORTS=off`.
+    pub fn without_reports(self) -> Self {
+        Self {
+            reports: false,
+            ..self
         }
     }
 
@@ -197,6 +210,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(subscribe::routes())
         .merge(profile::routes())
         .merge(status::routes())
+        .merge(reports::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
         // Around all of the API: whatever a request changes is announced to
         // the account's other tabs.

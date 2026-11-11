@@ -103,6 +103,10 @@ export class FakeServer {
 	signedIn: string | null = 'fiona';
 	/** Whether the account that is logged in is an admin, who sees the status. */
 	admin = true;
+	/** Whether the server takes reports of errors, whether the account sends them, and what it sent. */
+	reportsAvailable = true;
+	sendsReports = false;
+	reports: unknown[] = [];
 	oidc = false;
 	/** Wrong tries are refused for this many seconds. */
 	lockedFor = 0;
@@ -326,6 +330,19 @@ export class FakeServer {
 		if (!this.signedIn) return refused(401);
 		if (method === 'GET' && path === '/me') return json(this.me());
 		if (method === 'GET' && path === '/tree') return json(this.tree());
+		if (path === '/reports/consent') {
+			if (method === 'GET')
+				return json({ available: this.reportsAvailable, on: this.sendsReports });
+			if (!this.reportsAvailable && data.on) return refused(404, 'this server takes no reports');
+			this.sendsReports = Boolean(data.on);
+			if (!this.sendsReports) this.reports = [];
+			return empty();
+		}
+		if (method === 'POST' && path === '/reports') {
+			if (!this.sendsReports) return refused(403, 'this account does not send reports');
+			this.reports.push(...((data.reports as unknown[]) ?? []));
+			return empty();
+		}
 		if (method === 'GET' && path === '/status') {
 			return this.admin ? json(demoStatus(Date.now())) : refused(403, 'only an admin can do this');
 		}

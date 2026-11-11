@@ -140,8 +140,11 @@ export class DemoReader implements Reader {
 		markOlder: true,
 		subscribe: true,
 		opml: false,
-		status: true
+		status: true,
+		reports: false
 	};
+	/** The draft sends nothing anywhere. */
+	readonly reportsConsent = null;
 	/** The filter rules and the draft's own switches are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = this;
@@ -566,6 +569,10 @@ export class DemoReader implements Reader {
 	async exportOpml() {
 		return null;
 	}
+
+	setReportsConsent() {}
+
+	noteError() {}
 
 	/** A made-up status, so the page can be seen without a server. */
 	async status(): Promise<ServerStatus | null> {

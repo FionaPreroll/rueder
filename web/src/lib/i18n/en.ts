@@ -162,7 +162,13 @@ const en = {
 
 	settings: {
 		title: 'Settings',
-		tabs: { look: 'Appearance', reading: 'Reading', rules: 'Filter rules', keys: 'Keyboard' },
+		tabs: {
+			look: 'Appearance',
+			reading: 'Reading',
+			rules: 'Filter rules',
+			keys: 'Keyboard',
+			privacy: 'Privacy'
+		},
 		theme: 'Theme',
 		themes: { system: 'Like the system', light: 'Light', dark: 'Dark' },
 		accent: 'Accent color',
@@ -189,7 +195,21 @@ const en = {
 		markOnScroll: 'Mark articles as read while scrolling past them in the expanded view',
 		teasers: 'Show the first words of the text after the title in the list',
 		note: 'Changes apply at once and are saved with your account, so they follow you to every device.',
-		noteDemo: 'Changes apply at once and stay in this browser.'
+		noteDemo: 'Changes apply at once and stay in this browser.',
+		reports: {
+			send: 'Send reports of errors in this browser to this server',
+			intro:
+				'When something on the page goes wrong, its admins learn of it and can fix it. Reports go to this server and nowhere else.',
+			what: 'A report holds:',
+			holds: [
+				'the message of the error, without addresses and without numbers that name something',
+				'where in rueder’s own files it happened',
+				'the version of rueder and your browser with its major version'
+			],
+			never:
+				'Never what you read, your feeds, labels or rules. Admins see how many accounts an error hits, not which. Reports go after 30 days.',
+			off: 'Switching this off deletes the reports you sent.'
+		}
 	},
 
 	rules: {
@@ -347,7 +367,9 @@ const en = {
 			errors: (count: number) =>
 				`The server logged ${n(count)} ${plural(count, { one: 'error', other: 'errors' })} in the last hour.`,
 			limited: (count: number) =>
-				`${n(count)} ${plural(count, { one: 'request was', other: 'requests were' })} turned away as too many.`
+				`${n(count)} ${plural(count, { one: 'request was', other: 'requests were' })} turned away as too many.`,
+			browserErrors: (count: number) =>
+				`Browsers reported ${n(count)} ${plural(count, { one: 'error', other: 'different errors' })} in the last day.`
 		},
 		server: {
 			title: 'Server',
@@ -454,7 +476,29 @@ const en = {
 			error: 'Error',
 			warning: 'Warning',
 			times: (count: number, last: string) => (count > 1 ? `${n(count)} times, last ${last}` : last)
+		},
+		browsers: {
+			title: 'Errors in browsers',
+			off: 'This server takes no reports of errors (CLIENT_REPORTS=off).',
+			consenting: (count: number) =>
+				`${n(count)} ${plural(count, { one: 'account sends', other: 'accounts send' })} reports. Errors stay 30 days after they last happened.`,
+			none: 'No browser reported an error.',
+			kinds: {
+				error: 'Error',
+				rejection: 'Failed promise',
+				component: 'Part of the page',
+				request: 'Request'
+			},
+			hits: (count: number, accounts: number, last: string) =>
+				`${n(count)} ${plural(count, { one: 'time', other: 'times' })} in ${n(accounts)} ${plural(accounts, { one: 'account', other: 'accounts' })}, last ${last}`,
+			where: (versions: string, browsers: string) => `Version ${versions} · ${browsers}`
 		}
+	},
+
+	crash: {
+		title: 'Something went wrong on this page.',
+		text: 'Reload the page to go on. What you read and changed is saved on the server.',
+		reload: 'Reload'
 	},
 
 	demo: {

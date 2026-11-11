@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { cleanup, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServerReader } from '#lib/api/reader.svelte.ts';
@@ -431,5 +431,65 @@ describe('The status with a server', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
 		expect(screen.queryByRole('menuitem', { name: 'Server status' })).toBeNull();
 		expect(await reader.status()).toBeNull();
+	});
+});
+
+describe('Privacy in the settings', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	async function opened() {
+		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
+		const stop = reader.start();
+		await vi.waitFor(() => expect(reader.reportsConsent).not.toBeNull());
+		render(SettingsDialog, { reader, onclose: () => {} });
+		return { reader, stop };
+	}
+
+	it('lets the reader agree to send reports of errors, and take it back', async () => {
+		const { stop } = await opened();
+		await userEvent.click(screen.getByRole('tab', { name: 'Privacy' }));
+		const box = screen.getByRole('checkbox', { name: /Send reports of errors/ });
+		expect(box).not.toBeChecked();
+		expect(screen.getByText(/Never what you read/)).toBeInTheDocument();
+		await userEvent.click(box);
+		await vi.waitFor(() => expect(server.sendsReports).toBe(true));
+		expect(box).toBeChecked();
+		await userEvent.click(box);
+		await vi.waitFor(() => expect(server.sendsReports).toBe(false));
+		stop();
+	});
+
+	it('is not there where the server takes no reports, nor with made-up data', async () => {
+		server.reportsAvailable = false;
+		const { stop } = await opened();
+		expect(screen.queryByRole('tab', { name: 'Privacy' })).toBeNull();
+		stop();
+		cleanup();
+		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Privacy' })).toBeNull();
+	});
+});
+
+describe('Errors in browsers on the status page', () => {
+	it('says how often and in how many accounts, never which', async () => {
+		render(StatusDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(await screen.findByRole('heading', { name: 'Errors in browsers' })).toBeInTheDocument();
+		expect(
+			screen.getByText('2 accounts send reports. Errors stay 30 days after they last happened.')
+		).toBeInTheDocument();
+		expect(screen.getByText(/reading 'feedId'/)).toBeInTheDocument();
+		expect(screen.getByText(/^3 times in 2 accounts, last/)).toBeInTheDocument();
+		expect(screen.getByText('Version 1762899600000 · Chrome 141, Firefox 140')).toBeInTheDocument();
+		expect(screen.getByText('Browsers reported 1 error in the last day.')).toBeInTheDocument();
 	});
 });

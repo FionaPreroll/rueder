@@ -18,7 +18,19 @@
 {#if session.reader}
 	<!-- Another account gets a page of its own, with nothing left of the one before. -->
 	{#key session.reader}
-		<ReaderPage reader={session.reader} />
+		<!-- A part of the page that fails to draw is reported, if the account agreed, and the page offers to start again. -->
+		<svelte:boundary onerror={(error) => session.reader?.noteError('component', error)}>
+			<ReaderPage reader={session.reader} />
+			{#snippet failed()}
+				<div class="p-10 text-center" role="alert">
+					<p class="font-semibold">{m.crash.title}</p>
+					<p class="mt-2 text-sm text-soft">{m.crash.text}</p>
+					<button type="button" class="tool mt-4" onclick={() => location.reload()}>
+						{m.crash.reload}
+					</button>
+				</div>
+			{/snippet}
+		</svelte:boundary>
 	{/key}
 {:else if session.state === 'checking'}
 	<p class="p-10 text-center text-soft" role="status">{m.login.checking}</p>
