@@ -8,6 +8,7 @@
 	import { ruleText } from '#lib/rule-text.ts';
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
+	import Menu from './Menu.svelte';
 
 	let {
 		reader,
@@ -23,6 +24,7 @@
 
 	const read = $derived(reader.isRead(article));
 	const starred = $derived(reader.isStarred(article));
+	const labelled = $derived(new Set(reader.labelsOf(article)));
 	const feed = $derived(reader.feeds[article.feedId]);
 	const rule = $derived(reader.isHidden(article) ? reader.filters.hidingRule(article) : null);
 
@@ -133,6 +135,36 @@
 			/>
 			{m.list.keepUnread}
 		</label>
+		{#if reader.labels.length > 0}
+			<Menu class="inline-flex cursor-pointer items-center gap-1 hover:text-ink">
+				{#snippet button()}
+					<Icon name="tag" />
+					{m.labels.forArticle}
+				{/snippet}
+				{#each reader.labels as label (label.id)}
+					<button
+						type="button"
+						role="menuitemcheckbox"
+						aria-checked={labelled.has(label.id)}
+						class="menu-item flex items-center gap-2"
+						onclick={() => reader.setLabel(article, label.id, !labelled.has(label.id))}
+					>
+						<span class="size-2.5 rounded-full" style:background-color={label.color}></span>
+						<span class="flex-1">{label.title}</span>
+						{#if labelled.has(label.id)}<Icon name="check" class="size-4" />{/if}
+					</button>
+				{/each}
+			</Menu>
+		{/if}
+		{#each reader.labels.filter((label) => labelled.has(label.id)) as label (label.id)}
+			<span
+				class="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink"
+				aria-label={m.labels.set(label.title)}
+			>
+				<span class="size-2 rounded-full" style:background-color={label.color}></span>
+				{label.title}
+			</span>
+		{/each}
 		{#if article.changes > 0}
 			<button
 				type="button"

@@ -253,6 +253,20 @@ const de: Messages = {
 		then: 'dann'
 	},
 
+	labels: {
+		title: 'Labels',
+		add: 'Neues Label',
+		name: 'Name des Labels',
+		none: 'Noch keine Labels.',
+		actions: (title) => `Aktionen für das Label ${title}`,
+		rename: 'Umbenennen',
+		color: 'Farbe',
+		colors: ['Rot', 'Orange', 'Gelb', 'Grün', 'Türkis', 'Blau', 'Lila', 'Grau'],
+		remove: 'Label löschen',
+		forArticle: 'Labels',
+		set: (title) => `Label: ${title}`
+	},
+
 	subscribe: {
 		title: 'Feed abonnieren',
 		address: 'Adresse des Feeds oder der Website',
