@@ -171,3 +171,55 @@ describe('the expanded view', () => {
 		expect(reader.stream).toEqual({ kind: 'feed', id: feed.id });
 	});
 });
+
+describe('a long list', () => {
+	/** Lays the page out as a browser would: a view of 600 pixels, rows of 50. */
+	function laidOut() {
+		const box = (name: 'clientHeight' | 'offsetHeight', value: (element: HTMLElement) => number) =>
+			vi.spyOn(HTMLElement.prototype, name, 'get').mockImplementation(function (this: HTMLElement) {
+				return value(this);
+			});
+		box('clientHeight', () => 600);
+		box('offsetHeight', (element) =>
+			element.dataset.article || element.tagName === 'DIV' ? 50 : 0
+		);
+	}
+
+	afterEach(() => vi.restoreAllMocks());
+
+	async function longList() {
+		laidOut();
+		const view = setup({ kind: 'all' });
+		for (let i = 0; i < 3; i++) {
+			await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+		}
+		await new Promise((done) => requestAnimationFrame(done));
+		return view;
+	}
+
+	it('draws only the rows near the view, and the rest as space', async () => {
+		const { reader, container } = await longList();
+		expect(reader.visible.length).toBe(160);
+		const drawn = screen.getAllByRole('listitem');
+		// The view of 600 pixels and 1200 more below it: 36 rows of 50, and one more.
+		expect(drawn.length).toBeLessThan(60);
+		expect(drawn[0]).toHaveAttribute('data-article', reader.visible[0].id);
+		const space = [...container.querySelectorAll<HTMLElement>('div[style]')].map(
+			(div) => div.style.height
+		);
+		expect(space).toContain(`${(160 - drawn.length) * 50}px`);
+	});
+
+	it('scrolls to an article the keyboard steps to, though it was not drawn', async () => {
+		const { reader, container, row } = await longList();
+		const scroller = container.firstElementChild as HTMLElement;
+		const target = reader.visible[120];
+		reader.select(reader.visible[119], false);
+		reader.step(1);
+		await new Promise((done) => setTimeout(done, 0));
+		expect(scroller.scrollTop).toBeGreaterThan(0);
+		await new Promise((done) => requestAnimationFrame(done));
+		expect(row(target.id)).not.toBeNull();
+		expect(row(reader.visible[0].id)).toBeNull();
+	});
+});

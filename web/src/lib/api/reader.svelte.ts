@@ -793,11 +793,30 @@ export class ServerReader implements Reader {
 	}
 
 	select(article: Article, open = true) {
+		this.pick(article, open, 1);
+	}
+
+	/** Puts the cursor on an article, and opens it unless told not to. */
+	private pick(article: Article, open: boolean, by: 1 | -1) {
 		this.cursor = article.id;
 		if (open) {
 			this.open = article.id;
 			this.setRead(article, true);
+			this.loadAhead(article, by);
 		}
+	}
+
+	/**
+	 * Fetches the text of an opened article and of the one a step `by` would open
+	 * next, so that step shows its text at once.
+	 */
+	private loadAhead(article: Article, by: 1 | -1) {
+		const list = this.visible;
+		const at = list.findIndex((listed) => listed.id === article.id);
+		if (at === -1) return;
+		this.load(list[at]);
+		const next = list[at + by];
+		if (next) this.load(next);
 	}
 
 	toggleOpen(article: Article) {
@@ -830,7 +849,7 @@ export class ServerReader implements Reader {
 			return;
 		}
 		if (by === 1 && next >= list.length - AHEAD) void this.more();
-		this.select(article, open);
+		this.pick(article, open, by);
 		if (!open) this.open = null;
 		this.moved++;
 	}

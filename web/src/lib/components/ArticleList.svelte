@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The articles of what is picked in the sidebar, in one of two views: a dense list
 	// whose rows open in place, or every article in full, one card after the other.
+	// A long list draws only what is near the view; the rest is space of its height.
 	import { tick, untrack } from 'svelte';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -8,6 +9,15 @@
 	import { settings } from '#lib/settings.svelte.ts';
 	import ArticleBody from './ArticleBody.svelte';
 	import ArticleRow from './ArticleRow.svelte';
+	import { offsets, rowsInSight } from '#lib/virtual.ts';
+
+	/** Up to this many articles, all are drawn. */
+	const FEW = 60;
+	/** How far beyond the view rows are drawn, in pixels. */
+	const MARGIN = 1200;
+	/** The height of a row or a card, as a guess before any was drawn. */
+	const GUESS_ROW = 56;
+	const GUESS_CARD = 480;
 
 	let {
 		reader,
@@ -16,6 +26,39 @@
 	}: { reader: Reader; now: number; onversions: (article: Article) => void } = $props();
 
 	let scroller: HTMLElement | undefined = $state();
+	/** Where the rows begin within what scrolls. */
+	let list: HTMLElement | undefined = $state();
+	let scrollTop = $state(0);
+	let viewport = $state(0);
+
+	/** The heights of the rows as they were drawn, by article. */
+	let heights = $state.raw(new Map<string, number>());
+	const measured = new Map<string, number>();
+	let measuring = 0;
+
+	/** Notes the height of a row, and makes the list count with it once per frame. */
+	function note(id: string, height: number) {
+		if (measured.get(id) === height) return;
+		measured.set(id, height);
+		measuring ||= requestAnimationFrame(() => {
+			measuring = 0;
+			heights = new Map(measured);
+		});
+	}
+
+	function measure(node: HTMLElement, id: string) {
+		const take = () => note(id, node.offsetHeight);
+		take();
+		const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(take);
+		observer?.observe(node);
+		return {
+			update(next: string) {
+				id = next;
+				take();
+			},
+			destroy: () => observer?.disconnect()
+		};
+	}
 
 	const expanded = $derived(settings.view === 'expanded');
 	const showFeed = $derived(reader.stream.kind !== 'feed');
@@ -26,6 +69,33 @@
 
 	const rowOf = (id: string) => scroller?.querySelector<HTMLElement>(`[data-article="${id}"]`);
 
+	const ids = $derived(reader.visible.map((article) => article.id));
+	// What was not drawn yet is guessed to be as high as what was, on average.
+	const guess = $derived.by(() => {
+		let sum = 0;
+		for (const height of heights.values()) sum += height;
+		return heights.size > 0 ? sum / heights.size : expanded ? GUESS_CARD : GUESS_ROW;
+	});
+	const tops = $derived(offsets(ids, heights, guess));
+	// Without a view to measure, as before the page is laid out, everything is drawn.
+	const range = $derived(
+		ids.length <= FEW || viewport === 0
+			? { start: 0, end: ids.length }
+			: rowsInSight(tops, scrollTop - (list?.offsetTop ?? 0), viewport, MARGIN)
+	);
+	const shown = $derived(reader.visible.slice(range.start, range.end));
+	const above = $derived(tops[range.start]);
+	const below = $derived(tops[ids.length] - tops[range.end]);
+
+	/** Scrolls to where an article that is not drawn would be, so that it is. */
+	async function reach(id: string) {
+		const at = ids.indexOf(id);
+		if (!scroller || at === -1 || rowOf(id)) return;
+		scroller.scrollTop = (list?.offsetTop ?? 0) + tops[at];
+		scrollTop = scroller.scrollTop;
+		await tick();
+	}
+
 	// A step with the keyboard or the arrows brings the article to the top of the pane.
 	$effect(() => {
 		if (reader.moved === 0) return;
@@ -33,30 +103,46 @@
 			const id = reader.cursor;
 			if (!id) return;
 			await tick();
+			await reach(id);
 			rowOf(id)?.scrollIntoView({
 				block: expanded || reader.open === id ? 'start' : 'nearest'
 			});
 		});
 	});
 
-	// Another stream starts at its top.
+	// Another stream starts at its top, and another view measures its rows anew.
+	let first = true;
 	$effect(() => {
 		void reader.stream;
-		scroller?.scrollTo?.({ top: 0 });
+		void expanded;
+		untrack(() => {
+			scroller?.scrollTo?.({ top: 0 });
+			scrollTop = 0;
+			// The rows drawn first were measured already.
+			if (first) {
+				first = false;
+				return;
+			}
+			measured.clear();
+			heights = new Map();
+		});
 	});
 
-	// In the expanded view, what scrolls out at the top has been read.
+	// Once a frame: what is in sight, and in the expanded view, what scrolled out at
+	// the top has been read.
 	let frame = 0;
 	function scrolled() {
-		if (!expanded || !settings.markOnScroll || frame || !scroller) return;
+		if (frame || !scroller) return;
 		frame = requestAnimationFrame(() => {
 			frame = 0;
 			if (!scroller) return;
-			const edge = scroller.getBoundingClientRect().top;
-			for (const article of reader.visible) {
-				const card = rowOf(article.id);
-				if (!card || card.getBoundingClientRect().bottom > edge) break;
-				if (!reader.isRead(article)) reader.scrolledPast(article);
+			scrollTop = scroller.scrollTop;
+			if (!expanded || !settings.markOnScroll) return;
+			const start = list?.offsetTop ?? 0;
+			const articles = reader.visible;
+			for (let i = 0; i < articles.length; i++) {
+				if (start + tops[i + 1] > scrollTop) break;
+				if (!reader.isRead(articles[i])) reader.scrolledPast(articles[i]);
 			}
 		});
 	}
@@ -78,7 +164,12 @@
 	}
 </script>
 
-<div class="relative min-h-0 flex-1 overflow-y-auto" bind:this={scroller} onscroll={scrolled}>
+<div
+	class="relative min-h-0 flex-1 overflow-y-auto"
+	bind:this={scroller}
+	bind:clientHeight={viewport}
+	onscroll={scrolled}
+>
 	<!-- New arrivals wait here, so the list does not jump under the reader. -->
 	{#if reader.pending > 0}
 		<div class="sticky top-2 z-10 flex h-0 justify-center">
@@ -112,35 +203,43 @@
 			{/if}
 		</div>
 	{:else if expanded}
-		<div class="mx-auto max-w-4xl space-y-3 p-3">
-			{#each reader.visible as article (article.id)}
-				<!-- A click picks the card, as j and k do from the keyboard. -->
-				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-				<article
-					data-article={article.id}
-					class={[
-						'scroll-mt-3 rounded-md border bg-paper',
-						reader.cursor === article.id ? 'border-accent shadow-sm' : 'border-line'
-					]}
-					onclick={() => reader.select(article)}
-				>
-					<ArticleBody {reader} {article} {now} {onversions} />
-				</article>
+		<div class="mx-auto max-w-4xl px-3 pb-3" bind:this={list}>
+			<div style:height="{above}px"></div>
+			{#each shown as article (article.id)}
+				<div class="pt-3" use:measure={article.id}>
+					<!-- A click picks the card, as j and k do from the keyboard. -->
+					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+					<article
+						data-article={article.id}
+						class={[
+							'scroll-mt-3 rounded-md border bg-paper',
+							reader.cursor === article.id ? 'border-accent shadow-sm' : 'border-line'
+						]}
+						onclick={() => reader.select(article)}
+					>
+						<ArticleBody {reader} {article} {now} {onversions} />
+					</article>
+				</div>
 			{/each}
+			<div style:height="{below}px"></div>
 		</div>
 	{:else}
-		<ul class="divide-y divide-line border-b border-line">
-			{#each reader.visible as article (article.id)}
-				<li data-article={article.id}>
-					<ArticleRow {reader} {article} {now} {showFeed} />
-					{#if reader.open === article.id}
-						<div class="border-t border-l-3 border-line border-l-accent bg-paper">
-							<ArticleBody {reader} {article} {now} {onversions} />
-						</div>
-					{/if}
-				</li>
-			{/each}
-		</ul>
+		<div bind:this={list}>
+			<div style:height="{above}px"></div>
+			<ul class="divide-y divide-line border-b border-line">
+				{#each shown as article (article.id)}
+					<li data-article={article.id} use:measure={article.id}>
+						<ArticleRow {reader} {article} {now} {showFeed} />
+						{#if reader.open === article.id}
+							<div class="border-t border-l-3 border-line border-l-accent bg-paper">
+								<ArticleBody {reader} {article} {now} {onversions} />
+							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+			<div style:height="{below}px"></div>
+		</div>
 	{/if}
 
 	{#if reader.hasMore}

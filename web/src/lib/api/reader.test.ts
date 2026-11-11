@@ -980,6 +980,38 @@ describe('the text of an article', () => {
 		expect(reader.visible.every((article) => article.html !== null)).toBe(true);
 	});
 
+	it('of the next article is fetched with the one that is opened', async () => {
+		server.addArticles(lone, 5);
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${lone}` });
+		await settle();
+		const asked = () =>
+			server.requests
+				.map((r) => /\/articles\/(\d+)$/.exec(r.path)?.[1])
+				.filter((seq) => seq !== undefined);
+		const [newest, second, third] = reader.visible;
+		reader.select(second);
+		await settle();
+		// The opened one first, then the one below it.
+		expect(asked()).toEqual([`${second.seq}`, `${third.seq}`]);
+		expect(reader.visible[2].html).not.toBeNull();
+		// A step down shows a text that is there, and fetches the next.
+		reader.step(1);
+		await settle();
+		expect(reader.current?.html).not.toBeNull();
+		expect(asked()).toHaveLength(3);
+		// A step up fetches the one above.
+		reader.select(second);
+		reader.step(-1);
+		await settle();
+		expect(reader.current?.id).toBe(newest.id);
+		expect(asked().slice(3)).toEqual([`${newest.seq}`]);
+		// Moving the cursor without opening fetches nothing.
+		reader.step(1, false);
+		await settle();
+		expect(asked()).toHaveLength(4);
+	});
+
 	it('stays away with a notice when the server does not answer', async () => {
 		const reader = await started();
 		reader.show({ kind: 'feed', id: `feed-${tech}` });
