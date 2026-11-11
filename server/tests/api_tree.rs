@@ -690,3 +690,149 @@ async fn settings_are_kept_per_account(db: PgPool) {
     }
     assert_eq!(settings(&cookie).await.1, json!({ "theme": "light" }));
 }
+
+#[sqlx::test]
+async fn the_tree_has_room_for_so_many_folders_and_feeds(db: PgPool) {
+    use rueder::tree::{MAX_FEEDS_IN_FOLDER, MAX_FOLDERS};
+    let (ada, news) = common::reader(&db, "ada", 0).await;
+    let full = common::folder(&db, ada, None, "Full").await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    sqlx::query(
+        "WITH made AS (
+             INSERT INTO feeds (feed_url)
+             SELECT 'https://many.example/' || n FROM generate_series(1, $3) AS n RETURNING id
+         )
+         INSERT INTO subscriptions (account_id, feed_id, folder_id, position)
+         SELECT $1, id, $2, id FROM made",
+    )
+    .bind(ada)
+    .bind(full)
+    .bind(MAX_FEEDS_IN_FOLDER)
+    .execute(&db)
+    .await
+    .unwrap();
+    let news_url: String = sqlx::query_scalar("SELECT feed_url FROM feeds WHERE id = $1")
+        .bind(news)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+    // The folder is full: nothing moves in, and nobody subscribes into it.
+    let into = json!({
+        "node": { "kind": "feed", "id": news },
+        "target": { "kind": "folder", "id": full },
+        "position": "inside",
+    });
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/tree/move",
+        Some(&cookie),
+        Some(into),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let grace = common::account(&db, "grace").await;
+    let other = common::feed(&db, "other").await;
+    common::subscribe(&db, grace, other).await;
+    let other_url: String = sqlx::query_scalar("SELECT feed_url FROM feeds WHERE id = $1")
+        .bind(other)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    let new = json!({ "url": other_url, "folder_id": full });
+    let (status, _) = call(&state, Method::POST, "/api/feeds", Some(&cookie), Some(new)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Beside it there is room, and what is in it can still be put in order.
+    let new = json!({ "url": other_url });
+    let (status, _) = call(&state, Method::POST, "/api/feeds", Some(&cookie), Some(new)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let again = json!({ "url": news_url, "folder_id": full });
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/feeds",
+        Some(&cookie),
+        Some(again),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    sqlx::query(
+        "INSERT INTO folders (account_id, title, position)
+         SELECT $1, 'Folder ' || n, n FROM generate_series(2, $2) AS n",
+    )
+    .bind(ada)
+    .bind(MAX_FOLDERS)
+    .execute(&db)
+    .await
+    .unwrap();
+    let one_more = json!({ "title": "One more" });
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/folders",
+        Some(&cookie),
+        Some(one_more),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test]
+async fn whoever_reads_a_feed_says_as_what_it_is_fetched(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 1).await;
+    let (grace, blog) = common::reader(&db, "grace", 1).await;
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let set = async |cookie: Option<&str>, feed: i32, body: Value| {
+        let path = format!("/api/feeds/{feed}/agent");
+        call(&state, Method::PUT, &path, cookie, Some(body)).await.0
+    };
+    let agent = async |cookie: &str| {
+        let (_, tree) = call(&state, Method::GET, "/api/tree", Some(cookie), None).await;
+        tree["feeds"][0]["fetch_agent"].as_str().unwrap().to_owned()
+    };
+    sqlx::query("UPDATE feeds SET next_fetch_at = now() + interval '1 hour'")
+        .execute(&db)
+        .await
+        .unwrap();
+
+    assert_eq!(agent(&cookie).await, "rueder");
+    let browser = json!({ "agent": "browser" });
+    assert_eq!(
+        set(Some(&cookie), news, browser.clone()).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(agent(&cookie).await, "browser");
+    // The feed is tried again at once, and no other feed is.
+    let due: Vec<i32> = sqlx::query_scalar("SELECT id FROM feeds WHERE next_fetch_at <= now()")
+        .fetch_all(&db)
+        .await
+        .unwrap();
+    assert_eq!(due, [news]);
+
+    // Not for a feed one does not read, not without a session, and not as
+    // anything else.
+    assert_eq!(
+        set(Some(&cookie), blog, browser.clone()).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        set(None, news, browser.clone()).await,
+        StatusCode::UNAUTHORIZED
+    );
+    let other = json!({ "agent": "curl/8" });
+    assert_eq!(
+        set(Some(&cookie), news, other).await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(agent(&grace_cookie).await, "rueder");
+    let back = json!({ "agent": "rueder" });
+    assert_eq!(set(Some(&cookie), news, back).await, StatusCode::NO_CONTENT);
+    assert_eq!(agent(&cookie).await, "rueder");
+}

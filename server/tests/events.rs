@@ -177,15 +177,24 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/settings", area(Area::Settings)),
         ("/api/rules", area(Area::Rules)),
         ("/api/rules/3", area(Area::Rules)),
-        ("/api/rules/preview", area(Area::Rules)),
+        ("/api/rules/order", area(Area::Rules)),
         ("/api/logout", area(Area::Session)),
+        ("/api/sessions", area(Area::Session)),
+        ("/api/sessions/3", area(Area::Session)),
+        ("/api/password", area(Area::Session)),
         ("/api/tree/move", area(Area::Tree)),
         ("/api/folders", area(Area::Tree)),
         ("/api/folders/2", area(Area::Tree)),
         ("/api/feeds/7", area(Area::Tree)),
-        // What nobody has thought of yet makes browsers load the tree anew.
-        ("/api/subscriptions", area(Area::Tree)),
+        ("/api/feeds/7/agent", area(Area::Tree)),
+        ("/api/feeds", area(Area::Tree)),
         ("/api/opml", area(Area::Tree)),
+        // What nobody has thought of yet makes browsers load the tree anew.
+        ("/api/something/new", area(Area::Tree)),
+        // Questions that are sent like changes, and what only admins see.
+        ("/api/rules/preview", None),
+        ("/api/feeds/find", None),
+        ("/api/accounts", None),
         ("/api/feeds/not-a-number/read", reading(None, None)),
         ("/api/login", None),
         ("/api/oidc/callback", None),
@@ -965,4 +974,41 @@ async fn a_tab_names_itself_only_in_plain_words(db: PgPool) {
         assert_eq!(status, StatusCode::NO_CONTENT);
         assert_eq!(tab.next().await.unwrap().data["by"], by, "{name:?}");
     }
+}
+
+#[sqlx::test]
+async fn a_question_that_is_sent_like_a_change_is_not_told(db: PgPool) {
+    let (ada, _) = common::reader(&db, "ada", 2).await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let mut tab = listening(&state, &cookie).await;
+    let rule = json!({
+        "scope": { "kind": "all" },
+        "field": "title",
+        "match": "contains",
+        "pattern": "article 2",
+        "action": "hide",
+    });
+
+    // Asking what a rule would do changes nothing.
+    let status = send(
+        &state,
+        Method::POST,
+        "/api/rules/preview",
+        &cookie,
+        None,
+        rule.clone(),
+    )
+    .await;
+    assert!(status.is_success(), "{status}");
+    assert!(tab.is_quiet().await);
+    // Making the rule does: it hides an article, so the counts are others now.
+    let status = send(&state, Method::POST, "/api/rules", &cookie, Some("t"), rule).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let heard = tab.next().await.unwrap();
+    assert_eq!(
+        (heard.kind.as_str(), &heard.data),
+        ("rules", &json!({ "by": "t" }))
+    );
+    assert!(tab.is_quiet().await);
 }

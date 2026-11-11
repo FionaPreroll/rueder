@@ -6,15 +6,19 @@ pub mod cleaning;
 pub mod events;
 pub mod feeds;
 pub mod fetch;
+pub mod filters;
+pub mod health;
 pub mod http_client;
 pub mod images;
 pub mod import;
 pub mod labels;
 pub mod login;
 pub mod oidc;
+pub mod profile;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
+pub mod subscribe;
 pub mod tree;
 
 use std::{path::Path, sync::Arc};
@@ -33,6 +37,7 @@ use sqlx::PgPool;
 use crate::{
     cleaning::Rules,
     events::Events,
+    http_client::HttpClient,
     images::{ImageProxy, Refused},
     login::Limiter,
     oidc::Oidc,
@@ -60,6 +65,9 @@ pub struct AppState {
     pub rules: Option<Arc<Rules>>,
     /// What changes for an account, for its open tabs to hear of.
     pub events: Events,
+    /// The hardened HTTP client, for looking at an address a reader wants to
+    /// subscribe to. Without it, nobody subscribes to a feed that is new.
+    pub client: Option<HttpClient>,
 }
 
 impl AppState {
@@ -72,6 +80,14 @@ impl AppState {
             oidc: None,
             rules: None,
             events: Events::new(),
+            client: None,
+        }
+    }
+
+    pub fn with_client(self, client: HttpClient) -> Self {
+        Self {
+            client: Some(client),
+            ..self
         }
     }
 
@@ -134,6 +150,9 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(api::routes())
         .merge(tree::routes())
         .merge(labels::routes())
+        .merge(filters::routes())
+        .merge(subscribe::routes())
+        .merge(profile::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
         // Around all of the API: whatever a request changes is announced to
         // the account's other tabs.

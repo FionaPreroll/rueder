@@ -275,22 +275,33 @@ pub async fn set_read(
     read: bool,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let done = set_read_on(&mut tx, account_id, feed_id, seq, read).await?;
+    tx.commit().await?;
+    Ok(done)
+}
+
+/// [`set_read`] inside a transaction the caller has open.
+pub async fn set_read_on(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    seq: i32,
+    read: bool,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
     if seq < 1 || seq > last {
         return Ok(false);
     }
     if seq <= mark {
-        // Under the mark everything is read, except what is kept unread.
-        set_flags(&mut tx, account_id, feed_id, seq, Change::KeptUnread(!read)).await?;
+        set_flags(conn, account_id, feed_id, seq, Change::KeptUnread(!read)).await?;
     } else {
-        set_flags(&mut tx, account_id, feed_id, seq, Change::Read(read)).await?;
+        set_flags(conn, account_id, feed_id, seq, Change::Read(read)).await?;
         if read {
-            compact(&mut tx, account_id, feed_id, mark).await?;
+            compact(conn, account_id, feed_id, mark).await?;
         }
     }
-    tx.commit().await?;
     Ok(true)
 }
 
@@ -380,16 +391,28 @@ pub async fn set_hidden(
     hidden: bool,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let done = set_hidden_on(&mut tx, account_id, feed_id, seq, hidden).await?;
+    tx.commit().await?;
+    Ok(done)
+}
+
+/// [`set_hidden`] inside a transaction the caller has open.
+pub async fn set_hidden_on(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    seq: i32,
+    hidden: bool,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
     if seq < 1 || seq > last {
         return Ok(false);
     }
-    set_flags(&mut tx, account_id, feed_id, seq, Change::Hidden(hidden)).await?;
+    set_flags(conn, account_id, feed_id, seq, Change::Hidden(hidden)).await?;
     if hidden {
-        compact(&mut tx, account_id, feed_id, mark).await?;
+        compact(conn, account_id, feed_id, mark).await?;
     }
-    tx.commit().await?;
     Ok(true)
 }

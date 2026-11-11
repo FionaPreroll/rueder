@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT r.account_id FROM filter_rules r\n         JOIN subscriptions s ON s.account_id = r.account_id AND s.feed_id = $1\n         WHERE r.enabled",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "account_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a185eb3f1af3d5f69f7bf8356bb6b92006ec68e2d62a667cb0affa56222164d9"
+}

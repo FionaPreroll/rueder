@@ -160,3 +160,35 @@ pub async fn call(
     let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }
+
+/// Asks the server something with a body of the given content type, and
+/// returns the answer as it came, with its headers.
+pub async fn raw(
+    state: &rueder::AppState,
+    method: axum::http::Method,
+    path: &str,
+    cookie: Option<&str>,
+    body: Option<(&str, Vec<u8>)>,
+) -> (axum::http::StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    use axum::{body::Body, http::header};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let mut request = axum::http::Request::builder().method(method).uri(path);
+    if let Some(cookie) = cookie {
+        request = request.header(header::COOKIE, cookie);
+    }
+    let body = match body {
+        Some((kind, body)) => {
+            request = request.header(header::CONTENT_TYPE, kind);
+            Body::from(body)
+        }
+        None => Body::empty(),
+    };
+    let app = rueder::router(state.clone(), "missing".as_ref());
+    let request = request.body(body).unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    let (status, headers) = (response.status(), response.headers().clone());
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, headers, bytes.to_vec())
+}

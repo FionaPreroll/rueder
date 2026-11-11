@@ -19,6 +19,7 @@ use crate::{
     cleaning::Rules,
     events::{Change, Events},
     feeds::{self, Stored},
+    filters,
     http_client::{Agent, HttpClient, Request},
 };
 
@@ -138,6 +139,10 @@ pub async fn fetch_feed(
 
     let mut tx = db.begin().await?;
     let stored = feeds::store(&mut tx, feed_id, &parsed.articles).await?;
+    // The readers' filter rules see new articles before the readers do.
+    if let Some(first) = stored.first_new {
+        filters::apply_new(&mut tx, feed_id, first).await?;
+    }
     let state = sqlx::query!(
         "SELECT last_seq, created_at, fetch_interval_s FROM feeds WHERE id = $1",
         feed_id

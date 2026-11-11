@@ -519,7 +519,14 @@ pub fn changed(path: &str) -> Option<Changed> {
     Some(match parts.as_slice() {
         // Logging in changes nothing for those who already are.
         ["login"] | ["oidc", ..] => return None,
-        ["logout"] => Changed::Area(Area::Session),
+        // Questions that are sent like changes: what a rule would do, and
+        // which feeds a page has.
+        ["rules", "preview"] | ["feeds", "find"] => return None,
+        // An admin's list of accounts is nothing a reader's tabs show.
+        ["accounts", ..] => return None,
+        // A session ended: by logging out, by ending it from another device,
+        // or with a new password, which ends them all.
+        ["logout"] | ["sessions", ..] | ["password"] => Changed::Area(Area::Session),
         ["settings", ..] => Changed::Area(Area::Settings),
         ["rules", ..] => Changed::Area(Area::Rules),
         ["labels", ..] | ["feeds", _, "articles", _, "labels", ..] => Changed::Area(Area::Labels),

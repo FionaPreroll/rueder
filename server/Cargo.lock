@@ -2017,6 +2017,8 @@ dependencies = [
  "image",
  "markup5ever_rcdom",
  "proptest",
+ "quick-xml",
+ "regex",
  "reqwest",
  "rpassword",
  "rustls",

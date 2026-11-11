@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT true AS \"folder!\", id AS \"id!\", parent_id AS parent, title AS \"title!\",\n                  position AS \"position!\", NULL::text AS feed_url, NULL::text AS site_url\n           FROM folders WHERE account_id = $1\n           UNION ALL\n           SELECT false, s.feed_id, s.folder_id, coalesce(s.title, nullif(f.title, ''), f.feed_url),\n                  s.position, f.feed_url, f.site_url\n           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id WHERE s.account_id = $1\n           ORDER BY 5, 1 DESC, 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "folder!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "parent",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "position!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "feed_url",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "site_url",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "f9b141ee0a20fbb306de5ac30a3f14475490cc57dac00285f0d7d4d90e207d51"
+}

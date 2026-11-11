@@ -13,7 +13,7 @@ use rueder::{
     AppState, accounts, articles, bench,
     cleaning::Rules,
     events::Events,
-    fetch,
+    fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
     import, oidc,
@@ -30,6 +30,9 @@ use tokio::{
 };
 use tracing_subscriber::EnvFilter;
 
+/// Where the server listens if LISTEN_ADDR does not say.
+const LISTEN_ADDR: &str = "127.0.0.1:3000";
+
 /// rueder server. Configured through DATABASE_URL, LISTEN_ADDR and STATIC_DIR.
 #[derive(Parser)]
 #[command(version)]
@@ -42,6 +45,9 @@ struct Cli {
 enum Command {
     /// Run the web server (default).
     Serve,
+    /// Ask the server that runs on LISTEN_ADDR whether it is well: the health
+    /// check of the container. Fails if it does not answer.
+    Health,
     /// Fill an empty database with made-up feeds and articles and time the
     /// queries the reader lives on.
     #[command(subcommand)]
@@ -117,6 +123,12 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let cli = Cli::parse();
 
+    // Asks the server that is running, so it opens no database of its own.
+    if matches!(cli.command, Some(Command::Health)) {
+        let listen = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
+        return health::check(health::address(&listen).await?, health::WAIT).await;
+    }
+
     let database_url = env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
     // Without JIT: PostgreSQL compiles a query to machine code once its estimated
     // cost is high, which takes longer than the queries of a reader ever run.
@@ -136,6 +148,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(db).await,
+        Command::Health => unreachable!("answered before the database was opened"),
         Command::Bench(BenchCommand::Generate {
             accounts,
             feeds,
@@ -239,7 +252,7 @@ fn ask_password() -> anyhow::Result<String> {
 }
 
 async fn serve(db: PgPool) -> anyhow::Result<()> {
-    let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());
+    let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
     let static_dir =
         PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../web/build".into()));
 
@@ -334,7 +347,8 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     let mut state = AppState::new(db)
         .with_images(images)
         .with_rules(rules)
-        .with_events(events);
+        .with_events(events)
+        .with_client(client.clone());
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.
     if let Some(config) = oidc::Config::from_env()? {
