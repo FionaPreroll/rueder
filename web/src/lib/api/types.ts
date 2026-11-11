@@ -301,6 +301,12 @@ export type Move = {
 };
 
 /**
+ * The side of the node it is dropped on that a node lands on: before it,
+ * after it or, for a folder, inside it.
+ */
+export type DropPosition = "before" | "after" | "inside";
+
+/**
  * A folder or a subscription, as the tree's changes name them.
  */
 export type NodeRef =
@@ -312,12 +318,6 @@ export type NodeRef =
 		"kind": "feed",
 		"id": number,
 	};
-
-/**
- * The side of the node it is dropped on that a node lands on: before it,
- * after it or, for a folder, inside it.
- */
-export type DropPosition = "before" | "after" | "inside";
 
 /**
  * What `POST /api/folders` reads. It answers with `Created`.

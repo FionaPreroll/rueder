@@ -18,12 +18,51 @@ fn the_committed_types_are_current() {
         fs::write(&path, &generated).expect("the file can be written");
     }
     let committed = fs::read_to_string(&path).unwrap_or_default();
+    let lines = committed.lines().zip(generated.lines()).enumerate();
+    let differs = lines
+        .clone()
+        .find(|(_, (committed, generated))| committed != generated)
+        .map_or_else(
+            || format!("one has {} lines more", lines.count()),
+            |(line, (committed, generated))| {
+                format!("line {}: {committed:?} should be {generated:?}", line + 1)
+            },
+        );
     assert!(
         committed == generated,
-        "{} is out of date: run `UPDATE_API_TYPES=1 cargo test --test api_types` in server/ \
-         and commit the file",
+        "{} is out of date ({differs}): run `UPDATE_API_TYPES=1 cargo test --test api_types` in \
+         server/ and commit the file",
         path.display()
     );
+}
+
+/// The file is the same whichever compiler builds the server: `ts-rs` comes by
+/// the parts of a type in an order that differs between compilers, so the
+/// file has its own. A listed type stands first, its parts follow by name.
+#[test]
+fn the_types_stand_in_a_fixed_order() {
+    let generated = generate().unwrap();
+    let names: Vec<_> = generated
+        .lines()
+        .filter_map(|line| line.strip_prefix("export type "))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    let after = |name: &str, count: usize| {
+        let at = names.iter().position(|found| *found == name).unwrap();
+        names[at..=at + count].to_vec()
+    };
+    assert_eq!(names[..3], ["Health", "Credentials", "Me"]);
+    assert_eq!(after("Tree", 3), ["Tree", "Feed", "FetchAgent", "Folder"]);
+    assert_eq!(after("Move", 2), ["Move", "DropPosition", "NodeRef"]);
+    assert_eq!(
+        after("Rule", 4),
+        ["Rule", "RuleAction", "RuleField", "RuleMatch", "RuleScope"]
+    );
+    assert_eq!(after("ServerEvent", 1), ["ServerEvent", "FeedUnread"]);
+    let mut sorted = names.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted.len(), names.len(), "every name once");
 }
 
 /// JSON that is not the API's: what is stored of an article, what the old

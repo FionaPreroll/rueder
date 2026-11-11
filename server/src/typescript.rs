@@ -39,12 +39,19 @@ pub struct Types {
     declared: Vec<Declared>,
     /// Names two different types lay claim to.
     clashes: Vec<String>,
+    /// How many types the modules have listed so far.
+    listed: usize,
 }
 
 struct Declared {
     rust: TypeId,
     name: String,
     text: String,
+    /// Where it stands in the file: with the type the modules listed when it
+    /// was found, that type itself first, then what it is made of by name.
+    /// In which order `ts-rs` comes by the parts of a type differs from one
+    /// compiler to the next, and the file must not.
+    place: (usize, bool, String),
 }
 
 impl Types {
@@ -55,12 +62,22 @@ impl Types {
             config: Config::new().with_large_int("number"),
             declared: Vec::new(),
             clashes: Vec::new(),
+            listed: 0,
         }
     }
 
     /// Lists a type, and with it the types it is made of.
     pub(crate) fn add<T: TS + 'static>(&mut self) -> &mut Self {
+        self.listed += 1;
         self.visit::<T>();
+        let rust = TypeId::of::<T>();
+        // It stands first among what came with it. One that was found before,
+        // as a part of another type, stays with that one.
+        if let Some(found) = self.declared.iter_mut().find(|found| found.rust == rust)
+            && found.place.0 == self.listed
+        {
+            found.place.1 = false;
+        }
         self
     }
 }
@@ -90,7 +107,12 @@ impl TypeVisitor for Types {
             Some(_) => self.clashes.push(name.clone()),
             None => {}
         }
-        self.declared.push(Declared { rust, name, text });
+        self.declared.push(Declared {
+            rust,
+            place: (self.listed, true, name.clone()),
+            name,
+            text,
+        });
         T::visit_dependencies(self);
     }
 }
@@ -113,6 +135,7 @@ pub fn generate() -> anyhow::Result<String> {
         "different types with the same name in TypeScript: {}",
         types.clashes.join(", ")
     );
+    types.declared.sort_by(|a, b| a.place.cmp(&b.place));
     let mut file = HEADER.to_owned();
     for declared in &types.declared {
         file.push('\n');
