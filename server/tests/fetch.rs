@@ -18,6 +18,7 @@ use axum::{
 };
 use rueder::{
     cleaning::Rules,
+    events::Events,
     feeds::Stored,
     fetch::{self, MAX_INTERVAL, MIN_INTERVAL, Outcome},
     http_client::{Config, HttpClient},
@@ -342,7 +343,12 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         .unwrap();
 
     let client = client();
-    assert_eq!(fetch::fetch_due(&db, &client, &rules()).await.unwrap(), 2);
+    assert_eq!(
+        fetch::fetch_due(&db, &client, &rules(), &Events::new())
+            .await
+            .unwrap(),
+        2
+    );
     assert_eq!(site.lock().unwrap().requests, 2);
     for (feed, articles) in [(due, 1), (also_due, 1), (later, 0), (unread, 0)] {
         assert_eq!(
@@ -352,7 +358,12 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         );
     }
     // Fetched feeds are not due any more.
-    assert_eq!(fetch::fetch_due(&db, &client, &rules()).await.unwrap(), 0);
+    assert_eq!(
+        fetch::fetch_due(&db, &client, &rules(), &Events::new())
+            .await
+            .unwrap(),
+        0
+    );
     assert_eq!(site.lock().unwrap().requests, 2);
 }
 

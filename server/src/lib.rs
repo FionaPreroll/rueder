@@ -3,6 +3,7 @@ pub mod api;
 pub mod articles;
 pub mod bench;
 pub mod cleaning;
+pub mod events;
 pub mod feeds;
 pub mod fetch;
 pub mod filters;
@@ -26,6 +27,7 @@ use axum::{
     Json, Router,
     extract::{Path as UrlPath, State},
     http::{HeaderName, StatusCode, header},
+    middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -34,6 +36,7 @@ use sqlx::PgPool;
 
 use crate::{
     cleaning::Rules,
+    events::Events,
     http_client::HttpClient,
     images::{ImageProxy, Refused},
     login::Limiter,
@@ -60,6 +63,8 @@ pub struct AppState {
     /// The rules of the cleaning, for what is cleaned when it is asked for.
     /// Without them, the ones that come with rueder count.
     pub rules: Option<Arc<Rules>>,
+    /// What changes for an account, for its open tabs to hear of.
+    pub events: Events,
     /// The hardened HTTP client, for looking at an address a reader wants to
     /// subscribe to. Without it, nobody subscribes to a feed that is new.
     pub client: Option<HttpClient>,
@@ -74,6 +79,7 @@ impl AppState {
             client_ip_header: None,
             oidc: None,
             rules: None,
+            events: Events::new(),
             client: None,
         }
     }
@@ -83,6 +89,11 @@ impl AppState {
             client: Some(client),
             ..self
         }
+    }
+
+    /// Shares the events with whatever else publishes them, such as fetching.
+    pub fn with_events(self, events: Events) -> Self {
+        Self { events, ..self }
     }
 
     pub fn with_rules(self, rules: Arc<Rules>) -> Self {
@@ -120,16 +131,17 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
     let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
 
     Router::new()
-        .nest("/api", api())
+        .nest("/api", api(&state))
         .route("/img/{signature}/{size}/{address}", get(image))
         .fallback_service(spa)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
 
-fn api() -> Router<AppState> {
+fn api(state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
+        .route("/events", get(events::stream))
         .route("/login", post(login::login))
         .route("/logout", post(login::logout))
         .route("/me", get(login::me))
@@ -142,6 +154,12 @@ fn api() -> Router<AppState> {
         .merge(subscribe::routes())
         .merge(profile::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
+        // Around all of the API: whatever a request changes is announced to
+        // the account's other tabs.
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            events::announce,
+        ))
 }
 
 #[derive(Serialize)]

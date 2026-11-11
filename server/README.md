@@ -120,6 +120,17 @@ Every version of an article is kept as it was fetched, so `reclean` brings
 stored articles up to the rules and lists of today. It changes neither versions
 nor what anybody has read.
 
+## Live updates
+
+`GET /api/events` is a stream of server-sent events for the logged-in reader:
+new articles, changes made in another tab or on another device, feeds that
+start or stop failing. What the events are and what a browser does with each
+is in [docs/architecture.md](../docs/architecture.md#live-updates).
+
+A reverse proxy in front of the server must pass the stream on as it comes.
+The server says so in the header `X-Accel-Buffering: no`, which nginx heeds;
+other proxies need buffering switched off for this path.
+
 ## Images
 
 The proxy keeps what it fetched in `IMAGE_CACHE_DIR` (default `image-cache` in

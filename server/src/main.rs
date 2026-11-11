@@ -12,6 +12,7 @@ use clap::{Parser, Subcommand};
 use rueder::{
     AppState, accounts, articles, bench,
     cleaning::Rules,
+    events::Events,
     fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
@@ -290,11 +291,18 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
     // that come with rueder.
     let rules = Arc::new(Rules::from_env()?);
+    // What fetching finds and what readers change reaches open tabs at once.
+    let events = Events::new();
     // FETCH=off keeps the server from fetching feeds.
     if env::var("FETCH").is_ok_and(|value| value == "off") {
         tracing::info!("not fetching feeds (FETCH=off)");
     } else {
-        tokio::spawn(fetch::run(db.clone(), client.clone(), rules.clone()));
+        tokio::spawn(fetch::run(
+            db.clone(),
+            client.clone(),
+            rules.clone(),
+            events.clone(),
+        ));
     }
 
     // Images reach readers through the proxy. IMAGE_CACHE_DIR is where it keeps
@@ -339,6 +347,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     let mut state = AppState::new(db)
         .with_images(images)
         .with_rules(rules)
+        .with_events(events)
         .with_client(client.clone());
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.

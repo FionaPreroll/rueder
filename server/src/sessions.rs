@@ -148,6 +148,11 @@ impl FromRequestParts<AppState> for Session {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
+        // What wraps the API has looked the session up already for requests
+        // that change something (see `events::announce`).
+        if let Some(session) = parts.extensions.get::<Self>() {
+            return Ok(session.clone());
+        }
         let session = match token(&parts.headers) {
             Some(token) => find(&state.db, token).await?,
             None => None,
