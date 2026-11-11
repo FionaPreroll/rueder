@@ -5,13 +5,18 @@
 // one change after the other so they arrive in the order they were made. A change
 // the server refuses is taken back and said in a line over the list. The unread
 // counts are the server's; a change moves them here by one until the server is
-// asked again.
-//
-// What the server cannot do yet is left out here and switched off in the page
-// (`can`): lists that start with the oldest article and marking as read by age.
+// asked again. It can do everything the page offers (`can`).
 
-import type { Article, ArticleVersion, Feed, Stream, TreeNode } from '#lib/model.ts';
-import { ruleMatches, type FilterRule } from '#lib/filters.ts';
+import type {
+	Article,
+	ArticleVersion,
+	Enclosure,
+	Feed,
+	Picture,
+	Stream,
+	TreeNode
+} from '#lib/model.ts';
+import type { FilterRule } from '#lib/filters.ts';
 import {
 	MAX_OPML,
 	type Abilities,
@@ -74,12 +79,15 @@ interface Mark {
 
 const unmarked: Mark = { read: false, starred: false, hidden: false };
 
-/** The text of an article, as far as a list does not have it. */
+/** The text of an article and what comes with it, as far as a list does not have it. */
 interface Text {
 	/** The version it is the text of. */
 	changes: number;
 	html: string;
 	tags: string[];
+	enclosures: Enclosure[];
+	image: Picture | null;
+	hiddenBy: string | null;
 }
 
 /** What a session does for its reader. */
@@ -178,6 +186,8 @@ function toArticle(item: ApiListItem): Article {
 		link: item.url ?? '',
 		publishedAt: Date.parse(item.published_at),
 		html: null,
+		enclosures: [],
+		image: null,
 		changes: Math.max(0, item.version - 1),
 		updatedAt: item.updated_at ? Date.parse(item.updated_at) : null
 	};
@@ -210,14 +220,15 @@ export class ServerReader implements Reader {
 	/** The filter rules, in the order the server keeps them. */
 	rules = $state.raw<FilterRule[]>([]);
 
-	// What comes with later work packages: live updates (3.2) and a count of the
-	// hidden articles, which the API does not give.
+	/** How many articles the rules hide, as the server counted them. */
+	hiddenCount = $state(0);
+
+	// What comes with a later work package: live updates (3.2).
 	readonly pending = 0;
-	readonly hiddenCount = 0;
 	/** The filter rules are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = null;
-	readonly can: Abilities = { oldestFirst: false, markOlder: false, subscribe: true, opml: true };
+	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true, opml: true };
 	readonly account: Account;
 
 	/** Unread articles per feed, as the server counted them and as changes here moved them. */
@@ -230,6 +241,10 @@ export class ServerReader implements Reader {
 	/** By the id of the article. */
 	private marks = $state.raw<Record<string, Mark>>({});
 	private onlyUnread = $state(false);
+	private oldestFirst = $state(false);
+	/** What each saved rule finds, by its id, once somebody asked. */
+	private hits = $state.raw<Record<string, number>>({});
+	private hitsAsked = false;
 
 	/** The newest article the list knew when it was loaded; "mark all as read" stops there. */
 	private newest: number | null = null;
@@ -296,12 +311,15 @@ export class ServerReader implements Reader {
 		this.reload();
 	}
 
-	/** The server's lists start with the newest article. */
 	get newestFirst() {
-		return true;
+		return !this.oldestFirst;
 	}
 
-	set newestFirst(_: boolean) {}
+	set newestFirst(newest: boolean) {
+		if (newest === !this.oldestFirst) return;
+		this.oldestFirst = !newest;
+		this.reload();
+	}
 
 	/** The feeds a stream draws from, in the order of the tree. */
 	private feedsOf(stream: Stream): string[] {
@@ -370,6 +388,7 @@ export class ServerReader implements Reader {
 		}
 		this.feeds = feeds;
 		this.counts = counts;
+		this.hiddenCount = tree.hidden;
 		this.tree = toTree(tree);
 		// What is shown may be gone: unsubscribed or removed on another device.
 		const stream = this.stream;
@@ -440,9 +459,7 @@ export class ServerReader implements Reader {
 				: undefined;
 			marks[article.id] = { read: read ?? row.read, starred: starred ?? row.starred, hidden };
 			const text = this.texts.get(article.id);
-			return text?.changes === article.changes
-				? { ...article, html: text.html, tags: text.tags }
-				: article;
+			return text?.changes === article.changes ? { ...article, ...text } : article;
 		});
 		this.marks = marks;
 		return articles;
@@ -463,16 +480,24 @@ export class ServerReader implements Reader {
 				this.homeStarred = this.take(starred, false);
 			} else {
 				const last = more ? this.items.at(-1) : undefined;
-				const rows = await this.api.list(stream, {
-					limit: PAGE,
-					before: last ? Number(last.id) : undefined,
-					unread: this.onlyUnread && stream.kind !== 'starred' && stream.kind !== 'hidden'
-				});
+				const oldestFirst = this.oldestFirst;
+				const page = oldestFirst
+					? { after: last ? Number(last.id) : 0 }
+					: { before: last ? Number(last.id) : undefined };
+				// A list that starts with the oldest does not say what the newest is.
+				const [rows, newest] = await Promise.all([
+					this.api.list(stream, {
+						...page,
+						limit: PAGE,
+						unread: this.onlyUnread && stream.kind !== 'starred' && stream.kind !== 'hidden'
+					}),
+					oldestFirst && !more ? this.api.list(stream, { limit: 1 }) : null
+				]);
 				if (run !== this.listRun) return;
 				const articles = this.take(rows, stream.kind === 'hidden');
 				this.items = more ? [...this.items, ...articles] : articles;
 				this.hasMore = rows.length === PAGE;
-				if (!more) this.newest = rows[0]?.id ?? null;
+				if (!more) this.newest = (newest ?? rows)[0]?.id ?? null;
 			}
 		} catch (error) {
 			if (run !== this.listRun) return;
@@ -567,7 +592,13 @@ export class ServerReader implements Reader {
 				changes: Math.max(0, opened.version - 1),
 				html: opened.html,
 				// A feed may name a tag twice; the page shows each once.
-				tags: [...new Set(opened.tags)]
+				tags: [...new Set(opened.tags)],
+				// A feed may name a file twice, too.
+				enclosures: [...new Map(opened.enclosures.map((file) => [file.url, file])).values()].map(
+					({ url, type, length }) => ({ url, type, length })
+				),
+				image: opened.image_url ? { url: opened.image_url, title: opened.image_title ?? '' } : null,
+				hiddenBy: opened.hidden_by === null ? null : ruleKey(opened.hidden_by)
 			};
 			this.texts.set(article.id, text);
 			// The oldest go first; a Map keeps the order they were put in.
@@ -692,44 +723,50 @@ export class ServerReader implements Reader {
 
 	/**
 	 * Marks as read what the list knew of when it was loaded; what arrived since
-	 * stays unread. The lists of the starred and the hidden are not a place to mark
-	 * everything from, and the server cannot mark by age yet.
+	 * stays unread. With `olderThan`, only what was published more than that many
+	 * milliseconds ago. The lists of the starred and the hidden are not a place to
+	 * mark everything from.
 	 */
 	markAllRead(olderThan = 0) {
 		const stream = this.stream;
-		if (olderThan > 0 || stream.kind === 'home') return;
-		if (stream.kind === 'starred' || stream.kind === 'hidden') return;
+		if (stream.kind === 'home' || stream.kind === 'starred' || stream.kind === 'hidden') return;
 		const upto = this.newest;
 		if (upto === null) return;
-		this.sweep(stream, upto);
+		this.sweep(stream, upto, Math.max(0, olderThan));
 	}
 
-	private sweep(stream: ListStream, upto: number) {
+	private sweep(stream: ListStream, upto: number, olderThan: number) {
 		const feeds = new Set(this.feedsOf(stream));
 		const countsBefore = this.counts;
 		const marks = { ...this.marks };
-		const swept: Article[] = [];
+		const counts = { ...this.counts };
+		const before = Date.now() - olderThan;
+		const swept = new Map<string, Article>();
 		for (const article of [...this.items, ...this.homeUnread, ...this.homeStarred]) {
 			const mark = marks[article.id] ?? unmarked;
 			if (mark.read || !feeds.has(article.feedId) || Number(article.id) > upto) continue;
+			if (olderThan > 0 && article.publishedAt > before) continue;
 			marks[article.id] = { ...mark, read: true };
-			swept.push(article);
+			swept.set(article.id, article);
+			// By age, only the server knows how many are left; here go those the page has.
+			if (!mark.hidden) counts[article.feedId] = Math.max(0, (counts[article.feedId] ?? 0) - 1);
 		}
-		const counts = { ...this.counts };
-		for (const id of feeds) counts[id] = 0;
+		if (olderThan === 0) for (const id of feeds) counts[id] = 0;
 		this.marks = marks;
 		this.counts = counts;
 
 		this.write(
 			'sweep',
 			async () => {
-				await this.api.readUpto(stream, upto);
+				// The server counts an age in whole seconds.
+				const age = olderThan > 0 ? Math.max(1, Math.round(olderThan / 1000)) : undefined;
+				await this.api.readUpto(stream, upto, age);
 				// What arrived after the list was loaded is still unread; the server counts.
 				await this.loadTree();
 			},
 			() => {
 				const marks = { ...this.marks };
-				for (const article of swept) {
+				for (const article of swept.values()) {
 					const mark = marks[article.id];
 					if (mark && !this.waiting.has(`${article.id}:read`)) {
 						marks[article.id] = { ...mark, read: false };
@@ -837,6 +874,7 @@ export class ServerReader implements Reader {
 				await send();
 				await Promise.all([this.loadRules(), this.loadTree()]);
 				this.reload();
+				if (this.hitsAsked) this.countHits();
 			},
 			() => void this.loadRules()
 		);
@@ -878,21 +916,22 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	/**
-	 * The first enabled rule that hides the article, as far as the browser can
-	 * tell: the server does not say which rule it was, and its regular expressions
-	 * are not quite the browser's.
-	 */
-	hidingRule(article: Article) {
-		return (
-			this.rules.find(
-				(rule) =>
-					rule.enabled &&
-					rule.action === 'hide' &&
-					(rule.scope.kind === 'all' || this.feedsOf(rule.scope).includes(article.feedId)) &&
-					ruleMatches(rule, article)
-			) ?? null
+	hitsOf = (rule: FilterRule) => this.hits[rule.id] ?? null;
+
+	/** Asks the server what the saved rules find. The page shows the counts as they come. */
+	countHits() {
+		this.hitsAsked = true;
+		void this.api.ruleHits().then(
+			(hits) => {
+				this.hits = Object.fromEntries(hits.map((hit) => [ruleKey(hit.id), hit.matches]));
+			},
+			(error: unknown) => this.failed(error, 'unreachable')
 		);
+	}
+
+	/** The rule that hides the article, as the server named it with the article's text. */
+	hidingRule(article: Article) {
+		return this.rules.find((rule) => rule.id === article.hiddenBy) ?? null;
 	}
 
 	// Subscribing and OPML

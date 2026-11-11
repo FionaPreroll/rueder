@@ -30,6 +30,7 @@ import type {
 	RuleOutcome,
 	RulePreview,
 	RuleScope,
+	RulesHits,
 	StateChange,
 	Subscribed,
 	Tree,
@@ -76,6 +77,8 @@ export type ApiNode = NodeRef;
 export interface PageQuery {
 	/** Only what arrived before the article of this id. */
 	before?: number;
+	/** Only what arrived after the article of this id, the oldest first; 0 starts at the oldest. */
+	after?: number;
 	limit: number;
 	/** Leave out what was read. */
 	unread?: boolean;
@@ -179,6 +182,7 @@ export const api = {
 	list: async (stream: ListStream, page: PageQuery) => {
 		const query = new URLSearchParams({ limit: String(page.limit) });
 		if (page.before !== undefined) query.set('before', String(page.before));
+		if (page.after !== undefined) query.set('after', String(page.after));
 		if (page.unread) query.set('unread', 'true');
 		const list = await call<List>('GET', `${listPath(stream)}?${query}`);
 		return list.articles;
@@ -195,9 +199,18 @@ export const api = {
 	setState: (feedId: number, seq: number, change: { read?: boolean; starred?: boolean }) =>
 		call<void>('PUT', `/feeds/${feedId}/articles/${seq}/state`, change satisfies StateChange),
 
-	/** Marks as read what arrived in the stream up to the article of this id. */
-	readUpto: (stream: ListStream, uptoId: number) =>
-		call<void>('POST', readPath(stream), { upto_id: uptoId } satisfies Upto),
+	/**
+	 * Marks as read what arrived in the stream up to the article of this id; with
+	 * `olderThan`, only what was published more than that many seconds ago.
+	 */
+	readUpto: (stream: ListStream, uptoId: number, olderThan?: number) =>
+		call<void>(
+			'POST',
+			readPath(stream),
+			(olderThan === undefined
+				? { upto_id: uptoId }
+				: { upto_id: uptoId, older_than: olderThan }) satisfies Upto
+		),
 
 	move: (node: ApiNode, target: ApiNode, position: DropPosition) =>
 		call<void>('POST', '/tree/move', { node, target, position } satisfies Move),
@@ -226,7 +239,9 @@ export const api = {
 	changeRule: (id: number, rule: ApiNewRule) => call<RuleOutcome>('PUT', `/rules/${id}`, rule),
 	removeRule: (id: number) => call<RuleOutcome>('DELETE', `/rules/${id}`),
 	/** Tries a rule without storing it; a pattern that cannot be used is refused with 400. */
-	previewRule: (rule: ApiNewRule) => call<ApiRulePreview>('POST', '/rules/preview', rule)
+	previewRule: (rule: ApiNewRule) => call<ApiRulePreview>('POST', '/rules/preview', rule),
+	/** What each of the stored rules finds. */
+	ruleHits: async () => (await call<RulesHits>('GET', '/rules/hits')).hits
 };
 
 export type Api = typeof api;

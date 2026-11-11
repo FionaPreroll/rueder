@@ -550,6 +550,10 @@ export class DemoReader implements Reader {
 		this.states = states;
 	}
 
+	hitsOf = (rule: FilterRule) => this.countMatches(rule);
+	/** Nothing to ask for: the articles are all here. */
+	countHits() {}
+
 	/** How many of the articles in its scope a rule finds, whether it is on or not. */
 	countMatches(rule: FilterRule) {
 		let count = 0;

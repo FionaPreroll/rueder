@@ -478,6 +478,7 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
 
     let page = |before, unread_only| Page {
         before,
+        after: None,
         limit: 50,
         unread_only,
     };

@@ -294,6 +294,7 @@ async fn a_fetch_adds_what_is_new_and_nothing_twice(db: PgPool) {
 
     let page = Page {
         before: None,
+        after: None,
         limit: 10,
         unread_only: false,
     };
@@ -344,6 +345,7 @@ async fn a_changed_text_is_a_new_version_and_a_reflowed_one_is_not(db: PgPool) {
     assert_eq!(stored.updated, 1);
     let page = Page {
         before: None,
+        after: None,
         limit: 10,
         unread_only: false,
     };
@@ -546,6 +548,7 @@ async fn other_rules_are_no_new_version(db: PgPool) {
     );
     let page = Page {
         before: None,
+        after: None,
         limit: 10,
         unread_only: false,
     };

@@ -54,6 +54,25 @@ describe('the start page', () => {
 	});
 });
 
+describe('an article', () => {
+	it('shows the picture beside its text and plays its recording only when asked', async () => {
+		render(Page);
+		const sidebar = screen.getByRole('navigation');
+		await userEvent.click(within(sidebar).getByRole('button', { name: /^Lab Notes Weekly/ }));
+		expect(heading()).toHaveTextContent('Lab Notes Weekly');
+		const main = screen.getByRole('main');
+		const first = within(main).getAllByRole('listitem')[0];
+		await userEvent.click(within(first).getAllByRole('button')[1]);
+		expect(openArticle()).not.toBeNull();
+		const title = within(main).getByRole('heading', { level: 2 }).textContent!.trim();
+		expect(within(main).getByRole('img', { name: title })).toBeInTheDocument();
+		expect(within(main).getByRole('heading', { name: 'Attachments' })).toBeInTheDocument();
+		expect(main.querySelector('audio')).toBeNull();
+		await userEvent.click(within(main).getByRole('button', { name: /^Play/ }));
+		expect(main.querySelector('audio')?.getAttribute('src')).toMatch(/^data:audio\/wav;base64,/);
+	});
+});
+
 describe('the toolbar', () => {
 	it('marks all as read, or only what is older', async () => {
 		render(Page);

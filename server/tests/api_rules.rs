@@ -571,3 +571,89 @@ async fn nobody_sees_or_changes_the_rules_of_others(db: PgPool) {
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
     }
 }
+
+#[sqlx::test]
+async fn the_reader_learns_how_much_is_hidden_and_by_which_rule(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 12).await;
+    let blog = common::feed(&db, "blog").await;
+    common::subscribe(&db, ada, blog).await;
+    common::add(&db, blog, 3).await;
+    let grace = common::account(&db, "grace").await;
+    common::subscribe(&db, grace, news).await;
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let hidden_by = async |cookie: &str, feed: i32, seq: i32| {
+        let path = format!("/api/feeds/{feed}/articles/{seq}");
+        get(&state, &path, cookie).await["hidden_by"].clone()
+    };
+    assert_eq!(get(&state, "/api/tree", &cookie).await["hidden"], 0);
+    assert_eq!(
+        get(&state, "/api/rules/hits", &cookie).await,
+        json!({ "hits": [] })
+    );
+
+    // Three rules: one marks read, two hide, and the second of them holds for
+    // one feed only. One that is switched off counts what it would find.
+    let (reads, _) = add(
+        &state,
+        &cookie,
+        json!({ "pattern": "article 1", "action": "read" }),
+    )
+    .await;
+    let (word, _) = add(
+        &state,
+        &cookie,
+        json!({ "match": "word", "pattern": "article 1" }),
+    )
+    .await;
+    let scope = json!({ "kind": "feed", "id": news });
+    let (tens, _) = add(
+        &state,
+        &cookie,
+        json!({ "scope": scope, "pattern": "article 1" }),
+    )
+    .await;
+    let (off, _) = add(
+        &state,
+        &cookie,
+        json!({ "field": "author", "pattern": "grace", "enabled": false }),
+    )
+    .await;
+
+    // Article 1 of both feeds, and 10 to 12 of the news.
+    assert_eq!(get(&state, "/api/tree", &cookie).await["hidden"], 5);
+    assert_eq!(hidden_by(&cookie, news, 1).await, word);
+    assert_eq!(hidden_by(&cookie, blog, 1).await, word);
+    assert_eq!(hidden_by(&cookie, news, 11).await, tens);
+    // Not hidden: no rule to name, whatever marks it read.
+    assert_eq!(hidden_by(&cookie, news, 2).await, Value::Null);
+    assert_eq!(hidden_by(&cookie, blog, 2).await, Value::Null);
+
+    assert_eq!(
+        get(&state, "/api/rules/hits", &cookie).await,
+        json!({ "hits": [
+            { "id": reads, "matches": 5, "of": 15 },
+            { "id": word, "matches": 2, "of": 15 },
+            { "id": tens, "matches": 4, "of": 12 },
+            { "id": off, "matches": 15, "of": 15 },
+        ] })
+    );
+
+    // Without the first of the hiding rules the next one that hides is named.
+    let path = format!("/api/rules/{word}");
+    send(&state, Method::DELETE, &path, &cookie, Value::Null).await;
+    assert_eq!(get(&state, "/api/tree", &cookie).await["hidden"], 4);
+    assert_eq!(hidden_by(&cookie, news, 1).await, tens);
+
+    // Grace reads the same feed: nothing is hidden for her, and she has no
+    // rules to count.
+    assert_eq!(get(&state, "/api/tree", &grace_cookie).await["hidden"], 0);
+    assert_eq!(hidden_by(&grace_cookie, news, 1).await, Value::Null);
+    assert_eq!(
+        get(&state, "/api/rules/hits", &grace_cookie).await,
+        json!({ "hits": [] })
+    );
+}

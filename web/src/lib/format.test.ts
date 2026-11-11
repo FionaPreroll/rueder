@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { formatAgo, formatFull, formatWhen } from '#lib/format.ts';
+import { formatAgo, formatBytes, formatFull, formatWhen } from '#lib/format.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 
 const MINUTE = 60_000;
@@ -53,5 +53,17 @@ describe('formatFull', () => {
 		expect(formatFull(now)).toBe('Tuesday, November 10, 2026 at 3:30 PM');
 		useLanguage('de');
 		expect(formatFull(now)).toBe('Dienstag, 10. November 2026 um 15:30');
+	});
+});
+
+describe('formatBytes', () => {
+	it('is the size of a file in the unit that fits', () => {
+		expect(formatBytes(0)).toBe('0 B');
+		expect(formatBytes(999)).toBe('999 B');
+		expect(formatBytes(1500)).toBe('1.5 kB');
+		expect(formatBytes(34_560_000)).toBe('34.6 MB');
+		expect(formatBytes(5e12)).toBe('5,000 GB');
+		useLanguage('de');
+		expect(formatBytes(1500)).toBe('1,5 kB');
 	});
 });

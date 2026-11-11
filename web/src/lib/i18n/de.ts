@@ -99,6 +99,11 @@ const de: Messages = {
 		loadingList: 'Wird geladen …'
 	},
 
+	media: {
+		title: 'Anhänge',
+		play: 'Abspielen'
+	},
+
 	notice: {
 		unreachable: 'Der Server antwortet nicht. Was du siehst, ist vielleicht nicht mehr aktuell.',
 		notSaved:

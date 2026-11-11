@@ -111,8 +111,10 @@ export interface RuleBook {
 	 * the server's regular expressions are not the browser's.
 	 */
 	preview(rule: FilterRule): RulePreview | Promise<RulePreview>;
-	/** How many articles a saved rule finds, where the reader can say that at once. */
-	countMatches?(rule: FilterRule): number;
+	/** How many articles a saved rule finds; null as long as nobody has counted. */
+	hitsOf(rule: FilterRule): number | null;
+	/** Counts what the saved rules find, where that has to be asked for. */
+	countHits(): void;
 	/** The first enabled rule that hides the article, to say why it is hidden. */
 	hidingRule(article: Article): FilterRule | null;
 }

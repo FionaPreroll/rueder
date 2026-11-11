@@ -734,3 +734,181 @@ async fn everything_up_to_an_article_can_be_marked_read(db: PgPool) {
         );
     }
 }
+
+#[sqlx::test]
+async fn lists_can_start_with_the_oldest(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 3).await;
+    let blog = common::feed(&db, "blog").await;
+    common::subscribe(&db, ada, blog).await;
+    common::add(&db, blog, 2).await;
+    common::add(&db, news, 1).await;
+    let (grace, hers) = common::reader(&db, "grace", 2).await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let (n, b) = (i64::from(news), i64::from(blog));
+
+    // From the oldest on, two at a time, across the feeds.
+    let (status, page) = get(&state, "/api/articles?after=0&limit=2", &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(seqs(&page), [(n, 1), (n, 2)]);
+    let last = page["articles"][1]["id"].as_i64().unwrap();
+    let next = format!("/api/articles?limit=2&after={last}");
+    let (_, page) = get(&state, &next, &cookie).await;
+    assert_eq!(seqs(&page), [(n, 3), (b, 1)]);
+    let last = page["articles"][1]["id"].as_i64().unwrap();
+    let next = format!("/api/articles?limit=2&after={last}");
+    let (_, page) = get(&state, &next, &cookie).await;
+    assert_eq!(seqs(&page), [(b, 2), (n, 4)]);
+    let last = page["articles"][1]["id"].as_i64().unwrap();
+    let next = format!("/api/articles?limit=2&after={last}");
+    assert_eq!(seqs(&get(&state, &next, &cookie).await.1), []);
+
+    // One feed, and only what is unread: what is read under the mark and
+    // above it is left out, what was set back to unread is there.
+    let path = format!("/api/feeds/{news}/read");
+    assert_eq!(
+        post(&state, &path, &cookie, json!({ "upto": 2 })).await,
+        StatusCode::NO_CONTENT
+    );
+    for (seq, read) in [(1, false), (4, true)] {
+        let path = format!("/api/feeds/{news}/articles/{seq}/state");
+        assert_eq!(
+            put(&state, &path, &cookie, json!({ "read": read })).await,
+            StatusCode::NO_CONTENT
+        );
+    }
+    let path = format!("/api/feeds/{news}/articles?after=0");
+    let (_, page) = get(&state, &path, &cookie).await;
+    assert_eq!(seqs(&page), [(n, 1), (n, 2), (n, 3), (n, 4)]);
+    let (_, page) = get(&state, &format!("{path}&unread=true"), &cookie).await;
+    assert_eq!(seqs(&page), [(n, 1), (n, 3)]);
+    let (_, page) = get(&state, "/api/articles?after=0&unread=true", &cookie).await;
+    assert_eq!(seqs(&page), [(n, 1), (n, 3), (b, 1), (b, 2)]);
+
+    // The lists of what was marked go the same way.
+    for seq in [3, 1] {
+        let path = format!("/api/feeds/{news}/articles/{seq}/state");
+        put(&state, &path, &cookie, json!({ "starred": true })).await;
+    }
+    let (_, page) = get(&state, "/api/starred", &cookie).await;
+    assert_eq!(seqs(&page), [(n, 3), (n, 1)]);
+    let (_, page) = get(&state, "/api/starred?after=0", &cookie).await;
+    assert_eq!(seqs(&page), [(n, 1), (n, 3)]);
+    let first = page["articles"][0]["id"].as_i64().unwrap();
+    let (_, page) = get(&state, &format!("/api/starred?after={first}"), &cookie).await;
+    assert_eq!(seqs(&page), [(n, 3)]);
+
+    // A list goes one way.
+    let (status, _) = get(&state, "/api/articles?after=0&before=9", &cookie).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Grace has her own feed in her list and cannot ask for ada's.
+    let grace_cookie = common::session(&db, grace).await;
+    let (_, page) = get(&state, "/api/articles?after=0", &grace_cookie).await;
+    let h = i64::from(hers);
+    assert_eq!(seqs(&page), [(h, 1), (h, 2)]);
+    let path = format!("/api/feeds/{news}/articles?after=0");
+    assert_eq!(
+        get(&state, &path, &grace_cookie).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[sqlx::test]
+async fn what_is_older_than_an_age_can_be_marked_read(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 6).await;
+    let blog = common::feed(&db, "blog").await;
+    common::subscribe(&db, ada, blog).await;
+    common::add(&db, blog, 2).await;
+    let grace = common::account(&db, "grace").await;
+    common::subscribe(&db, grace, news).await;
+    // The news came in over the last six hours, one an hour, the newest an
+    // hour ago. Number 5 was published long before it arrived.
+    sqlx::query(
+        "UPDATE articles
+         SET published_at = now() - CASE WHEN seq = 5 THEN 100 ELSE 7 - seq END * interval '1 hour'
+         WHERE feed_id = $1",
+    )
+    .bind(news)
+    .execute(&db)
+    .await
+    .unwrap();
+    // The blog's are from yesterday.
+    sqlx::query(
+        "UPDATE articles SET published_at = now() - interval '30 hours' WHERE feed_id = $1",
+    )
+    .bind(blog)
+    .execute(&db)
+    .await
+    .unwrap();
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let unread = async || {
+        let path = format!("/api/feeds/{news}/articles?unread=true");
+        let (_, page) = get(&state, &path, &cookie).await;
+        seqs(&page)
+            .into_iter()
+            .map(|(_, seq)| seq)
+            .collect::<Vec<_>>()
+    };
+    let (_, list) = get(&state, "/api/articles?limit=1", &cookie).await;
+    let newest = list["articles"][0]["id"].as_i64().unwrap();
+    const HOUR: i64 = 3600;
+
+    // Older than three and a half hours: 1 to 3, and 5 from among the young.
+    let age = 3 * HOUR + HOUR / 2;
+    let path = format!("/api/feeds/{news}/read");
+    let body = json!({ "upto_id": newest, "older_than": age });
+    assert_eq!(
+        post(&state, &path, &cookie, body).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(unread().await, [6, 4]);
+    assert_eq!(counts(&state, &cookie, news).await, (6, 3, 2));
+    assert_eq!(counts(&state, &cookie, blog).await.2, 2);
+
+    // What was set back to unread and is old enough is read again; up to a
+    // number, nothing above it is touched.
+    let state_of = format!("/api/feeds/{news}/articles/2/state");
+    put(&state, &state_of, &cookie, json!({ "read": false })).await;
+    assert_eq!(unread().await, [6, 4, 2]);
+    let body = json!({ "upto": 4, "older_than": 2 * HOUR + HOUR / 2 });
+    assert_eq!(
+        post(&state, &path, &cookie, body).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(unread().await, [6]);
+    assert_eq!(counts(&state, &cookie, news).await, (6, 5, 1));
+
+    // Everything of the account, by age: the blog is a day old, the last of
+    // the news is not.
+    let body = json!({ "upto_id": newest, "older_than": 24 * HOUR });
+    assert_eq!(
+        post(&state, "/api/read", &cookie, body).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(unread().await, [6]);
+    assert_eq!(counts(&state, &cookie, blog).await.2, 0);
+
+    // An age is a number of seconds above zero, within reason.
+    for age in [0, -5, i64::MAX] {
+        let body = json!({ "upto_id": newest, "older_than": age });
+        assert_eq!(
+            post(&state, &path, &cookie, body).await,
+            StatusCode::BAD_REQUEST,
+            "{age}"
+        );
+    }
+
+    // None of this was grace's, and she cannot mark what she does not read.
+    assert_eq!(counts(&state, &grace_cookie, news).await, (6, 0, 6));
+    let path = format!("/api/feeds/{blog}/read");
+    let body = json!({ "upto": 2, "older_than": HOUR });
+    assert_eq!(
+        post(&state, &path, &grace_cookie, body).await,
+        StatusCode::NOT_FOUND
+    );
+}

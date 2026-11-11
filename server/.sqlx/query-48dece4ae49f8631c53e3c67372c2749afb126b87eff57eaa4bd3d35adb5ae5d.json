@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE article_states x SET kept_unread = false FROM articles a\n         WHERE x.account_id = $1 AND x.feed_id = $2 AND x.seq <= $3 AND x.kept_unread\n           AND a.feed_id = x.feed_id AND a.seq = x.seq AND a.published_at <= $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "48dece4ae49f8631c53e3c67372c2749afb126b87eff57eaa4bd3d35adb5ae5d"
+}
