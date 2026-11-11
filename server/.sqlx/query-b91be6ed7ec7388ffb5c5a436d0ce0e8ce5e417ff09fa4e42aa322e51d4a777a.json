@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE filter_rules r SET position = n.position\n         FROM (\n             SELECT k.id, row_number() OVER (ORDER BY t.at, k.position, k.id) AS position\n             FROM filter_rules k\n             LEFT JOIN (\n                 SELECT u.id, min(u.at) AS at\n                 FROM unnest($2::int4[]) WITH ORDINALITY AS u(id, at) GROUP BY u.id\n             ) t ON t.id = k.id\n             WHERE k.account_id = $1\n         ) n\n         WHERE r.id = n.id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b91be6ed7ec7388ffb5c5a436d0ce0e8ce5e417ff09fa4e42aa322e51d4a777a"
+}

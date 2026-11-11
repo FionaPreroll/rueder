@@ -52,6 +52,37 @@ pub async fn unread_counts(db: &PgPool, account_id: i32) -> anyhow::Result<Vec<F
     Ok(counts)
 }
 
+/// One subscription's numbers, or `None` if the account does not subscribe to
+/// the feed.
+pub async fn unread_of(
+    db: &PgPool,
+    account_id: i32,
+    feed_id: i32,
+) -> anyhow::Result<Option<FeedUnread>> {
+    let counts = sqlx::query_as!(
+        FeedUnread,
+        r#"
+        SELECT s.feed_id, f.last_seq, s.read_upto,
+               f.last_seq - s.read_upto
+               - (SELECT count(*) FROM article_states x
+                  WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id
+                    AND x.seq > s.read_upto AND (x.read OR x.hidden))
+               + (SELECT count(*) FROM article_states x
+                  WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id
+                    AND x.seq <= s.read_upto AND x.kept_unread AND NOT x.hidden)
+               AS "unread!"
+        FROM subscriptions s
+        JOIN feeds f ON f.id = s.feed_id
+        WHERE s.account_id = $1 AND s.feed_id = $2
+        "#,
+        account_id,
+        feed_id
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(counts)
+}
+
 /// Locks the subscription for the rest of the transaction and returns its mark
 /// and the feed's newest number, or `None` if the account does not subscribe to
 /// the feed.
@@ -244,22 +275,33 @@ pub async fn set_read(
     read: bool,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let done = set_read_on(&mut tx, account_id, feed_id, seq, read).await?;
+    tx.commit().await?;
+    Ok(done)
+}
+
+/// [`set_read`] inside a transaction the caller has open.
+pub async fn set_read_on(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    seq: i32,
+    read: bool,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
     if seq < 1 || seq > last {
         return Ok(false);
     }
     if seq <= mark {
-        // Under the mark everything is read, except what is kept unread.
-        set_flags(&mut tx, account_id, feed_id, seq, Change::KeptUnread(!read)).await?;
+        set_flags(conn, account_id, feed_id, seq, Change::KeptUnread(!read)).await?;
     } else {
-        set_flags(&mut tx, account_id, feed_id, seq, Change::Read(read)).await?;
+        set_flags(conn, account_id, feed_id, seq, Change::Read(read)).await?;
         if read {
-            compact(&mut tx, account_id, feed_id, mark).await?;
+            compact(conn, account_id, feed_id, mark).await?;
         }
     }
-    tx.commit().await?;
     Ok(true)
 }
 
@@ -349,16 +391,28 @@ pub async fn set_hidden(
     hidden: bool,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let done = set_hidden_on(&mut tx, account_id, feed_id, seq, hidden).await?;
+    tx.commit().await?;
+    Ok(done)
+}
+
+/// [`set_hidden`] inside a transaction the caller has open.
+pub async fn set_hidden_on(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    seq: i32,
+    hidden: bool,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
     if seq < 1 || seq > last {
         return Ok(false);
     }
-    set_flags(&mut tx, account_id, feed_id, seq, Change::Hidden(hidden)).await?;
+    set_flags(conn, account_id, feed_id, seq, Change::Hidden(hidden)).await?;
     if hidden {
-        compact(&mut tx, account_id, feed_id, mark).await?;
+        compact(conn, account_id, feed_id, mark).await?;
     }
-    tx.commit().await?;
     Ok(true)
 }

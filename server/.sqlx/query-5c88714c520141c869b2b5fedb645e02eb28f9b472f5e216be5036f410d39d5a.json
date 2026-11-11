@@ -1,0 +1,136 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,\n                f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message\n         FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1 ORDER BY s.position, s.feed_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "folder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "position",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "own_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "feed_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "feed_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "feed_url"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "site_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "site_url"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "icon_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "icon_url"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "fetch_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "fetch_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "error_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "error_message"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "5c88714c520141c869b2b5fedb645e02eb28f9b472f5e216be5036f410d39d5a"
+}

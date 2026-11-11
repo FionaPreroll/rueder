@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE subscriptions SET folder_id = $3 WHERE account_id = $1 AND feed_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d447e335ec37742a6365824af79b7e20dc4d1c6504a53ca2107350319dfcd743"
+}

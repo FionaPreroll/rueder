@@ -18,6 +18,7 @@ use axum::{
 };
 use rueder::{
     cleaning::Rules,
+    events::Events,
     feeds::Stored,
     fetch::{self, MAX_INTERVAL, MIN_INTERVAL, Outcome},
     http_client::{Config, HttpClient},
@@ -188,6 +189,37 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
 }
 
 #[sqlx::test]
+async fn the_readers_rules_see_what_a_fetch_brings(db: PgPool) {
+    let (url, _site) = site(&[("b", "Second", "two"), ("a", "First", "one")]).await;
+    let feed = feed_at(&db, "ada", &url).await;
+    let grace = common::account(&db, "grace").await;
+    common::subscribe(&db, grace, feed).await;
+    sqlx::query(
+        "INSERT INTO filter_rules (account_id, position, field, match, pattern, action)
+         SELECT id, 1, 'title', 'word', 'second', 'hide' FROM accounts WHERE username = 'ada'",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+
+    fetch::fetch_feed(&db, &client(), &rules(), feed)
+        .await
+        .unwrap();
+    // The article is hidden for Ada from the moment it is there, and for
+    // nobody else.
+    let hidden: Vec<(String, String)> = sqlx::query_as(
+        "SELECT c.username, a.title FROM article_states st
+         JOIN accounts c ON c.id = st.account_id
+         JOIN articles a ON a.feed_id = st.feed_id AND a.seq = st.seq
+         WHERE st.hidden",
+    )
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    assert_eq!(hidden, [("ada".to_owned(), "Second".to_owned())]);
+}
+
+#[sqlx::test]
 async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPool) {
     let (url, site) = site(&[("a", "First", "one")]).await;
     let feed = feed_at(&db, "ada", &url).await;
@@ -311,7 +343,12 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         .unwrap();
 
     let client = client();
-    assert_eq!(fetch::fetch_due(&db, &client, &rules()).await.unwrap(), 2);
+    assert_eq!(
+        fetch::fetch_due(&db, &client, &rules(), &Events::new())
+            .await
+            .unwrap(),
+        2
+    );
     assert_eq!(site.lock().unwrap().requests, 2);
     for (feed, articles) in [(due, 1), (also_due, 1), (later, 0), (unread, 0)] {
         assert_eq!(
@@ -321,7 +358,12 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         );
     }
     // Fetched feeds are not due any more.
-    assert_eq!(fetch::fetch_due(&db, &client, &rules()).await.unwrap(), 0);
+    assert_eq!(
+        fetch::fetch_due(&db, &client, &rules(), &Events::new())
+            .await
+            .unwrap(),
+        0
+    );
     assert_eq!(site.lock().unwrap().requests, 2);
 }
 

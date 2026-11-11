@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT feed_url FROM feeds WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "feed_url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0a8e0b8f4748a552987cc7f6f2f0a11ce5648453bde80d2cc9d63baa5d662f90"
+}

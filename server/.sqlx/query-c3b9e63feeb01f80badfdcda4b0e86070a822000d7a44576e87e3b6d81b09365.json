@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE folders SET parent_id = $3 WHERE account_id = $1 AND parent_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3b9e63feeb01f80badfdcda4b0e86070a822000d7a44576e87e3b6d81b09365"
+}

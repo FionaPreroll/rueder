@@ -40,7 +40,7 @@ pub struct Session {
     pub is_admin: bool,
 }
 
-fn token_hash(token: &str) -> Vec<u8> {
+pub(crate) fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
@@ -148,6 +148,11 @@ impl FromRequestParts<AppState> for Session {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
+        // What wraps the API has looked the session up already for requests
+        // that change something (see `events::announce`).
+        if let Some(session) = parts.extensions.get::<Self>() {
+            return Ok(session.clone());
+        }
         let session = match token(&parts.headers) {
             Some(token) => find(&state.db, token).await?,
             None => None,

@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT al.feed_id, al.seq, al.label_id\n           FROM labels l JOIN article_labels al ON al.label_id = l.id\n           WHERE l.account_id = $1\n             AND (al.feed_id, al.seq) IN (SELECT * FROM unnest($2::int4[], $3::int4[]))\n           ORDER BY l.position, l.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "article_labels",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "article_labels",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "label_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "article_labels",
+            "name": "label_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8e243c97a8122320017ca1afba50adeb4c05a88184b213c39007460608b02ab8"
+}

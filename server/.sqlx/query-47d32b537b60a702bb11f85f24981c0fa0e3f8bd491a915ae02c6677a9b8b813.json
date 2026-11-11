@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO labels (account_id, title, color, position)\n         SELECT $1, $2, $3, coalesce(max(position), 0) + 1 FROM labels WHERE account_id = $1\n         HAVING count(*) < $4\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "labels",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "47d32b537b60a702bb11f85f24981c0fa0e3f8bd491a915ae02c6677a9b8b813"
+}
