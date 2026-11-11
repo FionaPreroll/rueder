@@ -8,6 +8,7 @@ pub mod fetch;
 pub mod http_client;
 pub mod images;
 pub mod import;
+pub mod labels;
 pub mod login;
 pub mod oidc;
 pub mod reading;
@@ -120,6 +121,7 @@ fn api() -> Router<AppState> {
         .route("/oidc/callback", get(oidc::callback))
         .merge(api::routes())
         .merge(tree::routes())
+        .merge(labels::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

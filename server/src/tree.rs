@@ -43,12 +43,12 @@ pub enum Node {
     Feed(i32),
 }
 
-fn bad(message: &str) -> AppError {
+pub(crate) fn bad(message: &str) -> AppError {
     AppError::BadRequest(message.into())
 }
 
 /// A name as it is stored, or why it cannot be one.
-fn title(title: &str) -> Result<&str, AppError> {
+pub(crate) fn title(title: &str) -> Result<&str, AppError> {
     let title = title.trim();
     if title.is_empty() {
         return Err(bad("the name is empty"));
@@ -421,23 +421,35 @@ async fn rename_feed(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Ends a subscription, and with it what the reader read and starred there.
+/// Ends a subscription, and with it what the reader read, starred and
+/// labelled there.
 /// The feed and its articles stay for whoever else reads it.
 async fn unsubscribe(
     State(state): State<AppState>,
     session: Session,
     Path(feed_id): Path<i32>,
 ) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin().await?;
     let gone = sqlx::query!(
         "DELETE FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
         session.account_id,
         feed_id,
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
     if gone.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
+    // Labels hang on the article, not on the subscription.
+    sqlx::query!(
+        "DELETE FROM article_labels al USING labels l
+         WHERE l.id = al.label_id AND l.account_id = $1 AND al.feed_id = $2",
+        session.account_id,
+        feed_id,
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

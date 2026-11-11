@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM article_labels WHERE label_id = $1 AND feed_id = $2 AND seq = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "73828e551c0917b1d19e90fd4c1eb87033780c71ea06d3630df36ba28c74b828"
+}

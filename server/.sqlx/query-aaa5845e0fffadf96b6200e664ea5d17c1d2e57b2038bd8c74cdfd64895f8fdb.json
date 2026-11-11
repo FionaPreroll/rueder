@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE labels l SET position = n.position\n         FROM (\n             SELECT k.id, row_number() OVER (ORDER BY t.at, k.position, k.id) AS position\n             FROM labels k\n             LEFT JOIN unnest($2::int4[]) WITH ORDINALITY AS t(id, at) ON t.id = k.id\n             WHERE k.account_id = $1\n         ) n\n         WHERE l.id = n.id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aaa5845e0fffadf96b6200e664ea5d17c1d2e57b2038bd8c74cdfd64895f8fdb"
+}

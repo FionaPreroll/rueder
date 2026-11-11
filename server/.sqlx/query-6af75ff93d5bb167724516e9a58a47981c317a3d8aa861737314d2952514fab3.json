@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE labels SET title = coalesce($3, title), color = coalesce($4, color)\n         WHERE account_id = $1 AND id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6af75ff93d5bb167724516e9a58a47981c317a3d8aa861737314d2952514fab3"
+}

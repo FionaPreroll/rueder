@@ -23,7 +23,7 @@ use time::OffsetDateTime;
 
 use crate::{
     AppError, AppState,
-    articles::{self, ListItem, Opened, Page},
+    articles::{self, ListItem, Marked, Opened, Page},
     cleaning::{self, Base, Rules},
     images::{Signer, Size},
     reading,
@@ -38,6 +38,9 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/tree", get(tree))
         .route("/articles", get(all_articles))
+        .route("/starred", get(starred_articles))
+        .route("/hidden", get(hidden_articles))
+        .route("/labels/{label_id}/articles", get(label_articles))
         .route("/read", post(read_all))
         .route("/feeds/{feed_id}/articles", get(feed_articles))
         .route("/feeds/{feed_id}/read", post(read_feed))
@@ -159,9 +162,76 @@ struct ListQuery {
     unread: bool,
 }
 
+/// A line of a list, with the labels the reader gave the article.
+#[derive(Serialize)]
+struct Item {
+    #[serde(flatten)]
+    article: ListItem,
+    labels: Vec<i32>,
+}
+
 #[derive(Serialize)]
 struct List {
+    articles: Vec<Item>,
+}
+
+impl ListQuery {
+    fn page(&self) -> Page {
+        Page {
+            before: self.before,
+            limit: self.limit.unwrap_or(PAGE).clamp(1, MAX_PAGE),
+            unread_only: self.unread,
+        }
+    }
+}
+
+/// The account's labels on these articles, by feed and number.
+async fn labels_of(
+    state: &AppState,
+    session: &Session,
+    articles: &[(i32, i32)],
+) -> Result<HashMap<(i32, i32), Vec<i32>>, AppError> {
+    let (feeds, seqs): (Vec<i32>, Vec<i32>) = articles.iter().copied().unzip();
+    let rows = sqlx::query!(
+        r#"SELECT al.feed_id, al.seq, al.label_id
+           FROM labels l JOIN article_labels al ON al.label_id = l.id
+           WHERE l.account_id = $1
+             AND (al.feed_id, al.seq) IN (SELECT * FROM unnest($2::int4[], $3::int4[]))
+           ORDER BY l.position, l.id"#,
+        session.account_id,
+        &feeds,
+        &seqs,
+    )
+    .fetch_all(&state.db)
+    .await?;
+    let mut labels: HashMap<_, Vec<i32>> = HashMap::new();
+    for row in rows {
+        let of_article = labels.entry((row.feed_id, row.seq)).or_default();
+        of_article.push(row.label_id);
+    }
+    Ok(labels)
+}
+
+/// What a list sends out: pictures at the proxy, labels on each line.
+async fn listed(
+    state: &AppState,
+    session: &Session,
     articles: Vec<ListItem>,
+) -> Result<Json<List>, AppError> {
+    let keys: Vec<_> = articles.iter().map(|a| (a.feed_id, a.seq)).collect();
+    let mut labels = labels_of(state, session, &keys).await?;
+    let articles = articles
+        .into_iter()
+        .map(|mut article| {
+            article.thumbnail_url = state.picture(Size::Thumbnail, article.thumbnail_url.take());
+            let labels = labels.remove(&(article.feed_id, article.seq));
+            Item {
+                article,
+                labels: labels.unwrap_or_default(),
+            }
+        })
+        .collect();
+    Ok(Json(List { articles }))
 }
 
 async fn list(
@@ -170,16 +240,53 @@ async fn list(
     feed_ids: &[i32],
     query: ListQuery,
 ) -> Result<Json<List>, AppError> {
-    let page = Page {
-        before: query.before,
-        limit: query.limit.unwrap_or(PAGE).clamp(1, MAX_PAGE),
-        unread_only: query.unread,
-    };
-    let mut articles = articles::page(&state.db, session.account_id, feed_ids, page).await?;
-    for article in &mut articles {
-        article.thumbnail_url = state.picture(Size::Thumbnail, article.thumbnail_url.take());
+    let articles = articles::page(&state.db, session.account_id, feed_ids, query.page()).await?;
+    listed(state, session, articles).await
+}
+
+async fn marked(
+    state: &AppState,
+    session: &Session,
+    which: Marked,
+    query: ListQuery,
+) -> Result<Json<List>, AppError> {
+    let articles = articles::marked(&state.db, session.account_id, which, query.page()).await?;
+    listed(state, session, articles).await
+}
+
+async fn starred_articles(
+    State(state): State<AppState>,
+    session: Session,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<List>, AppError> {
+    marked(&state, &session, Marked::Starred, query).await
+}
+
+async fn hidden_articles(
+    State(state): State<AppState>,
+    session: Session,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<List>, AppError> {
+    marked(&state, &session, Marked::Hidden, query).await
+}
+
+async fn label_articles(
+    State(state): State<AppState>,
+    session: Session,
+    Path(label_id): Path<i32>,
+    Query(query): Query<ListQuery>,
+) -> Result<Json<List>, AppError> {
+    let own = sqlx::query_scalar!(
+        "SELECT id FROM labels WHERE account_id = $1 AND id = $2",
+        session.account_id,
+        label_id
+    )
+    .fetch_optional(&state.db)
+    .await?;
+    if own.is_none() {
+        return Err(AppError::NotFound);
     }
-    Ok(Json(List { articles }))
+    marked(&state, &session, Marked::Label(label_id), query).await
 }
 
 /// The feeds the account subscribes to: all of them, or the ones in a folder
@@ -267,17 +374,29 @@ async fn feed_articles(
     list(&state, &session, &[feed_id], query).await
 }
 
+/// An article for reading, with the labels the reader gave it.
+#[derive(Serialize)]
+struct Article {
+    #[serde(flatten)]
+    article: Opened,
+    labels: Vec<i32>,
+}
+
 async fn article(
     State(state): State<AppState>,
     session: Session,
     Path((feed_id, seq)): Path<(i32, i32)>,
-) -> Result<Json<Opened>, AppError> {
+) -> Result<Json<Article>, AppError> {
     let mut opened = articles::open(&state.db, session.account_id, feed_id, seq)
         .await?
         .ok_or(AppError::NotFound)?;
     opened.html = state.text(&opened.html);
     opened.image_url = state.picture(Size::Image, opened.image_url.take());
-    Ok(Json(opened))
+    let mut labels = labels_of(&state, &session, &[(feed_id, seq)]).await?;
+    Ok(Json(Article {
+        article: opened,
+        labels: labels.remove(&(feed_id, seq)).unwrap_or_default(),
+    }))
 }
 
 /// One version of an article, cleaned for reading like the current one.
@@ -351,6 +470,9 @@ async fn versions(
 struct StateChange {
     read: Option<bool>,
     starred: Option<bool>,
+    /// Hidden articles are in no list but the one of the hidden; a rule hides
+    /// them, or the reader.
+    hidden: Option<bool>,
 }
 
 async fn set_state(
@@ -360,7 +482,7 @@ async fn set_state(
     Json(change): Json<StateChange>,
 ) -> Result<StatusCode, AppError> {
     let account_id = session.account_id;
-    if change.read.is_none() && change.starred.is_none() {
+    if change.read.is_none() && change.starred.is_none() && change.hidden.is_none() {
         return Err(AppError::BadRequest("nothing to change".into()));
     }
     if let Some(read) = change.read
@@ -370,6 +492,11 @@ async fn set_state(
     }
     if let Some(starred) = change.starred
         && !reading::set_starred(&state.db, account_id, feed_id, seq, starred).await?
+    {
+        return Err(AppError::NotFound);
+    }
+    if let Some(hidden) = change.hidden
+        && !reading::set_hidden(&state.db, account_id, feed_id, seq, hidden).await?
     {
         return Err(AppError::NotFound);
     }

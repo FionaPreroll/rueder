@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH new AS (\n               SELECT l.id, a.feed_id, a.seq\n               FROM labels l, subscriptions s\n               JOIN articles a ON a.feed_id = s.feed_id\n               WHERE l.account_id = $1 AND l.id = $2\n                 AND s.account_id = $1 AND s.feed_id = $3 AND a.seq = $4\n           ), put AS (\n               INSERT INTO article_labels (label_id, feed_id, seq)\n               SELECT id, feed_id, seq FROM new\n               ON CONFLICT DO NOTHING\n           )\n           SELECT count(*) AS \"n!\" FROM new",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8386e1d3fbc6da7b109469e15965ff9813e57e772c2bc3e2e0215bd54368fca4"
+}
