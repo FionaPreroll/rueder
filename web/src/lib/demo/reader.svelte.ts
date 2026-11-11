@@ -6,7 +6,7 @@
 // (tree.ts) are the ones the server follows.
 
 import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
-import type { Article, ArticleVersion, Feed, Stream, TreeNode } from '#lib/model.ts';
+import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from '#lib/model.ts';
 import type {
 	Abilities,
 	Found,
@@ -96,6 +96,12 @@ function webAddress(text: string): URL | null {
 	}
 }
 
+/** Labels to start with; two articles of the Tagesbote have them. */
+const startLabels: Label[] = [
+	{ id: 'label-later', title: 'Später lesen', color: '#1a73e8' },
+	{ id: 'label-work', title: 'Arbeit', color: '#1e8e3e' }
+];
+
 export class DemoReader implements Reader {
 	tree = $state.raw<TreeNode[]>([]);
 	feeds = $state.raw<Record<string, Feed>>({});
@@ -103,6 +109,9 @@ export class DemoReader implements Reader {
 	articles = $state.raw<Record<string, DemoArticle[]>>({});
 	states = $state.raw<Record<string, FeedState>>({});
 	rules = $state.raw<FilterRule[]>([]);
+	labels = $state.raw<Label[]>(startLabels);
+	/** The labels of each article, by its id. */
+	articleLabels = $state.raw<Record<string, string[]>>({});
 	/** Folders shown closed in the sidebar. */
 	closed = $state.raw<ReadonlySet<string>>(new Set());
 
@@ -146,6 +155,7 @@ export class DemoReader implements Reader {
 	private now: () => number;
 	private rng = random(42);
 	private folderCount = 0;
+	private labelCount = 0;
 	private feedCount = 0;
 	/** The feeds subscribed to here, by their address. */
 	private addresses = new Map<string, string>();
@@ -159,6 +169,11 @@ export class DemoReader implements Reader {
 		this.feeds = data.feeds;
 		this.articles = data.articles;
 		this.rules = startRules;
+		const tagesbote = data.articles['feed-tagesbote'] ?? [];
+		const [last, before] = [tagesbote.at(-1), tagesbote.at(-2)];
+		if (last) this.articleLabels = { [last.id]: ['label-later'] };
+		if (before)
+			this.articleLabels = { ...this.articleLabels, [before.id]: ['label-later', 'label-work'] };
 
 		const states: Record<string, FeedState> = {};
 		Object.values(data.feeds).forEach((feed, index) => {
@@ -246,6 +261,8 @@ export class DemoReader implements Reader {
 				if (article.seq > upto) continue;
 				if (isHidden(state, article.seq) !== (stream.kind === 'hidden')) continue;
 				if (stream.kind === 'starred' && !isStarred(state, article.seq)) continue;
+				if (stream.kind === 'label' && !this.articleLabels[article.id]?.includes(stream.id))
+					continue;
 				if (onlyUnread && isRead(state, article.seq) && !this.kept.has(article.id)) continue;
 				if (
 					query &&
@@ -289,7 +306,8 @@ export class DemoReader implements Reader {
 
 	/** Articles that arrived since the list was drawn. */
 	pending = $derived.by(() => {
-		if (this.stream.kind === 'hidden' || this.stream.kind === 'starred') return 0;
+		const kind = this.stream.kind;
+		if (kind === 'hidden' || kind === 'starred' || kind === 'label') return 0;
 		let count = 0;
 		for (const feedId of this.feedsOf(this.stream)) {
 			const state = this.states[feedId];
@@ -541,6 +559,39 @@ export class DemoReader implements Reader {
 		return null;
 	}
 
+	// Labels
+
+	labelsOf(article: Article) {
+		const on = new Set(this.articleLabels[article.id] ?? []);
+		return this.labels.filter((label) => on.has(label.id)).map((label) => label.id);
+	}
+
+	setLabel(article: Article, labelId: string, on: boolean) {
+		if (!this.labels.some((label) => label.id === labelId)) return;
+		const before = this.articleLabels[article.id] ?? [];
+		if (before.includes(labelId) === on) return;
+		const after = on ? [...before, labelId] : before.filter((id) => id !== labelId);
+		this.articleLabels = { ...this.articleLabels, [article.id]: after };
+	}
+
+	addLabel(title: string, color: string) {
+		this.labels = [...this.labels, { id: `label-new-${++this.labelCount}`, title, color }];
+	}
+
+	changeLabel(id: string, change: { title?: string; color?: string }) {
+		this.labels = this.labels.map((label) => (label.id === id ? { ...label, ...change } : label));
+	}
+
+	removeLabel(id: string) {
+		this.labels = this.labels.filter((label) => label.id !== id);
+		const labels: Record<string, string[]> = {};
+		for (const [article, ids] of Object.entries(this.articleLabels)) {
+			labels[article] = ids.filter((labelId) => labelId !== id);
+		}
+		this.articleLabels = labels;
+		if (this.stream.kind === 'label' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
 	// Filter rules
 
 	/** Works out again which articles the rules hide, and marks what they mark as read. */
@@ -675,6 +726,9 @@ export class DemoReader implements Reader {
 
 	title(stream: Stream = this.stream) {
 		if (stream.kind === 'feed') return this.feeds[stream.id]?.title ?? '';
+		if (stream.kind === 'label') {
+			return this.labels.find((label) => label.id === stream.id)?.title ?? '';
+		}
 		if (stream.kind === 'folder') {
 			const folder = findNode(this.tree, stream.id);
 			return folder?.kind === 'folder' ? folder.title : '';

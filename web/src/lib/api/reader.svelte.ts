@@ -17,6 +17,7 @@ import type {
 	ArticleVersion,
 	Enclosure,
 	Feed,
+	Label,
 	Picture,
 	Stream,
 	TreeNode
@@ -56,6 +57,7 @@ import {
 	serverId,
 	CLOSED,
 	type Api,
+	type ApiLabel,
 	type ApiListItem,
 	type EventStream,
 	type ApiNewRule,
@@ -135,6 +137,13 @@ const EVENTS: ServerEvent['event'][] = [
 ];
 const folderKey = (id: number) => `folder-${id}`;
 const ruleKey = (id: number) => `rule-${id}`;
+const labelKey = (id: number) => `label-${id}`;
+
+const toLabel = (label: ApiLabel): Label => ({
+	id: labelKey(label.id),
+	title: label.title,
+	color: label.color
+});
 
 function toRule(rule: ApiRule): FilterRule {
 	const { scope } = rule;
@@ -253,6 +262,10 @@ export class ServerReader implements Reader {
 
 	/** The filter rules, in the order the server keeps them. */
 	rules = $state.raw<FilterRule[]>([]);
+	/** The labels, in the order the server keeps them. */
+	labels = $state.raw<Label[]>([]);
+	/** The labels of each article as the lists said them, and as this tab changed them. */
+	private articleLabels = $state.raw<Record<string, string[]>>({});
 
 	/** How many articles the rules hide, as the server counted them. */
 	hiddenCount = $state(0);
@@ -334,6 +347,7 @@ export class ServerReader implements Reader {
 		void this.loadSettings();
 		void this.loadTree();
 		void this.loadRules();
+		void this.loadLabels();
 		void this.loadList();
 		return () => {
 			this.stopped = true;
@@ -413,6 +427,9 @@ export class ServerReader implements Reader {
 
 	title(stream: Stream = this.stream) {
 		if (stream.kind === 'feed') return this.feeds[stream.id]?.title ?? '';
+		if (stream.kind === 'label') {
+			return this.labels.find((label) => label.id === stream.id)?.title ?? '';
+		}
 		if (stream.kind === 'folder') {
 			const folder = findNode(this.tree, stream.id);
 			return folder?.kind === 'folder' ? folder.title : '';
@@ -511,6 +528,7 @@ export class ServerReader implements Reader {
 	/** Articles from the rows of a list, with what the account did with them noted. */
 	private take(rows: ApiListItem[], hidden: boolean): Article[] {
 		const marks = { ...this.marks };
+		const labels = { ...this.articleLabels };
 		const articles = rows.map((row) => {
 			const article = toArticle(row);
 			// A change that is still on its way knows better than a list from before it.
@@ -519,10 +537,14 @@ export class ServerReader implements Reader {
 				? marks[article.id]?.starred
 				: undefined;
 			marks[article.id] = { read: read ?? row.read, starred: starred ?? row.starred, hidden };
+			if (!this.waiting.has(`${article.id}:labels`)) {
+				labels[article.id] = row.labels.map(labelKey);
+			}
 			const text = this.texts.get(article.id);
 			return text?.changes === article.changes ? { ...article, ...text } : article;
 		});
 		this.marks = marks;
+		this.articleLabels = labels;
 		return articles;
 	}
 
@@ -814,7 +836,8 @@ export class ServerReader implements Reader {
 	 */
 	markAllRead(olderThan = 0) {
 		const stream = this.stream;
-		if (stream.kind === 'home' || stream.kind === 'starred' || stream.kind === 'hidden') return;
+		const kind = stream.kind;
+		if (kind === 'home' || kind === 'starred' || kind === 'hidden' || kind === 'label') return;
 		const upto = this.newest;
 		if (upto === null) return;
 		this.sweep(stream, upto, Math.max(0, olderThan));
@@ -1047,6 +1070,73 @@ export class ServerReader implements Reader {
 		return this.rules.find((rule) => rule.id === article.hiddenBy) ?? null;
 	}
 
+	// Labels
+
+	private async loadLabels() {
+		try {
+			this.labels = (await this.api.labels()).map(toLabel);
+		} catch (error) {
+			this.failed(error, 'unreachable');
+		}
+	}
+
+	labelsOf(article: Article) {
+		const on = new Set(this.articleLabels[article.id] ?? []);
+		return this.labels.filter((label) => on.has(label.id)).map((label) => label.id);
+	}
+
+	setLabel(article: Article, labelId: string, on: boolean) {
+		const before = this.articleLabels[article.id] ?? [];
+		if (before.includes(labelId) === on) return;
+		const after = on ? [...before, labelId] : before.filter((id) => id !== labelId);
+		this.articleLabels = { ...this.articleLabels, [article.id]: after };
+		this.write(
+			`${article.id}:labels`,
+			() => this.api.setLabel(serverId(article.feedId), article.seq, serverId(labelId), on),
+			() => {
+				const now = this.articleLabels[article.id] ?? [];
+				const back = on ? now.filter((id) => id !== labelId) : [...now, labelId];
+				this.articleLabels = { ...this.articleLabels, [article.id]: back };
+			}
+		);
+	}
+
+	/** The server gives a new label its number, so it shows once the server has it. */
+	addLabel(title: string, color: string) {
+		this.write(
+			'labels',
+			async () => {
+				await this.api.addLabel(title, color);
+				await this.loadLabels();
+			},
+			() => {}
+		);
+	}
+
+	changeLabel(id: string, change: { title?: string; color?: string }) {
+		this.labels = this.labels.map((label) => (label.id === id ? { ...label, ...change } : label));
+		this.write(
+			'labels',
+			() => this.api.changeLabel(serverId(id), change),
+			() => void this.loadLabels()
+		);
+	}
+
+	removeLabel(id: string) {
+		this.labels = this.labels.filter((label) => label.id !== id);
+		const labels: Record<string, string[]> = {};
+		for (const [article, ids] of Object.entries(this.articleLabels)) {
+			labels[article] = ids.filter((labelId) => labelId !== id);
+		}
+		this.articleLabels = labels;
+		this.write(
+			'labels',
+			() => this.api.removeLabel(serverId(id)),
+			() => void this.loadLabels()
+		);
+		if (this.stream.kind === 'label' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
 	// Settings
 
 	/**
@@ -1238,8 +1328,10 @@ export class ServerReader implements Reader {
 			case 'settings':
 				if (!own) void this.loadSettings();
 				return;
-			// Labels (3.4) are not in the page yet.
 			case 'labels':
+				if (own) return;
+				void this.loadLabels();
+				this.relist();
 				return;
 		}
 	}

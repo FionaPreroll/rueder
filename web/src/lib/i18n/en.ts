@@ -256,6 +256,20 @@ const en = {
 		then: 'then'
 	},
 
+	labels: {
+		title: 'Labels',
+		add: 'New label',
+		name: 'Name of the label',
+		none: 'No labels yet.',
+		actions: (title: string) => `Actions for the label ${title}`,
+		rename: 'Rename',
+		color: 'Color',
+		colors: ['Red', 'Orange', 'Yellow', 'Green', 'Teal', 'Blue', 'Purple', 'Gray'],
+		remove: 'Delete the label',
+		forArticle: 'Labels',
+		set: (title: string) => `Label: ${title}`
+	},
+
 	subscribe: {
 		title: 'Subscribe to a feed',
 		address: 'Address of the feed or the website',

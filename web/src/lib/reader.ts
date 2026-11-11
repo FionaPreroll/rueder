@@ -6,7 +6,7 @@
 
 import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
-import type { Article, ArticleVersion, Feed, Stream, TreeNode } from './model.ts';
+import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
 
 /** A feed with something unread, for the start page. */
@@ -233,6 +233,16 @@ export interface Reader {
 	group(id: string, targetId: string, title: string): void;
 	renameFolder(id: string, title: string): void;
 	removeFolder(id: string): void;
+
+	/** The account's labels, in their order. */
+	readonly labels: Label[];
+	/** The labels an article has, by their ids, in the order of the labels. */
+	labelsOf(article: Article): string[];
+	setLabel(article: Article, labelId: string, on: boolean): void;
+	addLabel(title: string, color: string): void;
+	changeLabel(id: string, change: { title?: string; color?: string }): void;
+	/** Takes a label off every article and deletes it. */
+	removeLabel(id: string): void;
 
 	/** Looks at an address, which may lack its `https://`, for feeds. */
 	findFeeds(address: string): Promise<Found>;

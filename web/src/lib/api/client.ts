@@ -16,12 +16,15 @@ import type {
 	FindFeeds,
 	Folder,
 	FoundFeeds,
+	Label,
+	LabelChange,
 	List,
 	ListItem,
 	LoginWays,
 	Me,
 	Move,
 	NewFolder,
+	NewLabel,
 	NewSubscription,
 	NodeRef,
 	OpmlImported,
@@ -72,6 +75,7 @@ export type ApiRule = Rule;
 export type ApiNewRule = Omit<Rule, 'id'>;
 export type ApiRulePreview = RulePreview;
 export type ApiNode = NodeRef;
+export type ApiLabel = Label;
 
 /** Which part of a list is asked for. */
 export interface PageQuery {
@@ -102,6 +106,8 @@ const listPath = (stream: ListStream) => {
 			return `/feeds/${serverId(stream.id)}/articles`;
 		case 'folder':
 			return `/folders/${serverId(stream.id)}/articles`;
+		case 'label':
+			return `/labels/${serverId(stream.id)}/articles`;
 	}
 };
 
@@ -268,6 +274,15 @@ export const api = {
 	/** The settings as the account keeps them; what is in them is the page's business. */
 	settings: () => call<unknown>('GET', '/settings'),
 	saveSettings: (settings: unknown) => call<void>('PUT', '/settings', settings),
+
+	labels: () => call<ApiLabel[]>('GET', '/labels'),
+	addLabel: (title: string, color: string) =>
+		call<Created>('POST', '/labels', { title, color } satisfies NewLabel),
+	changeLabel: (id: number, change: LabelChange) => call<void>('PATCH', `/labels/${id}`, change),
+	removeLabel: (id: number) => call<void>('DELETE', `/labels/${id}`),
+	/** Puts a label on an article, or takes it off. */
+	setLabel: (feedId: number, seq: number, labelId: number, on: boolean) =>
+		call<void>(on ? 'PUT' : 'DELETE', `/feeds/${feedId}/articles/${seq}/labels/${labelId}`),
 
 	rules: () => call<ApiRule[]>('GET', '/rules'),
 	addRule: (rule: ApiNewRule) => call<RuleOutcome>('POST', '/rules', rule),

@@ -1600,3 +1600,99 @@ describe('settings', () => {
 		expect(settings.theme).toBe('dark');
 	});
 });
+
+describe('labels', () => {
+	let later: number;
+	let work: number;
+
+	beforeEach(() => {
+		later = server.addLabel('Later', '#1a73e8');
+		work = server.addLabel('Work', '#1e8e3e');
+		server.article(tech, 3)!.labels = [work, later];
+	});
+
+	it('come from the server, and the lists say which articles have them', async () => {
+		const reader = await started();
+		expect(reader.labels).toEqual([
+			{ id: `label-${later}`, title: 'Later', color: '#1a73e8' },
+			{ id: `label-${work}`, title: 'Work', color: '#1e8e3e' }
+		]);
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		const [third, second] = reader.visible;
+		// In the order of the labels, whatever order the article has them in.
+		expect(reader.labelsOf(third)).toEqual([`label-${later}`, `label-${work}`]);
+		expect(reader.labelsOf(second)).toEqual([]);
+
+		reader.show({ kind: 'label', id: `label-${work}` });
+		await settle();
+		expect(titles(reader)).toEqual([`Article 3 of feed ${tech}`]);
+		expect(reader.title()).toBe('Work');
+		expect(server.requests.at(-1)?.path).toMatch(new RegExp(`^/labels/${work}/articles\\?`));
+		// A list of a label is no place to mark everything from.
+		reader.markAllRead();
+		await settle();
+		expect(server.writes).toEqual([]);
+	});
+
+	it('go on and off an article at once, and back when the server refuses', async () => {
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		const second = reader.visible[1];
+		reader.setLabel(second, `label-${work}`, true);
+		expect(reader.labelsOf(second)).toEqual([`label-${work}`]);
+		await settle();
+		expect(server.article(tech, 2)?.labels).toEqual([work]);
+		reader.setLabel(second, `label-${work}`, false);
+		reader.setLabel(second, `label-${work}`, false);
+		await settle();
+		expect(server.article(tech, 2)?.labels).toEqual([]);
+		expect(server.writes).toEqual([
+			`PUT /feeds/${tech}/articles/2/labels/${work}`,
+			`DELETE /feeds/${tech}/articles/2/labels/${work}`
+		]);
+
+		server.refuse('PUT', /\/labels\/\d+$/, 500);
+		reader.setLabel(second, `label-${later}`, true);
+		expect(reader.labelsOf(second)).toEqual([`label-${later}`]);
+		await settle();
+		expect(reader.labelsOf(second)).toEqual([]);
+		expect(reader.notice).toBe('notSaved');
+	});
+
+	it('are made, renamed, recolored and deleted', async () => {
+		const reader = await started();
+		reader.addLabel('New', '#9334e6');
+		await settle();
+		expect(reader.labels.map((label) => label.title)).toEqual(['Later', 'Work', 'New']);
+
+		reader.changeLabel(`label-${later}`, { title: 'Soon', color: '#d93025' });
+		expect(reader.labels[0]).toMatchObject({ title: 'Soon', color: '#d93025' });
+		await settle();
+		expect(server.labels[0]).toMatchObject({ title: 'Soon', color: '#d93025' });
+
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		reader.show({ kind: 'label', id: `label-${work}` });
+		await settle();
+		const article = reader.visible[0];
+		reader.removeLabel(`label-${work}`);
+		expect(reader.labels.map((label) => label.title)).toEqual(['Soon', 'New']);
+		expect(reader.labelsOf(article)).toEqual([`label-${later}`]);
+		expect(reader.stream).toEqual({ kind: 'all' });
+		await settle();
+		expect(server.labels.map((label) => label.title)).toEqual(['Soon', 'New']);
+	});
+
+	it('follow what another tab did with them', async () => {
+		const reader = await started();
+		server.addLabel('Elsewhere');
+		server.emit({ event: 'labels', data: { by: TAB } });
+		await settle();
+		expect(reader.labels).toHaveLength(2);
+		server.emit({ event: 'labels', data: { by: 'another-tab' } });
+		await settle();
+		expect(reader.labels.map((label) => label.title)).toContain('Elsewhere');
+	});
+});

@@ -215,6 +215,33 @@ describe('Sidebar', () => {
 		expect(row('feed-tagesbote')).toBeNull();
 	});
 
+	it('lists the labels, makes, renames, recolors and deletes them', async () => {
+		const { reader, onpick } = setup();
+		const nav = screen.getByRole('navigation', { name: 'Subscriptions' });
+		await userEvent.click(within(nav).getByRole('button', { name: 'Arbeit' }));
+		expect(reader.stream).toEqual({ kind: 'label', id: 'label-work' });
+		expect(onpick).toHaveBeenCalled();
+
+		await userEvent.click(within(nav).getByRole('button', { name: 'New label' }));
+		await userEvent.type(screen.getByLabelText('Name of the label'), 'Recipes{Enter}');
+		expect(reader.labels.at(-1)).toMatchObject({ title: 'Recipes', color: '#f9ab00' });
+
+		await userEvent.click(screen.getByRole('button', { name: 'Actions for the label Recipes' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+		const name = screen.getByLabelText('Name of the label');
+		await userEvent.clear(name);
+		await userEvent.type(name, 'Cooking{Enter}');
+		expect(reader.labels.at(-1)?.title).toBe('Cooking');
+
+		await userEvent.click(screen.getByRole('button', { name: 'Actions for the label Cooking' }));
+		await userEvent.click(screen.getByRole('menuitemradio', { name: 'Purple' }));
+		expect(reader.labels.at(-1)?.color).toBe('#9334e6');
+
+		await userEvent.click(screen.getByRole('button', { name: 'Actions for the label Cooking' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Delete the label' }));
+		expect(reader.labels.map((label) => label.title)).toEqual(['Später lesen', 'Arbeit']);
+	});
+
 	it('asks to subscribe', async () => {
 		const { onsubscribe } = setup();
 		await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
