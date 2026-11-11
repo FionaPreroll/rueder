@@ -17,6 +17,16 @@ in German:
 - [Implementation](docs/implementation.md): where the work stands, conventions and
   the open work packages, for anyone taking over
 
+How to install the new rueder is in [deploy/README.md](deploy/README.md); CI
+publishes its image as `ghcr.io/fionapreroll/rueder`.
+
+**The old rueder described below no longer builds from this branch.** Its
+package files (`backend/go.mod`, `frontend/package.json` and their lockfiles),
+its compose files and its workflows were removed, so that nothing reports
+vulnerabilities in dependencies that no longer run anywhere. Its code stays as
+the model for the import. To run it, check out commit `0b36a96`, where
+everything below still applies.
+
 ## Dependencies
 
 - Docker or podman. Everything is contained in docker images.

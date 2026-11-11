@@ -7,6 +7,11 @@
 #
 #   deploy/smoke-test.sh
 #
+# With RUEDER_IMAGE set it starts that image instead of building one, as CI
+# does with the image it built before:
+#
+#   RUEDER_IMAGE=rueder:ci deploy/smoke-test.sh
+#
 # It uses a project and a port of its own and takes both away again, so it can
 # run next to a real installation.
 set -eu
@@ -44,9 +49,14 @@ headers=$(mktemp)
 trap finish EXIT
 
 say "Build and start"
+if [ -n "${RUEDER_IMAGE:-}" ]; then
+	build=--no-build
+else
+	build=--build
+fi
 # --wait returns once both containers call themselves healthy: PostgreSQL
 # accepts connections, and `rueder health` got an answer from the server.
-compose up --build --detach --wait
+compose up "$build" --detach --wait
 
 say "The server answers and reaches its database"
 curl --fail --silent --show-error "$at/api/health" | grep -q '"status":"ok"' ||

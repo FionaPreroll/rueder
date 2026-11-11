@@ -2,8 +2,7 @@
 
 How to run the new rueder (`server/` and `web/`) on a machine of your own: one
 container with the server and the frontend, PostgreSQL next to it, and your
-reverse proxy in front for TLS. The old rueder is run as the
-[README](../README.md) in the root says; its compose files are the ones there.
+reverse proxy in front for TLS.
 
 rueder is not finished. What it can do today is in
 [docs/implementation.md](../docs/implementation.md#stand).
@@ -37,6 +36,23 @@ and takes a few minutes.
 ```sh
 docker compose up --detach --build
 ```
+
+Or take the image that CI builds and tests for every change on `main`,
+instead of building one yourself: name it in `.env`, then fetch it and start.
+
+```sh
+# in .env
+RUEDER_IMAGE=ghcr.io/fionapreroll/rueder:latest
+```
+
+```sh
+docker compose pull rueder
+docker compose up --detach
+```
+
+`:latest` is the newest change on `main`; every change also has a tag of its
+own, `:sha-` and the first seven characters of its commit, for staying on one
+version. The image is for amd64 machines only.
 
 rueder now listens on `127.0.0.1:3000` and applies its database migrations on
 every start. `docker compose ps` shows both containers as `healthy` once they
@@ -151,6 +167,14 @@ git pull
 docker compose up --detach --build
 ```
 
+With the published image (`RUEDER_IMAGE` in `.env`):
+
+```sh
+git pull
+docker compose pull rueder
+docker compose up --detach
+```
+
 The new server applies new migrations when it starts. Make a backup first.
 
 ## Backup
@@ -185,7 +209,8 @@ docker compose start rueder
 
 `deploy/smoke-test.sh` builds the image, starts everything under another name
 and port, checks these points and that an account can log in, and takes it
-all away again. CI runs it on every pull request.
+all away again. CI runs it on every pull request, against the image it built; `RUEDER_IMAGE=… deploy/smoke-test.sh` tests a finished image
+without building one.
 
 ## Without Docker
 

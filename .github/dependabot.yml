@@ -1,27 +1,32 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-
+# Updates for what the new rueder is built from, once a month and one pull
+# request per ecosystem. Security updates come on their own whenever an
+# advisory appears. The old backend/ and frontend/ have no package files any
+# more, so nothing there is updated or reported.
 version: 2
 updates:
-  - package-ecosystem: "gomod" # See documentation for possible values
-    directory: "/backend" # Location of package manifests
+  - package-ecosystem: cargo
+    directories: ["/server", "/server/fuzz"]
     schedule:
-      interval: "monthly"
-  - package-ecosystem: "docker" # See documentation for possible values
-    directory: "/backend" # Location of package manifests
+      interval: monthly
+    groups:
+      cargo:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /web
     schedule:
-      interval: "monthly"
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/frontend" # Location of package manifests
+      interval: monthly
+    groups:
+      npm:
+        patterns: ["*"]
+  # The base images in the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
     schedule:
-      interval: "monthly"
-  - package-ecosystem: "docker" # See documentation for possible values
-    directory: "/frontend" # Location of package manifests
+      interval: monthly
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "monthly"
-  - package-ecosystem: "docker" # See documentation for possible values
-    directory: "/" # Location of package manifests
-    schedule:
-      interval: "monthly"
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
