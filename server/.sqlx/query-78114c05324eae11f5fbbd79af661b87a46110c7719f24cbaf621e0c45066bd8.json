@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT feed_id FROM subscriptions WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "feed_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "78114c05324eae11f5fbbd79af661b87a46110c7719f24cbaf621e0c45066bd8"
+}

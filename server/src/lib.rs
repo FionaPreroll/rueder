@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod api;
 pub mod articles;
 pub mod bench;
 pub mod cleaning;
@@ -26,6 +27,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 
 use crate::{
+    cleaning::Rules,
     images::{ImageProxy, Refused},
     login::Limiter,
     oidc::Oidc,
@@ -48,6 +50,9 @@ pub struct AppState {
     pub client_ip_header: Option<HeaderName>,
     /// The login through an OpenID Connect provider, if this server has one.
     pub oidc: Option<Arc<Oidc>>,
+    /// The rules of the cleaning, for what is cleaned when it is asked for.
+    /// Without them, the ones that come with rueder count.
+    pub rules: Option<Arc<Rules>>,
 }
 
 impl AppState {
@@ -58,6 +63,14 @@ impl AppState {
             logins: Arc::default(),
             client_ip_header: None,
             oidc: None,
+            rules: None,
+        }
+    }
+
+    pub fn with_rules(self, rules: Arc<Rules>) -> Self {
+        Self {
+            rules: Some(rules),
+            ..self
         }
     }
 
@@ -104,6 +117,7 @@ fn api() -> Router<AppState> {
         .route("/me", get(login::me))
         .route("/oidc/start", get(oidc::start))
         .route("/oidc/callback", get(oidc::callback))
+        .merge(api::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

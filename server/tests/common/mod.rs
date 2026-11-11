@@ -99,3 +99,32 @@ impl Random {
         (self.next() % n as u64) as usize
     }
 }
+
+/// What a logged-in browser of this account sends as its `Cookie` header.
+pub async fn session(db: &PgPool, account_id: i32) -> String {
+    let token = rueder::sessions::start(db, account_id).await.unwrap();
+    format!("{}={token}", rueder::sessions::COOKIE)
+}
+
+pub async fn folder(db: &PgPool, account_id: i32, parent: Option<i32>, title: &str) -> i32 {
+    sqlx::query_scalar(
+        "INSERT INTO folders (account_id, parent_id, title, position)
+         VALUES ($1, $2, $3, 1) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(parent)
+    .bind(title)
+    .fetch_one(db)
+    .await
+    .unwrap()
+}
+
+pub async fn move_to(db: &PgPool, account_id: i32, feed_id: i32, folder_id: i32) {
+    sqlx::query("UPDATE subscriptions SET folder_id = $3 WHERE account_id = $1 AND feed_id = $2")
+        .bind(account_id)
+        .bind(feed_id)
+        .bind(folder_id)
+        .execute(db)
+        .await
+        .unwrap();
+}
