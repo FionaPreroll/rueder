@@ -1,0 +1,39 @@
+<?x/id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modifiml version="1.0" encoding="UTF-8="?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://pur<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.ch="1337" href="https://example.org/1.mp3"/>
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+    <updated>2026-11-10T18:30:02Z</updated>
+    <media:thumbnail url="https://example.org/1.jpg"/>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Text <img src="a.png"/></p></div></content>
+  </entry>
+  <el.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entrl.org/atom/ns#" xmlns:dc="http://pur<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt"b&amp;gt;feed</title>
+  <link href="https://examptml" mode="escapeated>
+   d">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt-![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt;]]&gt;</content>
+    <dc:date>2026-11-10T08:00:00Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="https://news.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode <summary>Onom/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://example.org/"/>
+  <icon>/favicon.png</icon>rg/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+    <updated>2026-11-10T18:30:02Z</updated>
+    <media:thumbnail url="https://example.org/1.jpg"/>
+    <content type="xhtml"><div xmlns="http://w

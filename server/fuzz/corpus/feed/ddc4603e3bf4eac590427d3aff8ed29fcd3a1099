@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xm="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" mode="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsxmlns    <dc:date>2026-11-10T08:="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xm="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" moontent>
+  </entry>
+</feed>

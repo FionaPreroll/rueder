@@ -63,8 +63,12 @@ What is here:
   `rueder health`, which asks the running server whether it is well. How to
   install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan and work packages 2.1 to 2.10 of step 2. Fuzzing
-and the search follow.
+- Fuzz targets for the cleaning, the reading of feeds and the image proxy
+  (`fuzz/`), whose corpus runs as an ordinary test, and a soak test of the
+  whole program under the load of readers and fetching (`tests/soak.rs`).
+
+This is step 1 of the plan and work packages 2.1 to 2.11 of step 2. The search
+follows.
 
 ## Commands
 
@@ -189,3 +193,40 @@ cargo run --release -- bench measure    # times the queries, prints a table
 puts back what its writing queries changed, so it can run again. Results and how
 they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).
+
+## Fuzzing
+
+The fuzz targets in `fuzz/` throw any bytes at the cleaning, at the reading of
+feeds and at the image proxy, and check what
+[docs/architecture.md](../docs/architecture.md#fuzzing) says must hold for
+every input: no panic, no script or foreign image address in a cleaned text,
+the limits of a feed, only the formats and sizes the proxy lets through. They
+need nightly Rust and `cargo install cargo-fuzz`:
+
+```sh
+cd fuzz
+cargo +nightly fuzz run -O cleaning -- -max_total_time=1800 -timeout=10 -max_len=131072
+cargo +nightly fuzz run -O feed -- -max_total_time=1800 -timeout=10 -max_len=131072
+cargo +nightly fuzz run -O image -- -max_total_time=1800 -timeout=10
+cargo +nightly fuzz cmin -O feed     # afterwards: keep only what adds coverage
+```
+
+What a target checks is in `fuzz/checks.rs`, which `tests/fuzz_corpus.rs` also
+uses: `cargo test` plays the stored corpus in `fuzz/corpus/` with stable Rust.
+An input that broke a property goes into the corpus, under a name that says
+what it found, once it is fixed.
+
+## Soak test
+
+`tests/soak.rs` starts the server program on a database of its own, with a
+small server of made-up feeds and images next to it, and lets six made-up
+readers read for a while: lists, articles with their images, marking read,
+rules, the event stream, logging in and out. Every request has to get the
+answer it should, the unread counts have to agree with the lists, the log has
+to stay free of errors, and the server has to stop cleanly when told to.
+`cargo test` runs it for 20 seconds. A run of five minutes or more also checks
+that memory, open files, threads and response times stay level:
+
+```sh
+SOAK_SECONDS=3600 cargo test --release --test soak -- --nocapture   # prints a sample every half minute
+```

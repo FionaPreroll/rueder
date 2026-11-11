@@ -1,0 +1,8 @@
+<?xml version="1.0" en…coding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="httpmlns:dc=="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt9T08:00:00Z</issued>
+ rel="alternate" hre1-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">ai nlPwords</content>
+  </entry>
+</feed>

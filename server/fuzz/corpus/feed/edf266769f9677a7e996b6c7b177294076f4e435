@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" media="screen" href="/~files/feed-premium.xsl"?>
+
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:psc="http://podlove.org/simple-chapters" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:fh="http://purl.org/syndication/history/1.0" xmlns:podcast="https://podcastindex.org/namespace/1.0" xmlns:feedpress="https://feed.press/xmlns" xmlns:media="http://search.yahoo.com/mrss/" version="2.0">
+  <channel>
+    <feedpress:locale>en</feedpress:locale>
+    <title>Raumzeit</title>
+    <link>https://raumzeit-podcast.de</link>
+    <description><![CDATA[Derschrott-bekaempfung/</link>
+      <pubDate>Tue, 17 Nov 2020 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">podlove-2020-11-03t12:38:01+00:00-ce461b2fcc0b190</guid>
+      <description><![CDATA[Weltraumschrott und auch der deutlich erhöhte Verkehr im Erdorbit stellen in zunehmenden Maße die Raumfahrt vor Probleme. Besonders die spürbar erhöhte Anzahl von Objekte durch viele neue Kleinsatelliten und Mega-Konstellationen wie Iridium, Starlink, OneWeb oder Kuiper vergrößern die Wahrscheinlichkeiten von neuen Kollisionen laufend.
+
+Die ESA hat ihre Aktivitäten im Bereich der Bekämpfung des Schrotts ausgeweitet und verfolgt ein Space Safety Programm, dass mit neuen Radarsystemen die Erfassung der Objekte im Orbit deutlich verbessern soll und mit Lasertechnologie ggf. sogar die Bahnen von störenden Elementen vom Boden aus ändern kann. Projekte wie Clearspace One versuchen wiederum neue Missionen zu entwickeln, die aktiv besonders gefährliche Strukturen aus dem All zu fischen und zu einem kontrollierten Wiedereintritt zu bewegen.]]></description>
+      <atom:link rel="http://podlove.org/deep-link" href="https://raumzeit-podcast.de/2020/11/17/rz092-weltraumschrott-bekaempfung/#"/>
+      <enclosure url="https://raumzeit-podcast.de/podlove/file/2983/s/feed/c/oga/rz092-weltraumschrott-bekaempfung.oga" length="32940918" type

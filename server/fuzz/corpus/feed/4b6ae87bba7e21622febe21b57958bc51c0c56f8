@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8="?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://pur<?xml version=favicon.png</icon>rg/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+    <id>urn:uuid:1225c695-cfb8e4b-b-aaaa-80da344efa6a</id>
+    <updated>2026-11-10T18:30:02Z</updated>
+    <media:thumbnail url="https://example.org/1.jpg"/>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Text <img src="a.png"/></p></div></content>
+  </entry>
+  <el.org/dc/elem<dc:date>2026-11-10T08:00:0 Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="https://news.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode <summary>Only a summary</summary>
+  </entry>
+</fe="xml">Plain words</contentedè>
+  </entry>
+</feed>>

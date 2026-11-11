@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" media="screen" href="/~files/feed-premium.xsl"?>
+
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:psc="http://podlove.org/simple-chapters" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:fh="http://purl.org/syndication/history/1.0" xmlns:podcast=
+<li><span style="display: inline-block" class="glossary"><img src="https://www.google.com/s2/favicons?domain=https://de.wikipedia.org/wiki/Internationale_Fernmeldeunion" alt="Internationale Fernmeldeunion – Wikipedia" title="Internationale Fernmeldeunion – Wikipedia" /> <a href="https://de.wikipedia.org/wiki/Internationale_Fernmeldeunion">Internationale Fernmeldeunion – Wikipedia</a></li>
+
+    </ul>
+</div>
+
+
+
+</div>
+]]></content:encoded>
+      <psc:chapters xmlns:psc="http://podlove.org/simple-chapters" version="1.2">
+        <psc:chapter start="00:00:00.000" title="Intro"/>
+        <psc:chapter start="00:00:36.540" title="Begrüßung"/>
+        <psc:chapter start="00:02:09.547" title="Rückblick"/>
+        <psc:chapter start="00:04:25.484" title="Aktuelle Situation im All"/>
+        <psc:chapter start="00:11:19.609" title="Explosionen im Orbit"/>
+        <psc:chapter start="00:16:28.178" title="Orbitales Verkehrswesen"/>
+        <psc:chapter start="00:18:22.567" title="Space Safety Technologie"/>
+        <psc:chapter start="00:42:30.079" title="Satellitenregistrierung"/>
+        <psc:chapter start="00:52:55.058" title="CubeSats und Kleinsatelliten"/>
+        <psc:chapter start="00:55:35.288" title="Geostationäre Satelliten"/>
+        <psc:chapter start="00:57:54.994" title="Orbitale Müllabfuhr"/>
+        <psc:chapter start="01:16:12.997" title="Rückholsysteme und In-Orbit Recycling"/>
+        <psc:chapter start="01:23:44.640" title="Raumklimawandel"/>
+        <psc:chapter start="01:27:24.905" title="Ausklang"/>
+      </psc:chapters>
+      <atom:contributor>
+        <atom:name>Tim Pritlove</atom:name>
+      </atom:c

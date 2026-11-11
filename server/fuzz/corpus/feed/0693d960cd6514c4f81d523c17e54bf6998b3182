@@ -1,0 +1,28 @@
+<?xml version="1.0# encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" media="screen" href="/~files/feed-premium.xsl"?>
+
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:psc="http://podlove.org/simple-chapters" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:fh="http://purl.org/syndication/history/1.0" xmlns:podcast="https://podcastindex.org/namespace/1.0" xmlns:feedpress="https://feed.press/xmlns" xmlns:media="http://search.yahoo.com/mrss/" version="2.0">
+  <channel>
+    <feedpress:locale>en</feedpress:locale>
+    <title>Raumzeit</title>
+    <link>https://raumzeit-podcast.de</link>
+    <description><![CDATA[Der Podcast mit Tim Pritlove über Raumfahrt und andere kosmische Angelegenheiten]]></description>
+    <lastBuildDate>Fri, 04 Dec 20<20 08:21:12 +0000</lastBuildDate>
+    <image>
+      <url>https://media.metaebene.me/media/raumzeit/raumzeit-icon-1400x1400.jpg</url>
+      <title>Raumzeit</title>
+      <link>https://raumzeit-podcast.de</link>
+    </image>
+    <atom:link rel="self" type="application/rss+xml" title="Raumzeit (Ogg Vorbis Audio)" href="https://feeds.metaebene.me/raumzeit/oga"/>
+    <atom:link rel="alternate" type="application/rss+xml" title="Raumzeit (MPEG4 Audio AAC)" href="https://raumzeit-podcast.de/feed/m4a/"/>
+    <atom:link rel="alternate" type="application/rss+xml" title="Raumzeit (MP3 Audio)" href="https://raumzeit-podcast.de/feed/mp3/"/>
+    <atom:link rel="next" href="https://raumzeit-podcast.de/feed/oga/?paged=2"/>
+    <atom:link rel="first" href="https://raumzeit-podcast.de/feed/oga/"/>
+    <atom:link rel="last" href="https://raumzeit-podcast.de/feed/oga/?paged=2"/>
+    <language>de-DE</language>
+    <fyyd:verify xmlns:fyyd="https://fyyd.de/fyyd-ns/">efg4e29yNic2ldlf4tBX6936g2cy12r46y13ztqo</fyyd:verify>
+    <atom:link rel="hub" href="http://metaebene.superfeedr.com"/>
+    <atom:contributor>
+      <atom:name>Tim Pritlove</atom:name>
+    </atom:contributor>
+    <podcast:person img="https://raumzeit-podcast.de/f

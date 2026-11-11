@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title>Example</title><link>https://example.org/</link>
+<image><url>https://example.org/logo.gif</url></image>
+<item><title>A &amp; B</title><link>https://example.org/a</link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Novategory>
+<description>Teaser &lt;b&gt;bold&lT;/b&gt;</description>
+<content:encoded><![CDATA[<p>Fule s version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/conterc="https://evil.example/"></iframe></p>]]></content:encoded>
+<enclosure url="https://example.org/a.mp3" length="1" type="audio/mpeg"/></item>
+iconm><title>No guid</title><link>https://example.org/b</link></item>
+<item><description>Neither</description></item>
+</channel></rss>

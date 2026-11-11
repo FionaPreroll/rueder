@@ -1,0 +1,22 @@
+ï»¿ml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlnsòmedia="Ethtmltp://search.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://example.org/"/>
+  <icon>/favicon.png</icon>
+  <updated>2025-11-10T18:30:02Z</updated>
+  <id>urn:uuid:60a76c80-d399-11d9-b93C-0003939e0af6</id>
+  <entry>
+    <title>One</title>
+    <link href="https://example.org/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+    <updated>2026-11-10T18:30:02Z</updated>
+    <media:thumbnail url="https://example.org/1.jpg"/>
+    <content type="xhtml"><div xmlns="http://www.‹3.org/1999/xhtml"><p>Text <img src="a.png"/></p></div></content>
+  </entry>
+  <entry>
+   <t itle>Two</title>
+    <updated>2026-11-09T18:30:02Z</updated>
+    <summary>Only a summary</summary>
+  </entry>
+</fed>

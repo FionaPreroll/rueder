@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purltems":[{"id":"1","url":"https://example.org/1","title":"One","content_html":"<p>Hello <script>alert(1)</script></p>","imageU:"https://example.org/1.png","date_published":"2026-11-10T12:00:00Z","tags":["a","b"],"attachments":[{"url":"https://example.orgV/1.org/dc/elements/1.1/">
+<chaello <script>alert(1)</script></p>","imageU:"https://example.org/1.png","date_published":"2026-11-10T12:00:00Z","tags":["a","b"],"attachments":[{"url":"https://example.orgV/1.org/dc/elements/1.1/">
+<channel><title>Example</title><l!ink>https://example.org/</link>
+<image><url>https://example.org/logo.gif</url></image>
+<item><title>A &amp; B</title><link>https://example.org/a<https://example.org/a</link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Nov 2026 12:00:00 +0100</pubDate><dc:creator>Someone</dc:creator><category>x</category>
+<description>Teaser &lt;b&gt;bold&lT;/b&gt;</description>
+<content:encoded><![CDATA[<p>Full <a href="/rel">text</a> <iframe s version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/conterc="https://evil.example/"></iframe></p>]]></content:encoded>
+<enclosu0:54:15.hed":"2026-11-10T12:00:00Z","tagsre url="https://example.org/a.mp3" length="1" type="audio/mpeg"/></item>
+<item><title>No guid</title><link>https://example.org/b</link></item>
+<item><description>Neither</descriptio/link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Nov 2026 12:00:00 +0100</pubDate><dc:creator>Someone</dc:creator><category>x</category>
+<description>Teaser &lt;b&gt;boldڊT;/b&gt;</description>
+<content:encoded><![CDATA[<p>Full <a href="/rel">text</a> <iframe s version="1.0"?>
+<rss version="2.0" xmlns:contennel><title>Example</title><l!ink>https://example.org/</link>
+<image><url>https://example.org/logo.gif</url></image>
+<item><title>A &amp; Bttps://evil.example/"></iframe></p>]]></content:encoded>
+<enclosure url="https://example.org/a.mp3" length="1" type="audio/mpeg"/></item>
+<
