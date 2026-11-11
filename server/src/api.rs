@@ -470,9 +470,6 @@ async fn versions(
 struct StateChange {
     read: Option<bool>,
     starred: Option<bool>,
-    /// Hidden articles are in no list but the one of the hidden; a rule hides
-    /// them, or the reader.
-    hidden: Option<bool>,
 }
 
 async fn set_state(
@@ -482,7 +479,7 @@ async fn set_state(
     Json(change): Json<StateChange>,
 ) -> Result<StatusCode, AppError> {
     let account_id = session.account_id;
-    if change.read.is_none() && change.starred.is_none() && change.hidden.is_none() {
+    if change.read.is_none() && change.starred.is_none() {
         return Err(AppError::BadRequest("nothing to change".into()));
     }
     if let Some(read) = change.read
@@ -492,11 +489,6 @@ async fn set_state(
     }
     if let Some(starred) = change.starred
         && !reading::set_starred(&state.db, account_id, feed_id, seq, starred).await?
-    {
-        return Err(AppError::NotFound);
-    }
-    if let Some(hidden) = change.hidden
-        && !reading::set_hidden(&state.db, account_id, feed_id, seq, hidden).await?
     {
         return Err(AppError::NotFound);
     }

@@ -4,7 +4,7 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::call;
-use rueder::AppState;
+use rueder::{AppState, reading::set_hidden};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -504,17 +504,17 @@ async fn starred_and_hidden_articles_have_their_lists(db: PgPool) {
         [5]
     );
 
-    // Hiding takes an article out of every list but the one of the hidden,
-    // and out of the unread count.
-    assert_eq!(unread(&cookie).await, 5);
+    // Hiding, which is what filter rules do, takes an article out of every
+    // list but the one of the hidden, and out of the unread count. Readers do
+    // not hide by hand.
     assert_eq!(
         change(&cookie, news, 4, json!({ "hidden": true })).await,
-        StatusCode::NO_CONTENT
+        StatusCode::BAD_REQUEST
     );
-    assert_eq!(
-        change(&cookie, news, 5, json!({ "hidden": true })).await,
-        StatusCode::NO_CONTENT
-    );
+    assert_eq!(unread(&cookie).await, 5);
+    for seq in [4, 5] {
+        assert!(set_hidden(&db, ada, news, seq, true).await.unwrap());
+    }
     assert_eq!(unread(&cookie).await, 3);
     assert_eq!(
         seqs(
@@ -546,10 +546,7 @@ async fn starred_and_hidden_articles_have_their_lists(db: PgPool) {
     assert_eq!(unread(&grace_cookie).await, 5);
 
     // And back.
-    assert_eq!(
-        change(&cookie, news, 4, json!({ "hidden": false })).await,
-        StatusCode::NO_CONTENT
-    );
+    assert!(set_hidden(&db, ada, news, 4, false).await.unwrap());
     assert_eq!(seqs(&get(&state, "/api/hidden", &cookie).await.1), [5]);
     assert_eq!(
         seqs(&get(&state, "/api/starred", &cookie).await.1),
@@ -557,7 +554,7 @@ async fn starred_and_hidden_articles_have_their_lists(db: PgPool) {
     );
     assert_eq!(unread(&cookie).await, 4);
     assert_eq!(
-        change(&cookie, news, 9, json!({ "hidden": true })).await,
+        change(&cookie, news, 9, json!({ "starred": true })).await,
         StatusCode::NOT_FOUND
     );
 }

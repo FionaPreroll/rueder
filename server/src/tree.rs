@@ -17,7 +17,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 
-use crate::{AppError, AppState, sessions::Session};
+use crate::{AppError, AppState, filters, sessions::Session};
 
 /// The longest name of a folder or a subscription, in characters.
 pub const MAX_TITLE: usize = 100;
@@ -265,6 +265,7 @@ async fn move_node(
     nodes.insert(index, change.node);
     renumber(&mut tx, account_id, &nodes).await?;
     tx.commit().await?;
+    filters::tree_changed(&state.db, account_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -392,6 +393,7 @@ async fn remove_folder(
     .await?;
     renumber(&mut tx, account_id, &nodes).await?;
     tx.commit().await?;
+    filters::tree_changed(&state.db, account_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

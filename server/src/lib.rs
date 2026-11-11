@@ -5,6 +5,7 @@ pub mod bench;
 pub mod cleaning;
 pub mod feeds;
 pub mod fetch;
+pub mod filters;
 pub mod http_client;
 pub mod images;
 pub mod import;
@@ -122,6 +123,7 @@ fn api() -> Router<AppState> {
         .merge(api::routes())
         .merge(tree::routes())
         .merge(labels::routes())
+        .merge(filters::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 
