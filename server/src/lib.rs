@@ -103,6 +103,8 @@ fn api() -> Router<AppState> {
         .route("/login", post(login::login))
         .route("/logout", post(login::logout))
         .route("/me", get(login::me))
+        // What the login page asks before anybody is logged in.
+        .route("/login/ways", get(login::ways))
         .route("/oidc/start", get(oidc::start))
         .route("/oidc/callback", get(oidc::callback))
         .fallback(|| async { StatusCode::NOT_FOUND })

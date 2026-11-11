@@ -695,6 +695,22 @@ async fn the_provider_has_to_be_the_one_that_was_set(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn the_login_page_learns_whether_there_is_a_provider(db: PgPool) {
+    // Nobody is logged in when the login page asks.
+    let (state, _, _) = setup(&db).await;
+    let (status, headers, body) = send(&state, "/api/login/ways", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers.get(header::SET_COOKIE), None);
+    let ways: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(ways, json!({ "oidc": true }));
+
+    let (status, _, body) = send(&AppState::new(db), "/api/login/ways", &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    let ways: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(ways, json!({ "oidc": false }));
+}
+
+#[sqlx::test]
 async fn without_a_provider_there_is_no_such_login(db: PgPool) {
     let state = AppState::new(db);
     for path in ["/api/oidc/start", "/api/oidc/callback?code=c&state=s"] {
