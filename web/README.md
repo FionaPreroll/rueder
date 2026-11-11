@@ -25,6 +25,10 @@ What already is the real thing, and what the server will follow:
 - The tree of folders (`src/lib/tree.ts`): sorted by drag and drop or with Alt and
   the arrow keys, nested at most five levels deep.
 - Comparing versions of an article (`src/lib/diff.ts`).
+- The types of the server's API (`src/lib/api/types.ts`), for connecting the
+  interface to it. The server writes this file out of its own types, see
+  [server/README.md](../server/README.md): it is not edited by hand and not
+  formatted by Prettier.
 
 ## Commands
 
