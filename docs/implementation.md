@@ -31,14 +31,15 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 |---|---|---|
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
 | 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
-| 2 Backend | Begonnen am 2026-11-10: Pakete 2.1 (gehärteter HTTP-Client), 2.2 (Abruf mit Versionen), 2.3 (Bereinigung), 2.4 (Bild-Proxy), 2.5 (Konten und Sitzungen) und 2.6 (API) sind fertig | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs`, `server/src/cleaning.rs`, `server/src/images.rs`, `server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs`, `server/src/api.rs`, `server/src/tree.rs`, `server/src/labels.rs`, `server/src/filters.rs`, `server/src/subscribe.rs`, `server/src/profile.rs` |
+| 2 Backend | Begonnen am 2026-11-10: Pakete 2.1 (gehärteter HTTP-Client), 2.2 (Abruf mit Versionen), 2.3 (Bereinigung), 2.4 (Bild-Proxy), 2.5 (Konten und Sitzungen), 2.6 (API) und 2.10 (Betrieb) sind fertig | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs`, `server/src/cleaning.rs`, `server/src/images.rs`, `server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs`, `server/src/api.rs`, `server/src/tree.rs`, `server/src/labels.rs`, `server/src/filters.rs`, `server/src/subscribe.rs`, `server/src/profile.rs`, `Dockerfile`, `deploy/` |
 | 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
 | 4 Umstieg | Offen | |
 
 Was es heute gibt:
 
 - `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client, dem Abruf der Feeds, der mit `serve` läuft, der Bereinigung der Artikeltexte mit eigenen Regeln, dem Bild-Proxy unter `/img/`, Konten mit Passwort, Sitzungen und dem Login, auch über OpenID Connect, und der API unter `/api`: Baum, Listen, Artikel mit Versionen, Lesestand, Labels, Filterregeln mit Vorschau, Abonnieren mit Feed-Suche, OPML, Einstellungen, eigene Sitzungen und Konten für Admins (die Liste steht in [architecture.md](architecture.md#api)). 181 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Ausgeliefert wird das gebaute Frontend.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client, dem Abruf der Feeds, der mit `serve` läuft, der Bereinigung der Artikeltexte mit eigenen Regeln, dem Bild-Proxy unter `/img/`, Konten mit Passwort, Sitzungen und dem Login, auch über OpenID Connect, und der API unter `/api`: Baum, Listen, Artikel mit Versionen, Lesestand, Labels, Filterregeln mit Vorschau, Abonnieren mit Feed-Suche, OPML, Einstellungen, eigene Sitzungen und Konten für Admins (die Liste steht in [architecture.md](architecture.md#api)). 187 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Ausgeliefert wird das gebaute Frontend. `rueder health` fragt den laufenden Server, ob es ihm gut geht.
+- `Dockerfile` und `deploy/`: das Container-Image mit Server und Frontend, die Compose-Datei mit PostgreSQL und die [Anleitung zur Installation](../deploy/README.md), CI-Job `image`.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
 - Das alte System in `backend/` und `frontend/`, unverändert und lauffähig.
@@ -50,7 +51,7 @@ Was es noch nicht gibt: Live-Updates, die TypeScript-Typen der API für das Fron
 | Pfad | Was |
 |---|---|
 | `server/` | Neu. Rust: HTTP-Server mit `axum`, `sqlx` und PostgreSQL. Dasselbe Programm hat die Kommandozeile (Import, Messdaten, später Konten). Siehe [server/README.md](../server/README.md). |
-| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `http_client.rs` der gehärtete HTTP-Client, `feeds.rs` und `fetch.rs` Abruf, `cleaning.rs` Bereinigung, `reclean.rs` erneutes Bereinigen des Bestands, `images.rs` Bild-Proxy, `accounts.rs` Konten und Passwörter, `sessions.rs` Sitzungen und der Extraktor für eingeloggte Anfragen, `login.rs` Login, Logout und Rate-Limit, `api.rs` die API zum Lesen (Baum, Listen, Artikel, Versionen, Lesestand), `tree.rs` Änderungen am Baum und Einstellungen, `labels.rs` Labels, `filters.rs` Filterregeln, `subscribe.rs` Feed-Suche, Abonnieren und OPML, `profile.rs` eigene Sitzungen, Passwort und Konten für Admins, `oidc.rs` Login über OpenID Connect, `import.rs` Import der alten Datenbank, `bench.rs` Messdaten und Messung, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
+| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `http_client.rs` der gehärtete HTTP-Client, `feeds.rs` und `fetch.rs` Abruf, `cleaning.rs` Bereinigung, `reclean.rs` erneutes Bereinigen des Bestands, `images.rs` Bild-Proxy, `accounts.rs` Konten und Passwörter, `sessions.rs` Sitzungen und der Extraktor für eingeloggte Anfragen, `login.rs` Login, Logout und Rate-Limit, `api.rs` die API zum Lesen (Baum, Listen, Artikel, Versionen, Lesestand), `tree.rs` Änderungen am Baum und Einstellungen, `labels.rs` Labels, `filters.rs` Filterregeln, `subscribe.rs` Feed-Suche, Abonnieren und OPML, `profile.rs` eigene Sitzungen, Passwort und Konten für Admins, `oidc.rs` Login über OpenID Connect, `health.rs` der Unterbefehl `health` für den Healthcheck des Containers, `import.rs` Import der alten Datenbank, `bench.rs` Messdaten und Messung, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
 | `server/rules/` | Die Listen der Bereinigung als Daten: gesperrte Adressen und Tracking-Parameter, eine Regel je Zeile. |
 | `server/migrations/` | SQL-Migrationen, laufen beim Start von selbst. |
 | `server/.sqlx/` | Cache der geprüften Abfragen, damit das Programm ohne Datenbank baut (`cargo sqlx prepare`). |
@@ -58,11 +59,13 @@ Was es noch nicht gibt: Live-Updates, die TypeScript-Typen der API für das Fron
 | `server/fuzz/` | Kommt mit Paket 2.11: Fuzz-Targets für Bereinigung, Feed-Verarbeitung und Bild-Proxy samt Korpus. |
 | `web/` | Neu. SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
 | `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`), erfundene Daten (`demo/`). |
+| `Dockerfile`, `.dockerignore` | Neu. Das Container-Image mit Server und gebautem Frontend. |
+| `deploy/` | Neu. Betrieb: `compose.yaml` startet rueder und PostgreSQL, `.env.example` nennt die Einstellungen, `README.md` ist die Anleitung zur Installation, `smoke-test.sh` baut und startet alles zur Probe. |
 | `docs/` | Diese Dokumente. `user_data.md` beschreibt die Daten des alten Frontends im Browser. |
 | `.github/workflows/ci.yml` | CI für den neuen Code. |
 | `backend/` | Alt. Fünf Go-Dienste (`cmd/api`, `authbackend`, `events`, `feedfinder`, `worker`), Migrationen in `backend/migrations/`. Bleibt bis zum Umstieg. |
 | `frontend/` | Alt. Svelte-Frontend. Bleibt bis zum Umstieg. |
-| `config/`, `docker-compose*.yaml` | Alt. Betrieb des alten Systems mit loginsrv, imgproxy und nginx. |
+| `config/`, `docker-compose*.yaml` | Alt. Betrieb des alten Systems mit loginsrv, imgproxy und nginx. Die Compose-Datei des neuen liegt deshalb bis zum Abbau in `deploy/`. |
 
 Der alte Code wird nicht mehr weiterentwickelt, nur noch gelesen: als Vorlage für den Import, die Bereinigung und das Verhalten des Abrufs.
 
@@ -144,6 +147,16 @@ Einstellungen der Bereinigung: `CLEANING_RULES_DIR` nennt ein Verzeichnis mit ei
 
 Einstellungen des Bild-Proxy: `IMAGE_CACHE_DIR` ist das Verzeichnis seines Cache (Standard `image-cache` im Arbeitsverzeichnis), `IMAGE_CACHE_MB` dessen Größe (Standard 1024), `IMAGE_PROXY_KEY` der Schlüssel für die Adressen. Ohne Schlüssel erzeugt der Server einen und legt ihn ins Cache-Verzeichnis.
 
+Im Container, wie eine Installation läuft ([deploy/README.md](../deploy/README.md)):
+
+```sh
+docker build -t rueder .                                      # das Image, aus dem Wurzelverzeichnis
+cd deploy && cp .env.example .env                             # POSTGRES_PASSWORD setzen
+docker compose up --detach --build                            # rueder und PostgreSQL, http://127.0.0.1:3000
+docker compose exec rueder rueder account add <name> --admin  # die Befehle von oben laufen im Container
+deploy/smoke-test.sh                                          # baut, startet und prüft alles unter eigenem Namen und Port
+```
+
 Das alte System startet wie im [README](../README.md) beschrieben.
 
 ## CI
@@ -152,12 +165,13 @@ Das alte System startet wie im [README](../README.md) beschrieben.
 |---|---|
 | `ci.yml`, Job `web` | Neues Frontend: Lint, svelte-check, Tests mit Abdeckung, Build, dazu die Ein-Datei-Fassung als Artefakt. |
 | `ci.yml`, Job `server` | Neuer Server: PostgreSQL 16 als Dienst, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, Tests mit Abdeckung (`cargo llvm-cov`). Gebaut wird mit `SQLX_OFFLINE=true`. |
+| `ci.yml`, Job `image` | Das Container-Image: `deploy/smoke-test.sh` baut es, startet es mit PostgreSQL nach `deploy/compose.yaml` und prüft Health, Frontend, Konto und Login, Neustart mit erhaltenen Daten sowie Betrieb ohne Root und mit schreibgeschütztem Dateisystem. Veröffentlicht wird nichts. |
 | `backend-lint.yml`, `backend-test.yml`, `frontend-lint.yml`, `frontend-test.yml` | Das alte System. Bleiben bis zum Umstieg. |
 | `gitleaks.yml`, `codeql-analysis.yml` | Geheimnisse im Repository und statische Analyse. Bleiben. |
 
 Die Abdeckung geht an Codecov, getrennt nach den Flags `web` und `server` (`codecov.yml`). Der Upload braucht das Repository-Secret `CODECOV_TOKEN`. Die Status von Codecov sind informativ und blockieren keinen Merge.
 
-In Schritt 2 kommen `cargo audit` und `cargo deny` dazu, außerdem ein Job, der das Container-Image baut. Der Korpus der Fuzz-Targets läuft im Job `server` als gewöhnlicher Test mit; gefuzzt wird in der CI nicht.
+In Schritt 2 kommen `cargo audit` und `cargo deny` dazu (Paket 2.9). Der Korpus der Fuzz-Targets läuft im Job `server` als gewöhnlicher Test mit; gefuzzt wird in der CI nicht.
 
 ## Arbeitsweise
 
@@ -197,7 +211,7 @@ Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übern
 - [ ] **2.7 Live-Updates (A6).** `GET /api/events` mit den Ereignissen aus [architecture.md](architecture.md#live-updates), Nachliefern nach `Last-Event-ID`. Fertig, wenn ein Test zwei Verbindungen desselben Kontos und eine fremde öffnet und nur die richtigen Ereignisse sieht.
 - [ ] **2.8 API-Typen für das Frontend.** TypeScript-Typen aus den Rust-Typen erzeugen; die CI prüft, dass die eingecheckten Typen aktuell sind.
 - [ ] **2.9 Härtung (A3).** Content-Security-Policy und weitere Header, Prüfung des `Origin`-Headers, Rate-Limits, Limits je Konto, `cargo audit` und `cargo deny` in der CI.
-- [ ] **2.10 Betrieb.** Container-Image mit Server und Frontend, Compose-Datei mit PostgreSQL, Anleitung zur Installation.
+- [x] **2.10 Betrieb.** Container-Image mit Server und Frontend, Compose-Datei mit PostgreSQL, Anleitung zur Installation. Fertig am 2026-11-11, beschrieben unter [Betrieb](architecture.md#betrieb): `Dockerfile`, `deploy/compose.yaml`, [deploy/README.md](../deploy/README.md) und der CI-Job `image`, der das Image baut und mit `deploy/smoke-test.sh` startet. Dazugekommen ist der Unterbefehl `rueder health`, weil das Image keine Shell und kein curl für einen Healthcheck hat. Geprüft am gebauten Image (78 MB): Start mit PostgreSQL, Konto, Login, Neustart mit erhaltenen Daten, Betrieb ohne Root mit schreibgeschütztem Dateisystem. Offen geblieben: Das Image wird nicht veröffentlicht, eine Installation baut es selbst (rund drei Minuten auf vier Kernen); der Abruf echter Feeds aus dem Container heraus ließ sich in der Entwicklungsumgebung nicht prüfen, wie schon der Abruf selbst; das Backup ist beschrieben, eingerichtet wird es mit Paket 4.2.
 - [ ] **2.11 Fuzzing (A3).** Targets in `server/fuzz/` (`cargo-fuzz`) für Bereinigung, Feed-Verarbeitung und Bild-Proxy mit den Eigenschaften aus [architecture.md](architecture.md#fuzzing), Startkorpus aus `backend/test/data/` und den Fällen der Cleaner-Tests, dazu ein Test, der den Korpus mit stabilem Rust abspielt. Starten mit `cargo +nightly fuzz run <target> -- -max_total_time=1800`. Fertig, wenn jedes Target eine halbe Stunde ohne Fund gelaufen ist, die Funde davor behoben sind und im Korpus liegen und der Korpus-Test in der CI läuft.
 - [ ] **2.12 Security-Review** gegen die Tabelle in [architecture.md](architecture.md#security). Befunde werden behoben oder mit Begründung dort vermerkt. Es ist das letzte Paket des Schritts, auch wenn 2.13 die höhere Nummer trägt.
 - [ ] **2.13 Suche auf dem Server (A12, Detailfrage in [plan.md](plan.md#detailfragen)).** Zuerst die Messung: Größe und Schreibkosten eines Volltext-Index von PostgreSQL über Titel und Text bei 10 Millionen Artikeln, mit `bench`, Ergebnis unter [Messung](#messung). Ist der Index tragbar, `GET /api/search` über die eigenen Abos, mit Anker zum Blättern wie die Listen; wenn nicht, bleibt es bei der Suche in der gezeigten Liste, und die Entscheidung geht mit den Zahlen an Fiona. Fertig, wenn die Messung dasteht und entweder die Suche Tests hat, auch den mit dem fremden Konto, oder die Entscheidung vermerkt ist.

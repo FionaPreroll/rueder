@@ -6,6 +6,7 @@ pub mod cleaning;
 pub mod feeds;
 pub mod fetch;
 pub mod filters;
+pub mod health;
 pub mod http_client;
 pub mod images;
 pub mod import;

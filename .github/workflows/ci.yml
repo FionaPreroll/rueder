@@ -82,3 +82,11 @@ jobs:
           name: rueder-ui-draft
           path: web/build/index.html
           if-no-files-found: error
+
+  # The container image as deploy/compose.yaml runs it: built, started next to
+  # PostgreSQL and asked whether it works. Nothing is published.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/smoke-test.sh

@@ -46,9 +46,13 @@ What is here:
   admins. Every query is bound to the account of the session; the list of
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
 - The built frontend from `../web/build`.
+- The container image (`../Dockerfile`) with the server and the frontend, and
+  `rueder health`, which asks the running server whether it is well. How to
+  install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan and the first six work packages of step 2. Live
-updates, the API's types for the frontend and the hardening follow.
+This is step 1 of the plan, the first six work packages of step 2 and its
+work package 2.10. Live updates, the API's types for the frontend and the
+hardening follow.
 
 ## Commands
 

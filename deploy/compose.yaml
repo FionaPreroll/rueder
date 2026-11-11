@@ -1,0 +1,64 @@
+# rueder and its database. How to install: README.md in this directory.
+#
+#   cp .env.example .env    # and set POSTGRES_PASSWORD
+#   docker compose up --detach --build
+#
+# The compose files in the root of the repository are the old rueder's.
+
+name: rueder
+
+services:
+  rueder:
+    image: rueder
+    build:
+      context: ..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Every setting of the server can go into .env (see .env.example).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://rueder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/rueder
+    # Only this machine reaches rueder: a reverse proxy in front of it does
+    # TLS, without which nobody can log in.
+    ports:
+      - "${RUEDER_LISTEN:-127.0.0.1:3000}:3000"
+    volumes:
+      # The cache of the image proxy and its key. Nothing in it needs a backup.
+      - images:/var/cache/rueder
+    # The image runs as a user that is not root. It gets a file system it
+    # cannot write to, except for the volume above, and no privileges.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rueder
+      POSTGRES_DB: rueder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    # More memory for PostgreSQL's cache makes large installations faster; a
+    # quarter of the machine's memory is a common choice.
+    command: ["postgres", "-c", "shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB}"]
+    shm_size: 256mb
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=rueder", "--dbname=rueder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+
+volumes:
+  # Everything rueder knows. This is what to back up.
+  db:
+  images:
