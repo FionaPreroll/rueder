@@ -344,7 +344,14 @@ const OPML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 
 async fn import(state: &AppState, cookie: &str, file: &str) -> (StatusCode, Value) {
     let body = file.as_bytes().to_vec();
-    let (status, _, answer) = raw(state, Method::POST, "/api/opml", Some(cookie), body).await;
+    let (status, _, answer) = raw(
+        state,
+        Method::POST,
+        "/api/opml",
+        Some(cookie),
+        Some(("text/x-opml; charset=utf-8", body)),
+    )
+    .await;
     (
         status,
         serde_json::from_slice(&answer).unwrap_or(Value::Null),
@@ -352,8 +359,7 @@ async fn import(state: &AppState, cookie: &str, file: &str) -> (StatusCode, Valu
 }
 
 async fn export(state: &AppState, cookie: &str) -> String {
-    let (status, headers, file) =
-        raw(state, Method::GET, "/api/opml", Some(cookie), Vec::new()).await;
+    let (status, headers, file) = raw(state, Method::GET, "/api/opml", Some(cookie), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers[header::CONTENT_TYPE], "text/x-opml; charset=utf-8");
     assert_eq!(
@@ -482,8 +488,22 @@ async fn an_opml_file_that_breaks_the_rules_is_refused(db: PgPool) {
     );
     assert_eq!(feed_rows(&db).await, 0);
 
+    // A file that does not say it is XML is what a form on another site
+    // could send, and is not read.
+    let form = Some(json!({ "file": OPML }));
+    let (status, _) = call(&state, Method::POST, "/api/opml", Some(&cookie), form).await;
+    assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(feed_rows(&db).await, 0);
+
     for method in [Method::GET, Method::POST] {
-        let (status, _, _) = raw(&state, method, "/api/opml", None, OPML.into()).await;
+        let (status, _, _) = raw(
+            &state,
+            method,
+            "/api/opml",
+            None,
+            Some(("text/xml", OPML.into())),
+        )
+        .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
     assert_eq!(feed_rows(&db).await, 0);

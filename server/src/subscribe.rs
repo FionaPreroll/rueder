@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -572,9 +572,24 @@ struct Imported {
 async fn import(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Imported>, AppError> {
     let account_id = session.account_id;
+    // Said to be XML: a form on somebody else's page cannot say that.
+    let kind = headers.get(header::CONTENT_TYPE);
+    let kind = kind.and_then(|kind| kind.to_str().ok()).unwrap_or_default();
+    let kind = kind.split(';').next().unwrap_or_default().trim();
+    if !["text/x-opml", "text/xml", "application/xml"]
+        .iter()
+        .any(|known| kind.eq_ignore_ascii_case(known))
+    {
+        let message = "an OPML file comes as text/x-opml or XML";
+        return Err(AppError::Status(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            message.into(),
+        ));
+    }
     let read = tokio::task::spawn_blocking(move || outline(&String::from_utf8_lossy(&body)));
     let outline = read.await?.map_err(bad)?;
     let mut tx = state.db.begin().await?;

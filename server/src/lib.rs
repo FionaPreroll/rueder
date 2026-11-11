@@ -12,6 +12,7 @@ pub mod import;
 pub mod labels;
 pub mod login;
 pub mod oidc;
+pub mod profile;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
@@ -138,6 +139,7 @@ fn api() -> Router<AppState> {
         .merge(labels::routes())
         .merge(filters::routes())
         .merge(subscribe::routes())
+        .merge(profile::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

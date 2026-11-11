@@ -40,7 +40,7 @@ pub struct Session {
     pub is_admin: bool,
 }
 
-fn token_hash(token: &str) -> Vec<u8> {
+pub(crate) fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
