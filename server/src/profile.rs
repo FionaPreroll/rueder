@@ -159,7 +159,7 @@ async fn change_password(
     }
 }
 
-fn admin(session: &Session) -> Result<(), AppError> {
+pub(crate) fn admin(session: &Session) -> Result<(), AppError> {
     if session.is_admin {
         return Ok(());
     }

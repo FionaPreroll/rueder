@@ -14,6 +14,7 @@ import type {
 	Imported,
 	Reader,
 	RulePreview,
+	ServerStatus,
 	Subscribed
 } from '#lib/reader.ts';
 import {
@@ -46,6 +47,7 @@ import {
 	type FeedState
 } from '#lib/unread.ts';
 import { demoData, random, type DemoArticle, type DemoData } from './data.ts';
+import { demoStatus } from './status.ts';
 
 const PAGE = 40;
 
@@ -133,7 +135,13 @@ export class DemoReader implements Reader {
 	readonly loading = false;
 	readonly notice = null;
 	readonly account = null;
-	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true, opml: false };
+	readonly can: Abilities = {
+		oldestFirst: true,
+		markOlder: true,
+		subscribe: true,
+		opml: false,
+		status: true
+	};
 	/** The filter rules and the draft's own switches are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = this;
@@ -557,6 +565,11 @@ export class DemoReader implements Reader {
 
 	async exportOpml() {
 		return null;
+	}
+
+	/** A made-up status, so the page can be seen without a server. */
+	async status(): Promise<ServerStatus | null> {
+		return demoStatus(Date.now());
 	}
 
 	// Labels

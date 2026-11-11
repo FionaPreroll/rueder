@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pg_database_size(current_database()) AS \"size!\",\n                  (SELECT count(*) FROM pg_stat_activity\n                   WHERE datname = current_database()) AS \"connections!\",\n                  (SELECT extract(epoch FROM max(now() - query_start))::float8\n                   FROM pg_stat_activity\n                   WHERE datname = current_database() AND state = 'active'\n                     AND pid <> pg_backend_pid()) AS longest,\n                  d.blks_hit AS \"hit!\", d.blks_read AS \"read!\", d.deadlocks AS \"deadlocks!\"\n           FROM pg_stat_database d WHERE d.datname = current_database()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "connections!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "longest",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "hit!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "pg_stat_database",
+            "name": "blks_hit"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "read!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "pg_stat_database",
+            "name": "blks_read"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "deadlocks!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "pg_stat_database",
+            "name": "deadlocks"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "df9334f0c979ada607978bddb4f1e4374f12d64b8ec574048e13e98424ed7f95"
+}

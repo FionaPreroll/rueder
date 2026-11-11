@@ -229,6 +229,14 @@ async fn the_search_finds_the_feed_at_an_address_or_the_feeds_a_page_names(db: P
         let (status, _) = find(wrong.clone()).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{wrong}");
     }
+    // The status page counts the lookups: what was not even an address is
+    // none.
+    let lookups = state.monitor.lookups(std::time::Instant::now());
+    assert_eq!(
+        (lookups.found, lookups.none, lookups.failed, lookups.limited),
+        (4, 2, 2, 0)
+    );
+    assert_eq!(lookups.timing.count, 8);
     let (status, _) = call(
         &state,
         Method::POST,

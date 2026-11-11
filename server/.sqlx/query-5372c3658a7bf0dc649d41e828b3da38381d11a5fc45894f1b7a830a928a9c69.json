@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.error_message AS \"message!\", count(*) AS \"feeds!\"\n           FROM feeds f\n           WHERE f.error_message IS NOT NULL\n             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)\n           GROUP BY f.error_message",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "error_message"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "feeds!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "5372c3658a7bf0dc649d41e828b3da38381d11a5fc45894f1b7a830a928a9c69"
+}

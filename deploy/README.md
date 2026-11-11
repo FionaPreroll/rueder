@@ -135,6 +135,7 @@ The server's commands run inside its container:
 
 ```sh
 docker compose exec rueder rueder account list
+docker compose exec rueder rueder admin add fiona          # sees the server status; admin remove, admin list
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
 docker compose exec rueder rueder reclean                  # after the cleaning's rules changed

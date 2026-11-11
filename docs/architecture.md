@@ -1,6 +1,6 @@
 # rueder: Architektur des neuen Systems
 
-Stand 2026-11-10. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
+Stand 2026-11-11. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
 
 Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand und der Import, aus Schritt 2 der gehärtete HTTP-Client, der Abruf, die Bereinigung, der Bild-Proxy und die Live-Updates. Alles andere hier ist der Entwurf, nach dem gebaut wird. Sobald ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für Filterregeln und Ordnerbaum die Modelle in `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
 
@@ -20,6 +20,7 @@ Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand 
 - [API](#api)
 - [Frontend](#frontend)
 - [Betrieb](#betrieb)
+- [Status für Admins](#status-für-admins)
 
 ## Überblick
 
@@ -69,7 +70,7 @@ Zwei Regeln prägen den Aufbau:
 | Frontend | SvelteKit als SPA, Svelte 5, TypeScript, TailwindCSS 4 | Wird vom Server mit ausgeliefert. Die API-Typen werden aus dem Rust-Code erzeugt. |
 | Betrieb | Ein Container plus PostgreSQL hinter einem Reverse-Proxy | Heute sind es acht Container plus imgproxy. |
 
-Das Programm hat Unterbefehle: `rueder serve` (Standard) startet Server und Abruf, weitere Befehle erledigen einmalige Arbeiten (Import der alten Datenbank, Konten anlegen, Messdaten erzeugen). Migrationen laufen beim Start von selbst.
+Das Programm hat Unterbefehle: `rueder serve` (Standard) startet Server und Abruf, weitere Befehle erledigen einmalige Arbeiten (Import der alten Datenbank, Konten anlegen, Admins bestimmen, Messdaten erzeugen). Migrationen laufen beim Start von selbst.
 
 ## Datenmodell
 
@@ -364,7 +365,7 @@ Der Server ruft Adressen ab, die User eingeben, und zeigt HTML an, das Fremde ge
 |---|---|
 | Login und Sitzung | Sitzung als Cookie mit `HttpOnly`, `Secure` und `SameSite=Lax`. Das Frontend sieht kein Token mehr. Passwörter mit Argon2id, Rate-Limit auf dem Login, OpenID Connect als Option. |
 | CSRF | SameSite-Cookie und Prüfung der Herkunft (`Sec-Fetch-Site`, sonst `Origin`) bei jeder ändernden Anfrage. Gebaut, siehe [Header, Herkunft und Limits](#header-herkunft-und-limits). |
-| Zugriff auf Daten | Jede Abfrage ist an die Konto-ID gebunden. Feeds und Artikel sind nur für Abonnenten lesbar. Kein Endpunkt listet fremde Feeds. |
+| Zugriff auf Daten | Jede Abfrage ist an die Konto-ID gebunden. Feeds und Artikel sind nur für Abonnenten lesbar. Kein Endpunkt listet fremde Feeds. Auch der Status für Admins zählt nur, wie viele Feeds aus welchem Grund fehlschlagen, nie welche. |
 | Abruf fremder Adressen (SSRF) | Ein gemeinsamer HTTP-Client für Feed-Abruf, Feed-Suche und Bild-Proxy. Er erlaubt nur http und https, löst DNS selbst auf, sperrt private, lokale und Link-Local-Adressen und verbindet sich genau mit der geprüften IP. Jede Weiterleitung wird neu geprüft. Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Gebaut, siehe [Gehärteter HTTP-Client](#gehärteter-http-client). |
 | Artikel-HTML (XSS) | Bereinigung auf dem Server; der letzte Schritt ist immer `ammonia` nach fester Allowlist, ohne `id`, `class` und `style`, und nur vollständige `http`- und `https`-Adressen bleiben. Zweite Linie ist eine strenge Content-Security-Policy ohne Inline-Skripte, Bilder nur vom eigenen Proxy. Links bekommen `rel="noopener noreferrer"`. |
 | Bild-Proxy | Signierte Adressen, der Schlüssel bleibt auf dem Server. Durchgelassen werden nur echte Bildformate nach Prüfung der ersten Bytes, SVG nur gerastert oder gar nicht. Größenlimit und Cache auf Platte. Zur Quelle gehen keine Cookies, kein Referrer und ein fester User-Agent. Auslieferung mit `nosniff` und `Content-Security-Policy: sandbox`. |
@@ -498,7 +499,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 
 | Bereich | Endpunkte |
 |---|---|
-| Zustand | `GET /api/health` |
+| Zustand | `GET /api/health`; für Admins `GET /api/status`, siehe [Status für Admins](#status-für-admins) |
 | Sitzung | `POST /api/login`, `GET /api/login/ways`, `POST /api/logout`, `GET /api/me`, `GET /api/oidc/start`, `GET /api/oidc/callback` |
 | Konto | `GET /api/sessions`, `DELETE /api/sessions`, `DELETE /api/sessions/{id}`, `PUT /api/password`; für Admins `GET` und `POST /api/accounts` |
 | Baum | `GET /api/tree` (Ordner, Abos, Feeds mit `last_seq`, Lesemarken, Ungelesen-Zahlen und dem Fehler des letzten Abrufs, dazu die Zahl der ausgeblendeten Artikel), `POST /api/tree/move`, `POST /api/folders`, `PATCH` und `DELETE /api/folders/{id}` |
@@ -615,3 +616,41 @@ Abweichungen vom Entwurf, und was offen ist:
 - Die Compose-Datei liegt in `deploy/` und nicht im Wurzelverzeichnis. Dort liegen bis zum Abbau (Paket 4.7) die Dateien des alten Systems, und `docker compose` würde eine neue `compose.yaml` daneben der alten `docker-compose.yaml` vorziehen.
 - Das Image wird nirgends veröffentlicht. Wer rueder installiert, baut es aus dem Repository. Ob und wo es veröffentlicht wird, ist nicht entschieden.
 - PostgreSQL läuft mit seinen Standardwerten; nur `shared_buffers` lässt sich über `POSTGRES_SHARED_BUFFERS` setzen. Die [Messung](implementation.md#messung) lief mit 2 GB.
+
+## Status für Admins
+
+Gebaut in Paket 3.8 (`server/src/monitor.rs`, `server/src/status.rs`, `web/src/lib/components/StatusDialog.svelte`). Ein Admin öffnet im Menü seines Kontos den „Serverstatus“. Die Seite fragt `GET /api/status` und fragt alle 15 Sekunden neu, solange sie offen ist. Wer Admin ist, bestimmt die Kommandozeile: `rueder admin add <name>`, `rueder admin remove <name>`, `rueder admin list`, dazu wie bisher `rueder account add --admin`. Jede Anfrage liest das Recht neu aus der Datenbank, eine Änderung gilt also sofort und ohne neue Sitzung. Alle anderen bekommen 403.
+
+**Was der Server über sich festhält.** Der `Monitor` hält die letzte Stunde im Speicher, in sechs Abschnitten zu zehn Minuten; ein Abschnitt, der älter als eine Stunde ist, wird wiederverwendet. Gezählt werden:
+
+- jede Anfrage nach ihrer Route, mit der Zeit bis zum Beginn der Antwort und der Klasse der Antwort. Die Route ist Methode und Muster aus `MatchedPath`, etwa `GET /api/feeds/{id}/articles`, nie die Adresse selbst. Was keine Route trifft, zählt als `frontend` oder `other`; höchstens 200 Routen. Die Schicht liegt außen um Rate-Limit und Header und sieht also auch die 429. Ein Strom von Ereignissen zählt, bis er offen ist, nicht so lange er offen bleibt.
+- jeder Abruf eines Feeds (mit Inhalt, unverändert, fehlgeschlagen, an der Datenbank gescheitert, neue Artikel, Dauer) und die letzte Runde.
+- jede Feed-Suche (Feeds gefunden, keine, fehlgeschlagen, über dem Limit des Kontos, Dauer).
+- jedes Bild des Proxy (aus dem Cache, abgerufen, abgelehnt nach Grund, Dauer der abgerufenen), dazu der Füllstand des Cache und die Quellen, die er gerade meidet.
+- die Warnungen und Fehler des Logs. Eine eigene Schicht von `tracing` gibt sie an `Problems`. Gleicher Text vom gleichen Ort ist ein Problem mit Zähler; Felder, die sich jedes Mal ändern (Dauer, Zeilenzahl), fallen weg. Höchstens 100 Probleme zu je 1000 Zeichen, das neueste zuerst.
+
+Zeiten stehen in Eimern, die bei 0,1 ms beginnen und um eine Drittel-Oktave wachsen. Median und 95. Perzentil sind die Obergrenze ihres Eimers, höchstens die längste gemessene Zeit; sie liegen also bis zu einem Viertel über dem wahren Wert. Ein Zufallstest hält das gegen die sortierten Werte.
+
+**Was dazu aus PostgreSQL kommt**, bei jeder Anfrage: Zahl der Konten und Feeds, die geschätzte Zahl der Artikel (`reltuples`; ein `count(*)` über zehn Millionen Zeilen wäre zu teuer), Größe der Datenbank und der größten Tabellen samt ihrer Partitionen, Verbindungen, Anteil der Blöcke aus dem Speicher, Deadlocks, die am längsten laufende Abfrage und der Pool des Servers. Für den Abruf: Feeds, die mehr als zehn Minuten überfällig sind, Feeds ohne ersten Abruf und die fehlschlagenden Feeds, gruppiert nach Grund.
+
+**Gründe statt Feeds.** Ein fehlschlagender Feed wird nur gezählt, nach dem Grund seines Fehlers: Antwort der Seite mit Status, Zeitüberschreitung, gesperrtes Netz, Name ohne Adresse, keine Verbindung, zu groß, Weiterleitungen, kein lesbarer Feed, anderes. Der Grund wird aus dem gespeicherten Fehlertext gelesen; ein Test bindet das an die Texte des HTTP-Clients und des Abrufs. Adresse, Titel und Abonnenten nennt der Status nie, damit kein Endpunkt fremde Feeds listet. Die Ausnahme sind die Texte des Logs: Die liest, wer den Server betreibt, ohnehin.
+
+**Hinweise.** Der Server nennt, was einen Blick wert ist, als Art mit Zahlen; die Worte hat die Seite. Es gibt Hinweise auf Fehler im Log der letzten Stunde, einen voll belegten Pool, einen stillstehenden oder hinterherhinkenden Abruf, eine Abfrage, die seit 30 Sekunden läuft, Routen mit Fehlern des Servers, Routen mit mindestens fünf Anfragen, deren 95. Perzentil über 500 ms liegt, ein Fünftel oder mehr fehlschlagende Feeds, weniger als 90 % Lesezugriffe aus dem Speicher, einen Bild-Cache über 95 % und abgewiesene Anfragen.
+
+Abweichungen und Grenzen:
+
+- Alles außer den Zahlen aus PostgreSQL ist mit einem Neustart weg und gilt je Prozess. Mehrere Prozesse hätten je ihren eigenen Status; das passt, solange rueder ein Prozess ist.
+- Ein eigenes Werkzeug statt Prometheus oder OpenTelemetry, weil es keinen weiteren Dienst neben PostgreSQL braucht. Ein Endpunkt für Prometheus ließe sich später aus denselben Zählern bauen.
+- `pg_stat_statements` wird nicht genutzt, weil es eine Erweiterung in PostgreSQL braucht. Langsame Abfragen meldet `sqlx` selbst als Warnung, und die landen bei den Problemen.
+
+### Fehlerberichte aus dem Browser (geplant)
+
+Nur geplant, als Paket 3.9; gebaut ist davon nichts. Fehler, die im Browser eines Users auftreten, sieht heute niemand. Sie sollen auf die Statusseite kommen, aber nur von Usern, die zustimmen, und ohne fremden Dienst: rueder sammelt sie selbst, der Code liegt offen im Repository, die Daten bleiben beim Betreiber.
+
+- **Zustimmung.** Eine Einstellung je Konto, „Fehlerberichte an den Server schicken“, aus als Standard. Nur der User selbst schaltet sie ein; Admins können das nicht für andere. Ausschalten löscht die Berichte des Kontos. Der Betreiber kann die Annahme ganz abschalten.
+- **Was ein Bericht enthält.** Unbehandelte Fehler (`error`, `unhandledrejection`), Fehler von Komponenten (`<svelte:boundary>`) und fehlgeschlagene Anfragen an die API mit Status und Route (das Muster, nicht die Adresse), dazu die Version des Frontends und der Browser mit Hauptversion. Der Text wird vor dem Senden gekürzt (500 Zeichen), Adressen und Zahlen außer Zeile und Spalte werden ersetzt, der Stack behält nur die Dateinamen der eigenen Bundles mit Zeile und Spalte. Nichts aus Artikeln, Feeds, Labels oder Regeln.
+- **Wohin.** Nur an den eigenen Server, `POST /api/reports`, gesammelt: höchstens alle 30 Sekunden, höchstens 20 Berichte und 32 KB je Sendung, beim Verlassen der Seite mit `navigator.sendBeacon`. Der Browser spricht weiter mit nichts als rueder.
+- **Speicher.** Eine neue Tabelle mit einem Fingerabdruck aus Meldung und erstem eigenen Stack-Eintrag, Zähler, erstem und letztem Auftreten, Version und Browser. Ein Bericht ist an das Konto gebunden, damit Ausschalten und das Löschen eines Kontos ihn mitnehmen. Aufbewahrung 30 Tage, Limits je Konto und Tag, das Rate-Limit wie für alle Anfragen.
+- **Anzeige.** Ein Abschnitt „Fehler in Browsern“ auf der Statusseite: Meldung, wie oft, bei wie vielen Konten, Version, Browser, zuletzt. Namen von Konten zeigt er nicht.
+- **Verworfen:** ein selbst gehostetes Sentry oder GlitchTip mit deren SDK. Das wäre ein weiterer Dienst neben PostgreSQL, das SDK ist groß, und die Content-Security-Policy müsste dem Browser einen zweiten Host erlauben.
+- **Zu entscheiden** vor dem Bau, jeweils mit Vorschlag: aus als Standard (ja), 30 Tage Aufbewahrung (ja), Admins sehen keine Namen von Konten (ja).

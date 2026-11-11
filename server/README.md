@@ -109,7 +109,14 @@ with `POST /api/accounts`:
 cargo run -- account add ada            # asks for the password; --admin for an admin
 cargo run -- account password ada       # a new password, which ends ada's sessions
 cargo run -- account list
+cargo run -- admin add ada              # ada sees the status of the server; remove, list
 ```
+
+Admins see the status of the server in the account menu of the page
+(`GET /api/status`, `src/monitor.rs`, `src/status.rs`): how long requests take
+by route, the database, fetching, the feed search, the image proxy and the
+warnings and errors of the log, for the last hour, kept in memory. It counts
+failing feeds by why and names none.
 
 Without a terminal the password is read as one line from the input, for
 scripts. The session cookie is `Secure`, so logging in needs HTTPS in front of

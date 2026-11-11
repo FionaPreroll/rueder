@@ -202,6 +202,20 @@ pub async fn set_password(
     Ok(Ok(true))
 }
 
+/// Makes an account an admin, or an admin a reader again. False if there is
+/// no account of that name. What an admin may do counts from the next request
+/// on, as every request reads it anew.
+pub async fn set_admin(db: &PgPool, name: &str, is_admin: bool) -> anyhow::Result<bool> {
+    let changed = sqlx::query!(
+        "UPDATE accounts SET is_admin = $2 WHERE lower(username) = lower($1)",
+        name.trim(),
+        is_admin,
+    )
+    .execute(db)
+    .await?;
+    Ok(changed.rows_affected() > 0)
+}
+
 /// The account that name and password belong to, if they do.
 pub async fn login(db: &PgPool, name: &str, password: &str) -> anyhow::Result<Option<Account>> {
     let name = name.trim();

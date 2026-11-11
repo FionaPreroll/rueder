@@ -12,13 +12,16 @@
 		sidebarOpen,
 		ontogglesidebar,
 		onsettings,
-		onhelp
+		onhelp,
+		onstatus
 	}: {
 		reader: Reader;
 		sidebarOpen: boolean;
 		ontogglesidebar: () => void;
 		onsettings: () => void;
 		onhelp: () => void;
+		/** Opens the status of the server, for admins. */
+		onstatus: () => void;
 	} = $props();
 
 	const demo = $derived(reader.demo);
@@ -82,6 +85,12 @@
 				<Icon name="versions" />
 				{m.demo.revise}
 			</button>
+			{#if reader.can.status}
+				<button type="button" role="menuitem" class="menu-item" onclick={onstatus}>
+					<Icon name="pulse" />
+					{m.status.open}
+				</button>
+			{/if}
 		</Menu>
 	{/if}
 
@@ -140,6 +149,12 @@
 				<Icon name="user" class="size-5" />
 			{/snippet}
 			<p class="px-3 py-1.5 text-xs text-soft">{m.nav.account(reader.account.name)}</p>
+			{#if reader.can.status}
+				<button type="button" role="menuitem" class="menu-item" onclick={onstatus}>
+					<Icon name="pulse" />
+					{m.status.open}
+				</button>
+			{/if}
 			<button type="button" role="menuitem" class="menu-item" onclick={() => reader.signOut()}>
 				<Icon name="logout" />
 				{m.nav.logout}

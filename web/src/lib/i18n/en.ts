@@ -314,6 +314,149 @@ const en = {
 		export: 'Export as OPML'
 	},
 
+	status: {
+		title: 'Server status',
+		open: 'Server status',
+		loading: 'Asking the server …',
+		failed: 'The server did not answer. Try again in a moment.',
+		refresh: 'Refresh',
+		asOf: (time: string) => `As of ${time}. What is counted is the last hour.`,
+		demo: 'Made up, as there is no server here.',
+		empty: '–',
+		on: 'On',
+		off: 'Off',
+		took: (median: string, p95: string) => `median ${median}, 95% within ${p95}`,
+		hintsTitle: 'Worth a look',
+		allWell: 'Nothing stands out.',
+		hints: {
+			slowRoute: (route: string, took: string) =>
+				`${route} is slow: one request in twenty takes longer than ${took}.`,
+			serverErrors: (route: string, count: number) =>
+				`${route} answered with an error of the server ${n(count)} ${plural(count, { one: 'time', other: 'times' })}.`,
+			poolBusy: (size: number) =>
+				`All ${n(size)} connections to the database are in use, so requests wait for one.`,
+			fetchBacklog: (count: number, late: string) =>
+				`${n(count)} ${plural(count, { one: 'feed is', other: 'feeds are' })} fetched late, the latest by ${late}.`,
+			feedsFailing: (failing: number, subscribed: number) =>
+				`${n(failing)} of ${n(subscribed)} feeds fail.`,
+			notFetching: 'The server does not fetch feeds. Is FETCH set to off?',
+			cacheMisses: (share: string) =>
+				`The database finds only ${share} of what it reads in memory; more shared_buffers would help.`,
+			longQuery: (took: string) => `A query has been running for ${took}.`,
+			imageCacheFull: (share: string) => `The image cache is ${share} full.`,
+			errors: (count: number) =>
+				`The server logged ${n(count)} ${plural(count, { one: 'error', other: 'errors' })} in the last hour.`,
+			limited: (count: number) =>
+				`${n(count)} ${plural(count, { one: 'request was', other: 'requests were' })} turned away as too many.`
+		},
+		server: {
+			title: 'Server',
+			version: 'Version',
+			running: 'Running since',
+			memory: 'Memory',
+			accounts: 'Accounts',
+			feeds: 'Feeds',
+			feedsValue: (subscribed: number, all: number) =>
+				`${n(subscribed)} subscribed, ${n(all)} in all`,
+			articles: 'Articles',
+			articlesValue: (count: number) => `about ${n(count)}`,
+			live: 'Open tabs'
+		},
+		database: {
+			title: 'Database',
+			pool: 'Connections of rueder',
+			poolValue: (size: number, idle: number, max: number) =>
+				`${n(size)} open, ${n(idle)} idle, at most ${n(max)}`,
+			connections: 'All connections',
+			size: 'Size',
+			hitRatio: 'Read from memory',
+			deadlocks: 'Deadlocks',
+			longest: 'Longest running query',
+			tables: 'Largest tables',
+			table: 'Table',
+			bytes: 'Size',
+			rows: 'Rows, about'
+		},
+		fetcher: {
+			title: 'Fetching feeds',
+			state: 'Fetching',
+			lastRound: 'Last round',
+			lastRoundValue: (ago: string, feeds: number, took: string) =>
+				`${ago}: ${n(feeds)} ${plural(feeds, { one: 'feed', other: 'feeds' })} in ${took}`,
+			fetches: 'Fetches',
+			fetchesValue: (fetched: number, unchanged: number, failed: number) =>
+				`${n(fetched)} brought the feed, ${n(unchanged)} unchanged, ${n(failed)} failed`,
+			broken: 'Failed at the database',
+			newArticles: 'New articles',
+			took: 'Time per fetch',
+			overdue: 'Fetched late',
+			overdueValue: (count: number, late: string) => `${n(count)}, the latest by ${late}`,
+			waiting: 'Not fetched yet',
+			failing: 'Failing feeds, by why',
+			noneFailing: 'No feed fails.',
+			feeds: (count: number) => `${n(count)} ${plural(count, { one: 'feed', other: 'feeds' })}`,
+			failures: {
+				status: (code: number | null) =>
+					code ? `The site answers ${code}` : 'The site answers with an error',
+				timeout: 'The site takes too long',
+				blocked: 'The address is in a network rueder does not fetch from',
+				dns: 'The name has no address',
+				network: 'No connection, or it broke off',
+				too_large: 'Too large',
+				redirects: 'Too many redirects, or a broken one',
+				unreadable: 'Not a feed rueder can read',
+				other: 'Something else'
+			}
+		},
+		finder: {
+			title: 'Feed search',
+			state: 'Looking at addresses',
+			lookups: 'Lookups',
+			lookupsValue: (found: number, none: number, failed: number) =>
+				`${n(found)} found feeds, ${n(none)} found none, ${n(failed)} failed`,
+			limited: 'Over the limit of the account',
+			took: 'Time per lookup'
+		},
+		images: {
+			title: 'Image proxy',
+			state: 'Proxy',
+			cache: 'Cache',
+			cacheValue: (used: string, max: string) => `${used} of ${max}`,
+			served: 'Images',
+			servedValue: (cached: number, fetched: number) =>
+				`${n(cached)} from the cache, ${n(fetched)} fetched`,
+			refused: 'Refused',
+			refusedValue: (source: number, notImage: number, tooLarge: number, notFound: number) =>
+				`${n(source)} source failed, ${n(notImage)} no image, ${n(tooLarge)} too large, ${n(notFound)} wrong address`,
+			took: 'Time per fetched image',
+			failingSources: 'Sources left alone for now'
+		},
+		requests: {
+			title: 'Requests',
+			all: 'All requests',
+			allValue: (count: number, took: string) => `${n(count)}, ${took}`,
+			answers: 'Answers',
+			answersValue: (fine: number, refused: number, errors: number) =>
+				`${n(fine)} fine, ${n(refused)} refused, ${n(errors)} errors of the server`,
+			route: 'Route',
+			count: 'Count',
+			median: 'Median',
+			p95: '95%',
+			max: 'Longest',
+			errors: 'Errors',
+			none: 'No requests in the last hour.'
+		},
+		problems: {
+			title: 'Warnings and errors',
+			counts: (errors: number, warnings: number) =>
+				`In the last hour ${n(errors)} ${plural(errors, { one: 'error', other: 'errors' })} and ${n(warnings)} ${plural(warnings, { one: 'warning', other: 'warnings' })}.`,
+			none: 'Nothing was logged since the start.',
+			error: 'Error',
+			warning: 'Warning',
+			times: (count: number, last: string) => (count > 1 ? `${n(count)} times, last ${last}` : last)
+		}
+	},
+
 	demo: {
 		badge: 'Draft',
 		note: 'A draft with made-up feeds. Nothing is saved on a server.',

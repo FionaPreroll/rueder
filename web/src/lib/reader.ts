@@ -8,6 +8,9 @@ import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
+import type { ServerStatus } from './api/types.ts';
+
+export type { ServerStatus };
 
 /** A feed with something unread, for the start page. */
 export interface Fresh {
@@ -41,6 +44,8 @@ export interface Abilities {
 	subscribe: boolean;
 	/** Subscriptions can be taken in from an OPML file and given out as one. */
 	opml: boolean;
+	/** The status of the server can be shown: for admins. */
+	status: boolean;
 }
 
 /** A feed found at an address. */
@@ -259,4 +264,7 @@ export interface Reader {
 	importOpml(file: Blob): Promise<Imported>;
 	/** All subscriptions as an OPML file; null if there was no answer. */
 	exportOpml(): Promise<string | null>;
+
+	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
+	status(): Promise<ServerStatus | null>;
 }

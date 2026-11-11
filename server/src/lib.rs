@@ -14,12 +14,14 @@ pub mod images;
 pub mod import;
 pub mod labels;
 pub mod login;
+pub mod monitor;
 pub mod oidc;
 pub mod profile;
 pub mod rate;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
+pub mod status;
 pub mod subscribe;
 pub mod tree;
 pub mod typescript;
@@ -45,6 +47,7 @@ use crate::{
     http_client::HttpClient,
     images::{ImageProxy, Refused},
     login::Limiter,
+    monitor::Monitor,
     oidc::Oidc,
     rate::Rates,
     sessions::Session,
@@ -79,6 +82,8 @@ pub struct AppState {
     pub client: Option<HttpClient>,
     /// How much each sender and each account has asked of the server lately.
     pub rates: Arc<Rates>,
+    /// What the server notices about itself, for the status page.
+    pub monitor: Arc<Monitor>,
 }
 
 impl AppState {
@@ -93,7 +98,13 @@ impl AppState {
             events: Events::new(),
             client: None,
             rates: Arc::default(),
+            monitor: Arc::default(),
         }
+    }
+
+    /// Shares the monitor with whatever else it watches, such as fetching.
+    pub fn with_monitor(self, monitor: Arc<Monitor>) -> Self {
+        Self { monitor, ..self }
     }
 
     /// Other limits than [`rate::REQUESTS`] and [`rate::LOOKUPS`].
@@ -158,10 +169,12 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .fallback_service(spa)
         // Around everything, from the inside out: a change asked for by a
         // page of another site is refused, every request counts for its
-        // sender, and every answer, a refusal too, gets its headers.
+        // sender, and every answer, a refusal too, gets its headers. Outside
+        // of those, the time of each answer is counted for its route.
         .layer(middleware::from_fn(hardening::same_origin))
         .layer(middleware::from_fn_with_state(state.clone(), rate::limit))
         .layer(middleware::from_fn_with_state(policies, hardening::headers))
+        .layer(middleware::from_fn_with_state(state.clone(), monitor::time))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -183,6 +196,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(filters::routes())
         .merge(subscribe::routes())
         .merge(profile::routes())
+        .merge(status::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
         // Around all of the API: whatever a request changes is announced to
         // the account's other tabs.

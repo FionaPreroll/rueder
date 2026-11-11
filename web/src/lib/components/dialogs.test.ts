@@ -4,11 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServerReader } from '#lib/api/reader.svelte.ts';
 import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
+import { demoStatus } from '#lib/demo/status.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { MAX_OPML } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
+import TopBar from './TopBar.svelte';
 import SettingsDialog from './SettingsDialog.svelte';
+import StatusDialog from './StatusDialog.svelte';
 import SubscribeDialog from './SubscribeDialog.svelte';
 import VersionCompare from './VersionCompare.svelte';
 
@@ -322,5 +325,111 @@ describe('SubscribeDialog with a server', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Export as OPML' }));
 		expect(await screen.findByRole('alert')).toHaveTextContent('The server does not answer.');
 		expect(clicked).toHaveLength(1);
+	});
+});
+
+describe('StatusDialog', () => {
+	it('says what wants looking at and how the parts of the server fare', async () => {
+		render(StatusDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.getByRole('dialog', { name: 'Server status' })).toBeInTheDocument();
+		expect(screen.getByText(/no server here/)).toBeInTheDocument();
+		expect(
+			await screen.findByText(/POST \/api\/feeds\/find is slow: one request in twenty/)
+		).toBeInTheDocument();
+		expect(screen.getByText('7 of 31 feeds fail.')).toBeInTheDocument();
+		expect(screen.getByText('The server logged 1 error in the last hour.')).toBeInTheDocument();
+
+		// Each part has its facts.
+		for (const title of ['Server', 'Database', 'Fetching feeds', 'Feed search', 'Image proxy']) {
+			expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+		}
+		expect(screen.getByText('31 subscribed, 34 in all')).toBeInTheDocument();
+		expect(screen.getByText('4 open, 3 idle, at most 10')).toBeInTheDocument();
+		expect(screen.getByText('The site answers 403')).toBeInTheDocument();
+		expect(screen.getByText('3 feeds')).toBeInTheDocument();
+		expect(screen.getByText('191.9 MB of 1.1 GB')).toBeInTheDocument();
+
+		// The routes, the slowest first, and the largest tables.
+		const rows = screen.getAllByRole('row').map((row) => row.textContent ?? '');
+		const find = rows.findIndex((row) => row.includes('POST /api/feeds/find'));
+		const tree = rows.findIndex((row) => row.includes('GET /api/tree'));
+		expect(find).toBeGreaterThan(0);
+		expect(tree).toBeGreaterThan(find);
+		expect(rows.some((row) => row.includes('article_texts'))).toBe(true);
+
+		// And what the log said.
+		expect(screen.getByText(/canceling statement due to statement timeout/)).toBeInTheDocument();
+		expect(screen.getByText('rueder::oidc')).toBeInTheDocument();
+		expect(screen.getByText(/^2 times, last/)).toBeInTheDocument();
+	});
+
+	it('asks again when told to, and says so when the server does not answer', async () => {
+		const reader = new DemoReader(() => now);
+		const asked = vi.spyOn(reader, 'status');
+		render(StatusDialog, { reader, onclose: () => {} });
+		await screen.findByText('Worth a look');
+		asked.mockResolvedValueOnce(null);
+		await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('The server did not answer.');
+		expect(asked).toHaveBeenCalledTimes(2);
+		// What it knew stays on the page.
+		expect(screen.getByText('7 of 31 feeds fail.')).toBeInTheDocument();
+		vi.restoreAllMocks();
+	});
+
+	it('says that nothing stands out, in German too', async () => {
+		useLanguage('de');
+		const reader = new DemoReader(() => now);
+		vi.spyOn(reader, 'status').mockResolvedValue({ ...demoStatus(now), hints: [] });
+		render(StatusDialog, { reader, onclose: () => {} });
+		expect(await screen.findByText('Nichts fällt auf.')).toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Abruf der Feeds' })).toBeInTheDocument();
+		expect(screen.getByText('Die Seite antwortet mit 403')).toBeInTheDocument();
+		vi.restoreAllMocks();
+	});
+});
+
+describe('The status with a server', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	function bar(reader: ServerReader) {
+		render(TopBar, {
+			reader,
+			sidebarOpen: true,
+			ontogglesidebar: () => {},
+			onsettings: () => {},
+			onhelp: () => {},
+			onstatus: () => {}
+		});
+	}
+
+	it('is there for an admin, from the menu of the account', async () => {
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		expect(reader.can.status).toBe(true);
+		bar(reader);
+		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
+		expect(screen.getByRole('menuitem', { name: 'Server status' })).toBeInTheDocument();
+		const status = await reader.status();
+		expect(status?.counts.subscribed_feeds).toBe(31);
+	});
+
+	it('is not there for a reader, and the server would not tell', async () => {
+		server.admin = false;
+		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
+		expect(reader.can.status).toBe(false);
+		bar(reader);
+		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
+		expect(screen.queryByRole('menuitem', { name: 'Server status' })).toBeNull();
+		expect(await reader.status()).toBeNull();
 	});
 });
