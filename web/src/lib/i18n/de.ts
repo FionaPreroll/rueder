@@ -29,6 +29,14 @@ const de: Messages = {
 		renameFolder: 'Umbenennen',
 		removeFolder: 'Ordner entfernen, Inhalt behalten',
 		folderActions: (title) => `Aktionen für den Ordner ${title}`,
+		feedName: 'Name des Feeds',
+		feedNameHint: 'Leer für den eigenen Namen des Feeds',
+		renameFeed: 'Umbenennen',
+		unsubscribe: 'Abbestellen',
+		feedActions: (title) => `Aktionen für den Feed ${title}`,
+		unsubscribeTitle: 'Abbestellen?',
+		unsubscribeText: (title) =>
+			`„${title}“ abbestellen? Was du dort gelesen und markiert hast, geht verloren.`,
 		openFolder: 'Ordner aufklappen',
 		closeFolder: 'Ordner zuklappen',
 		openSidebar: 'Seitenleiste einblenden',
@@ -232,8 +240,41 @@ const de: Messages = {
 	subscribe: {
 		title: 'Feed abonnieren',
 		address: 'Adresse des Feeds oder der Website',
+		find: 'Feeds suchen',
+		finding: 'Suche …',
 		note: 'Der Entwurf kann nichts abrufen, der Feed bleibt deshalb leer.',
-		add: 'Abonnieren'
+		found: (count) =>
+			count === 1 ? 'Dort gibt es einen Feed:' : `Dort gibt es ${n(count)} Feeds:`,
+		none: 'Unter dieser Adresse gibt es keinen Feed.',
+		untitled: 'Ohne Namen',
+		folder: 'In den Ordner',
+		topLevel: 'Kein Ordner',
+		add: 'Abonnieren',
+		adding: 'Abonniere …',
+		refused: 'Das hat nicht geklappt.',
+		serverSays: (reason) => `Der Server sagt: ${reason}`,
+		busy: (seconds) =>
+			seconds
+				? `Zu viele Abfragen auf einmal. Versuch es in ${n(seconds)} ${plural(seconds, { one: 'Sekunde', other: 'Sekunden' })} wieder.`
+				: 'Zu viele Abfragen auf einmal. Versuch es gleich noch einmal.',
+		noFetching: 'Dieser Server ruft keine Feeds ab.',
+		tooLarge: (megabytes) => `Die Datei ist größer als ${n(megabytes)} MB.`,
+		unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
+	},
+
+	opml: {
+		title: 'Import und Export',
+		intro: 'Bring deine Abos aus einem anderen Feedreader als OPML-Datei mit, oder nimm sie mit.',
+		import: 'OPML-Datei importieren',
+		importing: 'Importiere …',
+		imported: (feeds, folders) =>
+			`${n(feeds)} ${plural(feeds, { one: 'neuer Feed', other: 'neue Feeds' })} und ${n(folders)} ${plural(folders, { one: 'neuer Ordner', other: 'neue Ordner' })}.`,
+		known: (count) =>
+			`${n(count)} ${plural(count, { one: 'Feed war', other: 'Feeds waren' })} schon abonniert.`,
+		skipped: (count) =>
+			`${n(count)} ${plural(count, { one: 'Eintrag wurde', other: 'Einträge wurden' })} ausgelassen, weil sie keine lesbaren Feeds sind.`,
+		later: 'Ihre Artikel kommen mit der nächsten Runde des Abrufs.',
+		export: 'Als OPML exportieren'
 	},
 
 	demo: {

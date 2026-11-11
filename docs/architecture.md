@@ -562,6 +562,9 @@ Gebaut in Paket 3.1 (`web/src/lib/api/`):
 - **Änderungen wirken sofort.** Lesen, Stern, alle als gelesen und jeder Zug im Baum zeigen sich gleich und gehen im Hintergrund an den Server, eine nach der anderen in der Reihenfolge, in der sie gemacht wurden. Lehnt der Server eine ab, wird sie zurückgenommen, eine Zeile über der Liste sagt es, und Baum und Zahlen werden neu geholt. Eine abgelehnte Änderung, die eine spätere schon überholt hat, wird nicht zurückgenommen.
 - **Filterregeln** kommen aus `/api/rules`. Eine Änderung zeigt sich in der Liste der Regeln sofort; was sie ausblendet und als gelesen markiert, rechnet der Server, deshalb werden Baum und Liste danach neu geholt. Während eine Regel geschrieben wird, fragt der Editor `POST /api/rules/preview`, sobald das Tippen eine Viertelsekunde ruht: So erfährt er, was die Regel träfe und ob ihr Muster eines ist, denn die regulären Ausdrücke des Servers sind nicht die des Browsers.
 - **Eine Antwort, die zu spät kommt,** wird verworfen: Wer schnell von Feed zu Feed klickt, sieht nie die Liste des vorigen.
+- **Abonnieren** (Paket 3.5) geht in zwei Schritten: Der Dialog fragt `POST /api/feeds/find`, was unter einer Adresse zu finden ist, und zeigt den Feed selbst oder die Feeds, die eine Website nennt; der gewählte wird mit `POST /api/feeds` abonniert, auf Wunsch in einen Ordner. Der Server ruft einen Feed, den noch niemand liest, dabei zuerst ab, das kann Sekunden dauern; erst dann erscheint er im Baum, und die Seite zeigt ihn. Suchen und Abonnieren stehen in derselben Reihe wie alle Änderungen, ein gerade angelegter Ordner ist also da, wenn ein Feed hinein soll. Was der Server ablehnt, sagt der Dialog mit eigenen Worten und darunter mit denen des Servers, der etwa nennt, was die Website geantwortet hat; zu viele Abfragen (429) und ein Server ohne Abruf (503) haben eigene Sätze.
+- **Umbenennen und Abbestellen** eines Feeds stehen im Menü seiner Zeile im Baum und wirken sofort. Ein leerer Name gibt dem Feed seinen eigenen zurück, den nur der Server kennt; deshalb wird der Baum danach neu geholt. Abbestellen fragt nach, weil mit dem Abo der Lesestand des Feeds geht; eine Regel, die für den Feed gilt, bleibt wie auf dem Server und greift wieder, wenn er erneut abonniert wird.
+- **OPML** steht im selben Dialog. Eine Datei geht, wie sie ist, als `text/x-opml` an `POST /api/opml`; eine über 1 MB lehnt schon der Browser ab. Der Dialog nennt, wie viele Feeds und Ordner neu sind, welche schon abonniert waren und was ausgelassen wurde. Der Export holt `GET /api/opml` und bietet die Datei als `rueder-<Datum>.opml` zum Speichern an. Der `DemoReader` hat kein OPML (`Reader.can.opml`): Er bräuchte einen eigenen Parser im Browser, der nur dem Entwurf diente.
 
 Abweichungen vom Entwurf:
 
@@ -570,7 +573,7 @@ Abweichungen vom Entwurf:
 - **Welche Ordner zugeklappt sind,** merkt sich der Browser (`localStorage`), nicht der Server.
 - Was die Oberfläche mit Server noch weglässt, steht bei [Paket 3.1](implementation.md#schritt-3-frontend).
 
-Was noch fehlt und Schritt 3 ergänzt: Labels, OPML, eine virtualisierte Liste für sehr lange Feeds, Vorladen des nächsten Artikels, Einstellungen auf dem Server, änderbare Tastaturbelegung.
+Was noch fehlt und Schritt 3 ergänzt: Labels, eine virtualisierte Liste für sehr lange Feeds, Vorladen des nächsten Artikels, Einstellungen auf dem Server, änderbare Tastaturbelegung.
 
 ## Betrieb
 

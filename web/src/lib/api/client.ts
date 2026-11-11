@@ -13,20 +13,25 @@ import type {
 	Created,
 	Credentials,
 	Feed,
+	FindFeeds,
 	Folder,
+	FoundFeeds,
 	List,
 	ListItem,
 	LoginWays,
 	Me,
 	Move,
 	NewFolder,
+	NewSubscription,
 	NodeRef,
+	OpmlImported,
 	Rename,
 	Rule,
 	RuleOutcome,
 	RulePreview,
 	RuleScope,
 	StateChange,
+	Subscribed,
 	Tree,
 	Upto,
 	Versions
@@ -112,14 +117,23 @@ const readPath = (stream: ListStream) => {
 /** How much of a refusal's text is kept. */
 const MAX_REASON = 300;
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** An OPML file as the server takes it. */
+const OPML = 'text/x-opml';
+
+/**
+ * Sends a request and gives back the answer, if the server took it. A body is
+ * sent as JSON, a `Blob` as it is, as an OPML file.
+ */
+async function send(method: string, path: string, body?: unknown): Promise<Response> {
+	const file = body instanceof Blob;
 	let response: Response;
 	try {
 		response = await fetch(`/api${path}`, {
 			method,
 			credentials: 'same-origin',
-			headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-			body: body === undefined ? undefined : JSON.stringify(body)
+			headers:
+				body === undefined ? undefined : { 'Content-Type': file ? OPML : 'application/json' },
+			body: body === undefined ? undefined : file ? body : JSON.stringify(body)
 		});
 	} catch {
 		throw new ApiError(0, 'the server did not answer');
@@ -129,12 +143,27 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 		const wait = Number(response.headers.get('Retry-After'));
 		throw new ApiError(response.status, reason, wait > 0 ? wait : null);
 	}
+	return response;
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+	const response = await send(method, path, body);
 	if (response.status === 204) return undefined as T;
 	try {
 		return (await response.json()) as T;
 	} catch {
 		// Something else answered in the server's place, a proxy's error page for one.
 		throw new ApiError(0, 'the answer was not what the server sends');
+	}
+}
+
+/** An answer that is a text, not JSON. */
+async function text(method: string, path: string): Promise<string> {
+	const response = await send(method, path);
+	try {
+		return await response.text();
+	} catch {
+		throw new ApiError(0, 'the answer was cut short');
 	}
 }
 
@@ -176,6 +205,21 @@ export const api = {
 	renameFolder: (id: number, title: string) =>
 		call<void>('PATCH', `/folders/${id}`, { title } satisfies Rename),
 	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`),
+
+	/** The feeds at an address: the feed itself, or those a web page names. */
+	findFeeds: async (url: string) =>
+		(await call<FoundFeeds>('POST', '/feeds/find', { url } satisfies FindFeeds)).feeds,
+	/** Subscribes to the feed at an address and gives back its number. */
+	subscribe: async (url: string, folderId: number | null) => {
+		const body: NewSubscription = { url, folder_id: folderId };
+		return (await call<Subscribed>('POST', '/feeds', body)).id;
+	},
+	/** An empty title gives the feed its own name back. */
+	renameFeed: (id: number, title: string) =>
+		call<void>('PATCH', `/feeds/${id}`, { title } satisfies Rename),
+	unsubscribe: (id: number) => call<void>('DELETE', `/feeds/${id}`),
+	importOpml: (file: Blob) => call<OpmlImported>('POST', '/opml', file),
+	exportOpml: () => text('GET', '/opml'),
 
 	rules: () => call<ApiRule[]>('GET', '/rules'),
 	addRule: (rule: ApiNewRule) => call<RuleOutcome>('POST', '/rules', rule),

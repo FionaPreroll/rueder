@@ -7,14 +7,24 @@
 
 import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
 import type { Article, ArticleVersion, Feed, Stream, TreeNode } from '#lib/model.ts';
-import type { Abilities, Fresh, Reader, RulePreview } from '#lib/reader.ts';
+import type {
+	Abilities,
+	Found,
+	Fresh,
+	Imported,
+	Reader,
+	RulePreview,
+	Subscribed
+} from '#lib/reader.ts';
 import {
+	addFeed,
 	addFolder,
 	canMove,
 	feedIds,
 	findNode,
 	moveNode,
 	nudge,
+	removeFeed,
 	removeFolder,
 	renameFolder,
 	type DropPosition,
@@ -70,6 +80,20 @@ const startRules: FilterRule[] = [
 	}
 ];
 
+/** What a reader typed, as an address of the web; without a scheme it is https. */
+function webAddress(text: string): URL | null {
+	const trimmed = text.trim();
+	if (!trimmed || /\s/.test(trimmed)) return null;
+	try {
+		const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+		const web =
+			(url.protocol === 'https:' || url.protocol === 'http:') && url.hostname.includes('.');
+		return web ? url : null;
+	} catch {
+		return null;
+	}
+}
+
 export class DemoReader implements Reader {
 	tree = $state.raw<TreeNode[]>([]);
 	feeds = $state.raw<Record<string, Feed>>({});
@@ -98,7 +122,7 @@ export class DemoReader implements Reader {
 	readonly loading = false;
 	readonly notice = null;
 	readonly account = null;
-	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true };
+	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true, opml: false };
 	/** The filter rules and the draft's own switches are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = this;
@@ -119,6 +143,10 @@ export class DemoReader implements Reader {
 	private rng = random(42);
 	private folderCount = 0;
 	private feedCount = 0;
+	/** The feeds subscribed to here, by their address. */
+	private addresses = new Map<string, string>();
+	/** The names the feeds had before the reader gave them one. */
+	private ownTitles = new Map<string, string>();
 
 	constructor(now: () => number = Date.now, data: DemoData = demoData(now())) {
 		this.now = now;
@@ -426,29 +454,76 @@ export class DemoReader implements Reader {
 		this.applyRules();
 	}
 
-	/** Adds a feed for an address. The draft cannot fetch, so the feed starts empty. */
-	subscribe(address: string) {
-		let host = address.trim();
-		try {
-			host = new URL(/^[a-z]+:\/\//i.test(host) ? host : `https://${host}`).hostname;
-		} catch {
-			// Not an address; the text itself is the title.
+	/**
+	 * The draft cannot fetch, so whatever looks like an address is taken as a feed,
+	 * named after its host.
+	 */
+	async findFeeds(address: string): Promise<Found> {
+		const url = webAddress(address);
+		if (!url) return { problem: 'refused', reason: '' };
+		return { feeds: [{ url: url.href, title: url.hostname }] };
+	}
+
+	/** Adds a feed for an address; it starts empty and stays so. */
+	async subscribe(address: string, folderId: string | null = null): Promise<Subscribed> {
+		const url = webAddress(address);
+		if (!url) return { problem: 'refused', reason: '' };
+		const known = this.addresses.get(url.href);
+		if (known && this.feeds[known]) {
+			this.show({ kind: 'feed', id: known });
+			return { feedId: known, known: true };
 		}
 		const id = `feed-new-${++this.feedCount}`;
 		const feed: Feed = {
 			id,
-			title: host,
-			siteUrl: `https://${host}`,
+			title: url.hostname,
+			siteUrl: url.origin,
 			hue: (this.feedCount * 67) % 360,
 			lastSeq: 0,
 			error: null
 		};
+		this.addresses.set(url.href, id);
 		this.feeds = { ...this.feeds, [id]: feed };
 		this.articles = { ...this.articles, [id]: [] };
 		this.states = { ...this.states, [id]: emptyState() };
-		this.tree = [...this.tree, { kind: 'feed', id }];
+		const folder = folderId !== null && findNode(this.tree, folderId)?.kind === 'folder';
+		this.tree = addFeed(this.tree, id, folder ? folderId : null);
+		if (folder && folderId !== null) this.setClosed(folderId, false);
 		this.show({ kind: 'feed', id });
-		return id;
+		return { feedId: id, known: false };
+	}
+
+	renameFeed(id: string, title: string) {
+		const feed = this.feeds[id];
+		if (!feed) return;
+		if (!this.ownTitles.has(id)) this.ownTitles.set(id, feed.title);
+		const name = title.trim() || this.ownTitles.get(id) || feed.title;
+		this.feeds = { ...this.feeds, [id]: { ...feed, title: name } };
+	}
+
+	/** The feed, its articles and what was read there go. */
+	unsubscribe(id: string) {
+		if (!this.feeds[id]) return;
+		const { [id]: _feed, ...feeds } = this.feeds;
+		const { [id]: _articles, ...articles } = this.articles;
+		const { [id]: _state, ...states } = this.states;
+		this.feeds = feeds;
+		this.articles = articles;
+		this.states = states;
+		this.tree = removeFeed(this.tree, id);
+		for (const [address, feedId] of this.addresses) {
+			if (feedId === id) this.addresses.delete(address);
+		}
+		if (this.stream.kind === 'feed' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
+	/** The draft has no OPML; `can.opml` keeps the page from asking. */
+	async importOpml(): Promise<Imported> {
+		return { problem: 'unreachable' };
+	}
+
+	async exportOpml() {
+		return null;
 	}
 
 	// Filter rules

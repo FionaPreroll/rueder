@@ -5,6 +5,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TreeNode } from '#lib/model.ts';
+import { MAX_OPML } from '#lib/reader.ts';
 import { PAGE, ServerReader, toTree } from './reader.svelte.ts';
 import { FakeServer } from './test/fake-server.ts';
 
@@ -625,7 +626,12 @@ describe('reading', () => {
 		await settle();
 		expect(server.writes).toEqual([]);
 		expect(reader.totalUnread).toBe(6);
-		expect(reader.can).toEqual({ oldestFirst: false, markOlder: false, subscribe: false });
+		expect(reader.can).toEqual({
+			oldestFirst: false,
+			markOlder: false,
+			subscribe: true,
+			opml: true
+		});
 	});
 });
 
@@ -892,9 +898,231 @@ describe('the session', () => {
 		expect(reader.demo).toBeNull();
 		expect(reader.pending).toBe(0);
 		expect(reader.hiddenCount).toBe(0);
-		reader.subscribe();
 		reader.showNew();
 		await settle();
 		expect(server.writes).toEqual([]);
+	});
+});
+
+describe('subscribing', () => {
+	const site = { url: 'https://site.example/feed.xml', title: 'A site' };
+	const other = { url: 'https://site.example/comments.xml', title: 'Its comments' };
+
+	it('finds the feeds of an address, and what is not there', async () => {
+		server.addSite('https://site.example', site, other);
+		const reader = await started();
+		expect(await reader.findFeeds('site.example')).toEqual({ feeds: [site, other] });
+		expect(await reader.findFeeds('https://site.example/feed.xml')).toEqual({ feeds: [site] });
+		expect(await reader.findFeeds('nothing.example')).toEqual({
+			problem: 'refused',
+			reason: 'the address cannot be fetched: no such site'
+		});
+		expect(server.requests.filter((r) => r.path === '/feeds/find').map((r) => r.body)).toEqual([
+			{ url: 'site.example' },
+			{ url: 'https://site.example/feed.xml' },
+			{ url: 'nothing.example' }
+		]);
+		// Looking changes nothing.
+		expect(server.writes.filter((write) => write !== 'POST /feeds/find')).toEqual([]);
+	});
+
+	it('says why the server would not look', async () => {
+		const reader = await started();
+		server.refuse('POST', /^\/feeds\/find$/, 429, 1, 'too many', { 'Retry-After': '2' });
+		expect(await reader.findFeeds('site.example')).toEqual({ problem: 'busy', retryAfter: 2 });
+		server.refuse('POST', /^\/feeds\/find$/, 503);
+		expect(await reader.findFeeds('site.example')).toEqual({ problem: 'noFetching' });
+		server.refuse('POST', /^\/feeds\/find$/, 500);
+		expect(await reader.findFeeds('site.example')).toEqual({ problem: 'unreachable' });
+		server.down = true;
+		expect(await reader.findFeeds('site.example')).toEqual({ problem: 'unreachable' });
+		server.down = false;
+		server.signedIn = null;
+		expect(await reader.findFeeds('site.example')).toEqual({ problem: 'unreachable' });
+		expect(session.expired).toHaveBeenCalled();
+		expect(reader.notice).toBeNull();
+	});
+
+	it('subscribes into a folder and shows the new feed', async () => {
+		server.addSite('https://site.example', site);
+		const reader = await started();
+		reader.setClosed(`folder-${news}`, true);
+		const subscribed = await reader.subscribe(site.url, `folder-${news}`);
+		await settle();
+		if (!('feedId' in subscribed)) throw new Error('not subscribed');
+		const { feedId } = subscribed;
+		expect(subscribed.known).toBe(false);
+		expect(server.requests.find((r) => r.method === 'POST' && r.path === '/feeds')?.body).toEqual({
+			url: site.url,
+			folder_id: news
+		});
+		expect(shape(reader.tree)).toEqual([
+			{ [`News (folder-${news})`]: [`feed-${tech}`, `feed-${blog}`, feedId] },
+			`feed-${lone}`
+		]);
+		expect(reader.feeds[feedId].title).toBe('A site');
+		expect(reader.isClosed(`folder-${news}`)).toBe(false);
+		expect(reader.stream).toEqual({ kind: 'feed', id: feedId });
+
+		// Once more, it is known; at the top level, the folder is null.
+		expect(await reader.subscribe(site.url, null)).toEqual({ feedId, known: true });
+		const second = server.requests.filter((r) => r.method === 'POST' && r.path === '/feeds')[1];
+		expect(second.body).toEqual({ url: site.url, folder_id: null });
+	});
+
+	it('says why the server would not subscribe, and changes nothing', async () => {
+		server.addSite('https://site.example', site);
+		const reader = await started();
+		const before = shape(reader.tree);
+		expect(await reader.subscribe('https://site.example', null)).toEqual({
+			problem: 'refused',
+			reason: 'this is not a feed that can be read: it is a web page'
+		});
+		expect(await reader.subscribe(site.url, 'folder-999')).toMatchObject({ problem: 'refused' });
+		server.refuse('POST', /^\/feeds$/, 429);
+		expect(await reader.subscribe(site.url, null)).toEqual({ problem: 'busy', retryAfter: null });
+		await settle();
+		expect(shape(reader.tree)).toEqual(before);
+		expect(reader.notice).toBeNull();
+		expect(reader.stream).toEqual({ kind: 'home' });
+	});
+
+	it('subscribes after the changes on their way', async () => {
+		server.addSite('https://site.example', site);
+		const reader = await started();
+		const release = server.hold(/^\/tree\/move$/);
+		reader.move(`feed-${lone}`, `folder-${news}`, 'inside');
+		const subscribing = reader.subscribe(site.url, null);
+		await settle();
+		expect(server.writes).toEqual(['POST /tree/move']);
+		release();
+		await subscribing;
+		expect(server.writes).toEqual(['POST /tree/move', 'POST /feeds']);
+	});
+});
+
+describe('the subscriptions', () => {
+	it("are renamed at once, and an empty name is the feed's own", async () => {
+		const reader = await started();
+		reader.renameFeed(`feed-${tech}`, 'Technik');
+		expect(reader.feeds[`feed-${tech}`].title).toBe('Technik');
+		await settle();
+		expect(server.requests.at(-1)).toMatchObject({
+			method: 'PATCH',
+			path: `/feeds/${tech}`,
+			body: { title: 'Technik' }
+		});
+		reader.renameFeed(`feed-${tech}`, '');
+		await settle();
+		expect(reader.feeds[`feed-${tech}`].title).toBe('Tech');
+		reader.renameFeed('feed-999', 'Nothing');
+		await settle();
+		expect(server.writes).toEqual([`PATCH /feeds/${tech}`, `PATCH /feeds/${tech}`]);
+	});
+
+	it('get their old name back when the server refuses the new one', async () => {
+		const reader = await started();
+		server.refuse('PATCH', /^\/feeds\/\d+$/, 400);
+		reader.renameFeed(`feed-${tech}`, 'Technik');
+		await settle();
+		expect(reader.feeds[`feed-${tech}`].title).toBe('Tech');
+		expect(reader.notice).toBe('notSaved');
+	});
+
+	it("end at once, and the list loses the feed's articles", async () => {
+		const reader = await started();
+		reader.show({ kind: 'all' });
+		await settle();
+		expect(titles(reader)).toContain(`Article 1 of feed ${tech}`);
+		reader.unsubscribe(`feed-${tech}`);
+		expect(reader.feeds[`feed-${tech}`]).toBeUndefined();
+		expect(shape(reader.tree)).toEqual([
+			{ [`News (folder-${news})`]: [`feed-${blog}`] },
+			`feed-${lone}`
+		]);
+		expect(reader.totalUnread).toBe(3);
+		await settle();
+		expect(server.writes).toEqual([`DELETE /feeds/${tech}`]);
+		expect(titles(reader).some((title) => title.endsWith(`of feed ${tech}`))).toBe(false);
+	});
+
+	it('that is shown ends, and everything is shown', async () => {
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${lone}` });
+		await settle();
+		reader.unsubscribe(`feed-${lone}`);
+		expect(reader.stream).toEqual({ kind: 'all' });
+		reader.unsubscribe('feed-999');
+		await settle();
+		expect(server.writes).toEqual([`DELETE /feeds/${lone}`]);
+	});
+
+	it('come back when the server refuses to end one', async () => {
+		const reader = await started();
+		server.refuse('DELETE', /^\/feeds\/\d+$/, 500);
+		reader.unsubscribe(`feed-${tech}`);
+		await settle();
+		expect(reader.feeds[`feed-${tech}`]).toMatchObject({ title: 'Tech' });
+		expect(shape(reader.tree)[0]).toEqual({
+			[`News (folder-${news})`]: [`feed-${tech}`, `feed-${blog}`]
+		});
+		expect(reader.notice).toBe('notSaved');
+	});
+});
+
+describe('OPML', () => {
+	const file = (...outlines: string[]) =>
+		new Blob([`<?xml version="1.0"?><opml version="2.0"><body>${outlines.join('')}</body></opml>`]);
+
+	it('takes a file in as it is and loads the tree anew', async () => {
+		const reader = await started();
+		const imported = await reader.importOpml(
+			file(
+				'<outline text="New" xmlUrl="https://new.example/feed.xml"/>',
+				`<outline text="Tech" xmlUrl="https://feed-${tech}.example/feed.xml"/>`,
+				'<outline text="Not one" xmlUrl="javascript:alert(1)"/>'
+			)
+		);
+		expect(imported).toEqual({ feeds: 1, folders: 0, known: 1, skipped: 1 });
+		const sent = server.requests.find((r) => r.path === '/opml');
+		expect(sent?.type).toBe('text/x-opml');
+		expect(String(sent?.body)).toContain('https://new.example/feed.xml');
+		await settle();
+		expect(Object.values(reader.feeds).map((feed) => feed.title)).toContain('New');
+	});
+
+	it('refuses a file that is too large before sending it', async () => {
+		const reader = await started();
+		const large = new Blob(['x'.repeat(MAX_OPML + 1)]);
+		expect(await reader.importOpml(large)).toEqual({ problem: 'tooLarge' });
+		expect(server.writes).toEqual([]);
+	});
+
+	it('says why the server would not take a file', async () => {
+		const reader = await started();
+		expect(await reader.importOpml(new Blob(['<html></html>']))).toEqual({
+			problem: 'refused',
+			reason: 'this is not an OPML file'
+		});
+		server.refuse('POST', /^\/opml$/, 413);
+		expect(await reader.importOpml(file())).toEqual({ problem: 'tooLarge' });
+		server.refuse('POST', /^\/opml$/, 415, 1, 'not XML');
+		expect(await reader.importOpml(file())).toEqual({ problem: 'refused', reason: 'not XML' });
+		server.down = true;
+		expect(await reader.importOpml(file())).toEqual({ problem: 'unreachable' });
+		expect(reader.notice).toBeNull();
+	});
+
+	it('gives out the subscriptions as a file', async () => {
+		const reader = await started();
+		const opml = await reader.exportOpml();
+		expect(opml).toContain('<opml version="2.0">');
+		expect(opml).toContain(`xmlUrl="https://feed-${tech}.example/feed.xml"`);
+		server.down = true;
+		expect(await reader.exportOpml()).toBeNull();
+		server.down = false;
+		server.signedIn = null;
+		expect(await reader.exportOpml()).toBeNull();
+		expect(session.expired).toHaveBeenCalled();
 	});
 });

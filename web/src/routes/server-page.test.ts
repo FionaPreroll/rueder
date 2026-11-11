@@ -133,8 +133,7 @@ describe('the page with a server', () => {
 	it('leaves out what the server cannot do yet', async () => {
 		render(Page);
 		expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();
-		// No subscribing, and none of the switches of the made-up reader.
-		expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
+		// None of the switches of the made-up reader.
 		expect(screen.queryByRole('button', { name: 'Draft' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'Live' })).toBeNull();
 
@@ -143,6 +142,30 @@ describe('the page with a server', () => {
 		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeInTheDocument();
 		expect(screen.queryByRole('menuitemradio', { name: 'Oldest first' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'More ways to mark as read' })).toBeNull();
+	});
+
+	it('subscribes to a feed, shows it, and ends the subscription again', async () => {
+		server.addSite('https://site.example', { url: 'https://site.example/feed.xml', title: 'Site' });
+		await reading();
+		await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
+		const dialog = screen.getByRole('dialog', { name: 'Subscribe to a feed' });
+		await userEvent.type(within(dialog).getByRole('textbox'), 'site.example{Enter}');
+		await userEvent.selectOptions(await within(dialog).findByLabelText('Into the folder'), 'News');
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Subscribe: Site' }));
+		await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+		expect(heading()).toHaveTextContent('Site');
+		const row = within(sidebar()).getByRole('button', { name: /^Site/ });
+		expect(row).toHaveAttribute('aria-current', 'page');
+
+		await userEvent.click(
+			within(sidebar()).getByRole('button', { name: 'Actions for the feed Site' })
+		);
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Unsubscribe' }));
+		const confirm = screen.getByRole('dialog', { name: 'Unsubscribe?' });
+		await userEvent.click(within(confirm).getByRole('button', { name: 'Unsubscribe' }));
+		expect(within(sidebar()).queryByRole('button', { name: /^Site/ })).toBeNull();
+		expect(heading()).toHaveTextContent('All items');
+		await vi.waitFor(() => expect(server.feeds.some((feed) => feed.title === 'Site')).toBe(false));
 	});
 
 	it('writes a filter rule with the server saying what it would catch', async () => {

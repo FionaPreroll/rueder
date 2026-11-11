@@ -32,6 +32,14 @@ const en = {
 		renameFolder: 'Rename',
 		removeFolder: 'Remove the folder, keep what is in it',
 		folderActions: (title: string) => `Actions for the folder ${title}`,
+		feedName: 'Name of the feed',
+		feedNameHint: 'Empty for the feed’s own name',
+		renameFeed: 'Rename',
+		unsubscribe: 'Unsubscribe',
+		feedActions: (title: string) => `Actions for the feed ${title}`,
+		unsubscribeTitle: 'Unsubscribe?',
+		unsubscribeText: (title: string) =>
+			`Unsubscribe from “${title}”? What you read and starred there is lost.`,
 		openFolder: 'Open folder',
 		closeFolder: 'Close folder',
 		openSidebar: 'Show the sidebar',
@@ -235,8 +243,40 @@ const en = {
 	subscribe: {
 		title: 'Subscribe to a feed',
 		address: 'Address of the feed or the website',
+		find: 'Find feeds',
+		finding: 'Looking …',
 		note: 'The draft cannot fetch anything, so the feed stays empty.',
-		add: 'Subscribe'
+		found: (count: number) => (count === 1 ? 'There is one feed:' : `There are ${n(count)} feeds:`),
+		none: 'There is no feed at this address.',
+		untitled: 'Without a name',
+		folder: 'Into the folder',
+		topLevel: 'No folder',
+		add: 'Subscribe',
+		adding: 'Subscribing …',
+		refused: 'That did not work.',
+		serverSays: (reason: string) => `The server says: ${reason}`,
+		busy: (seconds: number | null) =>
+			seconds
+				? `Too many lookups at once. Try again in ${n(seconds)} ${plural(seconds, { one: 'second', other: 'seconds' })}.`
+				: 'Too many lookups at once. Try again in a moment.',
+		noFetching: 'This server does not fetch feeds.',
+		tooLarge: (megabytes: number) => `The file is larger than ${n(megabytes)} MB.`,
+		unreachable: 'The server does not answer. Try again in a moment.'
+	},
+
+	opml: {
+		title: 'Import and export',
+		intro: 'Bring your subscriptions from another feed reader as an OPML file, or take them along.',
+		import: 'Import an OPML file',
+		importing: 'Importing …',
+		imported: (feeds: number, folders: number) =>
+			`${n(feeds)} new ${plural(feeds, { one: 'feed', other: 'feeds' })} and ${n(folders)} new ${plural(folders, { one: 'folder', other: 'folders' })}.`,
+		known: (count: number) =>
+			`${n(count)} ${plural(count, { one: 'feed was', other: 'feeds were' })} subscribed already.`,
+		skipped: (count: number) =>
+			`${n(count)} ${plural(count, { one: 'entry was', other: 'entries were' })} left out, not being feeds that can be read.`,
+		later: 'Their articles arrive with the next round of fetching.',
+		export: 'Export as OPML'
 	},
 
 	demo: {
