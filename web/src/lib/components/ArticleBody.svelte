@@ -23,9 +23,7 @@
 	const read = $derived(reader.isRead(article));
 	const starred = $derived(reader.isStarred(article));
 	const feed = $derived(reader.feeds[article.feedId]);
-	const rule = $derived(
-		reader.isHidden(article) ? (reader.filters?.hidingRule(article) ?? null) : null
-	);
+	const rule = $derived(reader.isHidden(article) ? reader.filters.hidingRule(article) : null);
 
 	// A list comes without the texts; the text is fetched when the article is shown.
 	$effect(() => {

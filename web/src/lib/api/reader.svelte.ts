@@ -8,11 +8,12 @@
 // asked again.
 //
 // What the server cannot do yet is left out here and switched off in the page
-// (`can`, `filters`): lists that start with the oldest article, marking as read by
-// age, the filter rules and subscribing.
+// (`can`): lists that start with the oldest article, marking as read by age, and
+// subscribing, which comes with a later work package.
 
 import type { Article, ArticleVersion, Feed, Stream, TreeNode } from '#lib/model.ts';
-import type { Abilities, Account, Fresh, Notice, Reader } from '#lib/reader.ts';
+import { ruleMatches, type FilterRule } from '#lib/filters.ts';
+import type { Abilities, Account, Fresh, Notice, Reader, RulePreview } from '#lib/reader.ts';
 import {
 	canMove,
 	feedIds,
@@ -30,6 +31,8 @@ import {
 	serverId,
 	type Api,
 	type ApiListItem,
+	type ApiNewRule,
+	type ApiRule,
 	type ApiTree,
 	type ListStream
 } from './client.ts';
@@ -44,6 +47,8 @@ const TEXTS_AT_ONCE = 4;
 const TEXTS_KEPT = 300;
 /** The cursor this close to the end of the page fetches the next one. */
 const AHEAD = 5;
+/** A rule that is being typed is tried once the typing has paused this long. */
+const PREVIEW_AFTER = 250;
 
 /** Where the closed folders are kept in the browser. */
 const CLOSED_KEY = 'rueder.closed';
@@ -75,6 +80,36 @@ export interface SessionEnds {
 
 const feedKey = (id: number) => `feed-${id}`;
 const folderKey = (id: number) => `folder-${id}`;
+const ruleKey = (id: number) => `rule-${id}`;
+
+function toRule(rule: ApiRule): FilterRule {
+	const { scope } = rule;
+	return {
+		id: ruleKey(rule.id),
+		enabled: rule.enabled,
+		scope:
+			scope.kind === 'all'
+				? scope
+				: { kind: scope.kind, id: scope.kind === 'feed' ? feedKey(scope.id) : folderKey(scope.id) },
+		field: rule.field,
+		match: rule.match,
+		pattern: rule.pattern,
+		action: rule.action
+	};
+}
+
+/** A rule as the server takes it: without its id, its scope by the server's numbers. */
+function fromRule(rule: FilterRule): ApiNewRule {
+	const { scope } = rule;
+	return {
+		enabled: rule.enabled,
+		scope: scope.kind === 'all' ? scope : { kind: scope.kind, id: serverId(scope.id) },
+		field: rule.field,
+		match: rule.match,
+		pattern: rule.pattern,
+		action: rule.action
+	};
+}
 
 /** The hue of the stand-in for a feed's icon: the same for the same feed every time. */
 const hueOf = (id: number) => (id * 67) % 360;
@@ -160,11 +195,15 @@ export class ServerReader implements Reader {
 	loading = $state(true);
 	notice = $state<Notice | null>(null);
 
+	/** The filter rules, in the order the server keeps them. */
+	rules = $state.raw<FilterRule[]>([]);
+
 	// What comes with later work packages: live updates (3.2), a count of the
-	// hidden articles, the filter rules and subscribing (3.5).
+	// hidden articles and subscribing (3.5).
 	readonly pending = 0;
 	readonly hiddenCount = 0;
-	readonly filters = null;
+	/** The filter rules are this reader's own methods. */
+	readonly filters = this;
 	readonly demo = null;
 	readonly can: Abilities = { oldestFirst: false, markOlder: false, subscribe: false };
 	readonly account: Account;
@@ -198,6 +237,9 @@ export class ServerReader implements Reader {
 	/** How many changes of one thing are on their way, by what they change. */
 	private waiting = new Map<string, number>();
 	private resyncing = false;
+	private newRules = 0;
+	/** Counts the rules that were tried, so that only the last one typed is asked for. */
+	private previewRun = 0;
 
 	private api: Api;
 	private session: SessionEnds;
@@ -208,9 +250,10 @@ export class ServerReader implements Reader {
 		this.api = api;
 	}
 
-	/** Loads the tree and the start page. There is nothing to stop yet. */
+	/** Loads the tree, the rules and the start page. There is nothing to stop yet. */
 	start() {
 		void this.loadTree();
+		void this.loadRules();
 		void this.loadList();
 		return () => {};
 	}
@@ -756,6 +799,88 @@ export class ServerReader implements Reader {
 	removeFolder(id: string) {
 		this.changeTree(removeFolder(this.tree, id), () => this.api.removeFolder(serverId(id)));
 		if (this.stream.kind === 'folder' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
+	// Filter rules
+
+	private async loadRules() {
+		try {
+			this.rules = (await this.api.rules()).map(toRule);
+		} catch (error) {
+			this.failed(error, 'unreachable');
+		}
+	}
+
+	/**
+	 * A change to the rules shows in their list at once. What it hides and marks as
+	 * read is the server's to work out, so the tree and the list are asked for anew
+	 * once it has taken the change; a change it refuses is gone with the rules as
+	 * the server has them.
+	 */
+	private changeRules(rules: FilterRule[], send: () => Promise<unknown>) {
+		this.rules = rules;
+		this.write(
+			'rules',
+			async () => {
+				await send();
+				await Promise.all([this.loadRules(), this.loadTree()]);
+				this.reload();
+			},
+			() => void this.loadRules()
+		);
+	}
+
+	newRuleId = () => `rule-new-${++this.newRules}`;
+
+	saveRule(rule: FilterRule) {
+		const known = this.rules.some((r) => r.id === rule.id);
+		this.changeRules(
+			known ? this.rules.map((r) => (r.id === rule.id ? rule : r)) : [...this.rules, rule],
+			() =>
+				known
+					? this.api.changeRule(serverId(rule.id), fromRule(rule))
+					: this.api.addRule(fromRule(rule))
+		);
+	}
+
+	deleteRule(id: string) {
+		this.changeRules(
+			this.rules.filter((rule) => rule.id !== id),
+			() => this.api.removeRule(serverId(id))
+		);
+	}
+
+	/** Asks the server what a rule would catch, once the typing has paused. */
+	async preview(rule: FilterRule): Promise<RulePreview> {
+		const run = ++this.previewRun;
+		await new Promise((resolve) => setTimeout(resolve, PREVIEW_AFTER));
+		// Another rule was typed since; whoever asked for this one has moved on.
+		if (run !== this.previewRun) return 'unreachable';
+		try {
+			return await this.api.previewRule(fromRule(rule));
+		} catch (error) {
+			// 400 is the server's word for a pattern it cannot use.
+			if (error instanceof ApiError && error.status === 400) return 'invalid';
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			return 'unreachable';
+		}
+	}
+
+	/**
+	 * The first enabled rule that hides the article, as far as the browser can
+	 * tell: the server does not say which rule it was, and its regular expressions
+	 * are not quite the browser's.
+	 */
+	hidingRule(article: Article) {
+		return (
+			this.rules.find(
+				(rule) =>
+					rule.enabled &&
+					rule.action === 'hide' &&
+					(rule.scope.kind === 'all' || this.feedsOf(rule.scope).includes(article.feedId)) &&
+					ruleMatches(rule, article)
+			) ?? null
+		);
 	}
 
 	/** Comes with work package 3.5; `can.subscribe` keeps the page from asking. */

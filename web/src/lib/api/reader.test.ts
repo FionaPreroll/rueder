@@ -629,6 +629,140 @@ describe('reading', () => {
 	});
 });
 
+describe('the filter rules', () => {
+	const adRule = (over = {}) => ({
+		id: 'rule-new-1',
+		enabled: true,
+		scope: { kind: 'all' as const },
+		field: 'title' as const,
+		match: 'contains' as const,
+		pattern: 'Article 1 of',
+		action: 'hide' as const,
+		...over
+	});
+
+	it('come from the server, with their scopes named as the tree names them', async () => {
+		server.rules = [
+			{ ...adRule(), id: 7, scope: { kind: 'feed', id: tech } },
+			{ ...adRule(), id: 8, scope: { kind: 'folder', id: news }, enabled: false },
+			{ ...adRule(), id: 9 }
+		];
+		const reader = await started();
+		expect(reader.filters).toBe(reader);
+		expect(reader.rules.map((rule) => [rule.id, rule.scope, rule.enabled])).toEqual([
+			['rule-7', { kind: 'feed', id: `feed-${tech}` }, true],
+			['rule-8', { kind: 'folder', id: `folder-${news}` }, false],
+			['rule-9', { kind: 'all' }, true]
+		]);
+	});
+
+	it('are saved at once, and the server says what they hide', async () => {
+		const reader = await started();
+		reader.show({ kind: 'all' });
+		await settle();
+		expect(reader.visible.length).toBe(6);
+
+		const id = reader.newRuleId();
+		reader.saveRule(adRule({ id, scope: { kind: 'folder', id: `folder-${news}` } }));
+		expect(reader.rules.map((rule) => rule.id)).toEqual([id]);
+		await settle();
+		expect(server.requests.find((r) => r.method === 'POST' && r.path === '/rules')?.body).toEqual({
+			enabled: true,
+			scope: { kind: 'folder', id: news },
+			field: 'title',
+			match: 'contains',
+			pattern: 'Article 1 of',
+			action: 'hide'
+		});
+		// The rule has the server's id now; what it hides is gone from the list and the counts.
+		const [saved] = reader.rules;
+		expect(saved.id).toBe(`rule-${server.rules[0].id}`);
+		expect(reader.visible.length).toBe(4);
+		expect(reader.totalUnread).toBe(4);
+
+		reader.show({ kind: 'hidden' });
+		await settle();
+		expect(reader.visible.map((a) => a.feedId).sort()).toEqual(
+			[blog, tech].map((n) => `feed-${n}`).sort()
+		);
+		expect(reader.hidingRule(reader.visible[0])).toEqual(saved);
+
+		// Switched off, it hides nothing and says so for no article.
+		reader.saveRule({ ...saved, enabled: false });
+		expect(reader.rules[0].enabled).toBe(false);
+		await settle();
+		expect(server.writes.at(-1)).toBe(`PUT /rules/${server.rules[0].id}`);
+		expect(reader.visible).toEqual([]);
+		expect(reader.totalUnread).toBe(6);
+
+		reader.deleteRule(saved.id);
+		expect(reader.rules).toEqual([]);
+		await settle();
+		expect(server.writes.at(-1)).toMatch(/^DELETE \/rules\/\d+$/);
+		expect(server.rules).toEqual([]);
+	});
+
+	it('are as the server has them again when it refuses a change', async () => {
+		server.rules = [{ ...adRule(), id: 7 }];
+		server.applyRules();
+		const reader = await started();
+		server.refuse('PUT', /^\/rules\/7$/, 400);
+		reader.saveRule({ ...reader.rules[0], pattern: 'something else' });
+		expect(reader.rules[0].pattern).toBe('something else');
+		await settle();
+		expect(reader.rules[0].pattern).toBe('Article 1 of');
+		expect(reader.notice).toBe('notSaved');
+
+		server.refuse('DELETE', /^\/rules\/7$/, 500);
+		reader.deleteRule('rule-7');
+		expect(reader.rules).toEqual([]);
+		await settle();
+		expect(reader.rules.map((rule) => rule.id)).toEqual(['rule-7']);
+	});
+
+	it('say only for a rule in whose scope the feed lies why an article is hidden', async () => {
+		server.rules = [
+			{ ...adRule(), id: 7, scope: { kind: 'feed', id: lone }, pattern: 'Article' },
+			{ ...adRule(), id: 8, action: 'read', pattern: 'Article' }
+		];
+		server.applyRules();
+		const reader = await started();
+		reader.show({ kind: 'hidden' });
+		await settle();
+		expect(reader.visible.map((a) => a.feedId)).toEqual([`feed-${lone}`]);
+		expect(reader.hidingRule(reader.visible[0])?.id).toBe('rule-7');
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		// The rule that marks as read hides nothing, and the other is not about this feed.
+		expect(reader.hidingRule(reader.visible[0])).toBeNull();
+	});
+
+	it('are tried on the server while they are written, the last one typed only', async () => {
+		const reader = await started();
+		const asked = () => server.requests.filter((r) => r.path === '/rules/preview');
+		const typed = ['A', 'Ar', 'Article 1 of'].map((pattern) => reader.preview(adRule({ pattern })));
+		expect(asked()).toEqual([]);
+		const answers = await Promise.all(typed);
+		expect(asked().length).toBe(1);
+		expect(asked()[0].body).toMatchObject({ pattern: 'Article 1 of', scope: { kind: 'all' } });
+		expect(answers.at(-1)).toEqual({ matches: 3, of: 6 });
+
+		const inFeed = adRule({ scope: { kind: 'feed' as const, id: `feed-${tech}` } });
+		expect(await reader.preview(inFeed)).toEqual({ matches: 1, of: 3 });
+	});
+
+	it('learn from the server whether a pattern is one', async () => {
+		const reader = await started();
+		expect(await reader.preview(adRule({ match: 'regex', pattern: '(Art' }))).toBe('invalid');
+		server.down = true;
+		expect(await reader.preview(adRule())).toBe('unreachable');
+		server.down = false;
+		server.signedIn = null;
+		expect(await reader.preview(adRule())).toBe('unreachable');
+		expect(session.expired).toHaveBeenCalled();
+	});
+});
+
 describe('the text of an article', () => {
 	it('is fetched when asked for, once', async () => {
 		// Feeds name tags twice now and then.
@@ -753,9 +887,8 @@ describe('the session', () => {
 		expect(session.signOut).toHaveBeenCalledOnce();
 	});
 
-	it('has neither rules nor the switches of the made-up reader', async () => {
+	it('has none of the switches of the made-up reader', async () => {
 		const reader = await started();
-		expect(reader.filters).toBeNull();
 		expect(reader.demo).toBeNull();
 		expect(reader.pending).toBe(0);
 		expect(reader.hiddenCount).toBe(0);

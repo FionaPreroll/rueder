@@ -200,6 +200,7 @@ const en = {
 			`Applies to ${n(count)} of ${n(total)} articles here now.`,
 		invalid: 'This is not a valid regular expression.',
 		empty: 'Enter the text to look for.',
+		checking: 'Looking what it would catch …',
 		hits: (count: number) => `${n(count)} ${plural(count, { one: 'hit', other: 'hits' })}`,
 		summary: (field: string, match: string, pattern: string, action: string) =>
 			`${field} ${match} “${pattern}”: ${action}`

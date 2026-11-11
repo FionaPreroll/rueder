@@ -18,17 +18,14 @@
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const allTabs = ['look', 'reading', 'rules', 'keys'] as const;
-	type Tab = (typeof allTabs)[number];
+	const tabs = ['look', 'reading', 'rules', 'keys'] as const;
+	type Tab = (typeof tabs)[number];
 
 	let {
 		reader,
 		tab = $bindable('look'),
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
-
-	// The filter rules have a tab only where the reader has rules.
-	const tabs = $derived(allTabs.filter((name) => name !== 'rules' || reader.filters));
 
 	const swatch: Record<(typeof accents)[number], string> = {
 		red: '#c8402e',
@@ -142,7 +139,7 @@
 					{m.settings.teasers}
 				</label>
 			</div>
-		{:else if tab === 'rules' && reader.filters}
+		{:else if tab === 'rules'}
 			<RulesEditor {reader} book={reader.filters} />
 		{:else}
 			<Shortcuts />

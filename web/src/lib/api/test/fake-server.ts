@@ -3,7 +3,16 @@
 // `fetch`, look at what was asked (`requests`), and can make it refuse or hold
 // back answers.
 
-import type { ApiFeed, ApiFolder, ApiListItem, ApiNode, ApiVersion } from '#lib/api/client.ts';
+import type {
+	ApiFeed,
+	ApiFolder,
+	ApiListItem,
+	ApiNewRule,
+	ApiNode,
+	ApiRule,
+	ApiVersion
+} from '#lib/api/client.ts';
+import { compile, ruleMatches } from '#lib/filters.ts';
 
 interface FakeFeed {
 	id: number;
@@ -69,6 +78,7 @@ export class FakeServer {
 	folders: ApiFolder[] = [];
 	feeds: FakeFeed[] = [];
 	articles: FakeArticle[] = [];
+	rules: ApiRule[] = [];
 
 	requests: Request[] = [];
 	/** The server is not there at all: `fetch` fails. */
@@ -241,6 +251,41 @@ export class FakeServer {
 			return empty();
 		}
 
+		if (method === 'GET' && path === '/rules') return json(this.rules);
+		const rule = /^\/rules(?:\/(\d+|preview))?$/.exec(path);
+		if (rule && method !== 'GET') {
+			const known = this.rules.find((r) => r.id === Number(rule[1]));
+			if (method === 'DELETE') {
+				if (!known) return refused(404);
+				this.rules = this.rules.filter((r) => r !== known);
+				this.applyRules();
+				return json({ id: known.id });
+			}
+			const sent = data as unknown as ApiNewRule;
+			sent.pattern = sent.pattern.trim();
+			if (compile(sent) === null) return refused(400, 'the pattern cannot be used');
+			if (sent.scope.kind !== 'all' && !this.scope(`${sent.scope.kind}s`, sent.scope.id)) {
+				return refused(404);
+			}
+			if (method === 'POST' && rule[1] === 'preview') {
+				const matches = this.articles.filter((article) => this.catches(sent, article)).length;
+				const of = this.articles.filter((a) => this.inScope(sent, a.feed_id)).length;
+				return json({ matches, of });
+			}
+			if (method === 'POST' && !rule[1]) {
+				const added = { ...sent, id: this.nextId++ };
+				this.rules.push(added);
+				this.applyRules();
+				return json({ id: added.id }, 201);
+			}
+			if (method === 'PUT' && known) {
+				Object.assign(known, sent);
+				this.applyRules();
+				return json({ id: known.id });
+			}
+			return refused(404);
+		}
+
 		if (method === 'POST' && path === '/tree/move') {
 			return this.move(data.node as ApiNode, data.target as ApiNode, String(data.position));
 		}
@@ -338,6 +383,33 @@ export class FakeServer {
 				starred: a.starred,
 				labels: []
 			}));
+	}
+
+	// Filter rules
+
+	private inScope(rule: ApiNewRule, feedId: number) {
+		const { scope } = rule;
+		return scope.kind === 'all' || !!this.scope(`${scope.kind}s`, scope.id)?.has(feedId);
+	}
+
+	/** Whether a rule finds an article, by the rules of the page's own model. */
+	private catches(rule: ApiNewRule, article: FakeArticle) {
+		if (!this.inScope(rule, article.feed_id)) return false;
+		const scope = { kind: 'all' } as const;
+		return ruleMatches(
+			{ ...rule, id: '', scope },
+			{ ...article, id: '', feedId: '', link: '', publishedAt: 0, changes: 0, updatedAt: null }
+		);
+	}
+
+	/** An article is hidden exactly if a rule that is on hides it; "read" only ever marks. */
+	applyRules() {
+		const on = this.rules.filter((rule) => rule.enabled);
+		for (const article of this.articles) {
+			const found = on.filter((rule) => this.catches(rule, article));
+			article.hidden = found.some((rule) => rule.action === 'hide');
+			if (found.some((rule) => rule.action === 'read')) article.read = true;
+		}
 	}
 
 	// The tree, as the server keeps it: rows with a parent and a position

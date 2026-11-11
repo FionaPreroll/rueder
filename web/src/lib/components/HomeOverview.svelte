@@ -113,9 +113,7 @@
 				<ul class="mt-2 list-disc space-y-1.5 pl-4 text-soft">
 					<li>{m.home.tipKeys}</li>
 					<li>{m.home.tipDrag}</li>
-					{#if reader.filters}
-						<li>{m.home.tipFilters}</li>
-					{/if}
+					<li>{m.home.tipFilters}</li>
 				</ul>
 			</section>
 		</aside>

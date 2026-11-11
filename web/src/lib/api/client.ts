@@ -115,6 +115,29 @@ export interface ApiVersion {
 	url: string | null;
 }
 
+/** Where a filter rule holds. */
+export type ApiRuleScope =
+	{ kind: 'all' } | { kind: 'folder'; id: number } | { kind: 'feed'; id: number };
+
+/** A filter rule. A new one is sent without its id. */
+export interface ApiRule {
+	id: number;
+	enabled: boolean;
+	scope: ApiRuleScope;
+	field: 'any' | 'title' | 'content' | 'author' | 'tag';
+	match: 'contains' | 'word' | 'regex';
+	pattern: string;
+	action: 'hide' | 'read';
+}
+
+export type ApiNewRule = Omit<ApiRule, 'id'>;
+
+/** What a rule would catch: the articles it matches, of this many it looked at. */
+export interface ApiRulePreview {
+	matches: number;
+	of: number;
+}
+
 /** A folder or a subscription, as the tree's changes name them. */
 export interface ApiNode {
 	kind: 'folder' | 'feed';
@@ -231,7 +254,14 @@ export const api = {
 		call<void>('POST', '/tree/move', { node, target, position }),
 	addFolder: (title: string) => call<{ id: number }>('POST', '/folders', { title }),
 	renameFolder: (id: number, title: string) => call<void>('PATCH', `/folders/${id}`, { title }),
-	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`)
+	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`),
+
+	rules: () => call<ApiRule[]>('GET', '/rules'),
+	addRule: (rule: ApiNewRule) => call<{ id: number }>('POST', '/rules', rule),
+	changeRule: (id: number, rule: ApiNewRule) => call<{ id: number }>('PUT', `/rules/${id}`, rule),
+	removeRule: (id: number) => call<{ id: number }>('DELETE', `/rules/${id}`),
+	/** Tries a rule without storing it; a pattern that cannot be used is refused with 400. */
+	previewRule: (rule: ApiNewRule) => call<ApiRulePreview>('POST', '/rules/preview', rule)
 };
 
 export type Api = typeof api;

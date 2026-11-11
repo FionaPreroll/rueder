@@ -5,9 +5,9 @@
 // a timer. The rules for unread counts (unread.ts), filters (filters.ts) and the tree
 // (tree.ts) are the ones the server follows.
 
-import { ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
+import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
 import type { Article, ArticleVersion, Feed, Stream, TreeNode } from '#lib/model.ts';
-import type { Abilities, Fresh, Reader } from '#lib/reader.ts';
+import type { Abilities, Fresh, Reader, RulePreview } from '#lib/reader.ts';
 import {
 	addFolder,
 	canMove,
@@ -491,6 +491,12 @@ export class DemoReader implements Reader {
 		let count = 0;
 		for (const feedId of this.inScope(scope)) count += (this.articles[feedId] ?? []).length;
 		return count;
+	}
+
+	/** What a rule would catch among all the articles in its scope. */
+	preview(rule: FilterRule): RulePreview {
+		if (compile(rule) === null) return 'invalid';
+		return { matches: this.countMatches(rule), of: this.countIn(rule.scope) };
 	}
 
 	saveRule(rule: FilterRule) {

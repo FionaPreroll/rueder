@@ -7,7 +7,7 @@ and TypeScript. It replaces `frontend/` once the Rust server is in place.
 
 The page talks to the Rust server: it logs in, shows the tree of folders and feeds,
 the lists, the articles and their earlier versions, and sends back what was read,
-starred and sorted. What comes with later work packages is in
+starred and sorted and the filter rules. What comes with later work packages is in
 [docs/implementation.md](../docs/implementation.md#schritt-3-frontend).
 
 - `src/lib/reader.ts` is the seam: what the page needs from whatever holds the feeds

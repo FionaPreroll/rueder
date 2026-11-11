@@ -143,10 +143,42 @@ describe('the page with a server', () => {
 		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeInTheDocument();
 		expect(screen.queryByRole('menuitemradio', { name: 'Oldest first' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'More ways to mark as read' })).toBeNull();
+	});
 
+	it('writes a filter rule with the server saying what it would catch', async () => {
+		await reading();
+		expect(unreadInTitle()).toBe(4);
 		await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-		const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim());
-		expect(tabs).toEqual(['Appearance', 'Reading', 'Keyboard']);
+		await userEvent.click(screen.getByRole('tab', { name: 'Filter rules' }));
+		expect(screen.getByText('No rules yet.')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Add a rule' }));
+		const save = screen.getByRole('button', { name: 'Save' });
+		expect(screen.getByRole('status')).toHaveTextContent('Enter the text to look for.');
+
+		// The server's regular expressions decide, so the server is asked.
+		await userEvent.selectOptions(screen.getByLabelText('Match'), 'regex');
+		await userEvent.type(screen.getByLabelText('Text to look for'), '(Article 3');
+		expect(screen.getByRole('status')).toHaveTextContent('Looking what it would catch');
+		expect(save).toBeDisabled();
+		await vi.waitFor(() =>
+			expect(screen.getByRole('status')).toHaveTextContent(
+				'This is not a valid regular expression.'
+			)
+		);
+		expect(save).toBeDisabled();
+
+		await userEvent.type(screen.getByLabelText('Text to look for'), ' of)');
+		await vi.waitFor(() =>
+			expect(screen.getByRole('status')).toHaveTextContent('Applies to 1 of 4 articles here now.')
+		);
+		await userEvent.click(save);
+		const row = await screen.findByText(
+			'Title matches the regular expression “(Article 3 of)”: hide the article'
+		);
+		// The server does not count what a saved rule finds.
+		expect(row.closest('li')).not.toHaveTextContent('hits');
+		await vi.waitFor(() => expect(server.rules.length).toBe(1));
+		await vi.waitFor(() => expect(unreadInTitle()).toBe(3));
 	});
 
 	it('shows a feed’s icon from the proxy, and the stand-in when it does not load', async () => {

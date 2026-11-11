@@ -4,7 +4,7 @@
 // made-up data that lives in the browser (demo/reader.svelte.ts), for tests and for
 // the build that runs without a server.
 
-import type { FilterRule, RuleScope } from './filters.ts';
+import type { FilterRule } from './filters.ts';
 import type { Article, ArticleVersion, Feed, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
 
@@ -40,16 +40,30 @@ export interface Abilities {
 	subscribe: boolean;
 }
 
+/**
+ * What a rule would catch if it were saved now, or why nobody can say: its pattern
+ * cannot be used, or the server did not answer.
+ */
+export type RulePreview =
+	| { matches: number; of: number }
+	/** The pattern is not one, a broken regular expression for one. */
+	| 'invalid'
+	| 'unreachable';
+
 /** The filter rules of the account and what they catch. */
 export interface RuleBook {
 	readonly rules: FilterRule[];
 	saveRule(rule: FilterRule): void;
 	deleteRule(id: string): void;
 	newRuleId(): string;
-	/** How many of the articles in its scope a rule finds, whether it is on or not. */
-	countMatches(rule: FilterRule): number;
-	/** How many articles there are in a rule's scope. */
-	countIn(scope: RuleScope): number;
+	/**
+	 * Tries a rule that is being written. A reader that has to ask its server
+	 * answers later; this is also how the page learns whether a pattern is one, as
+	 * the server's regular expressions are not the browser's.
+	 */
+	preview(rule: FilterRule): RulePreview | Promise<RulePreview>;
+	/** How many articles a saved rule finds, where the reader can say that at once. */
+	countMatches?(rule: FilterRule): number;
 	/** The first enabled rule that hides the article, to say why it is hidden. */
 	hidingRule(article: Article): FilterRule | null;
 }
@@ -102,8 +116,8 @@ export interface Reader {
 	/** Who is logged in; null where there is nobody to log in. */
 	readonly account: Account | null;
 	signOut(): void;
-	/** The filter rules, if this reader has them. */
-	readonly filters: RuleBook | null;
+	/** The filter rules. */
+	readonly filters: RuleBook;
 	/** Only the reader with made-up data has these. */
 	readonly demo: DemoSwitches | null;
 

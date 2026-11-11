@@ -198,6 +198,7 @@ const de: Messages = {
 		preview: (count, total) => `Trifft jetzt auf ${n(count)} von ${n(total)} Artikeln hier zu.`,
 		invalid: 'Das ist kein gültiger regulärer Ausdruck.',
 		empty: 'Gib den gesuchten Text ein.',
+		checking: 'Es wird nachgesehen, was die Regel träfe …',
 		hits: (count) => `${n(count)} Treffer`,
 		summary: (field, match, pattern, action) => `${field} ${match} „${pattern}“: ${action}`
 	},
