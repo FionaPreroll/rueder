@@ -12,6 +12,7 @@ use time::Duration;
 
 const ALL: Page = Page {
     before: None,
+    after: None,
     limit: 50,
     unread_only: false,
 };
@@ -84,6 +85,7 @@ async fn a_list_mixes_feeds_in_the_order_of_arrival(db: PgPool) {
 
     let page = |before, limit| Page {
         before,
+        after: None,
         limit,
         unread_only: false,
     };
@@ -314,16 +316,24 @@ async fn expected_page(
         },
     )
     .collect();
-    let rows: Vec<(i32, i32, i64)> =
+    let mut rows: Vec<(i32, i32, i64)> =
         sqlx::query_as("SELECT feed_id, seq, id FROM articles ORDER BY id DESC")
             .fetch_all(db)
             .await
             .unwrap();
+    // With `after` the list runs from the oldest on, and `before` counts for nothing.
+    if page.after.is_some() {
+        rows.reverse();
+    }
 
     let wanted: HashSet<i32> = feed_ids.iter().copied().collect();
     rows.into_iter()
         .filter(|(feed, _, id)| {
-            wanted.contains(feed) && page.before.is_none_or(|before| *id < before)
+            wanted.contains(feed)
+                && match page.after {
+                    Some(after) => *id > after,
+                    None => page.before.is_none_or(|before| *id < before),
+                }
         })
         .filter_map(|(feed, seq, _)| {
             let mark = *marks.get(&feed)?;
@@ -406,8 +416,10 @@ async fn pages_match_the_obvious_way_of_working_them_out(db: PgPool) {
                     .filter(|_| random.below(2) == 0)
                     .collect(),
             };
+            let place = |random: &mut Random| random.below(total as usize + 2) as i64;
             let page = Page {
-                before: (random.below(3) > 0).then(|| 1 + random.below(total as usize + 2) as i64),
+                before: (random.below(3) > 0).then(|| 1 + place(&mut random)),
+                after: (random.below(2) == 0).then(|| place(&mut random)),
                 limit: [1, 2, 5, 20, 50, 500][random.below(6)],
                 unread_only: random.below(2) == 0,
             };

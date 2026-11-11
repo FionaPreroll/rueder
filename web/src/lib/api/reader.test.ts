@@ -73,6 +73,7 @@ describe('the tree', () => {
 
 	it('sorts a level by position, folders first where two are the same', () => {
 		const tree = toTree({
+			hidden: 0,
 			folders: [
 				{ id: 2, parent_id: null, title: 'B', position: 2 },
 				{ id: 1, parent_id: null, title: 'A', position: 2 },
@@ -280,11 +281,10 @@ describe('the lists', () => {
 		await settle();
 		expect(reader.visible.map((a) => a.seq)).toEqual([1]);
 
-		// Setting it to what it is asks nothing; the server's lists start with the newest.
+		// Setting it to what it is asks nothing.
 		const asked = server.requests.length;
 		reader.unreadOnly = true;
-		reader.newestFirst = false;
-		expect(reader.newestFirst).toBe(true);
+		reader.newestFirst = true;
 		await settle();
 		expect(server.requests.length).toBe(asked);
 	});
@@ -310,6 +310,48 @@ describe('the lists', () => {
 		const unread = reader.totalUnread;
 		reader.setRead(reader.visible[0], true);
 		expect(reader.totalUnread).toBe(unread);
+	});
+
+	it('start with the oldest when asked to, page by page, and still know the newest', async () => {
+		server.addArticles(lone, PAGE);
+		const reader = await started();
+		reader.show({ kind: 'all' });
+		await settle();
+		const newest = Number(reader.visible[0].id);
+		expect(reader.newestFirst).toBe(true);
+
+		reader.newestFirst = false;
+		await settle();
+		expect(reader.newestFirst).toBe(false);
+		expect(titles(reader).slice(0, 2)).toEqual([
+			`Article 1 of feed ${tech}`,
+			`Article 2 of feed ${tech}`
+		]);
+		expect(reader.visible.length).toBe(PAGE);
+		expect(reader.hasMore).toBe(true);
+		reader.showMore();
+		await settle();
+		expect(reader.visible.length).toBe(PAGE + 6);
+		const ids = reader.visible.map((article) => Number(article.id));
+		expect(ids).toEqual([...ids].sort((a, b) => a - b));
+		expect(reader.hasMore).toBe(false);
+		expect(server.requests.at(-1)?.path).toBe(`/articles?limit=${PAGE}&after=${ids[PAGE - 1]}`);
+
+		// "Mark all as read" stops at the newest article there was, not at the end of the page.
+		reader.newestFirst = false;
+		reader.refresh();
+		await settle();
+		expect(reader.visible.length).toBe(PAGE);
+		reader.markAllRead();
+		await settle();
+		expect(server.requests.find((r) => r.path === '/read')?.body).toEqual({ upto_id: newest });
+		expect(reader.totalUnread).toBe(0);
+
+		// Only what is unread, oldest first: nothing is left.
+		reader.unreadOnly = true;
+		await settle();
+		expect(server.requests.at(-2)?.path).toBe(`/articles?limit=${PAGE}&after=0&unread=true`);
+		expect(reader.visible).toEqual([]);
 	});
 
 	it('search what is loaded', async () => {
@@ -607,12 +649,51 @@ describe('reading', () => {
 		expect(reader.notice).toBe('notSaved');
 	});
 
-	it('does not mark by age, nor from the starred or an empty list', async () => {
+	it('marks as read by age what is old enough, here and on the server', async () => {
+		// The articles came a minute apart; now is half a minute after the fourth.
+		const fourth = Date.parse(server.article(blog, 1)!.published_at);
+		const now = vi.spyOn(Date, 'now').mockReturnValue(fourth + 30_000);
+		server.now = () => fourth + 30_000;
+		const reader = await started();
+		reader.show({ kind: 'folder', id: `folder-${news}` });
+		await settle();
+		const newest = Number(reader.visible[0].id);
+		const release = server.hold(/\/read$/);
+
+		// Older than two minutes: the first two of the five in the folder.
+		reader.markAllRead(120_000);
+		expect(reader.visible.map((article) => reader.isRead(article))).toEqual([
+			false,
+			false,
+			false,
+			true,
+			true
+		]);
+		expect(reader.unreadIn(reader.tree[0])).toBe(3);
+		release();
+		await settle();
+		expect(server.requests.find((r) => r.path.endsWith('/read'))).toMatchObject({
+			path: `/folders/${news}/read`,
+			body: { upto_id: newest, older_than: 120 }
+		});
+		expect(server.unread(tech)).toBe(1);
+		expect(server.unread(blog)).toBe(2);
+		expect(server.unread(lone)).toBe(1);
+		expect(reader.totalUnread).toBe(4);
+
+		// Refused, it is taken back like any other change.
+		server.refuse('POST', /\/read$/, 500);
+		reader.markAllRead(30_000);
+		expect(reader.unreadIn(reader.tree[0])).toBe(1);
+		await settle();
+		expect(reader.unreadIn(reader.tree[0])).toBe(3);
+		expect(reader.notice).toBe('notSaved');
+		now.mockRestore();
+	});
+
+	it('does not mark from the starred or an empty list', async () => {
 		server.article(tech, 1)!.starred = true;
 		const reader = await started();
-		reader.show({ kind: 'all' });
-		await settle();
-		reader.markAllRead(86_400_000);
 		reader.show({ kind: 'starred' });
 		await settle();
 		reader.markAllRead();
@@ -625,7 +706,7 @@ describe('reading', () => {
 		await settle();
 		expect(server.writes).toEqual([]);
 		expect(reader.totalUnread).toBe(6);
-		expect(reader.can).toEqual({ oldestFirst: false, markOlder: false, subscribe: false });
+		expect(reader.can).toEqual({ oldestFirst: true, markOlder: true, subscribe: false });
 	});
 });
 
@@ -685,6 +766,8 @@ describe('the filter rules', () => {
 		expect(reader.visible.map((a) => a.feedId).sort()).toEqual(
 			[blog, tech].map((n) => `feed-${n}`).sort()
 		);
+		reader.load(reader.visible[0]);
+		await settle();
 		expect(reader.hidingRule(reader.visible[0])).toEqual(saved);
 
 		// Switched off, it hides nothing and says so for no article.
@@ -730,11 +813,38 @@ describe('the filter rules', () => {
 		reader.show({ kind: 'hidden' });
 		await settle();
 		expect(reader.visible.map((a) => a.feedId)).toEqual([`feed-${lone}`]);
+		expect(reader.hiddenCount).toBe(1);
+		// The server names the rule with the article's text.
+		expect(reader.hidingRule(reader.visible[0])).toBeNull();
+		reader.load(reader.visible[0]);
+		await settle();
 		expect(reader.hidingRule(reader.visible[0])?.id).toBe('rule-7');
 		reader.show({ kind: 'feed', id: `feed-${tech}` });
 		await settle();
+		reader.load(reader.visible[0]);
+		await settle();
 		// The rule that marks as read hides nothing, and the other is not about this feed.
 		expect(reader.hidingRule(reader.visible[0])).toBeNull();
+	});
+
+	it('count what they find once somebody asks, and again after a change', async () => {
+		server.rules = [
+			{ ...adRule(), id: 7, scope: { kind: 'feed', id: lone }, pattern: 'Article' },
+			{ ...adRule(), id: 8, enabled: false, pattern: 'Article 1' }
+		];
+		const reader = await started();
+		const asked = () => server.requests.filter((r) => r.path === '/rules/hits').length;
+		expect(reader.rules.map((rule) => reader.hitsOf(rule))).toEqual([null, null]);
+		expect(asked()).toBe(0);
+
+		reader.countHits();
+		await settle();
+		expect(reader.rules.map((rule) => reader.hitsOf(rule))).toEqual([1, 3]);
+
+		reader.saveRule({ ...reader.rules[1], pattern: 'Article 2' });
+		await settle();
+		expect(asked()).toBe(2);
+		expect(reader.rules.map((rule) => reader.hitsOf(rule))).toEqual([1, 2]);
 	});
 
 	it('are tried on the server while they are written, the last one typed only', async () => {
@@ -791,6 +901,33 @@ describe('the text of an article', () => {
 		reader.refresh();
 		await settle();
 		expect(reader.visible[0]).toMatchObject({ html: null, changes: 1 });
+	});
+
+	it('comes with the files and the picture of the article', async () => {
+		const episode = { url: 'https://pod.example/1.mp3', type: 'audio/mpeg', length: 1200 };
+		Object.assign(server.article(lone, 1)!, {
+			// A feed may name a file twice.
+			enclosures: [
+				{ ...episode, inline: false },
+				{ ...episode, inline: true }
+			],
+			image_url: '/img/abc/image/def',
+			image_title: 'A picture'
+		});
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${lone}` });
+		await settle();
+		expect(reader.visible[0]).toMatchObject({ enclosures: [], image: null });
+		reader.load(reader.visible[0]);
+		await settle();
+		expect(reader.visible[0]).toMatchObject({
+			enclosures: [episode],
+			image: { url: '/img/abc/image/def', title: 'A picture' }
+		});
+		// A list that is drawn again has them still.
+		reader.refresh();
+		await settle();
+		expect(reader.visible[0].enclosures).toEqual([episode]);
 	});
 
 	it('is fetched a few at a time when a whole page asks at once', async () => {

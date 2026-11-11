@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT min(seq) FROM articles\n         WHERE feed_id = $1 AND seq > $2 AND seq <= $3 AND published_at > $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "min",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3e5cd5322a427b3862c8a3eaa64f9dcbd520fb939d1226752fa85407411a5ab3"
+}

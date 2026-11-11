@@ -2,12 +2,13 @@ mod common;
 
 use std::collections::BTreeSet;
 
-use common::{Random, account, add, reader};
+use common::{Random, START, account, add, reader};
 use rueder::{
     articles::{self, Page},
     reading::{self, FeedUnread},
 };
 use sqlx::PgPool;
+use time::Duration;
 
 async fn unread(db: &PgPool, account_id: i32) -> FeedUnread {
     let counts = reading::unread_counts(db, account_id).await.unwrap();
@@ -213,6 +214,7 @@ async fn stars_are_apart_from_reading(db: PgPool) {
     );
     let page = Page {
         before: None,
+        after: None,
         limit: 10,
         unread_only: false,
     };
@@ -242,6 +244,11 @@ async fn only_ones_own_articles_can_be_marked(db: PgPool) {
     );
     assert!(
         !reading::mark_all_read(&db, stranger, feed_id, 3)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !reading::mark_older_read(&db, stranger, feed_id, 3, time::OffsetDateTime::now_utc())
             .await
             .unwrap()
     );
@@ -310,6 +317,8 @@ async fn the_mark_runs_over_long_stretches(db: PgPool) {
 #[derive(Default)]
 struct Model {
     last: i32,
+    /// When each article was published, in minutes after the start, by number.
+    published: Vec<i64>,
     read: BTreeSet<i32>,
     hidden: BTreeSet<i32>,
     starred: BTreeSet<i32>,
@@ -337,12 +346,44 @@ async fn reading_matches_the_obvious_model(db: PgPool) {
         for _ in 0..40 {
             let seq = 1 + random.below(model.last as usize + 2) as i32;
             let exists = seq <= model.last;
-            let step = match random.below(12) {
+            let step = match random.below(14) {
                 0 | 1 => {
                     let count = 1 + random.below(6);
                     add(&db, feed_id, count).await;
+                    // Most are published in the order they arrive, some earlier
+                    // or later than their neighbours.
+                    for seq in model.last + 1..=model.last + count as i32 {
+                        let mut minute = i64::from(seq);
+                        if random.below(3) == 0 {
+                            minute = random.below(model.last as usize + 8) as i64;
+                            sqlx::query(
+                                "UPDATE articles SET published_at = $3
+                                 WHERE feed_id = $1 AND seq = $2",
+                            )
+                            .bind(feed_id)
+                            .bind(seq)
+                            .bind(START + Duration::minutes(minute))
+                            .execute(&db)
+                            .await
+                            .unwrap();
+                        }
+                        model.published.push(minute);
+                    }
                     model.last += count as i32;
                     format!("{count} arrive")
+                }
+                12 | 13 => {
+                    let minute = random.below(model.last as usize + 8) as i64;
+                    // Published in that minute or before; an article is never
+                    // published between two minutes.
+                    let cutoff = START + Duration::minutes(minute) + Duration::seconds(30);
+                    reading::mark_older_read(&db, account_id, feed_id, seq, cutoff)
+                        .await
+                        .unwrap();
+                    let old = (1..=seq.min(model.last))
+                        .filter(|seq| model.published[*seq as usize - 1] <= minute);
+                    model.read.extend(old);
+                    format!("older than minute {minute} read up to {seq}")
                 }
                 2..=4 => {
                     let done = reading::set_read(&db, account_id, feed_id, seq, true)
@@ -403,6 +444,7 @@ async fn reading_matches_the_obvious_model(db: PgPool) {
 
             let page = |unread_only| Page {
                 before: None,
+                after: None,
                 limit: 1000,
                 unread_only,
             };

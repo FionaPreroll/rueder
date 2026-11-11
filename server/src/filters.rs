@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use ts_rs::TS;
 
-use crate::{AppError, AppState, reading, sessions::Session, tree::bad};
+use crate::{AppError, AppState, articles::Opened, reading, sessions::Session, tree::bad};
 
 /// How many rules an account can have.
 pub const MAX_RULES: i64 = 200;
@@ -42,7 +42,8 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Rule>()
         .add::<Outcome>()
         .add::<Order>()
-        .add::<Preview>();
+        .add::<Preview>()
+        .add::<AllHits>();
 }
 
 pub fn routes() -> Router<AppState> {
@@ -50,6 +51,7 @@ pub fn routes() -> Router<AppState> {
         .route("/rules", get(rules).post(add))
         .route("/rules/order", post(order))
         .route("/rules/preview", post(preview))
+        .route("/rules/hits", get(hits))
         .route("/rules/{id}", put(change).delete(remove))
 }
 
@@ -261,15 +263,27 @@ fn decide<'a>(tests: impl IntoIterator<Item = &'a Test>, article: &Texts) -> (bo
 
 /// A stored rule that is switched on, ready to decide, with its scope.
 struct Stored {
+    id: i32,
     scope: Scope,
     test: Test,
 }
 
 async fn stored(conn: &mut PgConnection, account_id: i32) -> anyhow::Result<Vec<Stored>> {
+    stored_of(conn, account_id, false).await
+}
+
+/// The account's rules ready to decide, in their order; with `all`, also the
+/// ones that are switched off.
+async fn stored_of(
+    conn: &mut PgConnection,
+    account_id: i32,
+    all: bool,
+) -> anyhow::Result<Vec<Stored>> {
     let rows = sqlx::query!(
-        "SELECT folder_id, feed_id, field, match AS matching, pattern, action
-         FROM filter_rules WHERE account_id = $1 AND enabled ORDER BY position, id",
-        account_id
+        "SELECT id, folder_id, feed_id, field, match AS matching, pattern, action
+         FROM filter_rules WHERE account_id = $1 AND (enabled OR $2) ORDER BY position, id",
+        account_id,
+        all,
     )
     .fetch_all(conn)
     .await?;
@@ -291,7 +305,11 @@ async fn stored(conn: &mut PgConnection, account_id: i32) -> anyhow::Result<Vec<
             &row.pattern,
             action,
         )?;
-        Some(Stored { scope, test })
+        Some(Stored {
+            id: row.id,
+            scope,
+            test,
+        })
     });
     Ok(rules.collect())
 }
@@ -562,6 +580,46 @@ pub async fn reapply(db: &PgPool, account_id: i32) -> anyhow::Result<Changed> {
     }
     tx.commit().await?;
     Ok(changed)
+}
+
+/// The rule that hides an article for the account, if the article is hidden:
+/// the first of the rules in their order that is switched on, holds for the
+/// feed, hides and matches. `None` also for an article that is hidden by a
+/// rule that has changed since and has not looked again.
+pub async fn hiding_rule(
+    db: &PgPool,
+    account_id: i32,
+    article: &Opened,
+) -> anyhow::Result<Option<i32>> {
+    let hidden = sqlx::query_scalar!(
+        "SELECT seq FROM article_states
+         WHERE account_id = $1 AND feed_id = $2 AND seq = $3 AND hidden",
+        account_id,
+        article.feed_id,
+        article.seq,
+    )
+    .fetch_optional(db)
+    .await?;
+    if hidden.is_none() {
+        return Ok(None);
+    }
+    let mut conn = db.acquire().await?;
+    let rules = stored(&mut conn, account_id).await?;
+    let folders = folders_of(&mut conn, account_id, Some(article.feed_id)).await?;
+    let none = HashSet::new();
+    let folders = folders.get(&article.feed_id).unwrap_or(&none);
+    let texts = Texts {
+        title: article.title.clone(),
+        text: text_of(&article.html),
+        author: article.author.clone(),
+        tags: article.tags.clone(),
+    };
+    let rule = rules.iter().find(|rule| {
+        rule.test.action == Action::Hide
+            && in_scope(rule.scope, article.feed_id, folders)
+            && rule.test.matches(&texts)
+    });
+    Ok(rule.map(|rule| rule.id))
 }
 
 /// Folders decide which rules hold for a feed, so after a move or after a
@@ -854,6 +912,95 @@ async fn preview(
         preview.matches += matching.count();
     }
     Ok(Json(preview))
+}
+
+/// What one of the stored rules finds.
+#[derive(Serialize, TS)]
+#[ts(rename = "RuleHits")]
+struct Hits {
+    id: i32,
+    /// The articles the rule matches, whether it is switched on or not,
+    matches: usize,
+    /// of this many it looked at: the newest of each feed in its scope.
+    of: usize,
+}
+
+/// What `GET /api/rules/hits` answers: for every rule of the account what it
+/// finds among the articles that are there, as a preview of it would say.
+#[derive(Serialize, TS)]
+#[ts(rename = "RulesHits")]
+struct AllHits {
+    hits: Vec<Hits>,
+}
+
+/// Counts what each of the account's rules finds. Every article is read once,
+/// however many rules there are.
+async fn hits(State(state): State<AppState>, session: Session) -> Result<Json<AllHits>, AppError> {
+    let mut conn = state.db.acquire().await?;
+    let rules = stored_of(&mut conn, session.account_id, true).await?;
+    let mut hits: Vec<Hits> = rules
+        .iter()
+        .map(|rule| Hits {
+            id: rule.id,
+            matches: 0,
+            of: 0,
+        })
+        .collect();
+    if rules.is_empty() {
+        return Ok(Json(AllHits { hits }));
+    }
+    let folders = folders_of(&mut conn, session.account_id, None).await?;
+    let feeds = sqlx::query!(
+        "SELECT s.feed_id, f.last_seq FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+         WHERE s.account_id = $1",
+        session.account_id
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let none = HashSet::new();
+    for feed in feeds {
+        let folders = folders.get(&feed.feed_id).unwrap_or(&none);
+        // The rules that hold for this feed, by their place in the answer.
+        let tests: Vec<(usize, Test)> = rules
+            .iter()
+            .enumerate()
+            .filter(|(_, rule)| in_scope(rule.scope, feed.feed_id, folders))
+            .map(|(at, rule)| (at, rule.test.clone()))
+            .collect();
+        if tests.is_empty() {
+            continue;
+        }
+        let from = feed.last_seq - RECENT + 1;
+        let articles = candidates(&mut conn, session.account_id, feed.feed_id, from, false).await?;
+        let looked_at = articles.len();
+        let found = tokio::task::spawn_blocking(move || {
+            let mut found = vec![0usize; tests.len()];
+            for article in articles {
+                let texts = Texts {
+                    title: article.title,
+                    text: text_of(&article.html),
+                    author: article.author,
+                    tags: article.tags,
+                };
+                for (count, (_, test)) in found.iter_mut().zip(&tests) {
+                    *count += usize::from(test.matches(&texts));
+                }
+            }
+            tests
+                .into_iter()
+                .map(|(at, _)| at)
+                .zip(found)
+                .collect::<Vec<_>>()
+        })
+        .await?;
+        for (at, count) in found {
+            if let Some(hits) = hits.get_mut(at) {
+                hits.matches += count;
+                hits.of += looked_at;
+            }
+        }
+    }
+    Ok(Json(AllHits { hits }))
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@
 
 use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
+use time::OffsetDateTime;
 use ts_rs::TS;
 
 /// How far the mark looks ahead in one go when it moves up.
@@ -344,6 +345,108 @@ pub async fn mark_all_read(
         feed_id,
         new_mark,
         upto,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "UPDATE subscriptions SET read_upto = $3 WHERE account_id = $1 AND feed_id = $2",
+        account_id,
+        feed_id,
+        new_mark,
+    )
+    .execute(&mut *tx)
+    .await?;
+    compact(&mut tx, account_id, feed_id, new_mark).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Marks as read what is older than `cutoff` among the articles up to the
+/// number `upto`, by when they were published. Returns false if the account
+/// does not subscribe to the feed.
+///
+/// Articles mostly arrive in the order they were published, so the mark moves
+/// up as far as everything under it is old enough. An old article that
+/// arrived among younger ones becomes an exception above the mark.
+pub async fn mark_older_read(
+    db: &PgPool,
+    account_id: i32,
+    feed_id: i32,
+    upto: i32,
+    cutoff: OffsetDateTime,
+) -> anyhow::Result<bool> {
+    let mut tx = db.begin().await?;
+    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+        return Ok(false);
+    };
+    let upto = upto.min(last);
+    // The first article above the mark that is too young stops the mark.
+    let young = sqlx::query_scalar!(
+        "SELECT min(seq) FROM articles
+         WHERE feed_id = $1 AND seq > $2 AND seq <= $3 AND published_at > $4",
+        feed_id,
+        mark,
+        upto,
+        cutoff,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let new_mark = young.map_or(upto, |young| young - 1).max(mark);
+    // Up to the new mark "read" goes without saying.
+    sqlx::query!(
+        "DELETE FROM article_states
+         WHERE account_id = $1 AND feed_id = $2 AND seq <= $3 AND read AND NOT (hidden OR starred)",
+        account_id,
+        feed_id,
+        new_mark,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "UPDATE article_states SET read = false
+         WHERE account_id = $1 AND feed_id = $2 AND seq <= $3 AND read",
+        account_id,
+        feed_id,
+        new_mark,
+    )
+    .execute(&mut *tx)
+    .await?;
+    // What was kept unread and is old enough is read now.
+    sqlx::query!(
+        "DELETE FROM article_states x USING articles a
+         WHERE x.account_id = $1 AND x.feed_id = $2 AND x.seq <= $3 AND x.kept_unread
+           AND NOT (x.hidden OR x.starred)
+           AND a.feed_id = x.feed_id AND a.seq = x.seq AND a.published_at <= $4",
+        account_id,
+        feed_id,
+        upto,
+        cutoff,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "UPDATE article_states x SET kept_unread = false FROM articles a
+         WHERE x.account_id = $1 AND x.feed_id = $2 AND x.seq <= $3 AND x.kept_unread
+           AND a.feed_id = x.feed_id AND a.seq = x.seq AND a.published_at <= $4",
+        account_id,
+        feed_id,
+        upto,
+        cutoff,
+    )
+    .execute(&mut *tx)
+    .await?;
+    // The old ones above the mark, behind something younger.
+    sqlx::query!(
+        "INSERT INTO article_states (account_id, feed_id, seq, read)
+         SELECT $1, a.feed_id, a.seq, true FROM articles a
+         WHERE a.feed_id = $2 AND a.seq > $3 AND a.seq <= $4 AND a.published_at <= $5
+         ON CONFLICT (account_id, feed_id, seq)
+         DO UPDATE SET read = true, kept_unread = false",
+        account_id,
+        feed_id,
+        new_mark,
+        upto,
+        cutoff,
     )
     .execute(&mut *tx)
     .await?;

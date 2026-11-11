@@ -137,12 +137,27 @@ describe('the page with a server', () => {
 		expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'Draft' })).toBeNull();
 		expect(screen.queryByRole('button', { name: 'Live' })).toBeNull();
+	});
 
+	it('turns the list around and marks as read by age', async () => {
+		render(Page);
 		await userEvent.keyboard('ga');
+		await screen.findAllByText(/Article 1 of feed/);
 		await userEvent.click(screen.getByRole('button', { name: /^All items/, expanded: false }));
-		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeInTheDocument();
-		expect(screen.queryByRole('menuitemradio', { name: 'Oldest first' })).toBeNull();
-		expect(screen.queryByRole('button', { name: 'More ways to mark as read' })).toBeNull();
+		await userEvent.click(screen.getByRole('menuitemradio', { name: 'Oldest first' }));
+		await vi.waitFor(() =>
+			expect(server.requests.some((r) => /^\/articles\?.*after=0/.test(r.path))).toBe(true)
+		);
+
+		// Everything the made-up server has is older than a day.
+		await userEvent.click(screen.getByRole('button', { name: 'More ways to mark as read' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Items older than a day' }));
+		await vi.waitFor(() =>
+			expect(server.requests.find((r) => r.path === '/read')?.body).toMatchObject({
+				older_than: 86_400
+			})
+		);
+		await vi.waitFor(() => expect(server.unread(tech)).toBe(0));
 	});
 
 	it('writes a filter rule with the server saying what it would catch', async () => {

@@ -430,12 +430,16 @@ pub struct Page {
     /// Only articles that arrived before this one (`ListItem::id`); `None` starts
     /// at the newest.
     pub before: Option<i64>,
+    /// Only articles that arrived after this one, and the list runs the other
+    /// way: oldest first. 0 starts at the oldest. It wins over `before`.
+    pub after: Option<i64>,
     pub limit: i64,
     /// Leave out what the account has read.
     pub unread_only: bool,
 }
 
-/// A page of the articles of some feeds, newest first, as the account sees them:
+/// A page of the articles of some feeds, newest first or, with `Page::after`,
+/// oldest first, as the account sees them:
 /// only feeds it subscribes to, without what its filter rules hide, each article
 /// with whether it is read and starred. One feed, a folder's feeds and all feeds
 /// are the same query.
@@ -465,9 +469,97 @@ pub async fn page(
     )
     .fetch_one(&mut *tx)
     .await?;
-    let items = sqlx::query_as!(
-        ListItem,
-        r#"
+    let items = if let Some(after) = page.after {
+        sqlx::query_as!(
+            ListItem,
+            r#"
+        WITH RECURSIVE subs AS MATERIALIZED (
+            SELECT s.feed_id, s.read_upto,
+                   CASE WHEN $5 THEN coalesce(
+                       (SELECT m.id FROM articles m
+                        WHERE m.feed_id = s.feed_id AND m.seq = s.read_upto), 0)
+                   ELSE 0 END AS floor
+            FROM subscriptions s
+            WHERE s.account_id = $1 AND s.feed_id = ANY($2)
+        ), merge AS (
+            -- Every feed's oldest article that belongs on the list.
+            SELECT array_agg(subs.feed_id) AS feeds, array_agg(subs.floor) AS floors,
+                   array_agg(head.id) AS heads, 0::bigint AS n, NULL::integer AS feed_id,
+                   NULL::bigint AS id
+            FROM subs CROSS JOIN LATERAL (
+                SELECT (SELECT a.id FROM articles a
+                        WHERE a.feed_id = subs.feed_id AND a.id > greatest(subs.floor, $3)
+                          AND NOT EXISTS (
+                              SELECT 1 FROM article_states x
+                              WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
+                                AND (x.hidden OR ($5 AND x.read))
+                              OFFSET 0)
+                        ORDER BY a.id LIMIT 1) AS id
+            ) head
+          UNION ALL
+            -- The oldest of them goes onto the page, and its feed's next one
+            -- takes its place.
+            SELECT m.feeds, m.floors,
+                   m.heads[:oldest.at - 1] || next.id || m.heads[oldest.at + 1:],
+                   m.n + 1, m.feeds[oldest.at], m.heads[oldest.at]
+            FROM merge m
+            CROSS JOIN LATERAL (
+                SELECT h.at FROM unnest(m.heads) WITH ORDINALITY AS h (id, at)
+                WHERE h.id IS NOT NULL
+                ORDER BY h.id LIMIT 1
+            ) oldest
+            CROSS JOIN LATERAL (
+                SELECT (SELECT a.id FROM articles a
+                        WHERE a.feed_id = m.feeds[oldest.at] AND a.id > m.heads[oldest.at]
+                          AND NOT EXISTS (
+                              SELECT 1 FROM article_states x
+                              WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
+                                AND (x.hidden OR ($5 AND x.read))
+                              OFFSET 0)
+                        ORDER BY a.id LIMIT 1) AS id
+            ) next
+            WHERE m.n < $4
+        ), picked AS (
+            SELECT m.feed_id, m.id FROM merge m WHERE m.n > 0
+          UNION ALL
+            -- Set back to unread under the read mark: few, found from their state.
+            SELECT a.feed_id, a.id
+            FROM subs
+            JOIN article_states k ON k.account_id = $1 AND k.feed_id = subs.feed_id
+                AND k.kept_unread AND NOT k.hidden AND k.seq <= subs.read_upto
+            JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq
+            WHERE $5 AND a.id > $3
+            ORDER BY id
+            LIMIT $4
+        )
+        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
+               a.teaser, a.author, a.url, a.thumbnail_url,
+               CASE WHEN a.seq <= subs.read_upto THEN NOT coalesce(st.kept_unread, false)
+                    ELSE coalesce(st.read, false) END AS "read!",
+               coalesce(st.starred, false) AS "starred!"
+        FROM picked p
+        JOIN subs ON subs.feed_id = p.feed_id
+        JOIN articles a ON a.feed_id = p.feed_id AND a.id = p.id
+        -- One step into the index per line; never the whole of the account's states.
+        LEFT JOIN LATERAL (
+            SELECT x.read, x.kept_unread, x.starred FROM article_states x
+            WHERE x.account_id = $1 AND x.feed_id = a.feed_id AND x.seq = a.seq
+            OFFSET 0
+        ) st ON true
+        ORDER BY a.id
+            "#,
+            account_id,
+            feed_ids,
+            after,
+            page.limit,
+            page.unread_only,
+        )
+        .fetch_all(&mut *tx)
+        .await?
+    } else {
+        sqlx::query_as!(
+            ListItem,
+            r#"
         WITH RECURSIVE subs AS MATERIALIZED (
             SELECT s.feed_id, s.read_upto,
                    CASE WHEN $5 THEN coalesce(
@@ -543,15 +635,16 @@ pub async fn page(
             OFFSET 0
         ) st ON true
         ORDER BY a.id DESC
-        "#,
-        account_id,
-        feed_ids,
-        page.before.unwrap_or(i64::MAX),
-        page.limit,
-        page.unread_only,
-    )
-    .fetch_all(&mut *tx)
-    .await?;
+            "#,
+            account_id,
+            feed_ids,
+            page.before.unwrap_or(i64::MAX),
+            page.limit,
+            page.unread_only,
+        )
+        .fetch_all(&mut *tx)
+        .await?
+    };
     tx.commit().await?;
     Ok(items)
 }
@@ -565,7 +658,7 @@ pub enum Marked {
     Label(i32),
 }
 
-/// A page of such a list, newest first. Only articles of feeds the account
+/// A page of such a list, newest first or, with `Page::after`, oldest first. Only articles of feeds the account
 /// subscribes to, and, except in the list of the hidden ones, nothing hidden.
 /// These lists are as long as what a reader marked by hand, so they are read
 /// from the marks and not from the feeds.
@@ -575,6 +668,7 @@ pub async fn marked(
     which: Marked,
     page: Page,
 ) -> anyhow::Result<Vec<ListItem>> {
+    let ascending = page.after.is_some();
     let (kind, label) = match which {
         Marked::Starred => ("starred", None),
         Marked::Hidden => ("hidden", None),
@@ -606,19 +700,25 @@ pub async fn marked(
         JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq
         LEFT JOIN article_states st
             ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq
-        WHERE a.id < $4 AND ($2 = 'hidden' OR NOT coalesce(st.hidden, false))
+        WHERE a.id < $4 AND a.id > $7 AND ($2 = 'hidden' OR NOT coalesce(st.hidden, false))
               AND ($5::boolean IS NOT TRUE
                    OR NOT CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
                                ELSE coalesce(st.read, false) END)
-        ORDER BY a.id DESC
+        ORDER BY CASE WHEN $8 THEN a.id END, a.id DESC
         LIMIT $6
         "#,
         account_id,
         kind,
         label,
-        page.before.unwrap_or(i64::MAX),
+        if ascending {
+            i64::MAX
+        } else {
+            page.before.unwrap_or(i64::MAX)
+        },
         page.unread_only,
         page.limit,
+        page.after.unwrap_or(0),
+        ascending,
     )
     .fetch_all(db)
     .await?;

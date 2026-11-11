@@ -27,6 +27,7 @@ use crate::{
     AppError, AppState,
     articles::{self, ListItem, Marked, Opened, Page},
     cleaning::{self, Base, Rules},
+    filters,
     images::{Signer, Size},
     reading,
     sessions::Session,
@@ -123,6 +124,8 @@ struct Feed {
 struct Tree {
     folders: Vec<Folder>,
     feeds: Vec<Feed>,
+    /// How many articles the account's rules hide, for the list of them.
+    hidden: i64,
 }
 
 async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tree>, AppError> {
@@ -169,7 +172,18 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
             }
         })
         .collect();
-    Ok(Json(Tree { folders, feeds }))
+    let hidden = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "hidden!" FROM article_states
+           WHERE account_id = $1 AND hidden"#,
+        session.account_id
+    )
+    .fetch_one(&state.db)
+    .await?;
+    Ok(Json(Tree {
+        folders,
+        feeds,
+        hidden,
+    }))
 }
 
 /// Which part of a list is asked for.
@@ -182,6 +196,9 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
 struct ListQuery {
     /// Only what arrived before the article of this `id`.
     before: Option<i64>,
+    /// Only what arrived after the article of this `id`, the oldest first; 0
+    /// starts at the oldest article there is. Not together with `before`.
+    after: Option<i64>,
     limit: Option<i64>,
     /// Leave out what was read.
     #[serde(default)]
@@ -199,19 +216,25 @@ struct Item {
 }
 
 /// A page of a list, the newest article first. For the next page, ask again
-/// with `before` set to the `id` of the last article of this one.
+/// with `before` set to the `id` of the last article of this one. A list asked
+/// for with `after` has the oldest article first and goes on the same way,
+/// with `after`.
 #[derive(Serialize, TS)]
 struct List {
     articles: Vec<Item>,
 }
 
 impl ListQuery {
-    fn page(&self) -> Page {
-        Page {
+    fn page(&self) -> Result<Page, AppError> {
+        if self.before.is_some() && self.after.is_some() {
+            return Err(AppError::BadRequest("give before or after".into()));
+        }
+        Ok(Page {
             before: self.before,
+            after: self.after,
             limit: self.limit.unwrap_or(PAGE).clamp(1, MAX_PAGE),
             unread_only: self.unread,
-        }
+        })
     }
 }
 
@@ -270,7 +293,7 @@ async fn list(
     feed_ids: &[i32],
     query: ListQuery,
 ) -> Result<Json<List>, AppError> {
-    let articles = articles::page(&state.db, session.account_id, feed_ids, query.page()).await?;
+    let articles = articles::page(&state.db, session.account_id, feed_ids, query.page()?).await?;
     listed(state, session, articles).await
 }
 
@@ -280,7 +303,7 @@ async fn marked(
     which: Marked,
     query: ListQuery,
 ) -> Result<Json<List>, AppError> {
-    let articles = articles::marked(&state.db, session.account_id, which, query.page()).await?;
+    let articles = articles::marked(&state.db, session.account_id, which, query.page()?).await?;
     listed(state, session, articles).await
 }
 
@@ -413,6 +436,9 @@ struct Article {
     article: Opened,
     enclosures: Vec<Enclosure>,
     labels: Vec<i32>,
+    /// The rule that hides the article, if one does: the first of the
+    /// account's rules that would, in their order.
+    hidden_by: Option<i32>,
 }
 
 /// A file that comes with an article, like the episode of a podcast.
@@ -472,6 +498,7 @@ async fn article(
     let mut opened = articles::open(&state.db, session.account_id, feed_id, seq)
         .await?
         .ok_or(AppError::NotFound)?;
+    let hidden_by = filters::hiding_rule(&state.db, session.account_id, &opened).await?;
     opened.html = state.text(&opened.html);
     opened.image_url = state.picture(Size::Image, opened.image_url.take());
     let mut labels = labels_of(&state, &session, &[(feed_id, seq)]).await?;
@@ -479,6 +506,7 @@ async fn article(
         enclosures: enclosures(&opened.enclosures),
         article: opened,
         labels: labels.remove(&(feed_id, seq)).unwrap_or_default(),
+        hidden_by,
     }))
 }
 
@@ -587,6 +615,8 @@ async fn set_state(
 
 /// How far to mark as read: up to a number in the feed, or up to the article
 /// of this `id` in the order of arrival, which is what a mixed list knows.
+/// With `older_than`, only what was published more than that many seconds
+/// ago.
 ///
 /// What `POST /api/feeds/{id}/read`, `/api/folders/{id}/read` and `/api/read`
 /// read.
@@ -595,6 +625,42 @@ async fn set_state(
 struct Upto {
     upto: Option<i32>,
     upto_id: Option<i64>,
+    older_than: Option<i64>,
+}
+
+/// The longest age that can be asked for, in seconds: a hundred years.
+const MAX_AGE: i64 = 100 * 365 * 86_400;
+
+impl Upto {
+    /// The time before which an article is old enough, if an age is asked for.
+    fn cutoff(&self) -> Result<Option<OffsetDateTime>, AppError> {
+        match self.older_than {
+            None => Ok(None),
+            Some(age) if (1..=MAX_AGE).contains(&age) => Ok(Some(
+                OffsetDateTime::now_utc() - time::Duration::seconds(age),
+            )),
+            Some(_) => Err(AppError::BadRequest("older_than is out of range".into())),
+        }
+    }
+}
+
+/// Marks as read up to a number in a feed: everything, or what is older than
+/// `cutoff`.
+async fn read_upto(
+    state: &AppState,
+    session: &Session,
+    feed_id: i32,
+    upto: i32,
+    cutoff: Option<OffsetDateTime>,
+) -> Result<(), AppError> {
+    let account_id = session.account_id;
+    match cutoff {
+        Some(cutoff) => {
+            reading::mark_older_read(&state.db, account_id, feed_id, upto, cutoff).await?
+        }
+        None => reading::mark_all_read(&state.db, account_id, feed_id, upto).await?,
+    };
+    Ok(())
 }
 
 /// Marks as read, in each of these feeds, what arrived up to the article of
@@ -605,6 +671,7 @@ async fn read_upto_id(
     session: &Session,
     feed_ids: &[i32],
     upto_id: i64,
+    cutoff: Option<OffsetDateTime>,
 ) -> Result<(), AppError> {
     let marks = sqlx::query!(
         r#"SELECT s.feed_id,
@@ -621,7 +688,7 @@ async fn read_upto_id(
     .await?;
     for mark in marks {
         if let Some(upto) = mark.upto {
-            reading::mark_all_read(&state.db, session.account_id, mark.feed_id, upto).await?;
+            read_upto(state, session, mark.feed_id, upto, cutoff).await?;
         }
     }
     Ok(())
@@ -634,11 +701,10 @@ async fn read_feed(
     Json(upto): Json<Upto>,
 ) -> Result<StatusCode, AppError> {
     subscribed(&state, &session, feed_id).await?;
+    let cutoff = upto.cutoff()?;
     match (upto.upto, upto.upto_id) {
-        (Some(seq), None) if seq >= 0 => {
-            reading::mark_all_read(&state.db, session.account_id, feed_id, seq).await?;
-        }
-        (None, Some(id)) => read_upto_id(&state, &session, &[feed_id], id).await?,
+        (Some(seq), None) if seq >= 0 => read_upto(&state, &session, feed_id, seq, cutoff).await?,
+        (None, Some(id)) => read_upto_id(&state, &session, &[feed_id], id, cutoff).await?,
         _ => return Err(AppError::BadRequest("give upto or upto_id".into())),
     }
     Ok(StatusCode::NO_CONTENT)
@@ -653,10 +719,11 @@ async fn read_many(
     let (None, Some(upto_id)) = (upto.upto, upto.upto_id) else {
         return Err(AppError::BadRequest("give upto_id".into()));
     };
+    let cutoff = upto.cutoff()?;
     let feeds = feeds_of(state, session, folder_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    read_upto_id(state, session, &feeds, upto_id).await?;
+    read_upto_id(state, session, &feeds, upto_id, cutoff).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

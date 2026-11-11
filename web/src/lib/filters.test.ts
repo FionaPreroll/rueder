@@ -13,6 +13,8 @@ const article: Article = {
 	link: 'https://blog.example/1',
 	publishedAt: 0,
 	html: '<p>Jetzt <b>zugreifen</b>, nur diese Woche.</p>',
+	enclosures: [],
+	image: null,
 	changes: 0,
 	updatedAt: null
 };
