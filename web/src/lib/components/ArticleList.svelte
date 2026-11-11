@@ -11,8 +11,9 @@
 	import ArticleRow from './ArticleRow.svelte';
 	import { offsets, rowsInSight } from '#lib/virtual.ts';
 
-	/** Up to this many articles, all are drawn. */
-	const FEW = 60;
+	/** Up to this many rows, or this many cards with their whole text, all are drawn. */
+	const FEW_ROWS = 60;
+	const FEW_CARDS = 12;
 	/** How far beyond the view rows are drawn, in pixels. */
 	const MARGIN = 1200;
 	/** The height of a row or a card, as a guess before any was drawn. */
@@ -79,7 +80,7 @@
 	const tops = $derived(offsets(ids, heights, guess));
 	// Without a view to measure, as before the page is laid out, everything is drawn.
 	const range = $derived(
-		ids.length <= FEW || viewport === 0
+		ids.length <= (expanded ? FEW_CARDS : FEW_ROWS) || viewport === 0
 			? { start: 0, end: ids.length }
 			: rowsInSight(tops, scrollTop - (list?.offsetTop ?? 0), viewport, MARGIN)
 	);
