@@ -22,8 +22,10 @@ it happens over the server's live updates. What comes with later work packages i
 - `src/lib/demo/` fills it from made-up feeds and articles that live in the browser,
   the same on every start: for the tests, for `pnpm dev:demo` and for the one-file
   build. Nothing of it is saved.
-- The settings (theme, density, language …) still stay in the browser's local
-  storage.
+- The settings (theme, density, language, keys of one's own …) are kept with the
+  account through the server's reader, and in the browser's local storage, so the
+  page looks right before the server answers. The draft keeps them in the browser
+  only.
 
 The models the server follows:
 

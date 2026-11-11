@@ -252,6 +252,17 @@ describe('the keyboard', () => {
 		expect(openArticle()).toBeNull();
 	});
 
+	it("takes the keys the reader chose instead of rueder's", async () => {
+		settings.keys = { next: 'l', goAll: 'g x' };
+		render(Page);
+		await press('j');
+		expect(heading()).toHaveTextContent('New in your subscriptions');
+		await press('gx');
+		expect(heading()).toHaveTextContent('All items');
+		await press('l');
+		expect(openArticle()).not.toBeNull();
+	});
+
 	it('opens the first article with k from the start page too', async () => {
 		render(Page);
 		await press('k');

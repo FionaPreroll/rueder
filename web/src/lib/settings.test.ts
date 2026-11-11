@@ -25,6 +25,7 @@ describe('parse', () => {
 			language: 'de',
 			markOnScroll: false,
 			teasers: 'yes',
+			keys: { next: 'l', previous: 'Enter' },
 			unknown: true
 		});
 		expect(parse(stored)).toEqual({
@@ -33,8 +34,10 @@ describe('parse', () => {
 			density: 'comfortable',
 			view: 'expanded',
 			language: 'de',
-			markOnScroll: false
+			markOnScroll: false,
+			keys: { next: 'l' }
 		});
+		expect(parse(JSON.stringify({ keys: 'j' })).keys).toEqual({});
 	});
 });
 
