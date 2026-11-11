@@ -104,6 +104,42 @@ export function removeFolder(tree: readonly TreeNode[], id: string): TreeNode[] 
 	return next;
 }
 
+/** The tree with a new feed at the end of a folder, or of the top level for `null`. */
+export function addFeed(
+	tree: readonly TreeNode[],
+	id: string,
+	folderId: string | null
+): TreeNode[] {
+	const next = clone(tree);
+	const folder = folderId === null ? null : find(next, folderId)?.node;
+	const level = folder?.kind === 'folder' ? folder.children : next;
+	level.push({ kind: 'feed', id });
+	return next;
+}
+
+/** The tree without a feed. */
+export function removeFeed(tree: readonly TreeNode[], id: string): TreeNode[] {
+	const next = clone(tree);
+	const found = find(next, id);
+	if (found?.node.kind === 'feed') found.siblings.splice(found.index, 1);
+	return next;
+}
+
+/** A folder as a list of all of them names it: how deep it lies, 0 at the top. */
+export interface ListedFolder {
+	id: string;
+	title: string;
+	depth: number;
+}
+
+/** All folders in the order of the tree, each before what is in it. */
+export const folderList = (nodes: readonly TreeNode[], depth = 0): ListedFolder[] =>
+	nodes.flatMap((node) =>
+		node.kind === 'folder'
+			? [{ id: node.id, title: node.title, depth }, ...folderList(node.children, depth + 1)]
+			: []
+	);
+
 /** A step with the keyboard: up or down among its siblings, into the folder above it, or out of its folder. */
 export type NudgeDirection = 'up' | 'down' | 'in' | 'out';
 

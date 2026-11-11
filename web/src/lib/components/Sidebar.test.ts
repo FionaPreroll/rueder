@@ -153,6 +153,47 @@ describe('Sidebar', () => {
 		expect(reader.tree).toHaveLength(folders);
 	});
 
+	it('renames a feed, and gives it its own name back', async () => {
+		const { reader, row } = setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Actions for the feed Tagesbote' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+		const name = screen.getByLabelText('Name of the feed');
+		expect(name).toHaveValue('Tagesbote');
+		expect(name).toHaveAttribute('placeholder', 'Empty for the feed’s own name');
+		await userEvent.clear(name);
+		await userEvent.type(name, 'Morning paper{Enter}');
+		expect(reader.feeds['feed-tagesbote'].title).toBe('Morning paper');
+		expect(row('feed-tagesbote')).toHaveTextContent(/^Morning paper/);
+
+		await userEvent.click(
+			screen.getByRole('button', { name: 'Actions for the feed Morning paper' })
+		);
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+		await userEvent.clear(screen.getByLabelText('Name of the feed'));
+		await userEvent.keyboard('{Enter}');
+		expect(reader.feeds['feed-tagesbote'].title).toBe('Tagesbote');
+	});
+
+	it('unsubscribes from a feed once that is confirmed', async () => {
+		const { reader, row } = setup();
+		const open = async () => {
+			await userEvent.click(screen.getByRole('button', { name: 'Actions for the feed Tagesbote' }));
+			await userEvent.click(screen.getByRole('menuitem', { name: 'Unsubscribe' }));
+			return screen.getByRole('dialog', { name: 'Unsubscribe?' });
+		};
+		let dialog = await open();
+		expect(dialog).toHaveTextContent('Unsubscribe from “Tagesbote”? What you read and starred');
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(reader.feeds['feed-tagesbote']).toBeDefined();
+
+		dialog = await open();
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Unsubscribe' }));
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(reader.feeds['feed-tagesbote']).toBeUndefined();
+		expect(row('feed-tagesbote')).toBeNull();
+	});
+
 	it('asks to subscribe', async () => {
 		const { onsubscribe } = setup();
 		await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));

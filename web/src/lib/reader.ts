@@ -36,9 +36,58 @@ export interface Abilities {
 	oldestFirst: boolean;
 	/** "Mark as read" can stop at articles younger than a day or a week. */
 	markOlder: boolean;
-	/** Feeds can be subscribed to. */
+	/** Feeds can be found and subscribed to. */
 	subscribe: boolean;
+	/** Subscriptions can be taken in from an OPML file and given out as one. */
+	opml: boolean;
 }
+
+/** A feed found at an address. */
+export interface FeedCandidate {
+	/** The address of the feed itself, which is what is subscribed to. */
+	url: string;
+	/** Its name, as far as the feed or the page says; it may be empty. */
+	title: string;
+}
+
+/** Why looking for feeds, subscribing or an import did not work. The page has the words. */
+export type Refusal =
+	/**
+	 * The server said no: not an address, nothing to fetch there, not a feed, not
+	 * an OPML file. `reason` is what the server said, in its own words.
+	 */
+	| { problem: 'refused'; reason: string }
+	/** Too many lookups in a short time; wait `retryAfter` seconds, if the server said. */
+	| { problem: 'busy'; retryAfter: number | null }
+	/** This server does not fetch feeds. */
+	| { problem: 'noFetching' }
+	/** The file is larger than the server takes. */
+	| { problem: 'tooLarge' }
+	/** The server did not answer, or not with what was asked for. */
+	| { problem: 'unreachable' };
+
+/** The feeds at an address: the feed itself, or what a web page names. */
+export type Found = { feeds: FeedCandidate[] } | Refusal;
+
+/** A subscription that holds now; `known` if it held before. */
+export type Subscribed = { feedId: string; known: boolean } | Refusal;
+
+/** What an import of an OPML file did. */
+export type Imported =
+	| {
+			/** Feeds read now that were not before. */
+			feeds: number;
+			/** Folders that were made. */
+			folders: number;
+			/** Feeds of the file that were read already. */
+			known: number;
+			/** Entries of the file that were left out. */
+			skipped: number;
+	  }
+	| Refusal;
+
+/** The largest OPML file a server takes, in bytes. */
+export const MAX_OPML = 1024 * 1024;
 
 /**
  * What a rule would catch if it were saved now, or why nobody can say: its pattern
@@ -165,5 +214,20 @@ export interface Reader {
 	addFolder(title: string): void;
 	renameFolder(id: string, title: string): void;
 	removeFolder(id: string): void;
-	subscribe(address: string): void;
+
+	/** Looks at an address, which may lack its `https://`, for feeds. */
+	findFeeds(address: string): Promise<Found>;
+	/**
+	 * Subscribes to a feed found by `findFeeds`, at the end of a folder or of the top
+	 * level, and shows it.
+	 */
+	subscribe(url: string, folderId: string | null): Promise<Subscribed>;
+	/** Gives a feed a name of the reader's own; an empty one goes back to the feed's. */
+	renameFeed(id: string, title: string): void;
+	/** Ends a subscription, and with it what was read and starred there. */
+	unsubscribe(id: string): void;
+	/** Takes the subscriptions of an OPML file in; folders are found by their name or made. */
+	importOpml(file: Blob): Promise<Imported>;
+	/** All subscriptions as an OPML file; null if there was no answer. */
+	exportOpml(): Promise<string | null>;
 }

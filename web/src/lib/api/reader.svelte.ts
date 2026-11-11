@@ -5,10 +5,7 @@
 // one change after the other so they arrive in the order they were made. A change
 // the server refuses is taken back and said in a line over the list. The unread
 // counts are the server's; a change moves them here by one until the server is
-// asked again.
-//
-// What the server cannot do yet is left out here and switched off in the page
-// (`can`): subscribing, which comes with a later work package.
+// asked again. It can do everything the page offers (`can`).
 
 import type {
 	Article,
@@ -20,13 +17,26 @@ import type {
 	TreeNode
 } from '#lib/model.ts';
 import type { FilterRule } from '#lib/filters.ts';
-import type { Abilities, Account, Fresh, Notice, Reader, RulePreview } from '#lib/reader.ts';
+import {
+	MAX_OPML,
+	type Abilities,
+	type Account,
+	type Found,
+	type Fresh,
+	type Imported,
+	type Notice,
+	type Reader,
+	type Refusal,
+	type RulePreview,
+	type Subscribed
+} from '#lib/reader.ts';
 import {
 	canMove,
 	feedIds,
 	findNode,
 	moveNode,
 	nudge,
+	removeFeed,
 	removeFolder,
 	renameFolder,
 	type DropPosition,
@@ -213,12 +223,12 @@ export class ServerReader implements Reader {
 	/** How many articles the rules hide, as the server counted them. */
 	hiddenCount = $state(0);
 
-	// What comes with later work packages: live updates (3.2) and subscribing (3.5).
+	// What comes with a later work package: live updates (3.2).
 	readonly pending = 0;
 	/** The filter rules are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = null;
-	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: false };
+	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true, opml: true };
 	readonly account: Account;
 
 	/** Unread articles per feed, as the server counted them and as changes here moved them. */
@@ -924,6 +934,124 @@ export class ServerReader implements Reader {
 		return this.rules.find((rule) => rule.id === article.hiddenBy) ?? null;
 	}
 
-	/** Comes with work package 3.5; `can.subscribe` keeps the page from asking. */
-	subscribe() {}
+	// Subscribing and OPML
+
+	/**
+	 * Asks the server after the changes on their way, for an answer the page waits
+	 * for: a folder that was just made is there for a feed that goes into it.
+	 */
+	private after<T>(ask: () => Promise<T>): Promise<T> {
+		const answer = this.sending.then(ask);
+		this.sending = answer.then(
+			() => {},
+			() => {}
+		);
+		return answer;
+	}
+
+	/** Why the server did not do what was asked, for the page to say. */
+	private refusal(error: unknown): Refusal {
+		if (!(error instanceof ApiError)) return { problem: 'unreachable' };
+		if (error.signedOut) {
+			this.session.expired();
+			return { problem: 'unreachable' };
+		}
+		switch (error.status) {
+			// Not an address, nothing there, not a feed, not OPML; a folder that is gone.
+			case 400:
+			case 404:
+			case 415:
+				return { problem: 'refused', reason: error.message };
+			case 413:
+				return { problem: 'tooLarge' };
+			case 429:
+				return { problem: 'busy', retryAfter: error.retryAfter };
+			case 503:
+				return { problem: 'noFetching' };
+			default:
+				return { problem: 'unreachable' };
+		}
+	}
+
+	async findFeeds(address: string): Promise<Found> {
+		try {
+			return { feeds: await this.after(() => this.api.findFeeds(address)) };
+		} catch (error) {
+			return this.refusal(error);
+		}
+	}
+
+	/**
+	 * The server fetches a feed nobody reads yet before it subscribes, which can
+	 * take a while; the feed shows once it is there.
+	 */
+	async subscribe(url: string, folderId: string | null): Promise<Subscribed> {
+		const folder = folderId === null ? null : serverId(folderId);
+		try {
+			const id = await this.after(() => this.api.subscribe(url, folder));
+			const feedId = feedKey(id);
+			const known = feedId in this.feeds;
+			await this.loadTree();
+			if (folderId !== null) this.setClosed(folderId, false);
+			this.show({ kind: 'feed', id: feedId });
+			return { feedId, known };
+		} catch (error) {
+			return this.refusal(error);
+		}
+	}
+
+	/**
+	 * A new name shows at once. An empty one gives the feed its own name back,
+	 * which only the server knows, so the tree is asked for anew.
+	 */
+	renameFeed(id: string, title: string) {
+		const feed = this.feeds[id];
+		if (!feed) return;
+		if (title) this.feeds = { ...this.feeds, [id]: { ...feed, title } };
+		this.write(
+			'tree',
+			async () => {
+				await this.api.renameFeed(serverId(id), title);
+				if (!title) await this.loadTree();
+			},
+			() => {}
+		);
+	}
+
+	/**
+	 * The feed goes from the tree at once; a mixed list is loaded anew once the
+	 * server has ended the subscription. A rule that holds for the feed stays, as
+	 * it does on the server, and holds again if the feed is subscribed again.
+	 */
+	unsubscribe(id: string) {
+		if (!this.feeds[id]) return;
+		const { [id]: _gone, ...feeds } = this.feeds;
+		this.feeds = feeds;
+		this.changeTree(removeFeed(this.tree, id), async () => {
+			await this.api.unsubscribe(serverId(id));
+			if (this.stream.kind !== 'feed') this.reload();
+		});
+		if (this.stream.kind === 'feed' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
+	/** The feeds of a file are fetched by the server's next round, not here. */
+	async importOpml(file: Blob): Promise<Imported> {
+		if (file.size > MAX_OPML) return { problem: 'tooLarge' };
+		try {
+			const imported = await this.after(() => this.api.importOpml(file));
+			await this.loadTree();
+			return imported;
+		} catch (error) {
+			return this.refusal(error);
+		}
+	}
+
+	async exportOpml() {
+		try {
+			return await this.after(() => this.api.exportOpml());
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
 }

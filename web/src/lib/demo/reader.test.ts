@@ -468,17 +468,90 @@ describe('the tree', () => {
 		expect(reader.stream).toEqual({ kind: 'all' });
 	});
 
-	it('subscribes to an address', () => {
+	it('finds the feed at an address, which is the address itself', async () => {
 		const { reader } = setup();
-		const id = reader.subscribe(' blog.example/feed.xml ');
+		expect(await reader.findFeeds(' blog.example/feed.xml ')).toEqual({
+			feeds: [{ url: 'https://blog.example/feed.xml', title: 'blog.example' }]
+		});
+		for (const nothing of ['', 'not an address', 'localhost', 'ftp://files.example/feed']) {
+			expect(await reader.findFeeds(nothing)).toEqual({ problem: 'refused', reason: '' });
+		}
+	});
+
+	it('subscribes to an address, into a folder or at the top', async () => {
+		const { reader } = setup();
+		const subscribed = await reader.subscribe(' blog.example/feed.xml ', null);
+		if (!('feedId' in subscribed)) throw new Error('not subscribed');
+		const id = subscribed.feedId;
+		expect(subscribed.known).toBe(false);
 		expect(reader.feeds[id]).toMatchObject({ title: 'blog.example', lastSeq: 0 });
+		expect(reader.tree.at(-1)).toEqual({ kind: 'feed', id });
 		expect(reader.stream).toEqual({ kind: 'feed', id });
 		expect(reader.list).toEqual([]);
 		expect(reader.unread(id)).toBe(0);
-		const other = reader.subscribe('https://news.example/atom');
-		expect(reader.feeds[other].siteUrl).toBe('https://news.example');
-		expect(reader.subscribe('not an address').length).toBeGreaterThan(0);
+		// The same address again is the same feed.
+		expect(await reader.subscribe('https://blog.example/feed.xml', null)).toEqual({
+			feedId: id,
+			known: true
+		});
+
+		reader.setClosed('folder-news', true);
+		const other = await reader.subscribe('http://news.example/atom', 'folder-news');
+		if (!('feedId' in other)) throw new Error('not subscribed');
+		expect(reader.feeds[other.feedId].siteUrl).toBe('http://news.example');
+		const news = findNode(reader.tree, 'folder-news');
+		expect(news?.kind === 'folder' && news.children.at(-1)).toEqual({
+			kind: 'feed',
+			id: other.feedId
+		});
+		expect(reader.isClosed('folder-news')).toBe(false);
+		// A folder that is gone is the top level.
+		const third = await reader.subscribe('third.example', 'folder-gone');
+		expect('feedId' in third && reader.tree.at(-1)?.id).toBe('feedId' in third && third.feedId);
+
+		expect(await reader.subscribe('not an address', null)).toEqual({
+			problem: 'refused',
+			reason: ''
+		});
 		// The draft cannot fetch, so nothing arrives there.
 		expect(reader.arrive(id)).toBeNull();
+	});
+
+	it('renames a feed, and gives it its own name back', async () => {
+		const { reader } = setup();
+		const before = reader.feeds['feed-tagesbote'].title;
+		reader.renameFeed('feed-tagesbote', 'Morning paper');
+		expect(reader.feeds['feed-tagesbote'].title).toBe('Morning paper');
+		reader.renameFeed('feed-tagesbote', 'Evening paper');
+		reader.renameFeed('feed-tagesbote', '  ');
+		expect(reader.feeds['feed-tagesbote'].title).toBe(before);
+		reader.renameFeed('feed-gone', 'Nothing');
+		expect(reader.feeds['feed-gone']).toBeUndefined();
+	});
+
+	it('unsubscribes, and what was there goes with it', async () => {
+		const { reader } = setup();
+		const total = reader.totalUnread;
+		const gone = reader.unread('feed-tagesbote');
+		expect(gone).toBeGreaterThan(0);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		reader.unsubscribe('feed-tagesbote');
+		expect(reader.feeds['feed-tagesbote']).toBeUndefined();
+		expect(findNode(reader.tree, 'feed-tagesbote')).toBeNull();
+		expect(feedIds(reader.tree)).not.toContain('feed-tagesbote');
+		expect(reader.totalUnread).toBe(total - gone);
+		expect(reader.stream).toEqual({ kind: 'all' });
+		expect(reader.list.some((article) => article.feedId === 'feed-tagesbote')).toBe(false);
+		// Subscribed again, it is a new and empty feed.
+		const again = await reader.subscribe('tagesbote.example', null);
+		expect('feedId' in again && again.feedId).not.toBe('feed-tagesbote');
+		reader.unsubscribe('feed-gone');
+	});
+
+	it('has no OPML', async () => {
+		const { reader } = setup();
+		expect(reader.can.opml).toBe(false);
+		expect(await reader.importOpml()).toEqual({ problem: 'unreachable' });
+		expect(await reader.exportOpml()).toBeNull();
 	});
 });

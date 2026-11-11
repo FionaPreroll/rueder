@@ -195,6 +195,9 @@ describe('the bar on top', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
 		const dialog = screen.getByRole('dialog', { name: 'Subscribe to a feed' });
 		await userEvent.type(within(dialog).getByRole('textbox'), 'blog.example{Enter}');
+		await userEvent.click(
+			await within(dialog).findByRole('button', { name: 'Subscribe: blog.example' })
+		);
 		expect(screen.queryByRole('dialog')).toBeNull();
 		expect(heading()).toHaveTextContent('blog.example');
 	});

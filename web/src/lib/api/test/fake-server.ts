@@ -19,9 +19,18 @@ interface FakeFeed {
 	id: number;
 	folder_id: number | null;
 	position: number;
+	/** The feed's own name, and the one the reader gave it. */
 	title: string;
+	name: string | null;
+	url: string;
 	error: string | null;
 	icon_url: string | null;
+}
+
+/** A feed the made-up web has, at the address of a site or of the feed itself. */
+interface FakeSiteFeed {
+	url: string;
+	title: string;
 }
 
 export interface FakeArticle {
@@ -51,6 +60,8 @@ interface Request {
 	/** The path after /api, with its query. */
 	path: string;
 	body: unknown;
+	/** The type of the body, as the request says it. */
+	type: string | null;
 }
 
 interface Refusal {
@@ -59,6 +70,8 @@ interface Refusal {
 	status: number;
 	/** How many requests it still refuses. */
 	times: number;
+	reason: string;
+	headers: Record<string, string>;
 }
 
 const START = Date.parse('2026-11-01T08:00:00Z');
@@ -69,6 +82,8 @@ const json = (body: unknown, status = 200) =>
 const empty = (status = 204) => new Response(null, { status });
 const refused = (status: number, reason = '', headers: Record<string, string> = {}) =>
 	new Response(reason, { status, headers });
+const text = (body: string, type: string) =>
+	new Response(body, { status: 200, headers: { 'Content-Type': type } });
 
 export class FakeServer {
 	/** Passwords by name. */
@@ -83,6 +98,8 @@ export class FakeServer {
 	feeds: FakeFeed[] = [];
 	articles: FakeArticle[] = [];
 	rules: ApiRule[] = [];
+	/** The feeds at an address of the made-up web, by the address with its scheme. */
+	sites = new Map<string, FakeSiteFeed[]>();
 
 	requests: Request[] = [];
 	/** What time it is for the server, for what it does by age. */
@@ -109,11 +126,19 @@ export class FakeServer {
 			folder_id: folder,
 			position,
 			title,
+			name: null,
+			url: `https://feed-${id}.example/feed.xml`,
 			error: null,
 			icon_url: null,
 			...over
 		});
 		return id;
+	}
+
+	/** A site of the made-up web: the feed at `url` itself, and a page that names it. */
+	addSite(page: string, ...feeds: FakeSiteFeed[]) {
+		this.sites.set(page, feeds);
+		for (const feed of feeds) this.sites.set(feed.url, [feed]);
 	}
 
 	/** Adds articles to a feed, as if they had just arrived; returns the last one. */
@@ -159,9 +184,16 @@ export class FakeServer {
 
 	// Misbehaving
 
-	/** The next `times` requests of this kind are refused with `status`. */
-	refuse(method: string, path: RegExp, status: number, times = 1) {
-		this.refusals.push({ method, path, status, times });
+	/** The next `times` requests of this kind are refused with `status`, and why. */
+	refuse(
+		method: string,
+		path: RegExp,
+		status: number,
+		times = 1,
+		reason = 'refused',
+		headers: Record<string, string> = {}
+	) {
+		this.refusals.push({ method, path, status, times, reason, headers });
 	}
 
 	/** Answers to these paths wait until the returned function is called. */
@@ -188,19 +220,31 @@ export class FakeServer {
 		const url = new URL(String(input), 'https://reader.example');
 		const method = init.method ?? 'GET';
 		const path = url.pathname.replace(/^\/api/, '') + url.search;
-		const body: unknown = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
-		this.requests.push({ method, path, body });
+		const body: unknown =
+			typeof init.body === 'string'
+				? JSON.parse(init.body)
+				: init.body instanceof Blob
+					? await init.body.text()
+					: undefined;
+		const type = new Headers(init.headers).get('Content-Type');
+		this.requests.push({ method, path, body, type });
 		if (this.down) throw new TypeError('fetch failed');
 		for (const held of this.held) if (held.path.test(path)) await held.wait;
 		const refusal = this.refusals.find((r) => r.method === method && r.path.test(path));
 		if (refusal) {
 			if (--refusal.times === 0) this.refusals = this.refusals.filter((r) => r !== refusal);
-			return refused(refusal.status, 'refused');
+			return refused(refusal.status, refusal.reason, refusal.headers);
 		}
-		return this.answer(method, url.pathname.replace(/^\/api/, ''), url.searchParams, body);
+		return this.answer(method, url.pathname.replace(/^\/api/, ''), url.searchParams, body, type);
 	};
 
-	private answer(method: string, path: string, query: URLSearchParams, body: unknown): Response {
+	private answer(
+		method: string,
+		path: string,
+		query: URLSearchParams,
+		body: unknown,
+		type: string | null
+	): Response {
 		const data = (body ?? {}) as Record<string, unknown>;
 		if (method === 'GET' && path === '/login/ways') return json({ oidc: this.oidc });
 		if (method === 'POST' && path === '/login') {
@@ -322,6 +366,9 @@ export class FakeServer {
 			if (!title) return refused(400, 'the name is empty');
 			return json({ id: this.addFolder(title) }, 201);
 		}
+		const subscribing = this.subscribing(method, path, data, body, type);
+		if (subscribing) return subscribing;
+
 		const folder = /^\/folders\/(\d+)$/.exec(path);
 		if (folder) {
 			const found = this.folders.find((f) => f.id === Number(folder[1]));
@@ -352,10 +399,11 @@ export class FakeServer {
 		return {
 			folders: this.folders,
 			hidden: this.articles.filter((article) => article.hidden).length,
-			feeds: this.feeds.map((feed) => ({
+			feeds: this.feeds.map(({ name, url, ...feed }) => ({
 				...feed,
+				title: name ?? feed.title,
 				feed_title: feed.title,
-				feed_url: `https://feed-${feed.id}.example/feed.xml`,
+				feed_url: url,
 				site_url: `https://feed-${feed.id}.example`,
 				fetch_agent: 'rueder',
 				last_seq: this.articles.filter((a) => a.feed_id === feed.id).length,
@@ -364,6 +412,77 @@ export class FakeServer {
 			}))
 		};
 	}
+
+	// Subscribing and OPML
+
+	private subscribing(
+		method: string,
+		path: string,
+		data: Record<string, unknown>,
+		body: unknown,
+		type: string | null
+	): Response | null {
+		if (method === 'POST' && path === '/feeds/find') {
+			const found = this.sites.get(this.address(String(data.url)));
+			if (!found) return refused(400, 'the address cannot be fetched: no such site');
+			return json({ feeds: found });
+		}
+		if (method === 'POST' && path === '/feeds') {
+			const url = this.address(String(data.url));
+			const folder = data.folder_id ?? null;
+			if (folder !== null && !this.folders.some((f) => f.id === folder)) return refused(404);
+			const known = this.feeds.find((feed) => feed.url === url);
+			if (known) return json({ id: known.id });
+			const feed = this.sites.get(url)?.find((found) => found.url === url);
+			if (!feed) return refused(400, 'this is not a feed that can be read: it is a web page');
+			return json({ id: this.addFeed(feed.title, folder as number | null, { url }) }, 201);
+		}
+		const feed = /^\/feeds\/(\d+)$/.exec(path);
+		if (feed) {
+			const found = this.feeds.find((f) => f.id === Number(feed[1]));
+			if (!found) return refused(404);
+			if (method === 'PATCH') {
+				found.name = String(data.title ?? '').trim() || null;
+				return empty();
+			}
+			if (method === 'DELETE') {
+				const level = this.level(found.folder_id).filter((row) => row !== found);
+				this.feeds = this.feeds.filter((f) => f !== found);
+				this.articles = this.articles.filter((a) => a.feed_id !== found.id);
+				this.renumber(level);
+				return empty();
+			}
+		}
+		if (method === 'GET' && path === '/opml') {
+			const outlines = this.feeds
+				.map((f) => `    <outline type="rss" text="${f.name ?? f.title}" xmlUrl="${f.url}"/>`)
+				.join('\n');
+			return text(
+				`<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <body>\n${outlines}\n  </body>\n</opml>\n`,
+				'text/x-opml; charset=utf-8'
+			);
+		}
+		if (method === 'POST' && path === '/opml') {
+			if (type !== 'text/x-opml') return refused(415, 'an OPML file comes as text/x-opml or XML');
+			const file = String(body);
+			if (!file.includes('<opml')) return refused(400, 'this is not an OPML file');
+			const imported = { feeds: 0, folders: 0, known: 0, skipped: 0 };
+			for (const [, title, url] of file.matchAll(/<outline text="([^"]*)" xmlUrl="([^"]*)"/g)) {
+				if (!/^https?:\/\//.test(url)) imported.skipped++;
+				else if (this.feeds.some((f) => f.url === url)) imported.known++;
+				else {
+					this.addFeed(title, null, { url });
+					imported.feeds++;
+				}
+			}
+			return json(imported);
+		}
+		return null;
+	}
+
+	/** An address as the server takes it: without a scheme, it is https. */
+	private address = (text: string) =>
+		(/^\w+:\/\//.test(text.trim()) ? '' : 'https://') + text.trim();
 
 	/** The feeds a list or a "mark as read" is about; undefined for what is not there. */
 	private scope(kind: string, id: number): Set<number> | undefined {

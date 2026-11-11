@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FOLDER_DEPTH, type TreeNode } from '#lib/model.ts';
 import {
+	addFeed,
 	addFolder,
 	ancestorIds,
 	canMove,
 	feedIds,
 	findNode,
+	folderList,
 	moveNode,
 	nudge,
+	removeFeed,
 	removeFolder,
 	renameFolder
 } from '#lib/tree.ts';
@@ -101,6 +104,38 @@ describe('folders', () => {
 		expect(shape(removeFolder(tree, 'rust'))).toBe('tech[a b c] d');
 		expect(shape(removeFolder(tree, 'tech'))).toBe('rust[a b] c d');
 		expect(shape(removeFolder(tree, 'a'))).toBe(shape(tree));
+	});
+});
+
+describe('feeds', () => {
+	it('are added at the end of a folder or of the top level', () => {
+		expect(shape(addFeed(tree, 'e', 'rust'))).toBe('tech[rust[a b e] c] d');
+		expect(shape(addFeed(tree, 'e', null))).toBe('tech[rust[a b] c] d e');
+		// A folder that is gone is the top level, and a feed is no folder.
+		expect(shape(addFeed(tree, 'e', 'gone'))).toBe('tech[rust[a b] c] d e');
+		expect(shape(addFeed(tree, 'e', 'a'))).toBe('tech[rust[a b] c] d e');
+		expect(shape(tree)).toBe('tech[rust[a b] c] d');
+	});
+
+	it('are removed, and nothing else is', () => {
+		expect(shape(removeFeed(tree, 'b'))).toBe('tech[rust[a] c] d');
+		expect(shape(removeFeed(tree, 'd'))).toBe('tech[rust[a b] c]');
+		expect(shape(removeFeed(tree, 'rust'))).toBe(shape(tree));
+		expect(shape(removeFeed(tree, 'gone'))).toBe(shape(tree));
+	});
+
+	it('go into folders that are listed in the order of the tree', () => {
+		expect(folderList(tree)).toEqual([
+			{ id: 'tech', title: 'TECH', depth: 0 },
+			{ id: 'rust', title: 'RUST', depth: 1 }
+		]);
+		expect(folderList([nested(3), folder('x')]).map((f) => `${f.id}:${f.depth}`)).toEqual([
+			'n3:0',
+			'n2:1',
+			'n1:2',
+			'x:0'
+		]);
+		expect(folderList([feed('a')])).toEqual([]);
 	});
 });
 

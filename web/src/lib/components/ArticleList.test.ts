@@ -137,7 +137,7 @@ describe('an empty list', () => {
 		await vi.waitFor(() =>
 			expect(screen.getByText('No article matches the search.')).toBeInTheDocument()
 		);
-		reader.subscribe('blog.example');
+		await reader.subscribe('blog.example', null);
 		await vi.waitFor(() =>
 			expect(screen.getByText('This feed has no articles yet.')).toBeInTheDocument()
 		);

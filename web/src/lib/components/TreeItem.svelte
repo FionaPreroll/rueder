@@ -18,6 +18,7 @@
 	import { m } from '#lib/i18n/index.ts';
 	import type { TreeNode } from '#lib/model.ts';
 	import Counter from './Counter.svelte';
+	import Dialog from './Dialog.svelte';
 	import FeedIcon from './FeedIcon.svelte';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
@@ -48,6 +49,7 @@
 
 	let renaming = $state(false);
 	let newTitle = $state('');
+	let unsubscribing = $state(false);
 
 	function pick() {
 		reader.show({ kind: node.kind, id: node.id });
@@ -113,9 +115,12 @@
 		}
 	}
 
+	/** A folder keeps its name if the new one is empty; a feed gets its own name back. */
 	function rename(event: SubmitEvent) {
 		event.preventDefault();
-		if (newTitle.trim()) reader.renameFolder(node.id, newTitle.trim());
+		const title = newTitle.trim();
+		if (node.kind === 'feed') reader.renameFeed(node.id, title);
+		else if (title) reader.renameFolder(node.id, title);
 		renaming = false;
 	}
 
@@ -166,7 +171,8 @@
 			<form class="min-w-0 flex-1 py-0.5" onsubmit={rename}>
 				<input
 					class="w-full rounded px-1.5 py-0.5 text-sm"
-					aria-label={m.nav.folderName}
+					aria-label={node.kind === 'folder' ? m.nav.folderName : m.nav.feedName}
+					placeholder={node.kind === 'feed' ? m.nav.feedNameHint : undefined}
 					bind:value={newTitle}
 					use:focus
 					onblur={() => (renaming = false)}
@@ -224,8 +230,56 @@
 					</button>
 				</Menu>
 			</div>
+		{:else if node.kind === 'feed' && feed && !renaming}
+			<div class="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+				<Menu class="plain size-6" align="right" label={m.nav.feedActions(feed.title)}>
+					{#snippet button()}
+						<Icon name="more" />
+					{/snippet}
+					<button
+						type="button"
+						role="menuitem"
+						class="menu-item"
+						onclick={() => {
+							newTitle = feed.title;
+							renaming = true;
+						}}
+					>
+						{m.nav.renameFeed}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						class="menu-item"
+						onclick={() => (unsubscribing = true)}
+					>
+						{m.nav.unsubscribe}
+					</button>
+				</Menu>
+			</div>
 		{/if}
 	</div>
+
+	{#if unsubscribing && feed}
+		<Dialog title={m.nav.unsubscribeTitle} onclose={() => (unsubscribing = false)}>
+			<p class="text-sm">{m.nav.unsubscribeText(feed.title)}</p>
+			<div class="mt-4 flex gap-2">
+				<button
+					type="button"
+					class="cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110"
+					onclick={() => {
+						unsubscribing = false;
+						reader.unsubscribe(node.id);
+					}}
+				>
+					{m.nav.unsubscribe}
+				</button>
+				<button type="button" class="tool" onclick={() => (unsubscribing = false)}>
+					{m.common.cancel}
+				</button>
+			</div>
+		</Dialog>
+	{/if}
 
 	{#if node.kind === 'folder' && !closed && node.children.length > 0}
 		<ul>
