@@ -185,6 +185,53 @@ async fn the_tree_has_the_readers_folders_feeds_and_counts(db: PgPool) {
     assert!(!all.contains("Tech") && !all.contains("blog"), "{all}");
 }
 
+/// A feed without a name of its own goes by the host of its address, and one
+/// that was never fetched says so.
+#[sqlx::test]
+async fn a_feed_without_a_name_or_a_fetch_says_so(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 0).await;
+    sqlx::query(
+        "UPDATE feeds SET title = '', feed_url = 'https://news.example/feed.xml' WHERE id = $1",
+    )
+    .bind(feed)
+    .execute(&db)
+    .await
+    .unwrap();
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let (_, tree) = get(&state, "/api/tree", &cookie).await;
+    let shown = &tree["feeds"][0];
+    assert_eq!(
+        (&shown["title"], &shown["feed_title"], &shown["fetched"]),
+        (&json!("news.example"), &json!(""), &json!(false))
+    );
+
+    // The reader's own name comes first, an empty one does not count, and a
+    // fetch is noted.
+    sqlx::query("UPDATE subscriptions SET title = '  ' WHERE feed_id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE feeds SET fetched_at = now() WHERE id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    let (_, tree) = get(&state, "/api/tree", &cookie).await;
+    assert_eq!(
+        (&tree["feeds"][0]["title"], &tree["feeds"][0]["fetched"]),
+        (&json!("news.example"), &json!(true))
+    );
+    sqlx::query("UPDATE subscriptions SET title = 'Mine' WHERE feed_id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    let (_, tree) = get(&state, "/api/tree", &cookie).await;
+    assert_eq!(tree["feeds"][0]["title"], "Mine");
+}
+
 #[sqlx::test]
 async fn lists_go_back_page_by_page(db: PgPool) {
     let (ada, news) = common::reader(&db, "ada", 4).await;

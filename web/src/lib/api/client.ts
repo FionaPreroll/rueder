@@ -214,7 +214,8 @@ export const api = {
 
 	move: (node: ApiNode, target: ApiNode, position: DropPosition) =>
 		call<void>('POST', '/tree/move', { node, target, position } satisfies Move),
-	addFolder: (title: string) => call<Created>('POST', '/folders', { title } satisfies NewFolder),
+	addFolder: (title: string, parentId: number | null = null) =>
+		call<Created>('POST', '/folders', { title, parent_id: parentId } satisfies NewFolder),
 	renameFolder: (id: number, title: string) =>
 		call<void>('PATCH', `/folders/${id}`, { title } satisfies Rename),
 	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`),

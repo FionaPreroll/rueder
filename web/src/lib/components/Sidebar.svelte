@@ -20,7 +20,7 @@
 		onpick?: () => void;
 	} = $props();
 
-	const drag: DragState = $state({ id: null, over: null, position: null });
+	let drag: DragState = $state({ id: null, over: null, position: null });
 
 	let naming = $state(false);
 	let folderName = $state('');
@@ -114,7 +114,7 @@
 
 		<ul>
 			{#each reader.tree as node (node.id)}
-				<TreeItem {reader} {node} depth={0} {drag} {onpick} />
+				<TreeItem {reader} {node} depth={0} bind:drag {onpick} />
 			{/each}
 		</ul>
 	</div>

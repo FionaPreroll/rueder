@@ -220,6 +220,10 @@ export interface Reader {
 	isClosed(folderId: string): boolean;
 	setClosed(folderId: string, closed: boolean): void;
 	addFolder(title: string): void;
+	/** Whether dropping the feed `id` on the feed `targetId` can put both into a new folder. */
+	canGroup(id: string, targetId: string): boolean;
+	/** Puts the feed `targetId` and then the feed `id` into a new folder where the target was. */
+	group(id: string, targetId: string, title: string): void;
 	renameFolder(id: string, title: string): void;
 	removeFolder(id: string): void;
 

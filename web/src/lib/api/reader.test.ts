@@ -95,6 +95,7 @@ describe('the tree', () => {
 				site_url: null,
 				icon_url: null,
 				fetch_agent: 'rueder',
+				fetched: true,
 				error: null,
 				last_seq: 0,
 				read_upto: 0,
@@ -566,10 +567,11 @@ describe('reading', () => {
 		reader.show({ kind: 'feed', id: `feed-${tech}` });
 		await settle();
 		const [first, second] = reader.visible;
+		// Without a cursor, a step back starts at the top too.
 		reader.step(-1);
-		expect(reader.cursor).toBeNull();
-		reader.step(1);
 		expect([reader.cursor, reader.open, reader.moved]).toEqual([first.id, first.id, 1]);
+		reader.step(-1);
+		expect([reader.cursor, reader.moved]).toEqual([first.id, 1]);
 		reader.step(1, false);
 		expect([reader.cursor, reader.open]).toEqual([second.id, null]);
 		expect(reader.isRead(second)).toBe(false);
@@ -584,6 +586,27 @@ describe('reading', () => {
 		expect(reader.current?.seq).toBe(1);
 		reader.step(-1);
 		expect(reader.current?.seq).toBe(2);
+	});
+
+	it('takes a step that comes while the list is on its way once it is there', async () => {
+		const reader = await started();
+		for (const by of [1, -1] as const) {
+			const release = server.hold(/^\/feeds\/\d+\/articles\?/);
+			reader.show({ kind: 'feed', id: `feed-${tech}` });
+			reader.step(by);
+			expect(reader.cursor).toBeNull();
+			release();
+			await settle();
+			expect([reader.current?.seq, reader.open]).toEqual([3, reader.cursor]);
+		}
+		// A step for a list that is no longer shown is forgotten.
+		const release = server.hold(/^\/feeds\/\d+\/articles\?/);
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		reader.step(1);
+		reader.show({ kind: 'feed', id: `feed-${blog}` });
+		release();
+		await settle();
+		expect(reader.cursor).toBeNull();
 	});
 
 	it('goes on to the next page when the cursor steps past the end', async () => {
@@ -1177,6 +1200,42 @@ describe('the subscriptions', () => {
 		reader.renameFeed('feed-999', 'Nothing');
 		await settle();
 		expect(server.writes).toEqual([`PATCH /feeds/${tech}`, `PATCH /feeds/${tech}`]);
+	});
+
+	it('go two into a new folder where the one dropped on was', async () => {
+		const reader = await started();
+		expect(reader.canGroup(`feed-${blog}`, `feed-${tech}`)).toBe(true);
+		reader.group(`feed-${blog}`, `feed-${tech}`, 'Together');
+		await settle();
+		const folder = server.folders.find((f) => f.title === 'Together')!;
+		expect(server.writes).toEqual([
+			'POST /folders',
+			'POST /tree/move',
+			'POST /tree/move',
+			'POST /tree/move'
+		]);
+		expect(server.requests.find((r) => r.path === '/folders')?.body).toEqual({
+			title: 'Together',
+			parent_id: news
+		});
+		expect(shape(reader.tree)).toEqual([
+			{
+				[`News (folder-${news})`]: [
+					{ [`Together (folder-${folder.id})`]: [`feed-${tech}`, `feed-${blog}`] }
+				]
+			},
+			`feed-${lone}`
+		]);
+		// At the top, the new folder is made there.
+		reader.group(`feed-${tech}`, `feed-${lone}`, 'Top');
+		await settle();
+		expect(server.requests.filter((r) => r.path === '/folders').at(-1)?.body).toEqual({
+			title: 'Top',
+			parent_id: null
+		});
+		expect(shape(reader.tree)[1]).toEqual({
+			[`Top (folder-${server.folders.at(-1)?.id})`]: [`feed-${lone}`, `feed-${tech}`]
+		});
 	});
 
 	it('get their old name back when the server refuses the new one', async () => {

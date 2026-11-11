@@ -31,6 +31,8 @@ import {
 	type Subscribed
 } from '#lib/reader.ts';
 import {
+	ancestorIds,
+	canGroup,
 	canMove,
 	feedIds,
 	findNode,
@@ -253,6 +255,8 @@ export class ServerReader implements Reader {
 	private loadingMore = false;
 	/** Set back to unread by hand; scrolling past does not mark these as read again. */
 	private pinned = new Set<string>();
+	/** A step with the keyboard that waits for the list to arrive. */
+	private waitingStep: { by: 1 | -1; open: boolean } | null = null;
 
 	/** Texts being fetched, waiting to be fetched, and fetched. */
 	private fetching = new Set<string>();
@@ -382,7 +386,8 @@ export class ServerReader implements Reader {
 				hue: hueOf(feed.id),
 				icon: feed.icon_url,
 				lastSeq: feed.last_seq,
-				error: feed.error
+				error: feed.error,
+				waiting: !feed.fetched
 			};
 			counts[id] = feed.unread;
 		}
@@ -498,6 +503,10 @@ export class ServerReader implements Reader {
 				this.items = more ? [...this.items, ...articles] : articles;
 				this.hasMore = rows.length === PAGE;
 				if (!more) this.newest = (newest ?? rows)[0]?.id ?? null;
+				// A step that was asked for while the list was on its way is taken now.
+				const waiting = this.waitingStep;
+				this.waitingStep = null;
+				if (!more && waiting) this.step(waiting.by, waiting.open);
 			}
 		} catch (error) {
 			if (run !== this.listRun) return;
@@ -517,6 +526,7 @@ export class ServerReader implements Reader {
 
 	show(stream: Stream) {
 		this.stream = stream;
+		this.waitingStep = null;
 		this.cursor = null;
 		this.open = null;
 		this.query = '';
@@ -703,10 +713,18 @@ export class ServerReader implements Reader {
 		}
 	}
 
+	/**
+	 * Without a cursor, either step goes to the first article. A step that comes
+	 * while the list is still on its way, as from the start page, waits for it.
+	 */
 	step(by: 1 | -1, open = true) {
 		const list = this.visible;
+		if (this.loading && this.stream.kind !== 'home' && list.length === 0) {
+			this.waitingStep = { by, open };
+			return;
+		}
 		const at = list.findIndex((article) => article.id === this.cursor);
-		const next = at === -1 ? (by === 1 ? 0 : -1) : at + by;
+		const next = at === -1 ? 0 : at + by;
 		const article = list[next];
 		if (!article) {
 			// Past the end of the page: the step goes on once the next page is there.
@@ -833,6 +851,34 @@ export class ServerReader implements Reader {
 			'tree',
 			async () => {
 				await this.api.addFolder(title);
+				await this.loadTree();
+			},
+			() => {}
+		);
+	}
+
+	canGroup = (id: string, targetId: string) => canGroup(this.tree, id, targetId);
+
+	/**
+	 * The server gives the new folder its number, so the folder shows once it has
+	 * it: made in the target's folder, put where the target is, and the two feeds
+	 * moved into it.
+	 */
+	group(id: string, targetId: string, title: string) {
+		if (!this.canGroup(id, targetId)) return;
+		const parent = ancestorIds(this.tree, targetId).at(-1);
+		const feed = (key: string) => ({ kind: 'feed' as const, id: serverId(key) });
+		this.write(
+			'tree',
+			async () => {
+				const { id: folderId } = await this.api.addFolder(
+					title,
+					parent === undefined ? null : serverId(parent)
+				);
+				const folder = { kind: 'folder' as const, id: folderId };
+				await this.api.move(folder, feed(targetId), 'before');
+				await this.api.move(feed(targetId), folder, 'inside');
+				await this.api.move(feed(id), folder, 'inside');
 				await this.loadTree();
 			},
 			() => {}

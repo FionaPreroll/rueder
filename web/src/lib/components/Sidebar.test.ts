@@ -88,6 +88,27 @@ describe('Sidebar', () => {
 		expect(target).not.toHaveClass('ring-2');
 	});
 
+	it('makes a new folder of a feed dropped on the middle of another', async () => {
+		const { reader, row } = setup();
+		const dragged = row('feed-nebenan').parentElement!;
+		const target = row('feed-harbor').parentElement!;
+		target.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100, width: 200, height: 20 });
+		// The test's browser has no DragEvent with a place; a mouse event carries one.
+		const over = (clientY: number) =>
+			fireEvent(target, new MouseEvent('dragover', { clientY, bubbles: true, cancelable: true }));
+		await fireEvent.dragStart(dragged);
+		// The edges of a feed still put the dragged one before or after it.
+		await over(102);
+		expect(target).not.toHaveClass('ring-2');
+		await over(110);
+		expect(target).toHaveClass('ring-2');
+		await fireEvent.drop(target);
+		const [folderId] = ancestorIds(reader.tree, 'feed-harbor').slice(-1);
+		expect(ancestorIds(reader.tree, 'feed-harbor')).toEqual(['folder-news', folderId]);
+		expect(ancestorIds(reader.tree, 'feed-nebenan')).toEqual(['folder-news', folderId]);
+		expect(row(folderId)).toHaveTextContent('New folder');
+	});
+
 	it('does not take a drop where the thing cannot go', async () => {
 		const { reader, row } = setup();
 		const tech = row('folder-tech').parentElement!;

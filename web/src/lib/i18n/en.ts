@@ -28,6 +28,7 @@ const en = {
 		hidden: 'Hidden by filters',
 		subscriptions: 'Subscriptions',
 		newFolder: 'New folder',
+		groupedFolder: 'New folder',
 		folderName: 'Name of the folder',
 		renameFolder: 'Rename',
 		removeFolder: 'Remove the folder, keep what is in it',
@@ -56,6 +57,7 @@ const en = {
 		logout: 'Log out',
 		unread: (count: number) => `${n(count)} unread`,
 		fetchFailed: (reason: string) => `The last fetch failed: ${reason}`,
+		waiting: 'Not fetched yet',
 		moveHint: 'Drag to sort, or press Alt with the arrow keys',
 		tooDeep: (levels: number) => `Folders nest ${levels} levels deep at most.`
 	},
@@ -85,6 +87,8 @@ const en = {
 		emptyUnread: 'Nothing unread here.',
 		emptySearch: 'No article matches the search.',
 		emptyFeed: 'This feed has no articles yet.',
+		waitingFeed:
+			'This feed has not been fetched yet. Its articles come with the next round of fetching, within a few minutes.',
 		showAll: 'Show all items',
 		more: 'Show more',
 		star: 'Add star',

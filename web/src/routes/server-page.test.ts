@@ -130,6 +130,31 @@ describe('the page with a server', () => {
 		expect(added.join('').trim()).toBe('With an addition.');
 	});
 
+	it('says when a feed waits for its first fetch', async () => {
+		server.addFeed('', null, { url: 'https://later.example/feed.xml', fetched: false });
+		await reading();
+		const row = within(sidebar()).getByRole('button', { name: /Not fetched yet/ });
+		await userEvent.click(row);
+		expect(
+			await screen.findByText(/This feed has not been fetched yet\. Its articles come/)
+		).toBeInTheDocument();
+	});
+
+	it('opens the first article with j or k from the start page', async () => {
+		for (const key of ['j', 'k']) {
+			const { unmount } = render(Page);
+			expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();
+			await userEvent.keyboard(key);
+			await vi.waitFor(() =>
+				expect(document.querySelector('[aria-expanded="true"][class*="py-"]')).toHaveTextContent(
+					'Lone Article 1 of feed'
+				)
+			);
+			expect(heading()).toHaveTextContent('All items');
+			unmount();
+		}
+	});
+
 	it('leaves out what the server cannot do yet', async () => {
 		render(Page);
 		expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();

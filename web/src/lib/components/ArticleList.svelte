@@ -19,9 +19,10 @@
 
 	const expanded = $derived(settings.view === 'expanded');
 	const showFeed = $derived(reader.stream.kind !== 'feed');
-	const feedIsEmpty = $derived(
-		reader.stream.kind === 'feed' && reader.feeds[reader.stream.id]?.lastSeq === 0
+	const shownFeed = $derived(
+		reader.stream.kind === 'feed' ? reader.feeds[reader.stream.id] : undefined
 	);
+	const feedIsEmpty = $derived(shownFeed?.lastSeq === 0);
 
 	const rowOf = (id: string) => scroller?.querySelector<HTMLElement>(`[data-article="${id}"]`);
 
@@ -97,6 +98,8 @@
 				<p role="status">{m.list.loadingList}</p>
 			{:else if reader.query.trim()}
 				<p>{m.list.emptySearch}</p>
+			{:else if feedIsEmpty && shownFeed?.waiting}
+				<p role="status">{m.list.waitingFeed}</p>
 			{:else if feedIsEmpty}
 				<p>{m.list.emptyFeed}</p>
 			{:else if reader.unreadOnly && reader.stream.kind !== 'starred' && reader.stream.kind !== 'hidden'}

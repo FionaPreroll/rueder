@@ -1,18 +1,25 @@
 <script lang="ts" module>
 	import type { DropPosition } from '#lib/tree.ts';
 
+	/**
+	 * Where a dragged row lands: before, after or into a folder, or, dropped on the
+	 * middle of another feed, together with it in a new folder.
+	 */
+	export type Landing = DropPosition | 'group';
+
 	/** What is being dragged in the sidebar, and where it would land if dropped now. */
 	export interface DragState {
 		id: string | null;
 		over: string | null;
-		position: DropPosition | null;
+		position: Landing | null;
 	}
 </script>
 
 <script lang="ts">
 	// A folder or a feed in the sidebar, with the folders and feeds inside it. Rows are
 	// sorted by dragging them (before, after or into a folder), or with Alt and the
-	// arrow keys.
+	// arrow keys. A feed dropped on the middle of another makes a new folder of both.
+	// The drag state belongs to the sidebar and is bound through every row.
 	import { tick } from 'svelte';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -28,7 +35,7 @@
 		reader,
 		node,
 		depth,
-		drag,
+		drag = $bindable(),
 		onpick
 	}: {
 		reader: Reader;
@@ -65,11 +72,17 @@
 		}
 	}
 
-	/** Upper part of a row: before it. Lower part: after it. The middle of a folder: into it. */
-	function positionAt(event: DragEvent): DropPosition {
+	/**
+	 * Upper part of a row: before it. Lower part: after it. The middle of a folder:
+	 * into it. The middle of a feed, for a feed: both into a new folder.
+	 */
+	function positionAt(event: DragEvent): Landing {
 		const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		const at = (event.clientY - box.top) / box.height;
-		if (node.kind === 'feed') return at < 0.5 ? 'before' : 'after';
+		if (node.kind === 'feed') {
+			if (drag.id && reader.canGroup(drag.id, node.id) && at >= 0.3 && at <= 0.7) return 'group';
+			return at < 0.5 ? 'before' : 'after';
+		}
 		if (at < 0.3) return 'before';
 		// Right under an open folder is its first row, so "after" would land inside anyway.
 		if (at > 0.7 && (closed || node.children.length === 0)) return 'after';
@@ -79,7 +92,11 @@
 	function dragover(event: DragEvent) {
 		if (!drag.id) return;
 		const position = positionAt(event);
-		if (reader.canMove(drag.id, node.id, position)) {
+		const allowed =
+			position === 'group'
+				? reader.canGroup(drag.id, node.id)
+				: reader.canMove(drag.id, node.id, position);
+		if (allowed) {
 			event.preventDefault();
 			drag.over = node.id;
 			drag.position = position;
@@ -91,8 +108,10 @@
 
 	function drop(event: DragEvent) {
 		event.preventDefault();
-		if (drag.id && drag.over === node.id && drag.position) {
-			reader.move(drag.id, node.id, drag.position);
+		const { id, position } = drag;
+		if (id && drag.over === node.id && position) {
+			if (position === 'group') reader.group(id, node.id, m.nav.groupedFolder);
+			else reader.move(id, node.id, position);
 		}
 		dragend();
 	}
@@ -135,7 +154,7 @@
 		class={[
 			'group relative flex items-center gap-0.5 pr-1 select-none',
 			chosen ? 'bg-chosen' : 'hover:bg-hover',
-			landing === 'inside' && 'ring-2 ring-accent ring-inset',
+			(landing === 'inside' || landing === 'group') && 'ring-2 ring-accent ring-inset',
 			drag.id === node.id && 'opacity-40'
 		]}
 		style:padding-left="{0.4 + depth * 0.85}rem"
@@ -193,6 +212,12 @@
 					<Icon name="folder" class="size-4 text-soft" />
 				{/if}
 				<span class={['truncate', count > 0 && 'font-semibold']}>{label}</span>
+				{#if feed?.waiting}
+					<span class="text-soft" title={m.nav.waiting}>
+						<Icon name="clock" class="size-3.5" />
+						<span class="sr-only">{m.nav.waiting}</span>
+					</span>
+				{/if}
 				{#if feed?.error}
 					<span class="text-warn" title={m.nav.fetchFailed(feed.error)}>
 						<Icon name="warning" class="size-3.5" />
@@ -284,7 +309,7 @@
 	{#if node.kind === 'folder' && !closed && node.children.length > 0}
 		<ul>
 			{#each node.children as child (child.id)}
-				<TreeItem {reader} node={child} depth={depth + 1} {drag} {onpick} />
+				<TreeItem {reader} node={child} depth={depth + 1} bind:drag {onpick} />
 			{/each}
 		</ul>
 	{/if}

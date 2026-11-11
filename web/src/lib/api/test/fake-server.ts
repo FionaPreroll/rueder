@@ -25,6 +25,8 @@ interface FakeFeed {
 	url: string;
 	error: string | null;
 	icon_url: string | null;
+	/** Whether the server fetched it yet; a feed from an OPML file waits. */
+	fetched: boolean;
 }
 
 /** A feed the made-up web has, at the address of a site or of the feed itself. */
@@ -132,6 +134,7 @@ export class FakeServer {
 			url: `https://feed-${id}.example/feed.xml`,
 			error: null,
 			icon_url: null,
+			fetched: true,
 			...over
 		});
 		return id;
@@ -366,7 +369,9 @@ export class FakeServer {
 		if (method === 'POST' && path === '/folders') {
 			const title = String(data.title).trim();
 			if (!title) return refused(400, 'the name is empty');
-			return json({ id: this.addFolder(title) }, 201);
+			const parent = typeof data.parent_id === 'number' ? data.parent_id : null;
+			if (parent !== null && !this.folders.some((f) => f.id === parent)) return refused(404);
+			return json({ id: this.addFolder(title, parent) }, 201);
 		}
 		const subscribing = this.subscribing(method, path, data, body, type);
 		if (subscribing) return subscribing;
@@ -479,7 +484,7 @@ export class FakeServer {
 				if (!/^https?:\/\//.test(url)) imported.skipped++;
 				else if (this.feeds.some((f) => f.url === url)) imported.known++;
 				else {
-					this.addFeed(title, null, { url });
+					this.addFeed(title, null, { url, fetched: false });
 					imported.feeds++;
 				}
 			}
