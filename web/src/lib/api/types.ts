@@ -749,6 +749,10 @@ export type ServerStatus = {
 	finder: StatusFinder,
 	images: StatusImages,
 	problems: StatusProblems,
+	/**
+	 * Errors in the browsers of readers who agreed to send them.
+	 */
+	browsers: StatusBrowserErrors,
 };
 
 /**
@@ -767,6 +771,50 @@ export type Durations = {
  * Why fetches fail.
  */
 export type FetchFailure = "status" | "timeout" | "blocked" | "dns" | "network" | "too_large" | "redirects" | "unreadable" | "other";
+
+/**
+ * What kind of error a report is about.
+ */
+export type ReportKind = "error" | "rejection" | "component" | "request";
+
+export type StatusBrowserError = {
+	kind: ReportKind,
+	message: string,
+	stack: string,
+	/**
+	 * How often it happened, in all browsers.
+	 */
+	count: number,
+	/**
+	 * In how many accounts.
+	 */
+	accounts: number,
+	/**
+	 * The versions of the frontend and the browsers it happened in.
+	 */
+	versions: Array<string>,
+	browsers: Array<string>,
+	first: string,
+	last: string,
+};
+
+/**
+ * The errors in browsers, for the status page.
+ */
+export type StatusBrowserErrors = {
+	/**
+	 * Whether the server takes reports at all.
+	 */
+	available: boolean,
+	/**
+	 * How many accounts send reports.
+	 */
+	consenting: number,
+	/**
+	 * The errors, the one that happened last first. No account is named.
+	 */
+	errors: Array<StatusBrowserError>,
+};
 
 /**
  * How much there is.
@@ -927,6 +975,10 @@ export type StatusHint =
 	| {
 		"kind": "limited",
 		count: number,
+	}
+	| {
+		"kind": "browser_errors",
+		errors: number,
 	};
 
 /**
@@ -1021,4 +1073,53 @@ export type StatusTable = {
 	 * What PostgreSQL estimates.
 	 */
 	rows: number,
+};
+
+/**
+ * What `GET /api/reports/consent` answers.
+ */
+export type ReportsConsent = {
+	/**
+	 * Whether this server takes reports at all.
+	 */
+	available: boolean,
+	/**
+	 * Whether this account sends them.
+	 */
+	on: boolean,
+};
+
+/**
+ * What `PUT /api/reports/consent` reads. Off deletes what the account sent.
+ */
+export type ReportsConsentChange = {
+	on: boolean,
+};
+
+/**
+ * What `POST /api/reports` reads: at most twenty reports. It answers 204.
+ */
+export type ClientReports = {
+	reports: Array<ClientReport>,
+};
+
+/**
+ * One error, as the browser saw it.
+ */
+export type ClientReport = {
+	kind: ReportKind,
+	message: string,
+	/**
+	 * The lines of the stack in the files of rueder's frontend, as
+	 * "_app/immutable/chunks/x.js:12:34", one a line.
+	 */
+	stack?: string,
+	/**
+	 * The version of the frontend.
+	 */
+	version: string,
+	/**
+	 * The browser and its major version, such as "Firefox 140".
+	 */
+	browser: string,
 };

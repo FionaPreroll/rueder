@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
-	// rules and the keyboard shortcuts. Everything applies as it is changed.
+	// rules, the keyboard shortcuts and, where the server takes them, whether this
+	// browser sends reports of its errors. Everything applies as it is changed.
 	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
 	import {
@@ -18,14 +19,21 @@
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const tabs = ['look', 'reading', 'rules', 'keys'] as const;
-	type Tab = (typeof tabs)[number];
+	const allTabs = ['look', 'reading', 'rules', 'keys', 'privacy'] as const;
+	type Tab = (typeof allTabs)[number];
 
 	let {
 		reader,
 		tab = $bindable('look'),
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
+
+	// Privacy only says something where the server takes reports of errors.
+	const tabs = $derived(
+		allTabs.filter(
+			(name) => name !== 'privacy' || (reader.can.reports && reader.reportsConsent?.available)
+		)
+	);
 
 	const swatch: Record<(typeof accents)[number], string> = {
 		red: '#c8402e',
@@ -141,6 +149,29 @@
 			</div>
 		{:else if tab === 'rules'}
 			<RulesEditor {reader} book={reader.filters} />
+		{:else if tab === 'privacy'}
+			<div class="space-y-3 text-sm">
+				<label class="flex cursor-pointer items-start gap-2 font-medium">
+					<input
+						type="checkbox"
+						class="mt-0.5 rounded text-accent"
+						checked={reader.reportsConsent?.on ?? false}
+						onchange={(event) => reader.setReportsConsent(event.currentTarget.checked)}
+					/>
+					{m.settings.reports.send}
+				</label>
+				<p class="text-soft">{m.settings.reports.intro}</p>
+				<div>
+					<p class="text-soft">{m.settings.reports.what}</p>
+					<ul class="mt-1 list-disc pl-5 text-soft">
+						{#each m.settings.reports.holds as line (line)}
+							<li>{line}</li>
+						{/each}
+					</ul>
+				</div>
+				<p class="text-soft">{m.settings.reports.never}</p>
+				<p class="text-xs text-soft">{m.settings.reports.off}</p>
+			</div>
 		{:else}
 			<Shortcuts />
 		{/if}

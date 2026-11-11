@@ -65,7 +65,9 @@ import {
 	type ApiTree,
 	type ListStream
 } from './client.ts';
-import type { ServerEvent } from './types.ts';
+import type { ReportKind, ServerEvent } from './types.ts';
+import { version } from '$app/env';
+import { Reporter, browserOf } from '#lib/reports.ts';
 
 /** How many articles a page of a list has. */
 export const PAGE = 40;
@@ -277,6 +279,11 @@ export class ServerReader implements Reader {
 	readonly demo = null;
 	readonly can: Abilities;
 	readonly account: Account;
+	/** Whether the server takes reports of errors, and whether this account sends them; null until asked. */
+	reportsConsent = $state.raw<{ available: boolean; on: boolean } | null>(null);
+	/** Gathers the errors of this browser while the account sends reports. */
+	private reporter: Reporter | null = null;
+	private stopReporting: (() => void) | null = null;
 
 	/** Unread articles per feed, as the server counted them and as changes here moved them. */
 	private counts = $state.raw<Record<string, number>>({});
@@ -338,7 +345,8 @@ export class ServerReader implements Reader {
 			markOlder: true,
 			subscribe: true,
 			opml: true,
-			status: account.admin
+			status: account.admin,
+			reports: true
 		};
 		this.session = session;
 		this.api = api;
@@ -352,12 +360,14 @@ export class ServerReader implements Reader {
 		this.stopped = false;
 		this.connect();
 		void this.loadSettings();
+		void this.loadConsent();
 		void this.loadTree();
 		void this.loadRules();
 		void this.loadLabels();
 		void this.loadList();
 		return () => {
 			this.stopped = true;
+			this.report(false);
 			this.events?.close();
 			this.events = null;
 			clearTimeout(this.reconnectTimer);
@@ -378,6 +388,61 @@ export class ServerReader implements Reader {
 	private failed(error: unknown, notice: Notice) {
 		if (error instanceof ApiError && error.signedOut) this.session.expired();
 		else this.notice = notice;
+		// What the server failed at, or a server that did not answer, is worth a
+		// report; what it refused is not an error of the page.
+		if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
+			const what = error.request ? `${error.request}: ` : '';
+			this.reporter?.note('request', `${what}${error.status || error.message}`, '');
+		}
+	}
+
+	// Reports of errors
+
+	private async loadConsent() {
+		try {
+			this.reportsConsent = await this.api.reportsConsent();
+			this.report(this.reportsConsent.available && this.reportsConsent.on);
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+		}
+	}
+
+	/** Starts or stops gathering the errors of this browser. */
+	private report(on: boolean) {
+		if (on && !this.reporter && !this.stopped && typeof window !== 'undefined') {
+			const api = this.api;
+			this.reporter = new Reporter({
+				send: (reports) => api.sendReports(reports),
+				beacon: (reports) => api.beaconReports(reports),
+				version,
+				browser: browserOf(navigator.userAgent),
+				host: location.host
+			});
+			this.stopReporting = this.reporter.start(window);
+		} else if (!on && this.reporter) {
+			this.stopReporting?.();
+			this.reporter = null;
+			this.stopReporting = null;
+		}
+	}
+
+	setReportsConsent(on: boolean) {
+		const before = this.reportsConsent;
+		if (!before?.available || before.on === on) return;
+		this.reportsConsent = { ...before, on };
+		this.report(on);
+		this.write(
+			'reports',
+			() => this.api.setReportsConsent(on),
+			() => {
+				this.reportsConsent = before;
+				this.report(before.on);
+			}
+		);
+	}
+
+	noteError(kind: ReportKind, error: unknown) {
+		this.reporter?.note(kind, error);
 	}
 
 	// What is where
@@ -1352,7 +1417,10 @@ export class ServerReader implements Reader {
 				void this.checkSession();
 				return;
 			case 'settings':
-				if (!own) void this.loadSettings();
+				if (!own) {
+					void this.loadSettings();
+					void this.loadConsent();
+				}
 				return;
 			case 'labels':
 				if (own) return;

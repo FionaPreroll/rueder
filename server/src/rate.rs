@@ -38,6 +38,9 @@ pub const REQUESTS: Rate = Rate::new(1200, Duration::from_millis(20));
 /// How many addresses an account may have the server look at: 30 at once, and
 /// one more every two seconds.
 pub const LOOKUPS: Rate = Rate::new(30, Duration::from_secs(2));
+/// How many reports of errors in its browsers an account may send: 100 at
+/// once, and about 100 more a day.
+pub const REPORTS: Rate = Rate::new(100, Duration::from_secs(864));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
 
@@ -118,6 +121,7 @@ impl<K: Hash + Eq + Clone> Limiter<K> {
 pub struct Rates {
     requests: Limiter<IpAddr>,
     lookups: Limiter<i32>,
+    reports: Limiter<i32>,
 }
 
 impl Rates {
@@ -125,7 +129,23 @@ impl Rates {
         Self {
             requests: Limiter::new(requests),
             lookups: Limiter::new(lookups),
+            reports: Limiter::new(REPORTS),
         }
+    }
+
+    /// Other limits for the reports of errors than [`REPORTS`].
+    pub fn with_reports(self, reports: Rate) -> Self {
+        Self {
+            reports: Limiter::new(reports),
+            ..self
+        }
+    }
+
+    /// Counts a report of an error the account's browser sends.
+    pub fn report(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
+        self.reports
+            .take(&account_id, now)
+            .map_err(|wait| AppError::TooMany(wait, "too many reports, try again later"))
     }
 
     /// Counts a request from this address. An IPv6 sender counts as its /64,

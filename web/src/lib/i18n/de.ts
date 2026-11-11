@@ -161,7 +161,13 @@ const de: Messages = {
 
 	settings: {
 		title: 'Einstellungen',
-		tabs: { look: 'Aussehen', reading: 'Lesen', rules: 'Filterregeln', keys: 'Tastatur' },
+		tabs: {
+			look: 'Aussehen',
+			reading: 'Lesen',
+			rules: 'Filterregeln',
+			keys: 'Tastatur',
+			privacy: 'Datenschutz'
+		},
 		theme: 'Farbschema',
 		themes: { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' },
 		accent: 'Akzentfarbe',
@@ -188,7 +194,21 @@ const de: Messages = {
 		markOnScroll: 'Artikel in der erweiterten Ansicht beim Vorbeiscrollen als gelesen markieren',
 		teasers: 'In der Liste nach dem Titel die ersten Worte des Textes zeigen',
 		note: 'Änderungen gelten sofort, liegen bei deinem Konto und gelten auf jedem Gerät.',
-		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.'
+		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.',
+		reports: {
+			send: 'Fehlerberichte aus diesem Browser an diesen Server schicken',
+			intro:
+				'Wenn auf der Seite etwas schiefgeht, erfahren die Admins davon und können es beheben. Berichte gehen an diesen Server und nirgendwo sonst hin.',
+			what: 'Ein Bericht enthält:',
+			holds: [
+				'die Meldung des Fehlers, ohne Adressen und ohne Zahlen, die etwas benennen',
+				'wo in den eigenen Dateien von rueder er auftrat',
+				'die Version von rueder und deinen Browser mit seiner Hauptversion'
+			],
+			never:
+				'Nie, was du liest, deine Feeds, Labels oder Regeln. Admins sehen, wie viele Konten ein Fehler trifft, nicht welche. Berichte verschwinden nach 30 Tagen.',
+			off: 'Ausschalten löscht die Berichte, die du geschickt hast.'
+		}
 	},
 
 	rules: {
@@ -344,7 +364,9 @@ const de: Messages = {
 			imageCacheFull: (share) => `Der Bild-Cache ist zu ${share} voll.`,
 			errors: (count) => `Der Server hat in der letzten Stunde ${n(count)} Fehler geloggt.`,
 			limited: (count) =>
-				`${n(count)} ${plural(count, { one: 'Anfrage wurde', other: 'Anfragen wurden' })} als zu viele abgewiesen.`
+				`${n(count)} ${plural(count, { one: 'Anfrage wurde', other: 'Anfragen wurden' })} als zu viele abgewiesen.`,
+			browserErrors: (count) =>
+				`Browser haben am letzten Tag ${n(count)} ${plural(count, { one: 'Fehler', other: 'verschiedene Fehler' })} gemeldet.`
 		},
 		server: {
 			title: 'Server',
@@ -447,7 +469,29 @@ const de: Messages = {
 			error: 'Fehler',
 			warning: 'Warnung',
 			times: (count, last) => (count > 1 ? `${n(count)}-mal, zuletzt ${last}` : last)
+		},
+		browsers: {
+			title: 'Fehler in Browsern',
+			off: 'Dieser Server nimmt keine Fehlerberichte an (CLIENT_REPORTS=off).',
+			consenting: (count) =>
+				`${n(count)} ${plural(count, { one: 'Konto schickt', other: 'Konten schicken' })} Berichte. Fehler bleiben 30 Tage nach ihrem letzten Auftreten.`,
+			none: 'Kein Browser hat einen Fehler gemeldet.',
+			kinds: {
+				error: 'Fehler',
+				rejection: 'Fehlgeschlagenes Promise',
+				component: 'Teil der Seite',
+				request: 'Anfrage'
+			},
+			hits: (count, accounts, last) =>
+				`${n(count)}-mal in ${n(accounts)} ${plural(accounts, { one: 'Konto', other: 'Konten' })}, zuletzt ${last}`,
+			where: (versions, browsers) => `Version ${versions} · ${browsers}`
 		}
+	},
+
+	crash: {
+		title: 'Auf dieser Seite ist etwas schiefgegangen.',
+		text: 'Lade die Seite neu, um weiterzumachen. Was du gelesen und geändert hast, ist auf dem Server gespeichert.',
+		reload: 'Neu laden'
 	},
 
 	demo: {

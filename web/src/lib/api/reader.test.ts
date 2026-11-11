@@ -739,7 +739,8 @@ describe('reading', () => {
 			markOlder: true,
 			subscribe: true,
 			opml: true,
-			status: true
+			status: true,
+			reports: true
 		});
 	});
 });
@@ -1632,6 +1633,71 @@ describe('settings', () => {
 		server.emit({ event: 'settings', data: { by: 'another-tab' } });
 		await settle();
 		expect(settings.theme).toBe('dark');
+	});
+});
+
+describe('reports of errors', () => {
+	/** What the reports the server got say, by kind and message. */
+	const got = () =>
+		(server.reports as { kind: string; message: string }[]).map((r) => `${r.kind}: ${r.message}`);
+
+	/** The page is left, which sends what waits. */
+	async function leave() {
+		window.dispatchEvent(new Event('pagehide'));
+		await settle();
+	}
+
+	it('are sent only once the reader agreed, and stop with no', async () => {
+		const reader = await started();
+		expect(reader.reportsConsent).toEqual({ available: true, on: false });
+		window.dispatchEvent(new ErrorEvent('error', { error: new TypeError('before') }));
+		await leave();
+		expect(got()).toEqual([]);
+
+		reader.setReportsConsent(true);
+		await settle();
+		expect(server.sendsReports).toBe(true);
+		window.dispatchEvent(new ErrorEvent('error', { error: new TypeError('x is undefined') }));
+		// What the server fails at is reported; what it refuses is not.
+		server.refuse('GET', /^\/feeds\/\d+\/articles\?/, 502);
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		server.refuse('GET', /^\/feeds\/\d+\/articles\?/, 404);
+		reader.show({ kind: 'feed', id: `feed-${blog}` });
+		await settle();
+		await leave();
+		expect(got()).toEqual([
+			'error: TypeError: x is undefined',
+			'request: GET /feeds/<n>/articles: 502'
+		]);
+
+		reader.setReportsConsent(false);
+		await settle();
+		expect([server.sendsReports, server.reports]).toEqual([false, []]);
+		window.dispatchEvent(new ErrorEvent('error', { error: new TypeError('after') }));
+		await leave();
+		expect(got()).toEqual([]);
+	});
+
+	it('follow what another tab agreed to, and stay off where the server takes none', async () => {
+		const reader = await started();
+		server.sendsReports = true;
+		server.emit({ event: 'settings', data: { by: 'another-tab' } });
+		await settle();
+		expect(reader.reportsConsent?.on).toBe(true);
+		reader.noteError('component', new Error('a part failed'));
+		await leave();
+		expect(got()).toEqual(['component: Error: a part failed']);
+
+		server.reportsAvailable = false;
+		server.sendsReports = false;
+		const other = await started();
+		expect(other.reportsConsent).toEqual({ available: false, on: false });
+		other.setReportsConsent(true);
+		await settle();
+		expect(server.requests.some((r) => r.method === 'PUT' && r.path === '/reports/consent')).toBe(
+			false
+		);
 	});
 });
 

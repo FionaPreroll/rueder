@@ -34,6 +34,10 @@ import type {
 	RulePreview,
 	RuleScope,
 	RulesHits,
+	ReportsConsent,
+	ReportsConsentChange,
+	ClientReport,
+	ClientReports,
 	ServerStatus,
 	StateChange,
 	Subscribed,
@@ -48,7 +52,9 @@ export class ApiError extends Error {
 		readonly status: number,
 		message: string,
 		/** Seconds to wait, if the server said so (429). */
-		readonly retryAfter: number | null = null
+		readonly retryAfter: number | null = null,
+		/** What was asked, as "GET /feeds/12/articles", for a report of the error. */
+		readonly request = ''
 	) {
 		super(message);
 		this.name = 'ApiError';
@@ -154,13 +160,20 @@ export const CLOSED = 2;
  * Sends a request and gives back the answer, if the server took it. A body is
  * sent as JSON, a `Blob` as it is, as an OPML file.
  */
-async function send(method: string, path: string, body?: unknown): Promise<Response> {
+async function send(
+	method: string,
+	path: string,
+	body?: unknown,
+	/** The request may outlive the page, as one sent while it is left. */
+	keepalive = false
+): Promise<Response> {
 	const file = body instanceof Blob;
 	let response: Response;
 	try {
 		response = await fetch(`/api${path}`, {
 			method,
 			credentials: 'same-origin',
+			keepalive,
 			headers: {
 				'X-Rueder-Tab': TAB,
 				...(body === undefined ? {} : { 'Content-Type': file ? OPML : 'application/json' })
@@ -168,15 +181,18 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
 			body: body === undefined ? undefined : file ? body : JSON.stringify(body)
 		});
 	} catch {
-		throw new ApiError(0, 'the server did not answer');
+		throw new ApiError(0, 'the server did not answer', null, asked(method, path));
 	}
 	if (!response.ok) {
 		const reason = (await response.text().catch(() => '')).slice(0, MAX_REASON);
 		const wait = Number(response.headers.get('Retry-After'));
-		throw new ApiError(response.status, reason, wait > 0 ? wait : null);
+		throw new ApiError(response.status, reason, wait > 0 ? wait : null, asked(method, path));
 	}
 	return response;
 }
+
+/** A request as a report names it: without what follows the `?`. */
+const asked = (method: string, path: string) => `${method} ${path.split('?')[0]}`;
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
 	const response = await send(method, path, body);
@@ -185,7 +201,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 		return (await response.json()) as T;
 	} catch {
 		// Something else answered in the server's place, a proxy's error page for one.
-		throw new ApiError(0, 'the answer was not what the server sends');
+		throw new ApiError(0, 'the answer was not what the server sends', null, asked(method, path));
 	}
 }
 
@@ -295,7 +311,18 @@ export const api = {
 	ruleHits: async () => (await call<RulesHits>('GET', '/rules/hits')).hits,
 
 	/** For admins only. */
-	status: () => call<ServerStatus>('GET', '/status')
+	status: () => call<ServerStatus>('GET', '/status'),
+
+	reportsConsent: () => call<ReportsConsent>('GET', '/reports/consent'),
+	setReportsConsent: (on: boolean) =>
+		call<void>('PUT', '/reports/consent', { on } satisfies ReportsConsentChange),
+	sendReports: (reports: ClientReport[]) =>
+		call<void>('POST', '/reports', { reports } satisfies ClientReports),
+	/** Sends reports as the page is left: the request outlives the page. */
+	beaconReports: (reports: ClientReport[]) => {
+		send('POST', '/reports', { reports } satisfies ClientReports, true).catch(() => {});
+		return true;
+	}
 };
 
 export type Api = typeof api;

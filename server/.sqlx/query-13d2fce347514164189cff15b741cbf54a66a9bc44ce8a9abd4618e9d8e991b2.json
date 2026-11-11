@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM client_reports WHERE last_at < now() - interval '30 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "13d2fce347514164189cff15b741cbf54a66a9bc44ce8a9abd4618e9d8e991b2"
+}
