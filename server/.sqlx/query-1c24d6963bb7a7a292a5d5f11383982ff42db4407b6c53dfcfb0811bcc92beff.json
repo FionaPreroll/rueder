@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_states (account_id, feed_id, seq, read)\n         SELECT $1, a.feed_id, a.seq, true FROM articles a\n         WHERE a.feed_id = $2 AND a.seq > $3 AND a.seq <= $4 AND a.published_at <= $5\n         ON CONFLICT (account_id, feed_id, seq)\n         DO UPDATE SET read = true, kept_unread = false",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c24d6963bb7a7a292a5d5f11383982ff42db4407b6c53dfcfb0811bcc92beff"
+}

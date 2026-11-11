@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import Counter from './Counter.svelte';
+import Enclosures from './Enclosures.svelte';
 import Menu from './Menu.svelte';
 import Shortcuts from './Shortcuts.svelte';
 import MenuHarness from './test/MenuHarness.svelte';
@@ -11,6 +12,45 @@ import MenuHarness from './test/MenuHarness.svelte';
 afterEach(() => {
 	Object.assign(settings, defaults);
 	useLanguage(null);
+});
+
+describe('Enclosures', () => {
+	const enclosures = [
+		{ url: 'https://pod.example/shows/Folge%2012.mp3?token=1', type: 'audio/mpeg', length: 1500 },
+		{ url: 'https://pod.example/film.webm', type: 'VIDEO/webm', length: null },
+		{ url: 'https://pod.example/', type: null, length: 0 },
+		{ url: 'data:audio/wav;base64,AAAA', type: 'audio/wav', length: 3 }
+	];
+
+	it('lists the files with a link, their kind and their size', () => {
+		render(Enclosures, { enclosures });
+		expect(screen.getByRole('heading', { name: 'Attachments' })).toBeInTheDocument();
+		const links = screen.getAllByRole('link');
+		expect(links.map((link) => link.textContent?.trim())).toEqual([
+			'Folge 12.mp3',
+			'film.webm',
+			'pod.example',
+			'audio/wav'
+		]);
+		expect(links[0]).toHaveAttribute('href', enclosures[0].url);
+		expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer');
+		expect(links[0].closest('li')).toHaveTextContent('audio/mpeg · 1.5 kB');
+		expect(links[2].closest('li')).not.toHaveTextContent('·');
+	});
+
+	it('fetches nothing until the reader asks to play, and plays sound and film only', async () => {
+		const { container } = render(Enclosures, { enclosures });
+		expect(container.querySelector('audio, video')).toBeNull();
+		expect(screen.getAllByRole('button').length).toBe(3);
+
+		await userEvent.click(screen.getByRole('button', { name: 'Play: Folge 12.mp3' }));
+		expect(container.querySelector('audio')).toHaveAttribute('src', enclosures[0].url);
+		expect(container.querySelector('video')).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Play: Folge 12.mp3' })).toBeNull();
+
+		await userEvent.click(screen.getByRole('button', { name: 'Play: film.webm' }));
+		expect(container.querySelector('video')).toHaveAttribute('src', enclosures[1].url);
+	});
 });
 
 describe('Counter', () => {

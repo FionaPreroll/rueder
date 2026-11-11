@@ -55,6 +55,7 @@ describe('the types of the API', () => {
 
 	it('hold the answers of the server', () => {
 		const tree: Tree = {
+			hidden: 2,
 			folders: [{ id: 1, parent_id: null, title: 'News', position: 1 }],
 			feeds: [
 				{
@@ -111,7 +112,8 @@ describe('the types of the API', () => {
 			enclosures: [
 				{ url: 'https://a.example/1.mp3', type: 'audio/mpeg', length: 123, inline: false }
 			],
-			labels: []
+			labels: [],
+			hidden_by: null
 		};
 		const rule: Rule = {
 			id: 1,

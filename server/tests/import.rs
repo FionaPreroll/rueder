@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 const ALL: Page = Page {
     before: None,
+    after: None,
     limit: 50,
     unread_only: false,
 };

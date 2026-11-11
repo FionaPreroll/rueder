@@ -4,6 +4,7 @@
 // back answers.
 
 import type {
+	ApiArticle,
 	ApiFeed,
 	ApiFolder,
 	ApiListItem,
@@ -40,6 +41,9 @@ export interface FakeArticle {
 	starred: boolean;
 	hidden: boolean;
 	versions: ApiVersion[];
+	enclosures: ApiArticle['enclosures'];
+	image_url: string | null;
+	image_title: string | null;
 }
 
 interface Request {
@@ -81,6 +85,8 @@ export class FakeServer {
 	rules: ApiRule[] = [];
 
 	requests: Request[] = [];
+	/** What time it is for the server, for what it does by age. */
+	now = () => Date.now();
 	/** The server is not there at all: `fetch` fails. */
 	down = false;
 	private refusals: Refusal[] = [];
@@ -133,6 +139,9 @@ export class FakeServer {
 				starred: false,
 				hidden: false,
 				versions: [],
+				enclosures: [],
+				image_url: null,
+				image_title: null,
 				...over
 			};
 			this.articles.push(article);
@@ -230,7 +239,14 @@ export class FakeServer {
 					versions: _versions,
 					...opened
 				} = article;
-				return json({ ...opened, enclosures: [], image_url: null, image_title: null, labels: [] });
+				const hiding = this.rules.find(
+					(rule) => rule.enabled && rule.action === 'hide' && this.catches(rule, article)
+				);
+				return json({
+					...opened,
+					labels: [],
+					hidden_by: article.hidden ? (hiding?.id ?? null) : null
+				});
 			}
 			if (method === 'GET' && one[3] === '/versions') return json({ versions: article.versions });
 			if (method === 'PUT' && one[3] === '/state') {
@@ -245,13 +261,25 @@ export class FakeServer {
 			const feeds = this.scope(read[1] ?? 'articles', Number(read[2]));
 			if (!feeds) return refused(404);
 			if (typeof data.upto_id !== 'number') return refused(400, 'give upto_id');
+			const age = typeof data.older_than === 'number' ? data.older_than : null;
+			if (age !== null && age <= 0) return refused(400, 'older_than is out of range');
+			const before = age === null ? Infinity : this.now() - age * 1000;
 			for (const article of this.articles) {
-				if (feeds.has(article.feed_id) && article.id <= data.upto_id) article.read = true;
+				if (!feeds.has(article.feed_id) || article.id > data.upto_id) continue;
+				if (Date.parse(article.published_at) <= before) article.read = true;
 			}
 			return empty();
 		}
 
 		if (method === 'GET' && path === '/rules') return json(this.rules);
+		if (method === 'GET' && path === '/rules/hits') {
+			const hits = this.rules.map((rule) => ({
+				id: rule.id,
+				matches: this.articles.filter((article) => this.catches(rule, article)).length,
+				of: this.articles.filter((article) => this.inScope(rule, article.feed_id)).length
+			}));
+			return json({ hits });
+		}
 		const rule = /^\/rules(?:\/(\d+|preview))?$/.exec(path);
 		if (rule && method !== 'GET') {
 			const known = this.rules.find((r) => r.id === Number(rule[1]));
@@ -320,9 +348,10 @@ export class FakeServer {
 		return { id: 1, username: this.signedIn, is_admin: true };
 	}
 
-	private tree(): { folders: ApiFolder[]; feeds: ApiFeed[] } {
+	private tree(): { folders: ApiFolder[]; feeds: ApiFeed[]; hidden: number } {
 		return {
 			folders: this.folders,
+			hidden: this.articles.filter((article) => article.hidden).length,
 			feeds: this.feeds.map((feed) => ({
 				...feed,
 				feed_title: feed.title,
@@ -354,6 +383,8 @@ export class FakeServer {
 
 	private list(kind: string, feeds: Set<number>, query: URLSearchParams): ApiListItem[] {
 		const before = Number(query.get('before') ?? Infinity);
+		// With `after` the list starts with the oldest article.
+		const after = query.has('after') ? Number(query.get('after')) : null;
 		const limit = Number(query.get('limit') ?? 50);
 		const unread = query.get('unread') === 'true';
 		return this.articles
@@ -361,11 +392,12 @@ export class FakeServer {
 				(a) =>
 					feeds.has(a.feed_id) &&
 					a.id < before &&
+					a.id > (after ?? 0) &&
 					a.hidden === (kind === 'hidden') &&
 					(kind !== 'starred' || a.starred) &&
 					!(unread && a.read)
 			)
-			.sort((a, b) => b.id - a.id)
+			.sort((a, b) => (after === null ? b.id - a.id : a.id - b.id))
 			.slice(0, limit)
 			.map((a) => ({
 				feed_id: a.feed_id,
@@ -398,7 +430,17 @@ export class FakeServer {
 		const scope = { kind: 'all' } as const;
 		return ruleMatches(
 			{ ...rule, id: '', scope },
-			{ ...article, id: '', feedId: '', link: '', publishedAt: 0, changes: 0, updatedAt: null }
+			{
+				...article,
+				id: '',
+				feedId: '',
+				link: '',
+				publishedAt: 0,
+				enclosures: [],
+				image: null,
+				changes: 0,
+				updatedAt: null
+			}
 		);
 	}
 

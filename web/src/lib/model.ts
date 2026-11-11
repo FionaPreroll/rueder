@@ -41,6 +41,21 @@ export interface ArticleVersion {
 	html: string;
 }
 
+/** A file that comes with an article, like the episode of a podcast. */
+export interface Enclosure {
+	url: string;
+	/** Its media type, such as `audio/mpeg`, if the feed says. */
+	type: string | null;
+	/** Its size in bytes, if the feed says. */
+	length: number | null;
+}
+
+/** The picture a feed gives for an article, apart from its text. */
+export interface Picture {
+	url: string;
+	title: string;
+}
+
 export interface Article {
 	id: string;
 	feedId: string;
@@ -57,6 +72,11 @@ export interface Article {
 	 * article is opened and `Reader.load` has fetched it. The tags come with the text.
 	 */
 	html: string | null;
+	/** The files and the picture that come with the article. Like the text, they are there once it is opened. */
+	enclosures: Enclosure[];
+	image: Picture | null;
+	/** The rule that hides the article, where the server names it; it comes with the text. */
+	hiddenBy?: string | null;
 	/** How many earlier versions there are; 0 for an article that never changed. */
 	changes: number;
 	/** When the current version replaced the one before, or null. */

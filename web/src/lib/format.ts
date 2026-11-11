@@ -45,5 +45,19 @@ export function formatAgo(at: number, now: number) {
 	return relative().format(-Math.round(passed / (365 * DAY)), 'year');
 }
 
+const amount = localized((locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }));
+
+/** The size of a file: "512 B", "3.4 MB". */
+export function formatBytes(bytes: number) {
+	const units = ['B', 'kB', 'MB', 'GB'];
+	let size = Math.max(0, bytes);
+	let unit = 0;
+	while (size >= 1000 && unit < units.length - 1) {
+		size /= 1000;
+		unit++;
+	}
+	return `${amount().format(unit === 0 ? Math.round(size) : size)} ${units[unit]}`;
+}
+
 /** Day and time in full, for the head of an open article and for tooltips. */
 export const formatFull = (at: number) => whole().format(new Date(at));

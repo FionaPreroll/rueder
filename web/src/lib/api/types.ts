@@ -117,6 +117,10 @@ export type Created = {
 export type Tree = {
 	folders: Array<Folder>,
 	feeds: Array<Feed>,
+	/**
+	 * How many articles the account's rules hide, for the list of them.
+	 */
+	hidden: number,
 };
 
 /**
@@ -174,6 +178,11 @@ export type ListQuery = {
 	 * Only what arrived before the article of this `id`.
 	 */
 	before?: number,
+	/**
+	 * Only what arrived after the article of this `id`, the oldest first; 0
+	 * starts at the oldest article there is. Not together with `before`.
+	 */
+	after?: number,
 	limit?: number,
 	/**
 	 * Leave out what was read.
@@ -183,7 +192,9 @@ export type ListQuery = {
 
 /**
  * A page of a list, the newest article first. For the next page, ask again
- * with `before` set to the `id` of the last article of this one.
+ * with `before` set to the `id` of the last article of this one. A list asked
+ * for with `after` has the oldest article first and goes on the same way,
+ * with `after`.
  */
 export type List = {
 	articles: Array<ListItem>,
@@ -223,6 +234,11 @@ export type ListItem = {
 export type Article = {
 	enclosures: Array<Enclosure>,
 	labels: Array<number>,
+	/**
+	 * The rule that hides the article, if one does: the first of the
+	 * account's rules that would, in their order.
+	 */
+	hidden_by: number | null,
 	feed_id: number,
 	seq: number,
 	id: number,
@@ -291,6 +307,8 @@ export type StateChange = {
 /**
  * How far to mark as read: up to a number in the feed, or up to the article
  * of this `id` in the order of arrival, which is what a mixed list knows.
+ * With `older_than`, only what was published more than that many seconds
+ * ago.
  *
  * What `POST /api/feeds/{id}/read`, `/api/folders/{id}/read` and `/api/read`
  * read.
@@ -298,6 +316,7 @@ export type StateChange = {
 export type Upto = {
 	upto?: number | null,
 	upto_id?: number | null,
+	older_than?: number | null,
 };
 
 /**
@@ -537,6 +556,29 @@ export type RuleChanged = {
 export type RulePreview = {
 	/**
 	 * The articles the rule matches,
+	 */
+	matches: number,
+	/**
+	 * of this many it looked at: the newest of each feed in its scope.
+	 */
+	of: number,
+};
+
+/**
+ * What `GET /api/rules/hits` answers: for every rule of the account what it
+ * finds among the articles that are there, as a preview of it would say.
+ */
+export type RulesHits = {
+	hits: Array<RuleHits>,
+};
+
+/**
+ * What one of the stored rules finds.
+ */
+export type RuleHits = {
+	id: number,
+	/**
+	 * The articles the rule matches, whether it is switched on or not,
 	 */
 	matches: number,
 	/**

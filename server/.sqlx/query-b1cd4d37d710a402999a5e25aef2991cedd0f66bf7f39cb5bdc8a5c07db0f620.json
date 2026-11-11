@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        WITH marks AS (\n            SELECT x.feed_id, x.seq FROM article_states x\n            WHERE $2 = 'starred' AND x.account_id = $1 AND x.starred\n          UNION ALL\n            SELECT x.feed_id, x.seq FROM article_states x\n            WHERE $2 = 'hidden' AND x.account_id = $1 AND x.hidden\n          UNION ALL\n            SELECT al.feed_id, al.seq\n            FROM labels l JOIN article_labels al ON al.label_id = l.id\n            WHERE $2 = 'label' AND l.account_id = $1 AND l.id = $3\n        )\n        SELECT a.feed_id AS \"feed_id!\", a.seq AS \"seq!\", a.id AS \"id!\",\n               a.published_at AS \"published_at!\", a.updated_at, a.version AS \"version!\",\n               a.title AS \"title!\", a.teaser AS \"teaser!\", a.author AS \"author!\", a.url,\n               a.thumbnail_url,\n               CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                    ELSE coalesce(st.read, false) END AS \"read!\",\n               coalesce(st.starred, false) AS \"starred!\"\n        FROM marks m\n        JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = m.feed_id\n        JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq\n        LEFT JOIN article_states st\n            ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n        WHERE a.id < $4 AND ($2 = 'hidden' OR NOT coalesce(st.hidden, false))\n              AND ($5::boolean IS NOT TRUE\n                   OR NOT CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                               ELSE coalesce(st.read, false) END)\n        ORDER BY a.id DESC\n        LIMIT $6\n        ",
+  "query": "\n        WITH marks AS (\n            SELECT x.feed_id, x.seq FROM article_states x\n            WHERE $2 = 'starred' AND x.account_id = $1 AND x.starred\n          UNION ALL\n            SELECT x.feed_id, x.seq FROM article_states x\n            WHERE $2 = 'hidden' AND x.account_id = $1 AND x.hidden\n          UNION ALL\n            SELECT al.feed_id, al.seq\n            FROM labels l JOIN article_labels al ON al.label_id = l.id\n            WHERE $2 = 'label' AND l.account_id = $1 AND l.id = $3\n        )\n        SELECT a.feed_id AS \"feed_id!\", a.seq AS \"seq!\", a.id AS \"id!\",\n               a.published_at AS \"published_at!\", a.updated_at, a.version AS \"version!\",\n               a.title AS \"title!\", a.teaser AS \"teaser!\", a.author AS \"author!\", a.url,\n               a.thumbnail_url,\n               CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                    ELSE coalesce(st.read, false) END AS \"read!\",\n               coalesce(st.starred, false) AS \"starred!\"\n        FROM marks m\n        JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = m.feed_id\n        JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq\n        LEFT JOIN article_states st\n            ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n        WHERE a.id < $4 AND a.id > $7 AND ($2 = 'hidden' OR NOT coalesce(st.hidden, false))\n              AND ($5::boolean IS NOT TRUE\n                   OR NOT CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                               ELSE coalesce(st.read, false) END)\n        ORDER BY CASE WHEN $8 THEN a.id END, a.id DESC\n        LIMIT $6\n        ",
   "describe": {
     "columns": [
       {
@@ -144,7 +144,9 @@
         "Int4",
         "Int8",
         "Bool",
-        "Int8"
+        "Int8",
+        "Int8",
+        "Bool"
       ]
     },
     "nullable": [
@@ -163,5 +165,5 @@
       null
     ]
   },
-  "hash": "eaf5cb5257bd05f99e65ad3fefd5099d38b316bce8533d69af8a705aad4f90fe"
+  "hash": "b1cd4d37d710a402999a5e25aef2991cedd0f66bf7f39cb5bdc8a5c07db0f620"
 }

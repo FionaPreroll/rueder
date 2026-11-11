@@ -37,6 +37,8 @@ interface FeedSeed {
 	perDay: number;
 	/** Every so many articles one is an advertisement, for the filter rules to catch. */
 	adEvery?: number;
+	/** Its articles come with a recording, and with their picture beside the text. */
+	recorded?: boolean;
 	error?: string;
 }
 
@@ -270,7 +272,8 @@ const seeds: FeedSeed[] = [
 			'tell an older story'
 		],
 		count: 18,
-		perDay: 0.3
+		perDay: 0.3,
+		recorded: true
 	},
 	{
 		id: 'feed-strich',
@@ -390,6 +393,44 @@ function paragraphs(rng: Rng, lang: 'de' | 'en', count: number) {
 	);
 }
 
+const tones = new Map<number, string>();
+
+/**
+ * A second of a tone as a sound file, in an address that holds the file itself:
+ * what a made-up episode plays without a server to fetch it from.
+ */
+function tone(hertz: number) {
+	const known = tones.get(hertz);
+	if (known) return known;
+	const rate = 8000;
+	const bytes = new Uint8Array(44 + rate);
+	const view = new DataView(bytes.buffer);
+	const text = (at: number, letters: string) =>
+		[...letters].forEach((letter, i) => (bytes[at + i] = letter.charCodeAt(0)));
+	// The head of a WAV file: one channel, eight bits a sample.
+	text(0, 'RIFF');
+	view.setUint32(4, 36 + rate, true);
+	text(8, 'WAVEfmt ');
+	view.setUint32(16, 16, true);
+	view.setUint16(20, 1, true);
+	view.setUint16(22, 1, true);
+	view.setUint32(24, rate, true);
+	view.setUint32(28, rate, true);
+	view.setUint16(32, 1, true);
+	view.setUint16(34, 8, true);
+	text(36, 'data');
+	view.setUint32(40, rate, true);
+	for (let i = 0; i < rate; i++) {
+		const fade = Math.min(1, i / 400, (rate - i) / 400);
+		bytes[44 + i] = 128 + Math.round(50 * fade * Math.sin((2 * Math.PI * hertz * i) / rate));
+	}
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	const address = `data:audio/wav;base64,${btoa(binary)}`;
+	tones.set(hertz, address);
+	return address;
+}
+
 const toHtml = (paras: string[], image: string | null, alt: string) =>
 	(image ? `<p><img src="${image}" alt="${alt}" width="640" height="280" /></p>` : '') +
 	paras.map((p) => `<p>${p}</p>`).join('');
@@ -402,7 +443,9 @@ function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): DemoArti
 	const headline = `${pick(rng, seed.heads)} ${pick(rng, seed.tails)}`;
 	const title = isAd ? ad[lang].prefix + headline : headline;
 	const paras = paragraphs(rng, lang, 3 + Math.floor(rng() * 4));
-	const image = rng() < 0.35 ? picture(seed.hue, seq % 4) : null;
+	const drawn = seed.recorded || rng() < 0.35 ? picture(seed.hue, seq % 4) : null;
+	// A feed of recordings gives its picture beside the text, not in it.
+	const image = seed.recorded ? null : drawn;
 
 	// Some articles changed after they were first fetched.
 	const versions: ArticleVersion[] = [];
@@ -436,6 +479,10 @@ function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): DemoArti
 		link: `${seed.site}/${seq}`,
 		publishedAt,
 		html: toHtml(current, image, title),
+		enclosures: seed.recorded
+			? [{ url: tone(330 + 110 * (seq % 4)), type: 'audio/wav', length: 8044 }]
+			: [],
+		image: seed.recorded && drawn ? { url: drawn, title } : null,
 		changes: versions.length,
 		versions,
 		updatedAt

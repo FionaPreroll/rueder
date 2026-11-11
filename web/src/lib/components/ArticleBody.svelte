@@ -6,6 +6,7 @@
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
 	import { ruleText } from '#lib/rule-text.ts';
+	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -24,6 +25,11 @@
 	const starred = $derived(reader.isStarred(article));
 	const feed = $derived(reader.feeds[article.feedId]);
 	const rule = $derived(reader.isHidden(article) ? reader.filters.hidingRule(article) : null);
+
+	// The picture a feed gives beside the text is shown where the text has none of its own.
+	const lead = $derived(
+		article.image && article.html !== null && !/<img\b/i.test(article.html) ? article.image : null
+	);
 
 	// A list comes without the texts; the text is fetched when the article is shown.
 	$effect(() => {
@@ -88,7 +94,19 @@
 	{:else}
 		<!-- The text comes cleaned from the server; with made-up data it is made up in the browser. -->
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+		{#if lead}
+			<img
+				class="mt-3 max-h-96 max-w-full rounded-md"
+				src={lead.url}
+				alt={lead.title}
+				title={lead.title || undefined}
+				loading="lazy"
+			/>
+		{/if}
 		<div class="article-body mt-3">{@html article.html}</div>
+		{#if article.enclosures.length > 0}
+			<Enclosures enclosures={article.enclosures} />
+		{/if}
 	{/if}
 
 	<footer

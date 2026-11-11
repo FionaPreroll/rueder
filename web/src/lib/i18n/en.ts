@@ -94,6 +94,11 @@ const en = {
 		loadingList: 'Loading …'
 	},
 
+	media: {
+		title: 'Attachments',
+		play: 'Play'
+	},
+
 	notice: {
 		unreachable: 'The server does not answer. What you see may be out of date.',
 		notSaved: 'The server did not take your last change. It was undone here.'

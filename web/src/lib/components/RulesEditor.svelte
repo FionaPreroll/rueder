@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	// The filter rules of the account: a list to switch them on and off, and a form to
 	// add or change one, which says how many articles the rule would catch right now.
 	import type { Reader, RuleBook, RulePreview } from '#lib/reader.ts';
@@ -13,6 +14,9 @@
 	const fields = ['any', 'title', 'content', 'author', 'tag'] as const;
 	const matches = ['contains', 'word', 'regex'] as const;
 	const actions = ['hide', 'read'] as const;
+
+	// A reader with a server has to ask what the saved rules find.
+	onMount(() => book.countHits());
 
 	/** The rule in the form, or null while the form is closed. */
 	let draft = $state<FilterRule | null>(null);
@@ -95,6 +99,7 @@
 
 <ul class="mt-3 divide-y divide-line rounded-md border border-line">
 	{#each book.rules as rule (rule.id)}
+		{@const hits = book.hitsOf(rule)}
 		<li class="flex items-center gap-3 px-3 py-2 text-sm">
 			<label class="flex cursor-pointer items-center gap-1.5" title={m.rules.on}>
 				<input
@@ -109,7 +114,7 @@
 				<p class="truncate">{ruleText(rule)}</p>
 				<p class="text-xs text-soft">
 					{scopeText(reader, rule.scope)}
-					{#if book.countMatches}· {m.rules.hits(book.countMatches(rule))}{/if}
+					{#if hits !== null}· {m.rules.hits(hits)}{/if}
 				</p>
 			</div>
 			<button
