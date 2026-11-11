@@ -118,6 +118,20 @@
 	kbd {
 		@apply rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-xs text-ink;
 	}
+
+	/* SvelteKit names the page for screen readers after a navigation, in an element it
+	   hides with a `style` attribute. The server's Content-Security-Policy allows no
+	   inline styles, so the same rules stand here. */
+	#svelte-announcer {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
 }
 
 @layer components {

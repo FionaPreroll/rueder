@@ -7,6 +7,7 @@ pub mod events;
 pub mod feeds;
 pub mod fetch;
 pub mod filters;
+pub mod hardening;
 pub mod health;
 pub mod http_client;
 pub mod images;
@@ -15,6 +16,7 @@ pub mod labels;
 pub mod login;
 pub mod oidc;
 pub mod profile;
+pub mod rate;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
@@ -22,11 +24,11 @@ pub mod subscribe;
 pub mod tree;
 pub mod typescript;
 
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use axum::{
     Json, Router,
-    extract::{Path as UrlPath, State},
+    extract::{DefaultBodyLimit, Path as UrlPath, State},
     http::{HeaderName, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
@@ -39,16 +41,21 @@ use ts_rs::TS;
 use crate::{
     cleaning::Rules,
     events::Events,
+    hardening::Policies,
     http_client::HttpClient,
     images::{ImageProxy, Refused},
     login::Limiter,
     oidc::Oidc,
+    rate::Rates,
     sessions::Session,
 };
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
+
+/// The largest body a request to the API may have, in bytes.
+pub const MAX_BODY: usize = 256 * 1024;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -70,6 +77,8 @@ pub struct AppState {
     /// The hardened HTTP client, for looking at an address a reader wants to
     /// subscribe to. Without it, nobody subscribes to a feed that is new.
     pub client: Option<HttpClient>,
+    /// How much each sender and each account has asked of the server lately.
+    pub rates: Arc<Rates>,
 }
 
 impl AppState {
@@ -83,6 +92,15 @@ impl AppState {
             rules: None,
             events: Events::new(),
             client: None,
+            rates: Arc::default(),
+        }
+    }
+
+    /// Other limits than [`rate::REQUESTS`] and [`rate::LOOKUPS`].
+    pub fn with_rates(self, rates: Rates) -> Self {
+        Self {
+            rates: Arc::new(rates),
+            ..self
         }
     }
 
@@ -132,10 +150,18 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
     // Unknown paths get index.html so client-side routes survive a reload.
     let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
 
+    let policies = Arc::new(Policies::for_frontend(static_dir));
+
     Router::new()
         .nest("/api", api(&state))
         .route("/img/{signature}/{size}/{address}", get(image))
         .fallback_service(spa)
+        // Around everything, from the inside out: a change asked for by a
+        // page of another site is refused, every request counts for its
+        // sender, and every answer, a refusal too, gets its headers.
+        .layer(middleware::from_fn(hardening::same_origin))
+        .layer(middleware::from_fn_with_state(state.clone(), rate::limit))
+        .layer(middleware::from_fn_with_state(policies, hardening::headers))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -164,6 +190,9 @@ fn api(state: &AppState) -> Router<AppState> {
             state.clone(),
             events::announce,
         ))
+        // What the API is sent is small. Only an OPML file may be larger,
+        // and says so at its own endpoint.
+        .layer(DefaultBodyLimit::max(MAX_BODY))
 }
 
 /// The types of this module for the frontend, see [`typescript`].
@@ -242,6 +271,8 @@ pub enum AppError {
     BadRequest(String),
     /// Any other refusal, with its reason.
     Status(StatusCode, String),
+    /// Over a limit: how long to wait, and for what.
+    TooMany(Duration, &'static str),
     Internal(anyhow::Error),
 }
 
@@ -251,6 +282,7 @@ impl IntoResponse for AppError {
             Self::NotFound => StatusCode::NOT_FOUND.into_response(),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
             Self::Status(status, message) => (status, message).into_response(),
+            Self::TooMany(wait, message) => rate::too_many(wait, message),
             Self::Internal(err) => {
                 tracing::error!("{err:#}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()

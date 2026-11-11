@@ -29,6 +29,9 @@ const COOKIE_AGE: i64 = 400 * 24 * 60 * 60;
 /// How much later a session is used again before that is written down, in
 /// seconds: not every request needs a write.
 const TOUCH_AFTER: f64 = 3600.0;
+/// How many sessions an account can have at once: browsers and devices that
+/// are logged in.
+pub const MAX_PER_ACCOUNT: i64 = 100;
 /// 32 random bytes in base64 without padding.
 const TOKEN_LEN: usize = 43;
 
@@ -55,6 +58,16 @@ pub async fn start(db: &PgPool, account_id: i32) -> anyhow::Result<String> {
         token_hash(&token),
         account_id,
         IDLE as f64,
+    )
+    .execute(db)
+    .await?;
+    // Beyond what an account can have, the ones used longest ago end.
+    sqlx::query!(
+        "DELETE FROM sessions WHERE token_hash IN (
+             SELECT token_hash FROM sessions WHERE account_id = $1
+             ORDER BY last_seen_at DESC, created_at DESC OFFSET $2)",
+        account_id,
+        MAX_PER_ACCOUNT,
     )
     .execute(db)
     .await?;

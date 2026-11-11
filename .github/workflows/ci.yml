@@ -4,11 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Mondays at 05:17 UTC: a new advisory about a dependency shows up even
+  # in a week without a change. Only the job `dependencies` runs then.
+  schedule:
+    - cron: "17 5 * * 1"
 
 jobs:
   # The new server in server/ and the new frontend in web/. The workflows of the Go
   # backend and the old frontend stay until the switch.
   server:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -51,7 +56,25 @@ jobs:
           files: server/lcov.info
           flags: server
 
+  # What the server is built from: no dependency with a known vulnerability,
+  # only licenses, sources and crates that server/deny.toml allows.
+  dependencies:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+      # Reads Cargo.lock; its exceptions are in server/.cargo/audit.toml.
+      - run: cargo audit
+      # Reads what is really built: advisories again, licenses, banned crates, sources.
+      - run: cargo deny check
+
   web:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -86,6 +109,7 @@ jobs:
   # The container image as deploy/compose.yaml runs it: built, started next to
   # PostgreSQL and asked whether it works. Nothing is published.
   image:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

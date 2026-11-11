@@ -352,7 +352,7 @@ Abweichungen vom Entwurf, und was offen ist:
 - **Eigene Sitzungen** (seit Paket 2.6, `server/src/profile.rs`). `GET /api/sessions` zeigt, wo ein Konto eingeloggt ist, mit Beginn und letzter Nutzung; `DELETE /api/sessions/{id}` beendet eine davon, `DELETE /api/sessions` alle anderen. Der Name einer Sitzung in dieser Liste sind die ersten acht Byte des SHA-256 ihres Tokens; aus ihm lässt sich kein Token bilden. Gerät oder Browser merkt sich der Server nicht.
 - **Neues Passwort.** `PUT /api/password` verlangt das bisherige Passwort, zählt Fehlversuche wie der Login (eine gestohlene Sitzung kann also nicht endlos raten), beendet alle Sitzungen des Kontos und gibt dem fragenden Browser eine neue. Ein Konto ohne Passwort, etwa nach einem Login über OpenID Connect, setzt sein erstes ohne das alte.
 - **Konten anlegen.** `GET` und `POST /api/accounts` sind einem Admin vorbehalten: die Liste der Konten und ein neues Konto mit einem ersten Passwort, das der Admin weitergibt. Der Einmal-Link aus den [Detailfragen](plan.md#detailfragen) ist für importierte Konten ohne Passwort gedacht und kommt mit dem Import (Paket 4.3); bis dahin setzt `rueder account password` ein Passwort.
-- Die Prüfung des `Origin`-Headers kommt mit Paket 2.9.
+- Die Prüfung des `Origin`-Headers gibt es seit Paket 2.9, siehe [Header, Herkunft und Limits](#header-herkunft-und-limits). Seither hat ein Konto auch höchstens 100 Sitzungen; mit der nächsten endet die, die am längsten nicht genutzt wurde.
 
 Wie die bestehenden Konten umziehen, steht bei den [Detailfragen](plan.md#detailfragen): Der Import führt sie mit den Konten zusammen, die es im neuen rueder schon gibt, und legt nur die übrigen ohne Passwort an.
 
@@ -363,7 +363,7 @@ Der Server ruft Adressen ab, die User eingeben, und zeigt HTML an, das Fremde ge
 | Angriffsfläche | Maßnahme |
 |---|---|
 | Login und Sitzung | Sitzung als Cookie mit `HttpOnly`, `Secure` und `SameSite=Lax`. Das Frontend sieht kein Token mehr. Passwörter mit Argon2id, Rate-Limit auf dem Login, OpenID Connect als Option. |
-| CSRF | SameSite-Cookie und Prüfung des `Origin`-Headers bei jeder ändernden Anfrage. |
+| CSRF | SameSite-Cookie und Prüfung der Herkunft (`Sec-Fetch-Site`, sonst `Origin`) bei jeder ändernden Anfrage. Gebaut, siehe [Header, Herkunft und Limits](#header-herkunft-und-limits). |
 | Zugriff auf Daten | Jede Abfrage ist an die Konto-ID gebunden. Feeds und Artikel sind nur für Abonnenten lesbar. Kein Endpunkt listet fremde Feeds. |
 | Abruf fremder Adressen (SSRF) | Ein gemeinsamer HTTP-Client für Feed-Abruf, Feed-Suche und Bild-Proxy. Er erlaubt nur http und https, löst DNS selbst auf, sperrt private, lokale und Link-Local-Adressen und verbindet sich genau mit der geprüften IP. Jede Weiterleitung wird neu geprüft. Grenzen für Größe, Zeit, Weiterleitungen und Dekompression. Gebaut, siehe [Gehärteter HTTP-Client](#gehärteter-http-client). |
 | Artikel-HTML (XSS) | Bereinigung auf dem Server; der letzte Schritt ist immer `ammonia` nach fester Allowlist, ohne `id`, `class` und `style`, und nur vollständige `http`- und `https`-Adressen bleiben. Zweite Linie ist eine strenge Content-Security-Policy ohne Inline-Skripte, Bilder nur vom eigenen Proxy. Links bekommen `rel="noopener noreferrer"`. |
@@ -373,8 +373,77 @@ Der Server ruft Adressen ab, die User eingeben, und zeigt HTML an, das Fremde ge
 | Feed-Parser | Limits für Feed-Größe und Artikelzahl, keine externen XML-Entitäten. |
 | HTML-Parser | Grenzen für Tiefe und Größe des Baums, den ein Text ergibt (siehe [Bereinigung](#bereinigung)). Gelesen wird fremdes HTML nur in `cleaning.rs`, auf einem Thread, der den Server nicht aufhält. |
 | Unerwartete Eingaben (Panics, Hänger, Speicherverbrauch) | [Fuzzing](#fuzzing) von Bereinigung, Feed-Verarbeitung und Bild-Proxy, Property-Test für die Adressprüfung des HTTP-Clients. |
-| Missbrauch | Limits je Konto für Feeds, Ordner und Regeln. Rate-Limits auf der API. |
+| Missbrauch | Limits je Konto für Feeds, Ordner, Regeln, Labels und Sitzungen. Rate-Limits je Adresse auf allem und je Konto auf Abrufen fremder Adressen. Gebaut, siehe [Header, Herkunft und Limits](#header-herkunft-und-limits). |
 | Lieferkette und Betrieb | `cargo audit` und `cargo deny` in der CI, Lockfiles, Container ohne Root mit schreibgeschütztem Dateisystem. Geheimnisse kommen nie in den Frontend-Build. |
+
+### Header, Herkunft und Limits
+
+Gebaut in Paket 2.9 (`server/src/hardening.rs`, `server/src/rate.rs`). Drei Schichten liegen um alles, was der Server beantwortet, auch um das Frontend und den Bild-Proxy. Von außen nach innen: Header, Rate-Limit, Herkunft. Eine abgelehnte Anfrage bekommt also dieselben Header wie jede andere, und sie erreicht weder einen Endpunkt noch die Live-Updates.
+
+**Header an jeder Antwort.** Ein Endpunkt, der einen davon selbst setzt, behält seinen Wert; das tut nur der Bild-Proxy.
+
+| Header | Wert | Wozu |
+|---|---|---|
+| `Content-Security-Policy` | Für das Frontend die Policy unten, für `/api` und `/img` `default-src 'none'; frame-ancestors 'none'` | Zweite Linie hinter der Bereinigung. |
+| `X-Content-Type-Options` | `nosniff` | Der genannte Typ gilt, was auch immer in den Bytes steht. |
+| `Referrer-Policy` | `no-referrer` | Verlinkte Seiten erfahren nicht, woher jemand kommt. |
+| `X-Frame-Options` | `DENY` | Kein Rahmen auf fremden Seiten, für Browser ohne `frame-ancestors`. |
+| `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy` | `same-origin` | Eine geöffnete oder öffnende Seite bekommt keinen Zugriff auf das Fenster, und keine fremde Seite lädt, was rueder ausliefert. |
+| `Permissions-Policy` | Kamera, Mikrofon, Standort, Bildschirmaufnahme, Zahlung und USB aus | Braucht ein Reader nicht, also bekommt es auch kein Artikel. |
+| `Cache-Control` | `no-store` für `/api` | Antworten gehören einem Konto und bleiben in keinem Cache. Bilder behalten ihr `private, immutable`. |
+
+**Die Content-Security-Policy des Frontends:**
+
+```text
+default-src 'none'; script-src 'self' 'sha256-…' 'sha256-…'; style-src 'self';
+img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src http: https:;
+manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+```
+
+- **Skripte** nur aus den eigenen Dateien. Die Seite von SvelteKit enthält zwei Skripte im HTML: das für das Thema vor dem ersten Bild und das, das die App startet. Der Server liest `index.html` beim Start, bildet ihre SHA-256 und nennt sie in der Policy. So kommt sie ohne `'unsafe-inline'` und ohne `'unsafe-eval'` aus: Ein Skript, ein `onerror` oder ein `javascript:`-Link in einem Artikeltext läuft nicht, auch wenn die Bereinigung es einmal durchließe. Nach einem neuen Build des Frontends braucht der Server deshalb einen Neustart; im Container ist das ohnehin so.
+- **Styles** nur aus den eigenen Dateien, auch keine `style`-Attribute. Svelte setzt berechnete Styles über das DOM, das ist davon nicht betroffen. SvelteKit versteckt sein Element für Screenreader (`#svelte-announcer`) mit einem `style`-Attribut; das lehnt der Browser ab und meldet es einmal in der Konsole. Dieselben Regeln stehen deshalb in `web/src/routes/layout.css`.
+- **Bilder** nur vom eigenen Server, also vom Bild-Proxy. `data:` ist für das Icon in der Seite.
+- **Verbindungen** (API, Live-Updates) nur zum eigenen Server.
+- **Audio und Video** von überall: Sie kommen direkt von der Quelle und laden erst nach Klick, wie unter [Security](#security) beschrieben.
+- Geprüft im Browser (Chromium) am gebauten Frontend: Die Oberfläche läuft, und ein eingeschleustes Skript, ein Event-Handler, `eval`, ein fremdes Bild und ein Abruf an einen fremden Server werden abgelehnt.
+- Für Schritt 3: Der Login über OpenID Connect beginnt mit einem Link auf `/api/oidc/start`, nicht mit einem Formular, weil `form-action 'self'` die Weiterleitung zum Anbieter sonst sperrt.
+
+`Strict-Transport-Security` setzt der Server nicht: TLS macht der Reverse-Proxy, und nur der weiß, ob die ganze Domain HTTPS spricht. Die Beispiele in [deploy/README.md](../deploy/README.md) setzen den Header dort.
+
+**Herkunft ändernder Anfragen.** Jede Anfrage außer `GET`, `HEAD` und `OPTIONS` wird geprüft, bevor sie einen Endpunkt erreicht:
+
+1. Sagt der Browser mit `Sec-Fetch-Site`, woher die Anfrage kommt, gilt das: `same-origin` und `none` (von Hand ausgelöst) gehen durch, alles andere wird mit 403 abgelehnt, auch `same-site`, also eine andere Subdomain. Diesen Header kann eine Seite nicht setzen oder ändern.
+2. Ältere Browser nennen nur `Origin`. Dann muss dessen Host mit Port der sein, an den die Anfrage ging (`Host`). `null` wird abgelehnt.
+3. Eine Anfrage ohne beides kommt von keinem Browser, etwa von `curl` mit dem Cookie in der Hand; die lässt sich von einer fremden Seite aus nicht senden und geht durch.
+
+Der Server braucht dafür keine Einstellung mit seiner eigenen Adresse. Der Reverse-Proxy muss für Punkt 2 den `Host`-Header durchreichen; Caddy tut das von selbst, das nginx-Beispiel setzt ihn. Lesende Anfragen von fremden Seiten bleiben erlaubt, sonst ließe sich rueder nicht über einen Link öffnen; dort schützt `SameSite=Lax` des Cookies. Nicht abgedeckt ist `GET /api/oidc/start?link`, das einem eingeloggten Konto die eigene Identität beim Anbieter zuordnet; das sieht sich das Security-Review (Paket 2.12) an.
+
+**Rate-Limits**, gezählt im Speicher des Servers für höchstens 10.000 Adressen und Konten. Wer darüber liegt, bekommt 429 mit `Retry-After`.
+
+| Was | Grenze | Gezählt je |
+|---|---|---|
+| Jede Anfrage, auch an Frontend und Bild-Proxy | 1200 auf einmal, danach 50 je Sekunde | Adresse (bei IPv6 das /64) |
+| Abrufe fremder Adressen: Feed-Suche und das Abonnieren eines Feeds, den noch niemand liest | 30 auf einmal, danach einer alle zwei Sekunden | Konto |
+| Falsche Passwörter | 10 je Name und 30 je Adresse in 15 Minuten, siehe [Login und Sitzungen](#login-und-sitzungen) | Name und Adresse |
+| Offene Live-Verbindungen | 20, siehe [Live-Updates](#live-updates) | Konto |
+
+Die Grenze je Adresse liegt weit über dem, was Lesen braucht: Eine Liste lädt bis zu 200 Vorschaubilder auf einmal, und mehrere Leser können eine Adresse teilen. Sie soll verhindern, dass einer den Server für alle belegt. Hinter einem Reverse-Proxy ohne `CLIENT_IP_HEADER` zählen alle Leser als eine Adresse. Die Bilder des Proxy brauchen keine eigene Grenze je Konto, weil nur der Server ihre Adressen signiert: Niemand kann ihn darüber zu beliebigen Abrufen bringen. Ein OPML-Import ruft nichts ab, seine Feeds holt die nächste Runde des Abrufs.
+
+**Limits je Konto.** Was darüber hinausgeht, lehnt die API mit 400 ab.
+
+| Was | Grenze | Wo |
+|---|---|---|
+| Abonnierte Feeds | 2000, davon höchstens 1000 in einem Ordner | `tree::MAX_FEEDS`, `tree::MAX_FEEDS_IN_FOLDER` |
+| Ordner | 100, höchstens fünf Ebenen | `tree::MAX_FOLDERS` |
+| Filterregeln | 200, ein Muster höchstens 200 Zeichen | `filters::MAX_RULES`, `filters::MAX_PATTERN` |
+| Labels | 100 | `labels::MAX_LABELS` |
+| Sitzungen | 100, die am längsten ungenutzte endet | `sessions::MAX_PER_ACCOUNT` |
+| Einstellungen | 16 KB | `tree::MAX_SETTINGS` |
+| Eine Anfrage an die API | 256 KB, eine OPML-Datei 1 MB mit höchstens 2000 Feeds | `MAX_BODY`, `subscribe::MAX_OPML` |
+
+Die Grenze für Feeds ist mit diesem Paket dazugekommen: Jeder abonnierte Feed wird abgerufen, solange ihn jemand liest, und ohne sie hätte ein Konto den Server über wiederholte OPML-Importe beliebig viele Feeds abrufen lassen können. Ein Import, der sie überschreiten würde, wird als Ganzes abgelehnt.
+
+**Abhängigkeiten.** Der CI-Job `dependencies` läuft bei jedem Pull Request und jeden Montag. `cargo audit` prüft `Cargo.lock` gegen die Datenbank von RustSec. `cargo deny check` prüft, was wirklich gebaut wird (`server/deny.toml`): bekannte Lücken und nicht mehr gepflegte Crates, Lizenzen nach einer festen Liste, Quellen (nur crates.io) und gesperrte Crates (`openssl`, `native-tls`, damit TLS bei `rustls` bleibt). Eine Ausnahme steht mit Begründung in `server/.cargo/audit.toml`: `libsqlite3-sys` (RUSTSEC-2026-0459) steht nur im Lockfile, weil `sqlx` seinen SQLite-Treiber als Option nennt; gebaut wird es nicht, und `cargo deny` sieht es deshalb auch nicht. Sie fällt weg, sobald ein Update von `sqlx` eine neuere Version zulässt.
 
 ### Gehärteter HTTP-Client
 
@@ -436,7 +505,7 @@ Was für alle gilt:
 - **Ohne Sitzung 401.** Jeder Handler nimmt den Extraktor `Session` und bindet seine Abfragen an dessen Kontonummer. Was einem anderen Konto gehört oder was es nicht gibt, ist beides 404; die Antwort verrät nicht, welches von beiden. Zu jedem Endpunkt gibt es einen Test, in dem ein zweites Konto nichts davon sieht und nichts daran ändert.
 - **Listen blättern mit einem Anker** statt mit einem Offset: `before` ist die ID des letzten gezeigten Artikels, `limit` höchstens 200 (Standard 50). Jeder Eintrag trägt Lesestand, Stern und Labels.
 - **Bilder zeigen immer auf den Bild-Proxy.** Der Text eines Artikels geht durch `Signer::in_html`, Vorschaubild, Aufmacherbild und Icon durch `Signer::address`. Ein Server ohne Bild-Proxy liefert Texte ohne Bilder aus.
-- **Fehler** sind 400 mit einem Satz als Text (eine Eingabe, die gegen eine Regel verstößt), 422 (eine Anfrage, die sich nicht lesen lässt), 403 (nur für Admins, falsches bisheriges Passwort), 429 (zu viele Fehlversuche) und 500 ohne Einzelheiten.
+- **Fehler** sind 400 mit einem Satz als Text (eine Eingabe, die gegen eine Regel verstößt), 422 (eine Anfrage, die sich nicht lesen lässt), 403 (nur für Admins, falsches bisheriges Passwort, eine ändernde Anfrage von einer fremden Seite), 413 (eine Anfrage über 256 KB), 429 mit `Retry-After` (zu viele Fehlversuche, zu viele Anfragen) und 500 ohne Einzelheiten. Was für jede Anfrage und jede Antwort gilt, steht unter [Header, Herkunft und Limits](#header-herkunft-und-limits).
 - **Alle als gelesen** nennt, bis wohin: `upto` (Nummer im Feed) oder `upto_id` (ID des neuesten Artikels, den die Liste zeigte). Was danach eintrifft, bleibt ungelesen.
 - **Änderungen am Lesestand** wirken im Frontend sofort und werden im Hintergrund bestätigt; lehnt der Server ab, nimmt das Frontend sie zurück.
 
@@ -506,7 +575,7 @@ Was noch fehlt und Schritt 3 ergänzt: Labels, OPML, eine virtualisierte Liste f
 ## Betrieb
 
 - Ein Container mit dem Rust-Programm und dem gebauten Frontend, daneben PostgreSQL, davor ein Reverse-Proxy für TLS.
-- Konfiguration über Umgebungsvariablen (`DATABASE_URL`, Adresse zum Lauschen, Verzeichnis des Frontends, Verzeichnis, Größe und Schlüssel des Bild-Proxy, `CLIENT_IP_HEADER` für das Rate-Limit hinter dem Reverse-Proxy, OpenID Connect). Geheimnisse stehen nie im Image und nie im Frontend-Build.
+- Konfiguration über Umgebungsvariablen (`DATABASE_URL`, Adresse zum Lauschen, Verzeichnis des Frontends, Verzeichnis, Größe und Schlüssel des Bild-Proxy, `CLIENT_IP_HEADER` für die Rate-Limits hinter dem Reverse-Proxy, OpenID Connect). Geheimnisse stehen nie im Image und nie im Frontend-Build.
 - Migrationen laufen beim Start. Der Container läuft ohne Root mit schreibgeschütztem Dateisystem; beschreibbar ist nur das Verzeichnis für den Bild-Cache, in dem auch der selbst erzeugte Schlüssel des Bild-Proxy liegt.
 - Sicherung: PostgreSQL. Der Bild-Cache lässt sich jederzeit neu aufbauen.
 

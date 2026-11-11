@@ -1,0 +1,55 @@
+# What `cargo deny check` holds the dependencies to. CI runs it on every pull
+# request and once a week, next to `cargo audit`.
+
+[graph]
+# The image is built for Linux; what only other systems would pull in is not
+# checked.
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+all-features = true
+
+[advisories]
+# Known vulnerabilities and unsound code fail the check, and so does a crate
+# nobody maintains any more. An exception gets a line here with its reason.
+unmaintained = "all"
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Licenses that let rueder be passed on as it is. A new one is a decision,
+# not an accident.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    # Only the files of these crates themselves stay under it: cssparser and
+    # dtoa-short, which the HTML cleaning pulls in.
+    "MPL-2.0",
+    # The list of root certificates in webpki-roots.
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# rueder itself is not published as a crate.
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+deny = [
+    # TLS is rustls, in Rust: nothing links the system's OpenSSL.
+    { crate = "openssl", reason = "rueder uses rustls" },
+    { crate = "openssl-sys", reason = "rueder uses rustls" },
+    { crate = "native-tls", reason = "rueder uses rustls" },
+]
+
+[sources]
+# Everything comes from crates.io, nothing from a git repository or another
+# registry.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

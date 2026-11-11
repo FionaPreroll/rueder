@@ -52,13 +52,7 @@ impl Key {
     /// An IPv6 sender has a whole /64 to pick addresses from, so that is what
     /// counts as one.
     pub fn address(ip: IpAddr) -> Self {
-        Self::Address(match ip.to_canonical() {
-            IpAddr::V6(v6) => {
-                let net = u128::from(v6) & !u128::from(u64::MAX);
-                IpAddr::V6(Ipv6Addr::from(net))
-            }
-            v4 => v4,
-        })
+        Self::Address(network(ip))
     }
 
     fn limit(&self) -> u32 {
@@ -66,6 +60,17 @@ impl Key {
             Self::Name(_) => PER_NAME,
             Self::Address(_) => PER_ADDRESS,
         }
+    }
+}
+
+/// What counts as one sender: an IPv4 address, or the /64 of an IPv6 address.
+pub fn network(ip: IpAddr) -> IpAddr {
+    match ip.to_canonical() {
+        IpAddr::V6(v6) => {
+            let net = u128::from(v6) & !u128::from(u64::MAX);
+            IpAddr::V6(Ipv6Addr::from(net))
+        }
+        v4 => v4,
     }
 }
 
@@ -208,12 +213,8 @@ pub async fn login(
         .filter_map(|key| state.logins.blocked(key, now))
         .max();
     if let Some(wait) = wait {
-        return Ok((
-            StatusCode::TOO_MANY_REQUESTS,
-            [(header::RETRY_AFTER, wait.as_secs().max(1).to_string())],
-            "too many wrong tries, try again later",
-        )
-            .into_response());
+        let message = "too many wrong tries, try again later";
+        return Err(AppError::TooMany(wait, message));
     }
 
     let account = accounts::login(&state.db, &credentials.username, &credentials.password).await?;

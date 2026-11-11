@@ -59,6 +59,22 @@ curl --fail --silent --show-error "$at/" | grep -qi '<!doctype html' ||
 curl --fail --silent --show-error "$at/feed/12" | grep -qi '<!doctype html' ||
 	fail "an unknown path is not answered with the frontend"
 
+say "The frontend's scripts may run, and no others"
+# The policy names every script inside the page by its hash. Without them the
+# app would not start in a browser, which curl would never notice.
+policy=$(curl --fail --silent --show-error --head "$at/" | tr -d '\r' |
+	sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p')
+scripts=$(curl --fail --silent --show-error "$at/" | grep -c '<script>')
+hashes=$(printf '%s' "$policy" | grep -o "'sha256-" | wc -l)
+[ "$scripts" -gt 0 ] && [ "$hashes" -eq "$scripts" ] ||
+	fail "the policy allows $hashes scripts inside the page, which has $scripts"
+case "$policy" in *unsafe*) fail "the policy allows more than the page's own scripts" ;; esac
+
+say "A change that another site asks for is refused"
+code=$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
+	--header 'Sec-Fetch-Site: cross-site' "$at/api/logout")
+[ "$code" = 403 ] || fail "a request from another site got $code, not 403"
+
 say "An account can be made and logs in"
 printf '%s\n' "$password" | compose exec -T rueder rueder account add smoke --admin
 curl --fail --silent --show-error --dump-header "$headers" --output /dev/null \
