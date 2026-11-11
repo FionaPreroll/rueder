@@ -561,3 +561,43 @@ async fn wrong_passwords_are_counted_for_the_address(db: PgPool) {
         StatusCode::TOO_MANY_REQUESTS
     );
 }
+
+#[sqlx::test]
+async fn an_account_has_only_so_many_sessions(db: PgPool) {
+    let ada = common::account(&db, "ada").await;
+    let grace = common::account(&db, "grace").await;
+    let state = AppState::new(db.clone());
+    let theirs = common::session(&db, grace).await;
+    let first = common::session(&db, ada).await;
+    let second = common::session(&db, ada).await;
+    // The first began earlier, but the second was used longer ago.
+    let token = second.split_once('=').unwrap().1;
+    sqlx::query(
+        "UPDATE sessions SET last_seen_at = now() - interval '2 hours' WHERE token_hash = $1",
+    )
+    .bind(Sha256::digest(token.as_bytes()).to_vec())
+    .execute(&db)
+    .await
+    .unwrap();
+    let count = async || -> i64 {
+        sqlx::query_scalar("SELECT count(*) FROM sessions WHERE account_id = $1")
+            .bind(ada)
+            .fetch_one(&db)
+            .await
+            .unwrap()
+    };
+
+    let mut newest = String::new();
+    for _ in 2..sessions::MAX_PER_ACCOUNT {
+        newest = common::session(&db, ada).await;
+    }
+    assert_eq!(count().await, sessions::MAX_PER_ACCOUNT);
+
+    // One more: the one that was used longest ago ends, and no other.
+    let one_more = common::session(&db, ada).await;
+    assert_eq!(count().await, sessions::MAX_PER_ACCOUNT);
+    assert_eq!(me(&state, Some(&second)).await.0, StatusCode::UNAUTHORIZED);
+    for cookie in [&first, &newest, &one_more, &theirs] {
+        assert_eq!(me(&state, Some(cookie)).await.0, StatusCode::OK);
+    }
+}

@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching, cleaning, images, login and the API
+## State: foundation, data, fetching, cleaning, images, login, the API and its hardening
 
 What is here:
 
@@ -45,14 +45,23 @@ What is here:
   of a web page, OPML in and out, settings, the own sessions, and accounts for
   admins. Every query is bound to the account of the session; the list of
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
-- The built frontend from `../web/build`.
+- Live updates (`src/events.rs`): `GET /api/events` tells an account's open
+  tabs what changed, as server-sent events.
+- Hardening (`src/hardening.rs`, `src/rate.rs`): every answer carries a
+  Content-Security-Policy and the other security headers, a request that
+  changes something is refused when a page of another site sent it, each
+  address may send only so many requests, and each account has limits for
+  feeds, folders, rules, labels and sessions. See
+  [docs/architecture.md](../docs/architecture.md#header-herkunft-und-limits).
+- The built frontend from `../web/build`. The policy names the scripts inside
+  its `index.html` by their hash, read when the server starts: restart the
+  server after building the frontend anew.
 - The container image (`../Dockerfile`) with the server and the frontend, and
   `rueder health`, which asks the running server whether it is well. How to
   install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan, the first six work packages of step 2 and its
-work package 2.10. Live updates, the API's types for the frontend and the
-hardening follow.
+This is step 1 of the plan and work packages 2.1 to 2.7, 2.9 and 2.10 of
+step 2. The API's types for the frontend, fuzzing and the search follow.
 
 ## Commands
 
@@ -65,11 +74,14 @@ cargo test                           # creates a database per test on the server
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo sqlx prepare -- --all-targets  # after changing a query: renew the cache in .sqlx/
+cargo audit && cargo deny check      # after changing dependencies: advisories, licenses, sources
 ```
 
 Queries are checked against the schema when compiling. Without a database the
 build uses the cache in `.sqlx/` (`SQLX_OFFLINE=true`, as in CI); `cargo sqlx` comes
-with `cargo install sqlx-cli`.
+with `cargo install sqlx-cli`. `cargo audit` and `cargo deny` come with
+`cargo install cargo-audit cargo-deny`; what they allow is in `deny.toml`, and an
+advisory that does not apply is listed with its reason in `.cargo/audit.toml`.
 
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 (default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).

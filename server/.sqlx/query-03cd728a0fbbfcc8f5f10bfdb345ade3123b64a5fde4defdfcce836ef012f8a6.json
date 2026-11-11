@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sessions WHERE token_hash IN (\n             SELECT token_hash FROM sessions WHERE account_id = $1\n             ORDER BY last_seen_at DESC, created_at DESC OFFSET $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "03cd728a0fbbfcc8f5f10bfdb345ade3123b64a5fde4defdfcce836ef012f8a6"
+}

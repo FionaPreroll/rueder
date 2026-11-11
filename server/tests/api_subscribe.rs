@@ -9,6 +9,7 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use axum::{
@@ -22,7 +23,8 @@ use common::{call, raw};
 use rueder::{
     AppState,
     http_client::{Config, HttpClient},
-    subscribe,
+    rate::{REQUESTS, Rate, Rates},
+    subscribe, tree,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -507,4 +509,149 @@ async fn an_opml_file_that_breaks_the_rules_is_refused(db: PgPool) {
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
     assert_eq!(feed_rows(&db).await, 0);
+}
+
+#[sqlx::test]
+async fn an_account_can_have_the_server_look_at_only_so_many_addresses(db: PgPool) {
+    let (site, requests) = site().await;
+    let url = format!("{site}/feed.xml");
+    let ada = common::account(&db, "ada").await;
+    let grace = common::account(&db, "grace").await;
+    let hour = Duration::from_secs(3600);
+    let state = state(&db).with_rates(Rates::new(REQUESTS, Rate::new(2, hour)));
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let find = async |cookie: &str| {
+        let body = json!({ "url": format!("{site}/blog/") });
+        post(&state, "/api/feeds/find", cookie, body).await.0
+    };
+    let subscribe = async |cookie: &str| {
+        post(&state, "/api/feeds", cookie, json!({ "url": url }))
+            .await
+            .0
+    };
+
+    // An address that is none is not looked at and does not count.
+    let none = json!({ "url": "ftp://files.example/feed" });
+    for _ in 0..5 {
+        let (status, _) = post(&state, "/api/feeds/find", &cookie, none.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    assert_eq!(find(&cookie).await, StatusCode::OK);
+    assert_eq!(subscribe(&cookie).await, StatusCode::CREATED);
+    assert_eq!(requests.load(Ordering::SeqCst), 2);
+    // Both are used up: neither the search nor a new feed reaches the site.
+    assert_eq!(find(&cookie).await, StatusCode::TOO_MANY_REQUESTS);
+    let other = json!({ "url": format!("{site}/feed.xml?other") });
+    let (status, headers, _) = raw(
+        &state,
+        Method::POST,
+        "/api/feeds",
+        Some(&cookie),
+        Some(("application/json", other.to_string().into_bytes())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    let wait: u64 = headers[header::RETRY_AFTER]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((3590..=3600).contains(&wait), "{wait}");
+    assert_eq!(requests.load(Ordering::SeqCst), 2);
+    assert_eq!(feed_rows(&db).await, 1);
+    // A feed that is there already is not fetched, so it is no lookup.
+    assert_eq!(subscribe(&cookie).await, StatusCode::OK);
+
+    // Another account has its own.
+    assert_eq!(subscribe(&grace_cookie).await, StatusCode::CREATED);
+    assert_eq!(find(&grace_cookie).await, StatusCode::OK);
+    assert_eq!(find(&grace_cookie).await, StatusCode::OK);
+    assert_eq!(find(&grace_cookie).await, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[sqlx::test]
+async fn an_account_can_subscribe_to_only_so_many_feeds(db: PgPool) {
+    let ada = common::account(&db, "ada").await;
+    let grace = common::account(&db, "grace").await;
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    // One short of the limit, in folders that each have room.
+    let first = common::folder(&db, ada, None, "First").await;
+    let second = common::folder(&db, ada, None, "Second").await;
+    sqlx::query(
+        "WITH new AS (
+             INSERT INTO feeds (feed_url, title)
+             SELECT 'https://many.example/' || n, 'Feed ' || n FROM generate_series(1, $1) AS n
+             RETURNING id)
+         INSERT INTO subscriptions (account_id, feed_id, folder_id, position)
+         SELECT $2, id, CASE WHEN row_number() OVER (ORDER BY id) % 2 = 0 THEN $3 ELSE $4 END, id
+         FROM new",
+    )
+    .bind(tree::MAX_FEEDS as i32 - 1)
+    .bind(ada)
+    .bind(first)
+    .bind(second)
+    .execute(&db)
+    .await
+    .unwrap();
+    let last = common::feed(&db, "last").await;
+    let beyond = common::feed(&db, "beyond").await;
+    let url = |name: &str| format!("https://{name}.example/feed.xml");
+    let count = async |account: i32| -> i64 {
+        sqlx::query_scalar("SELECT count(*) FROM subscriptions WHERE account_id = $1")
+            .bind(account)
+            .fetch_one(&db)
+            .await
+            .unwrap()
+    };
+
+    let (status, made) = post(&state, "/api/feeds", &cookie, json!({ "url": url("last") })).await;
+    assert_eq!(
+        (status, made["id"].as_i64()),
+        (StatusCode::CREATED, Some(last.into()))
+    );
+    assert_eq!(count(ada).await, tree::MAX_FEEDS);
+    let (status, _) = post(
+        &state,
+        "/api/feeds",
+        &cookie,
+        json!({ "url": url("beyond") }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // A feed the account reads already is no new one.
+    let (status, _) = post(&state, "/api/feeds", &cookie, json!({ "url": url("last") })).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // An OPML file does not get around it: all of it is refused.
+    let file = r#"<opml><body>
+        <outline type="rss" xmlUrl="https://last.example/feed.xml"/>
+        <outline type="rss" xmlUrl="https://beyond.example/feed.xml"/>
+        </body></opml>"#;
+    let (status, _) = import(&state, &cookie, file).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(count(ada).await, tree::MAX_FEEDS);
+
+    // The limit is the account's own.
+    let (status, did) = import(&state, &grace_cookie, file).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(did["feeds"], 2);
+    let (status, made) = post(
+        &state,
+        "/api/feeds",
+        &grace_cookie,
+        json!({ "url": url("beyond") }),
+    )
+    .await;
+    assert_eq!(
+        (status, made["id"].as_i64()),
+        (StatusCode::OK, Some(beyond.into()))
+    );
+    assert_eq!(count(grace).await, 2);
 }

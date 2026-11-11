@@ -1,0 +1,331 @@
+//! What every answer and every changing request has to pass, whatever the
+//! endpoint: the headers that tell the browser what a page of rueder may do,
+//! and the check that a change was asked for by rueder's own pages.
+//!
+//! - [`headers`] gives every answer its Content-Security-Policy and the other
+//!   headers. Article HTML is cleaned before it is stored; the policy is the
+//!   second line, for the day the cleaning lets something through: no script
+//!   runs but the ones rueder ships, and a page loads images, styles and data
+//!   from rueder alone.
+//! - [`same_origin`] refuses a request that changes something and was sent by
+//!   a page of another site. The session cookie is `SameSite=Lax` already;
+//!   this is the second line against cross-site request forgery.
+
+use std::{fs, path::Path, sync::Arc};
+
+use axum::{
+    extract::{Request, State},
+    http::{
+        HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
+        header::{self, Entry},
+    },
+    middleware::Next,
+    response::{IntoResponse, Response},
+};
+use base64::{Engine, engine::general_purpose::STANDARD};
+use sha2::{Digest, Sha256};
+use url::Url;
+
+/// What an answer of the API or the image proxy may do if a browser shows it
+/// as a page: nothing. The image proxy sets its own, with `sandbox` on top.
+const DATA_POLICY: &str = "default-src 'none'; frame-ancestors 'none'";
+
+/// How many inline scripts of the frontend's page get a place in the policy,
+/// and how much of the page is looked at for them. SvelteKit's page has two
+/// and a few kilobytes.
+const MAX_INLINE_SCRIPTS: usize = 8;
+const MAX_PAGE: u64 = 1024 * 1024;
+
+/// The headers every answer gets, unless the endpoint set its own.
+const ALWAYS: [(HeaderName, &str); 6] = [
+    // The type the server names is the type, whatever the bytes look like.
+    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    // Sites that are linked from articles do not learn where the reader
+    // came from.
+    (header::REFERRER_POLICY, "no-referrer"),
+    // No other site shows rueder in a frame, for browsers that do not know
+    // `frame-ancestors`.
+    (header::X_FRAME_OPTIONS, "DENY"),
+    // A page that rueder opens, or that opens rueder, gets no handle on its
+    // window, and no other site loads what rueder serves.
+    (
+        HeaderName::from_static("cross-origin-opener-policy"),
+        "same-origin",
+    ),
+    (
+        HeaderName::from_static("cross-origin-resource-policy"),
+        "same-origin",
+    ),
+    // A reader needs none of these, so nothing an article brings gets them.
+    (
+        HeaderName::from_static("permissions-policy"),
+        "camera=(), display-capture=(), geolocation=(), microphone=(), payment=(), usb=()",
+    ),
+];
+
+/// The Content-Security-Policy of the frontend's pages.
+///
+/// Scripts and styles come from rueder's own files only. SvelteKit starts the
+/// app with a script inside the page, and the page sets the theme with another
+/// before the first paint; those two are allowed by their hash, so no
+/// `'unsafe-inline'` is needed and a script in an article's text never runs.
+/// Images come from the image proxy; `data:` is for the icon in the page.
+/// Audio and video are the one thing a browser fetches from elsewhere, and
+/// only once the reader starts them.
+fn page_policy(script_hashes: &[String]) -> String {
+    let mut scripts = String::from("script-src 'self'");
+    for hash in script_hashes {
+        scripts.push_str(&format!(" 'sha256-{hash}'"));
+    }
+    [
+        "default-src 'none'",
+        &scripts,
+        "style-src 'self'",
+        "img-src 'self' data:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "media-src http: https:",
+        "manifest-src 'self'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ]
+    .join("; ")
+}
+
+/// The SHA-256 of every script that stands inside a page, as the policy
+/// names them. The page is rueder's own, built by SvelteKit; this is not a
+/// parser for HTML somebody else wrote. A script it misses does not run.
+pub fn inline_scripts(page: &str) -> Vec<String> {
+    let lower = page.to_ascii_lowercase();
+    let mut hashes = Vec::new();
+    let mut at = 0;
+    while hashes.len() < MAX_INLINE_SCRIPTS {
+        let Some(tag) = lower[at..].find("<script").map(|found| at + found) else {
+            break;
+        };
+        let Some(open_end) = lower[tag..].find('>').map(|found| tag + found) else {
+            break;
+        };
+        let Some(close) = lower[open_end..]
+            .find("</script")
+            .map(|found| open_end + found)
+        else {
+            break;
+        };
+        // A script with an address is allowed by where it comes from.
+        if !lower[tag..open_end].contains("src=") {
+            let script = &page[open_end + 1..close];
+            hashes.push(STANDARD.encode(Sha256::digest(script.as_bytes())));
+        }
+        at = close;
+    }
+    hashes
+}
+
+/// The policies of a server, worked out once when it starts.
+#[derive(Clone)]
+pub struct Policies {
+    page: HeaderValue,
+}
+
+impl Policies {
+    /// For the frontend in this directory. Its `index.html` is read once: a
+    /// new build of the frontend needs a restart of the server.
+    pub fn for_frontend(static_dir: &Path) -> Self {
+        let index = static_dir.join("index.html");
+        let page = fs::metadata(&index)
+            .ok()
+            .filter(|file| file.len() <= MAX_PAGE)
+            .and_then(|_| fs::read_to_string(&index).ok());
+        if page.is_none() {
+            tracing::warn!(
+                "no frontend at {}: its scripts will not run",
+                index.display()
+            );
+        }
+        Self::for_page(page.as_deref().unwrap_or_default())
+    }
+
+    pub fn for_page(page: &str) -> Self {
+        let policy = page_policy(&inline_scripts(page));
+        Self {
+            // Hashes in base64 and fixed words: always a header's value.
+            page: HeaderValue::from_str(&policy)
+                .unwrap_or(HeaderValue::from_static("default-src 'none'")),
+        }
+    }
+}
+
+/// Whether the path belongs to the API or the image proxy, whose answers are
+/// data and never a page.
+fn is_data(path: &str) -> bool {
+    path == "/api" || path.starts_with("/api/") || path.starts_with("/img/")
+}
+
+/// Around everything the server answers: the headers of [`ALWAYS`] and a
+/// Content-Security-Policy. What the API answers is one account's own and
+/// is kept by no cache.
+pub async fn headers(
+    State(policies): State<Arc<Policies>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let data = is_data(request.uri().path());
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    for (name, value) in ALWAYS {
+        if let Entry::Vacant(entry) = headers.entry(name) {
+            entry.insert(HeaderValue::from_static(value));
+        }
+    }
+    if let Entry::Vacant(entry) = headers.entry(header::CONTENT_SECURITY_POLICY) {
+        entry.insert(if data {
+            HeaderValue::from_static(DATA_POLICY)
+        } else {
+            policies.page.clone()
+        });
+    }
+    if data && let Entry::Vacant(entry) = headers.entry(header::CACHE_CONTROL) {
+        entry.insert(HeaderValue::from_static("no-store"));
+    }
+    response
+}
+
+/// The host a request was sent to, in lower case.
+fn host(request: &Request) -> Option<String> {
+    let named = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|host| host.to_str().ok());
+    // HTTP/2 names it in the address instead.
+    let host = named.or_else(|| request.uri().authority().map(|host| host.as_str()))?;
+    Some(host.to_ascii_lowercase())
+}
+
+/// Whether the `Origin` a browser named is the host the request was sent to.
+/// Behind a reverse proxy that is the proxy's name, as long as the proxy
+/// hands the `Host` header on.
+fn is_own(origin: &str, host: &str) -> bool {
+    let Ok(origin) = Url::parse(origin) else {
+        return false;
+    };
+    let Some(name) = origin.host_str() else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    // `Url` leaves out the port a scheme has anyway; a `Host` may name it.
+    match (origin.port(), origin.port_or_known_default()) {
+        (Some(port), _) => host == format!("{name}:{port}"),
+        (None, Some(port)) => host == name || host == format!("{name}:{port}"),
+        (None, None) => host == name,
+    }
+}
+
+/// Whether a request that changes something may pass: not if a browser says
+/// it comes from a page of another site.
+///
+/// Browsers say so in `Sec-Fetch-Site`, which a page cannot set or change;
+/// older ones only name the page's `Origin`, which has to be this server
+/// then. A request with neither comes from no browser, such as a script with
+/// the session's cookie in hand, and no page of another site can send one.
+fn allowed(request: &Request) -> bool {
+    let headers: &HeaderMap = request.headers();
+    let named = |name: HeaderName| headers.get(name).map(|value| value.to_str().ok());
+    match named(HeaderName::from_static("sec-fetch-site")) {
+        // `none` is what the reader did by hand, such as typing an address.
+        Some(Some("same-origin" | "none")) => return true,
+        Some(_) => return false,
+        None => {}
+    }
+    match named(header::ORIGIN) {
+        None => true,
+        Some(Some(origin)) => host(request).is_some_and(|host| is_own(origin, &host)),
+        Some(None) => false,
+    }
+}
+
+/// Around everything: a request that changes something is refused if it
+/// comes from a page of another site.
+pub async fn same_origin(request: Request, next: Next) -> Response {
+    let reads_only = matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    );
+    if reads_only || allowed(&request) {
+        return next.run(request).await;
+    }
+    tracing::debug!("refused a request from another site: {}", request.uri());
+    (
+        StatusCode::FORBIDDEN,
+        "this request comes from another site",
+    )
+        .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scripts_inside_a_page_are_found() {
+        let page = "<!doctype html><head>\n\
+            <script src=\"/a.js\"></script>\n\
+            <SCRIPT>one()</SCRIPT>\n\
+            <script type=\"module\" data-x>\n\ttwo();\n</script>\n\
+            </head><body><script>";
+        let hash = |script: &str| STANDARD.encode(Sha256::digest(script.as_bytes()));
+        assert_eq!(inline_scripts(page), [hash("one()"), hash("\n\ttwo();\n")]);
+        // The hash of `alert(1)`, as browsers and the specification have it.
+        assert_eq!(
+            inline_scripts("<script>alert(1)</script>"),
+            ["bhHHL3z2vDgxUt0W3dWQOrprscmda2Y5pLsLg4GF+pI="]
+        );
+        assert!(inline_scripts("").is_empty());
+        assert!(inline_scripts("<script>never closed").is_empty());
+        assert!(inline_scripts("<script").is_empty());
+        let many = "<script>x</script>".repeat(MAX_INLINE_SCRIPTS + 5);
+        assert_eq!(inline_scripts(&many).len(), MAX_INLINE_SCRIPTS);
+        // Not at a character's border, and still no panic.
+        assert_eq!(inline_scripts("ä<script>ö</script>ü").len(), 1);
+    }
+
+    #[test]
+    fn the_policy_of_a_page_names_its_scripts() {
+        let policies = Policies::for_page("<script>start()</script>");
+        let policy = policies.page.to_str().unwrap();
+        assert!(policy.starts_with("default-src 'none'; script-src 'self' 'sha256-"));
+        assert!(!policy.contains("unsafe"));
+        let none = Policies::for_page("");
+        assert!(none.page.to_str().unwrap().contains("script-src 'self';"));
+    }
+
+    #[test]
+    fn an_origin_is_the_host_or_not() {
+        assert!(is_own("https://reader.example", "reader.example"));
+        assert!(is_own("https://Reader.Example", "reader.example"));
+        assert!(is_own("https://reader.example", "reader.example:443"));
+        assert!(is_own("http://reader.example", "reader.example:80"));
+        assert!(is_own("http://localhost:3000", "localhost:3000"));
+        assert!(is_own("http://[::1]:3000", "[::1]:3000"));
+        assert!(!is_own("https://reader.example", "reader.example:8443"));
+        assert!(!is_own("https://reader.example:8443", "reader.example"));
+        assert!(!is_own("http://localhost:3000", "localhost:3001"));
+        assert!(!is_own("https://evil.example", "reader.example"));
+        assert!(!is_own(
+            "https://reader.example.evil.example",
+            "reader.example"
+        ));
+        assert!(!is_own(
+            "https://evil.example/reader.example",
+            "reader.example"
+        ));
+        assert!(!is_own(
+            "https://reader.example@evil.example",
+            "reader.example"
+        ));
+        assert!(!is_own("null", "reader.example"));
+        assert!(!is_own("", "reader.example"));
+        assert!(!is_own("reader.example", "reader.example"));
+    }
+}

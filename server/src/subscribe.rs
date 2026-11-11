@@ -7,7 +7,7 @@
 //! exception: its feeds are taken on trust and fetched by the next round,
 //! and the ones that are none show their error in the tree.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use axum::{
     Json, Router,
@@ -146,10 +146,11 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
 /// a web page has the feeds it names, which nobody has looked at yet.
 async fn find(
     State(state): State<AppState>,
-    _session: Session,
+    session: Session,
     Json(find): Json<Find>,
 ) -> Result<Json<Found>, AppError> {
     let url = address(&find.url)?;
+    state.rates.lookup(session.account_id, Instant::now())?;
     let request = Request {
         accept: Some(ACCEPT),
         ..Request::new(url.as_str())
@@ -256,6 +257,7 @@ async fn add(
     if reads.is_some() {
         return Ok(false);
     }
+    tree::room_for_subscription(conn, account_id).await?;
     tree::room_for_feed(conn, account_id, folder).await?;
     let position = tree::end_of(conn, account_id, folder).await?;
     sqlx::query!(
@@ -310,7 +312,11 @@ async fn subscribe(
     drop(conn);
     let (id, fresh) = match feed {
         Some(id) => (id, false),
-        None => (create(&state, &url).await?, true),
+        None => {
+            // Only a feed nobody reads yet is fetched here.
+            state.rates.lookup(account_id, Instant::now())?;
+            (create(&state, &url).await?, true)
+        }
     };
     let mut tx = state.db.begin().await?;
     tree::lock(&mut tx, account_id).await?;

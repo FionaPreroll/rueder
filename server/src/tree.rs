@@ -23,6 +23,9 @@ use crate::{AppError, AppState, filters, sessions::Session};
 pub const MAX_TITLE: usize = 100;
 /// How many folders an account can have.
 pub const MAX_FOLDERS: i64 = 100;
+/// How many feeds an account can subscribe to. Every one of them is fetched
+/// for as long as somebody reads it.
+pub const MAX_FEEDS: i64 = 2000;
 /// How many feeds one folder, or the top level, can hold.
 pub const MAX_FEEDS_IN_FOLDER: i64 = 1000;
 /// The largest settings of an account, in bytes of JSON.
@@ -106,6 +109,23 @@ pub(crate) async fn room_for_feed(
     .await?;
     if have >= MAX_FEEDS_IN_FOLDER {
         return Err(bad("too many feeds in this folder"));
+    }
+    Ok(())
+}
+
+/// Whether the account can subscribe to one more feed.
+pub(crate) async fn room_for_subscription(
+    conn: &mut PgConnection,
+    account_id: i32,
+) -> Result<(), AppError> {
+    let have = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM subscriptions WHERE account_id = $1"#,
+        account_id,
+    )
+    .fetch_one(conn)
+    .await?;
+    if have >= MAX_FEEDS {
+        return Err(bad("too many feeds"));
     }
     Ok(())
 }

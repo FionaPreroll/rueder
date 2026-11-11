@@ -1,0 +1,13 @@
+# What `cargo audit` leaves out, each with its reason. `cargo audit` reads
+# Cargo.lock, which also lists crates that are never built.
+
+[advisories]
+ignore = [
+    # libsqlite3-sys (SQLite's C code). sqlx names its SQLite driver as an
+    # optional dependency, so the lockfile lists it, but rueder only turns on
+    # PostgreSQL: `cargo tree --target all -e all -i libsqlite3-sys` prints
+    # nothing, and `cargo deny`, which looks at what is built, does not see
+    # it. sqlx 0.9.0 does not allow a newer version. Take this line out when
+    # an update of sqlx does.
+    "RUSTSEC-2026-0459",
+]

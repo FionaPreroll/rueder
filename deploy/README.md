@@ -57,6 +57,8 @@ included:
 
 ```caddyfile
 reader.example {
+	# Browsers that were here once come back over HTTPS only.
+	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy 127.0.0.1:3000
 }
 ```
@@ -71,6 +73,9 @@ server {
     ssl_certificate     /etc/letsencrypt/live/reader.example/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/reader.example/privkey.pem;
 
+    # Browsers that were here once come back over HTTPS only.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -83,9 +88,14 @@ server {
 }
 ```
 
+rueder sends the other security headers itself, a Content-Security-Policy
+among them; the proxy need not add any. It has to pass the `Host` header on
+unchanged, as both examples do: rueder compares it with the `Origin` of a
+request to refuse changes that a page of another site asks for.
+
 Behind a proxy every connection comes from the proxy. Tell rueder which header
-carries the reader's address, so that the limit on wrong passwords counts per
-reader and not for everybody at once. Both examples above set
+carries the reader's address, so that the limits on requests and on wrong
+passwords count per reader and not for everybody at once. Both examples above set
 `X-Forwarded-For`:
 
 ```sh

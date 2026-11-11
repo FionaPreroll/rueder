@@ -2,6 +2,8 @@
 name = "rueder"
 version = "0.1.0"
 edition = "2024"
+# Not a crate for crates.io: the server is built from this repository.
+publish = false
 
 [dependencies]
 ammonia = "4.2.4"

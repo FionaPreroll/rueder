@@ -116,12 +116,8 @@ async fn change_password(
     // A stolen session must not be a way to try passwords without end.
     let (key, now) = (Key::name(&session.username), Instant::now());
     if let Some(wait) = state.logins.blocked(&key, now) {
-        return Ok((
-            StatusCode::TOO_MANY_REQUESTS,
-            [(header::RETRY_AFTER, wait.as_secs().max(1).to_string())],
-            "too many wrong tries, try again later",
-        )
-            .into_response());
+        let message = "too many wrong tries, try again later";
+        return Err(AppError::TooMany(wait, message));
     }
     let hash = sqlx::query_scalar!(
         "SELECT password_hash FROM accounts WHERE id = $1",
