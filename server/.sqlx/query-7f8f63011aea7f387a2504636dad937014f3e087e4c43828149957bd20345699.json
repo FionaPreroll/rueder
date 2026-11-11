@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT string_agg(\n                      '''' || replace(replace(w, '\\', '\\\\'), '''', '''''') || ''''\n                      || CASE WHEN char_length(w) >= 3 THEN ':*' ELSE '' END,\n                      ' & ' ORDER BY w) AS \"query\"\n           FROM unnest(tsvector_to_array(to_tsvector('simple', $1))) w",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "query",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7f8f63011aea7f387a2504636dad937014f3e087e4c43828149957bd20345699"
+}

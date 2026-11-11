@@ -4,11 +4,11 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching, cleaning, images, login, the API and its hardening
+## State: foundation, data, fetching, cleaning, images, login, the API, its hardening and the search
 
 What is here:
 
-- The schema (`migrations/0001_initial.sql`, comments in German).
+- The schema (`migrations/`, comments in German).
 - The article store (`src/articles.rs`): three tables, so that lists never read
   text and old versions never touch what new articles are read from. One query
   serves the lists of a feed, a folder and all feeds.
@@ -45,6 +45,11 @@ What is here:
   of a web page, OPML in and out, settings, the own sessions, and accounts for
   admins. Every query is bound to the account of the session; the list of
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
+- The search (`src/search.rs`): `GET /api/search` finds the articles of the
+  own feeds that have all the words, or words that begin with them, newest
+  first. A GIN index over `article_content` holds the words; the search goes
+  back in growing windows of the order of arrival, so that a common word costs
+  no more than a rare one, and says where to go on after half a second.
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
 - The API's types for the frontend (`src/typescript.rs`): every type that is
@@ -67,8 +72,8 @@ What is here:
   (`fuzz/`), whose corpus runs as an ordinary test, and a soak test of the
   whole program under the load of readers and fetching (`tests/soak.rs`).
 
-This is step 1 of the plan and work packages 2.1 to 2.11 of step 2. The search
-follows.
+This is step 1 of the plan and work packages 2.1 to 2.11 and 2.13 of step 2.
+The security review (2.12) follows.
 
 ## Commands
 

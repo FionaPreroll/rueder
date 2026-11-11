@@ -26,6 +26,12 @@
 
 	const demo = $derived(reader.demo);
 
+	/** Searching from the start page searches all articles. */
+	function search(words: string) {
+		if (reader.stream.kind === 'home' && words.trim()) reader.show({ kind: 'all' });
+		reader.query = words;
+	}
+
 	/** The draft's own switch: change the open article, to try the versions. */
 	function revise() {
 		const article = reader.current;
@@ -103,7 +109,8 @@
 			type="search"
 			class="h-8 w-full rounded border-line py-0 pr-2 pl-8 text-sm"
 			placeholder={m.nav.searchPlaceholder}
-			bind:value={reader.query}
+			value={reader.query}
+			oninput={(event) => search(event.currentTarget.value)}
 			onkeydown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
 		/>
 	</label>

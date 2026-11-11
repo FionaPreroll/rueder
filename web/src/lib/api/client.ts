@@ -34,6 +34,7 @@ import type {
 	RulePreview,
 	RuleScope,
 	RulesHits,
+	SearchHits,
 	ServerStatus,
 	StateChange,
 	Subscribed,
@@ -91,6 +92,18 @@ export interface PageQuery {
 
 /** The lists of articles: a feed's, a folder's, everything, the starred and the hidden. */
 export type ListStream = Exclude<Stream, { kind: 'home' }>;
+
+/** What a search on the server goes through: everything, a feed or a folder. */
+export type SearchScope = Extract<Stream, { kind: 'all' | 'feed' | 'folder' }>;
+
+/** Which part of what a search found is asked for. */
+export interface SearchPage {
+	/** Where to go on: `next` of the page before. */
+	before?: number;
+	limit: number;
+	/** Leave out what was read. */
+	unread?: boolean;
+}
 
 /** The number in an id of the page: 12 for "feed-12", which is feed 12 of the server. */
 export const serverId = (id: string) => Number(id.slice(id.lastIndexOf('-') + 1));
@@ -224,6 +237,14 @@ export const api = {
 		if (page.unread) query.set('unread', 'true');
 		const list = await call<List>('GET', `${listPath(stream)}?${query}`);
 		return list.articles;
+	},
+
+	search: (words: string, scope: SearchScope, page: SearchPage) => {
+		const query = new URLSearchParams({ q: words, limit: String(page.limit) });
+		if (scope.kind !== 'all') query.set(scope.kind, String(serverId(scope.id)));
+		if (page.before !== undefined) query.set('before', String(page.before));
+		if (page.unread) query.set('unread', 'true');
+		return call<SearchHits>('GET', `/search?${query}`);
 	},
 
 	article: (feedId: number, seq: number) =>

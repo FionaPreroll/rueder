@@ -1,0 +1,168 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n               a.teaser, a.author, a.url, a.thumbnail_url,\n               CASE WHEN a.seq <= hit.read_upto THEN NOT coalesce(st.kept_unread, false)\n                    ELSE coalesce(st.read, false) END AS \"read!\",\n               coalesce(st.starred, false) AS \"starred!\"\n        FROM (\n            SELECT x.feed_id, x.seq, x.id, s.read_upto\n            FROM article_content x\n            JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = x.feed_id\n            WHERE article_search_doc(x.title, x.author, x.tags, x.html) @@ $3::text::tsquery\n              AND x.id >= $4 AND x.id < $5 AND x.feed_id = ANY($2)\n              AND NOT EXISTS (\n                  SELECT 1 FROM article_states h\n                  WHERE h.account_id = $1 AND h.feed_id = x.feed_id AND h.seq = x.seq\n                    AND (h.hidden OR ($6 AND h.read)))\n              AND ($6 IS NOT TRUE OR x.seq > s.read_upto OR EXISTS (\n                  SELECT 1 FROM article_states k\n                  WHERE k.account_id = $1 AND k.feed_id = x.feed_id AND k.seq = x.seq\n                    AND k.kept_unread))\n            ORDER BY x.id DESC\n            LIMIT $7\n        ) hit\n        JOIN articles a ON a.feed_id = hit.feed_id AND a.seq = hit.seq\n        LEFT JOIN article_states st\n            ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n        ORDER BY a.id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "teaser",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "teaser"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "author",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "thumbnail_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "thumbnail_url"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "read!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "starred!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Text",
+        "Int8",
+        "Int8",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "c3e703269f5d7b72101e7518851e1580091bf4dba2b224ae516814346e441f60"
+}

@@ -1,6 +1,6 @@
 //! The API a logged-in reader's interface lives on: the tree of folders and
 //! feeds, the lists of articles, an article and its versions, and what was
-//! read.
+//! read, and the search.
 //!
 //! Every handler takes a [`Session`] and binds what it asks the database to
 //! that account: a feed nobody of this account subscribes to, or a folder of
@@ -29,7 +29,7 @@ use crate::{
     cleaning::{self, Base, Rules},
     filters,
     images::{Signer, Size},
-    reading,
+    reading, search,
     sessions::Session,
 };
 
@@ -46,7 +46,9 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Article>()
         .add::<Versions>()
         .add::<StateChange>()
-        .add::<Upto>();
+        .add::<Upto>()
+        .add::<SearchQuery>()
+        .add::<SearchHits>();
 }
 
 pub fn routes() -> Router<AppState> {
@@ -64,6 +66,7 @@ pub fn routes() -> Router<AppState> {
         .route("/feeds/{feed_id}/articles/{seq}/state", put(set_state))
         .route("/folders/{folder_id}/articles", get(folder_articles))
         .route("/folders/{folder_id}/read", post(read_folder))
+        .route("/search", get(search_articles))
 }
 
 impl AppState {
@@ -285,15 +288,15 @@ async fn labels_of(
     Ok(labels)
 }
 
-/// What a list sends out: pictures at the proxy, labels on each line.
-async fn listed(
+/// The lines of a list as they go out: pictures at the proxy, labels on each.
+async fn items(
     state: &AppState,
     session: &Session,
     articles: Vec<ListItem>,
-) -> Result<Json<List>, AppError> {
+) -> Result<Vec<Item>, AppError> {
     let keys: Vec<_> = articles.iter().map(|a| (a.feed_id, a.seq)).collect();
     let mut labels = labels_of(state, session, &keys).await?;
-    let articles = articles
+    Ok(articles
         .into_iter()
         .map(|mut article| {
             article.thumbnail_url = state.picture(Size::Thumbnail, article.thumbnail_url.take());
@@ -303,7 +306,15 @@ async fn listed(
                 labels: labels.unwrap_or_default(),
             }
         })
-        .collect();
+        .collect())
+}
+
+async fn listed(
+    state: &AppState,
+    session: &Session,
+    articles: Vec<ListItem>,
+) -> Result<Json<List>, AppError> {
+    let articles = items(state, session, articles).await?;
     Ok(Json(List { articles }))
 }
 
@@ -445,6 +456,72 @@ async fn feed_articles(
 ) -> Result<Json<List>, AppError> {
     subscribed(&state, &session, feed_id).await?;
     list(&state, &session, &[feed_id], query).await
+}
+
+/// A search through the articles of the account's feeds: `GET /api/search`.
+/// Answers with `SearchHits`.
+#[derive(Deserialize, TS)]
+#[ts(optional_fields)]
+struct SearchQuery {
+    /// The words. An article is found if it has all of them in its title, its
+    /// author, its tags or its text; a word of three letters or more also
+    /// finds the words that begin with it.
+    q: String,
+    /// Only in this feed.
+    feed: Option<i32>,
+    /// Only in the feeds of this folder and the folders inside it. Not
+    /// together with `feed`.
+    folder: Option<i32>,
+    /// Only what arrived before this `id`: `next` of the page before.
+    before: Option<i64>,
+    limit: Option<i64>,
+    /// Leave out what was read.
+    #[serde(default)]
+    #[ts(as = "Option<bool>")]
+    unread: bool,
+}
+
+/// A page of what a search found, the newest first.
+#[derive(Serialize, TS)]
+struct SearchHits {
+    articles: Vec<Item>,
+    /// Where the next page begins, as `before`; null if nothing older is
+    /// left. A page can hold fewer articles than asked for, even none, and
+    /// still have a `next`: the server searches for so long per request.
+    next: Option<i64>,
+}
+
+async fn search_articles(
+    State(state): State<AppState>,
+    session: Session,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<SearchHits>, AppError> {
+    let feeds = match (query.feed, query.folder) {
+        (Some(_), Some(_)) => return Err(AppError::BadRequest("give feed or folder".into())),
+        (Some(feed_id), None) => {
+            subscribed(&state, &session, feed_id).await?;
+            vec![feed_id]
+        }
+        (None, folder_id) => feeds_of(&state, &session, folder_id)
+            .await?
+            .ok_or(AppError::NotFound)?,
+    };
+    let page = search::Page {
+        before: query.before,
+        limit: query.limit.unwrap_or(PAGE).clamp(1, MAX_PAGE),
+        unread_only: query.unread,
+    };
+    match search::search(&state.db, session.account_id, &feeds, &query.q, page).await? {
+        search::Outcome::Found(hits) => Ok(Json(SearchHits {
+            articles: items(&state, &session, hits.articles).await?,
+            next: hits.next,
+        })),
+        search::Outcome::Unusable(why) => Err(AppError::BadRequest(why.into())),
+        search::Outcome::TooSlow => Err(AppError::Status(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "the search took too long".into(),
+        )),
+    }
 }
 
 /// An article for reading, with the labels the reader gave it.

@@ -326,6 +326,50 @@ export type Upto = {
 };
 
 /**
+ * A search through the articles of the account's feeds: `GET /api/search`.
+ * Answers with `SearchHits`.
+ */
+export type SearchQuery = {
+	/**
+	 * The words. An article is found if it has all of them in its title, its
+	 * author, its tags or its text; a word of three letters or more also
+	 * finds the words that begin with it.
+	 */
+	q: string,
+	/**
+	 * Only in this feed.
+	 */
+	feed?: number,
+	/**
+	 * Only in the feeds of this folder and the folders inside it. Not
+	 * together with `feed`.
+	 */
+	folder?: number,
+	/**
+	 * Only what arrived before this `id`: `next` of the page before.
+	 */
+	before?: number,
+	limit?: number,
+	/**
+	 * Leave out what was read.
+	 */
+	unread?: boolean,
+};
+
+/**
+ * A page of what a search found, the newest first.
+ */
+export type SearchHits = {
+	articles: Array<ListItem>,
+	/**
+	 * Where the next page begins, as `before`; null if nothing older is
+	 * left. A page can hold fewer articles than asked for, even none, and
+	 * still have a `next`: the server searches for so long per request.
+	 */
+	next: number | null,
+};
+
+/**
  * Where a node goes, seen from the node it is dropped on, as in the
  * interface's own model of the tree.
  *

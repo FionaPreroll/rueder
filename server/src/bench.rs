@@ -5,7 +5,9 @@
 //! The data is made by PostgreSQL itself, in the shape that matters for the
 //! queries: a few very large feeds and many small ones, arrivals mixed across
 //! feeds over ten years, readers in every state from "all read" to "never
-//! opened". Texts are random characters of realistic length.
+//! opened". Titles and texts are made of words of realistic length, drawn the
+//! way words of a language are: a few very often, most of them rarely (Zipf).
+//! That is what the size of the search index and the time of a search depend on.
 
 use std::{
     fmt,
@@ -16,8 +18,8 @@ use anyhow::{Context, bail};
 use sqlx::PgPool;
 
 use crate::{
-    articles::{self, Page},
-    reading,
+    articles::{self, NewArticle, Original, Page},
+    reading, search,
 };
 
 /// How much to make up.
@@ -34,6 +36,34 @@ const SLOTS: usize = 100_000;
 const BATCH: i64 = 200_000;
 /// The made-up articles span this long, up to now.
 const SPAN_SECONDS: i64 = 10 * 365 * 24 * 60 * 60;
+/// How many different words the made-up texts have. The word of rank n comes
+/// with a chance of about 1/n: the most common in nearly every article, the
+/// rarest in a handful of 10 million.
+pub const VOCABULARY: i32 = 1_000_000;
+/// Words are made of these, the most common of one, the rarest of four.
+const SYLLABLES: [&str; 32] = [
+    "en", "er", "de", "ka", "ma", "ri", "lo", "sa", "ni", "te", "ba", "mo", "li", "ra", "ve", "to",
+    "schu", "ber", "lin", "sta", "gra", "tor", "man", "hei", "kon", "wal", "fen", "stra", "mei",
+    "zu", "pol", "dun",
+];
+/// Words come in sentences of this many, which texts and titles are put
+/// together from.
+const SENTENCE: i32 = 9;
+/// At most this many different sentences are made.
+const SENTENCES: i64 = 4_000_000;
+
+/// The made-up word of rank `n`, from 1 (the most common) up to below
+/// [`VOCABULARY`]; the same as the database makes in [`SENTENCES_SQL`].
+pub fn word(n: i32) -> String {
+    let syllable = |shift: u32| SYLLABLES[(n as usize >> shift) % 32];
+    let mut word = String::from(syllable(0));
+    for (shift, from) in [(5, 32), (10, 1024), (15, 32768)] {
+        if n >= from {
+            word.push_str(syllable(shift));
+        }
+    }
+    word
+}
 
 /// Fills an empty database.
 pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
@@ -97,6 +127,29 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
     .execute(db)
     .await?;
 
+    // Sentences of words, which the articles' texts are put together from.
+    let sentences = (size.articles / 2).clamp(1000, SENTENCES);
+    sqlx::query("DROP TABLE IF EXISTS bench_sentences")
+        .execute(db)
+        .await?;
+    sqlx::query(
+        "CREATE UNLOGGED TABLE bench_sentences (k integer PRIMARY KEY, words text NOT NULL)",
+    )
+    .execute(db)
+    .await?;
+    sqlx::query(SENTENCES_SQL)
+        .bind(sentences)
+        .bind(SENTENCE)
+        .bind(VOCABULARY)
+        .bind(&SYLLABLES[..])
+        .execute(db)
+        .await
+        .context("making up sentences")?;
+    tracing::info!(
+        "{sentences} sentences after {} s",
+        started.elapsed().as_secs()
+    );
+
     let step = SPAN_SECONDS as f64 / size.articles as f64;
     sqlx::query(
         "SELECT ensure_versions_partition(d::date)
@@ -107,6 +160,20 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
     .fetch_all(db)
     .await?;
 
+    // The search index is built when all articles are in, the way the
+    // migration builds it for the articles already there: that is quicker than
+    // keeping it up to date article by article, and it is the time measured.
+    let (search_index, statistics): (String, i16) = sqlx::query_as(
+        "SELECT pg_get_indexdef(i.indexrelid), a.attstattarget
+         FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indexrelid AND a.attnum = 1
+         WHERE i.indexrelid = 'article_content_search'::regclass",
+    )
+    .fetch_one(db)
+    .await?;
+    sqlx::query("DROP INDEX article_content_search")
+        .execute(db)
+        .await?;
+
     let mut from = 1;
     while from <= size.articles {
         let to = (from + BATCH - 1).min(size.articles);
@@ -116,6 +183,7 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
             .bind(SLOTS as i32)
             .bind(size.articles)
             .bind(step)
+            .bind(sentences)
             .execute(db)
             .await
             .context("making up articles")?;
@@ -129,7 +197,27 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
     sqlx::query("SELECT setval('articles_id_seq', (SELECT max(id) FROM articles))")
         .fetch_one(db)
         .await?;
-    sqlx::query("DROP TABLE bench_slots").execute(db).await?;
+    sqlx::query("DROP TABLE bench_slots, bench_sentences")
+        .execute(db)
+        .await?;
+
+    let building = Instant::now();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(search_index))
+        .execute(db)
+        .await
+        .context("building the search index")?;
+    if statistics > 0 {
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "ALTER INDEX article_content_search ALTER COLUMN 1 SET STATISTICS {statistics}"
+        )))
+        .execute(db)
+        .await?;
+    }
+    tracing::info!(
+        "search index built in {} s, after {} s",
+        building.elapsed().as_secs(),
+        started.elapsed().as_secs()
+    );
 
     sqlx::query(FOLDERS).execute(db).await?;
     sqlx::query(SUBSCRIPTIONS).execute(db).await?;
@@ -162,9 +250,30 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// $1 sentences of $2 words each out of a vocabulary of $3 words, made of the
+/// syllables $4, the same way as [`word`].
+const SENTENCES_SQL: &str = r"
+INSERT INTO bench_sentences (k, words)
+SELECT k, (
+    SELECT string_agg(
+               $4[1 + w.n % 32]
+               || CASE WHEN w.n >= 32 THEN $4[1 + w.n / 32 % 32] ELSE '' END
+               || CASE WHEN w.n >= 1024 THEN $4[1 + w.n / 1024 % 32] ELSE '' END
+               || CASE WHEN w.n >= 32768 THEN $4[1 + w.n / 32768 % 32] ELSE '' END,
+               ' ' ORDER BY w.j)
+    FROM (
+        -- Spread evenly over the logarithm of the rank: rank n comes with a
+        -- chance of about 1/n.
+        SELECT j, least($3 - 1, floor(exp(
+                   (hashint8(k::bigint * 64 + j) & 16777215) / 16777216.0 * ln($3)))::integer) AS n
+        FROM generate_series(1, $2) j
+    ) w)
+FROM generate_series(0, $1 - 1) k
+";
+
 /// One batch of articles into the three tables. $1 and $2 are the first and last
 /// place in the order of arrival, $3 the number of slots, $4 the number of all
-/// articles, $5 the seconds between two arrivals.
+/// articles, $5 the seconds between two arrivals, $6 the number of sentences.
 ///
 /// A twentieth of the articles has a second version, a hundredth a third.
 const ARTICLES: &str = r"
@@ -181,11 +290,14 @@ WITH picked AS (
 ), sized AS MATERIALIZED (
     SELECT p.*,
            'https://feed-' || p.feed_id || '.example/posts/' || left(p.noise, 40) AS url,
-           -- Chunks of text: mostly short notes, some long reads.
+           -- Sentences of text: mostly short notes, some long reads.
            CASE WHEN p.r < 600 THEN 2 + p.r % 5
                 WHEN p.r < 950 THEN 6 + p.r % 10
                 WHEN p.r < 1015 THEN 16 + p.r % 32
-                ELSE 60 + p.r % 100 END AS chunks
+                ELSE 60 + p.r % 100 END AS chunks,
+           (SELECT b.words FROM bench_sentences b
+            WHERE b.k = (hashint8(p.g + 5) & 2147483647) % $6) AS title,
+           'author-' || (hashint8(p.g + 3) & 31) AS author
     FROM placed p
 ), counted AS (
     UPDATE feeds f SET last_seq = f.last_seq + c.count
@@ -199,19 +311,24 @@ WITH picked AS (
            CASE WHEN g % 100 = 0 THEN at + interval '40 days'
                 WHEN g % 20 = 0 THEN at + interval '2 days' END,
            1 + (g % 20 = 0)::integer + (g % 100 = 0)::integer,
-           left(noise, 25 + (r & 63)),
+           title,
            left(encode(sha512(('s' || g)::bytea), 'hex') || noise, 120 + (hashint8(g + 2) & 127)),
-           'author-' || (hashint8(g + 3) & 31),
+           author,
            url,
            CASE WHEN g % 2 = 0
                 THEN 'https://feed-' || feed_id || '.example/media/' || left(noise, 48) || '.jpg' END
     FROM sized ORDER BY g
 ), warm AS (
-    INSERT INTO article_content (feed_id, seq, guid_hash, checksum, guid, html, tags)
+    -- With the copy of id, title and author that the search index reads, which
+    -- the trigger cannot find in articles while this statement runs.
+    INSERT INTO article_content
+        (feed_id, seq, guid_hash, checksum, guid, html, tags, id, title, author)
     SELECT feed_id, seq, substring(sha256(url::bytea) FOR 16), sha256(('c' || g)::bytea), url,
-           (SELECT string_agg(encode(sha256((g || ':' || i)::bytea), 'hex'), '')
-            FROM generate_series(1, chunks) i),
-           ARRAY['tag-' || (r & 15), 'tag-' || (r & 7)]
+           '<p>' || (SELECT string_agg(b.words, '. ' ORDER BY i)
+                     FROM generate_series(1, chunks) i
+                     JOIN bench_sentences b ON b.k = (hashint8(g * 256 + i) & 2147483647) % $6)
+                 || '.</p>',
+           ARRAY['tag-' || (r & 15), 'tag-' || (r & 7)], g, title, author
     FROM sized ORDER BY g
 )
 INSERT INTO article_versions (feed_id, seq, version, fetched_at, checksum, raw)
@@ -360,6 +477,8 @@ pub struct Report {
     /// Table or index, and its size in bytes.
     pub sizes: Vec<(String, i64)>,
     pub timings: Vec<Timing>,
+    /// For each kind of search, a word of that kind and how many articles have it.
+    pub searched: Vec<(&'static str, String, i64)>,
 }
 
 impl fmt::Display for Report {
@@ -383,6 +502,11 @@ impl fmt::Display for Report {
                 ms(t.p99),
                 ms(t.max)
             )?;
+        }
+        writeln!(f, "\n| Search | For example | Articles with it |")?;
+        writeln!(f, "|---|---|---:|")?;
+        for (what, word, articles) in &self.searched {
+            writeln!(f, "| {what} | {word} | {articles} |")?;
         }
         writeln!(f, "\n| Table or index | Size |")?;
         writeln!(f, "|---|---:|")?;
@@ -409,7 +533,11 @@ impl Random {
     }
 
     fn pick<T: Copy>(&mut self, from: &[T]) -> T {
-        from[self.below(from.len() as i64) as usize]
+        *self.pick_ref(from)
+    }
+
+    fn pick_ref<'a, T>(&mut self, from: &'a [T]) -> &'a T {
+        &from[self.below(from.len() as i64) as usize]
     }
 }
 
@@ -551,6 +679,156 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         .fetch_all(db)
         .await?
     });
+    // Searches, each kind with words of its own frequency, for a random
+    // account in all its feeds. Rank n has a chance of about 1/n per word.
+    let mut gave_up = 0;
+    let mut searched = Vec::new();
+    macro_rules! search {
+        ($name:literal, $words:expr, $before:expr, $unread:expr) => {{
+            searched.push(($name, $words, 0));
+            time!($name, {
+                let account_id = random.pick(&accounts);
+                let words: String = $words;
+                let page = search::Page {
+                    before: $before,
+                    limit: 50,
+                    unread_only: $unread,
+                };
+                match search::search(db, account_id, &feeds_of(account_id), &words, page).await? {
+                    search::Outcome::Found(hits) => hits.articles.len(),
+                    search::Outcome::TooSlow => {
+                        gave_up += 1;
+                        0
+                    }
+                    search::Outcome::Unusable(why) => bail!("searching for {words}: {why}"),
+                }
+            });
+        }};
+    }
+    let rank = |random: &mut Random, from: i32, to: i32| {
+        word(from + random.below(i64::from(to.min(VOCABULARY) - from)) as i32)
+    };
+    search!(
+        "Search, a very common word",
+        rank(&mut random, 1, 10),
+        None,
+        false
+    );
+    search!(
+        "Search, a common word",
+        rank(&mut random, 100, 1000),
+        None,
+        false
+    );
+    search!(
+        "Search, a rarer word",
+        rank(&mut random, 10_000, 100_000),
+        None,
+        false
+    );
+    search!(
+        "Search, a rare word",
+        rank(&mut random, 300_000, VOCABULARY),
+        None,
+        false
+    );
+    search!(
+        "Search, two words",
+        format!(
+            "{} {}",
+            rank(&mut random, 100, 1000),
+            rank(&mut random, 10_000, 100_000)
+        ),
+        None,
+        false
+    );
+    search!(
+        "Search, a common word, deep inside",
+        rank(&mut random, 100, 1000),
+        Some(1 + random.below(max_id)),
+        false
+    );
+    search!(
+        "Search, a rarer word, unread only",
+        rank(&mut random, 10_000, 100_000),
+        None,
+        true
+    );
+    if gave_up > 0 {
+        tracing::warn!("{gave_up} searches took longer than {:?}", search::TIMEOUT);
+    }
+    // How many articles have a word of each kind: the first one searched for.
+    for (_, words, articles) in &mut searched {
+        if let Some(query) = search::query(db, words).await? {
+            *articles = sqlx::query_scalar(
+                "SELECT count(*) FROM article_content
+                 WHERE article_search_doc(title, author, tags, html) @@ $1::text::tsquery",
+            )
+            .bind(query)
+            .fetch_one(db)
+            .await?;
+        }
+    }
+
+    // Fetching: a feed brings 20 new articles, with texts like those stored.
+    // Timed with the search index and without it, in a transaction that is
+    // rolled back, so nothing stays.
+    let texts: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT title, author, html FROM article_content WHERE id % 97 = 0 LIMIT 1000",
+    )
+    .fetch_all(db)
+    .await?;
+    if texts.is_empty() {
+        bail!("nothing to measure: no article texts");
+    }
+    for (name, with_index) in [
+        ("Store 20 new articles of a feed", true),
+        (
+            "Store 20 new articles of a feed, without the search index",
+            false,
+        ),
+    ] {
+        let mut times = Vec::with_capacity(runs);
+        for run in 0..runs {
+            let now = time::OffsetDateTime::now_utc();
+            let batch: Vec<_> = (0..20)
+                .map(|n| {
+                    let (title, author, html) = random.pick_ref(&texts);
+                    NewArticle {
+                        guid: format!("https://bench.example/{run}/{n}"),
+                        published_at: now,
+                        fetched_at: now,
+                        original: Original {
+                            title: title.clone(),
+                            content: html.clone(),
+                            authors: vec![author.clone()],
+                            tags: Vec::new(),
+                            url: None,
+                        },
+                        teaser: html.chars().take(200).collect(),
+                        thumbnail_url: None,
+                        html: html.clone(),
+                        enclosures: serde_json::json!([]),
+                        image_url: None,
+                        image_title: None,
+                    }
+                })
+                .collect();
+            let feed_id = random.pick(&subs).feed_id;
+            let mut tx = db.begin().await?;
+            if !with_index {
+                sqlx::query("DROP INDEX article_content_search")
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            let started = Instant::now();
+            articles::insert(&mut tx, feed_id, &batch).await?;
+            times.push(started.elapsed());
+            tx.rollback().await?;
+        }
+        timings.push(Timing::of(name, times));
+    }
+
     // The last two change what was read. It is put back after them, so that a
     // second run measures the same thing as the first.
     sqlx::raw_sql(
@@ -616,5 +894,6 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         states: count("article_states").await?,
         sizes,
         timings,
+        searched,
     })
 }

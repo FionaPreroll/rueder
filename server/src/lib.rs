@@ -20,6 +20,7 @@ pub mod profile;
 pub mod rate;
 pub mod reading;
 pub mod reclean;
+pub mod search;
 pub mod sessions;
 pub mod status;
 pub mod subscribe;

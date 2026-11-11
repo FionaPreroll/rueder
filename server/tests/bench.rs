@@ -66,7 +66,7 @@ async fn made_up_data_can_be_measured(db: PgPool) {
         (report.accounts, report.feeds, report.articles),
         (3, 12, 3000)
     );
-    assert_eq!(report.timings.len(), 14);
+    assert_eq!(report.timings.len(), 23);
     assert!(
         report
             .timings
@@ -76,6 +76,48 @@ async fn made_up_data_can_be_measured(db: PgPool) {
     let printed = report.to_string();
     assert!(printed.contains("| All feeds, unread only |"));
     assert!(printed.contains("| articles_pkey |"));
+    assert!(printed.contains("| Search, a rare word |"));
+    assert!(printed.contains("| article_content_search |"));
+    // The most common word is in most articles, and the search finds it.
+    let (_, word, articles) = &report.searched[0];
+    assert!(*articles > 1000, "{word}: {articles}");
+    assert_eq!(bench::word(1), "er");
+    assert_eq!(bench::word(32 * 32 + 3), "kaener");
+}
+
+/// The made-up texts are words, and the search index is there afterwards,
+/// with the statistics the migration gave it.
+#[sqlx::test]
+async fn made_up_texts_are_words(db: PgPool) {
+    let size = Size {
+        accounts: 2,
+        feeds: 3,
+        articles: 200,
+    };
+    bench::generate(&db, size).await.unwrap();
+    let (title, html): (String, String) =
+        sqlx::query_as("SELECT title, html FROM article_content ORDER BY id LIMIT 1")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(title.split(' ').count(), 9, "{title}");
+    assert!(html.starts_with("<p>") && html.ends_with(".</p>"), "{html}");
+    let statistics: i16 = sqlx::query_scalar(
+        "SELECT attstattarget FROM pg_attribute
+         WHERE attrelid = 'article_content_search'::regclass AND attnum = 1",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(statistics, 1000);
+    let copies: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM articles a JOIN article_content c USING (feed_id, seq)
+         WHERE (a.id, a.title, a.author) IS DISTINCT FROM (c.id, c.title, c.author)",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(copies, 0);
 }
 
 #[sqlx::test]
