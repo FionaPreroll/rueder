@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Reader } from '#lib/demo/reader.svelte.ts';
+import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import type { Stream } from '#lib/model.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import ArticleList from './ArticleList.svelte';
@@ -9,7 +9,7 @@ import ArticleList from './ArticleList.svelte';
 const now = Date.parse('2026-11-10T14:30:00Z');
 
 function setup(stream: Stream = { kind: 'feed', id: 'feed-tagesbote' }) {
-	const reader = new Reader(() => now);
+	const reader = new DemoReader(() => now);
 	reader.show(stream);
 	const onversions = vi.fn();
 	const { container } = render(ArticleList, { reader, now, onversions });

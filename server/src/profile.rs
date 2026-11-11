@@ -12,12 +12,23 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use ts_rs::TS;
 
 use crate::{
     AppError, AppState, accounts,
     login::Key,
     sessions::{self, Session},
 };
+
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types
+        .add::<Device>()
+        .add::<NewPassword>()
+        .add::<Listed>()
+        .add::<NewAccount>()
+        .add::<Created>();
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -28,13 +39,18 @@ pub fn routes() -> Router<AppState> {
 }
 
 /// One place a reader is logged in.
-#[derive(Serialize)]
+///
+/// `GET /api/sessions` answers with a list of them; `DELETE /api/sessions/{id}`
+/// ends one, `DELETE /api/sessions` all but the one that asks.
+#[derive(Serialize, TS)]
 struct Device {
     /// A name for the session that is not its token and leads to none.
     id: String,
     #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
     created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
     last_seen_at: OffsetDateTime,
     /// The session that asks.
     current: bool,
@@ -98,10 +114,12 @@ async fn end_others(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
+/// What `PUT /api/password` reads.
+#[derive(Deserialize, TS)]
 struct NewPassword {
     /// The password so far. An account that has none needs none.
     #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
     current: String,
     new: String,
 }
@@ -150,13 +168,17 @@ fn admin(session: &Session) -> Result<(), AppError> {
 }
 
 /// An account as an admin sees it.
-#[derive(Serialize)]
+///
+/// `GET /api/accounts` answers with a list of them, for admins only.
+#[derive(Serialize, TS)]
+#[ts(rename = "Account")]
 struct Listed {
     id: i32,
     username: String,
     is_admin: bool,
     has_password: bool,
     #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
     created_at: OffsetDateTime,
 }
 
@@ -177,16 +199,19 @@ async fn all_accounts(
     Ok(Json(listed.collect()))
 }
 
-#[derive(Deserialize)]
+/// What `POST /api/accounts` reads, for admins only. It answers with `Created`.
+#[derive(Deserialize, TS)]
 struct NewAccount {
     username: String,
     /// The first password, which the admin hands over and the reader changes.
     password: String,
     #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
     is_admin: bool,
 }
 
-#[derive(Serialize)]
+/// The answer to making something: the number it got.
+#[derive(Serialize, TS)]
 struct Created {
     id: i32,
 }

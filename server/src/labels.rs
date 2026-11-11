@@ -7,6 +7,7 @@ use axum::{
     routing::{get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{
     AppError, AppState,
@@ -16,6 +17,16 @@ use crate::{
 
 /// How many labels an account can have.
 pub const MAX_LABELS: i64 = 100;
+
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types
+        .add::<Label>()
+        .add::<NewLabel>()
+        .add::<Created>()
+        .add::<Change>()
+        .add::<Order>();
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -28,7 +39,8 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-#[derive(Serialize)]
+/// A label. `GET /api/labels` answers with a list of them.
+#[derive(Serialize, TS)]
 struct Label {
     id: i32,
     title: String,
@@ -71,13 +83,15 @@ async fn labels(
     Ok(Json(labels))
 }
 
-#[derive(Deserialize)]
+/// What `POST /api/labels` reads. It answers with `Created`.
+#[derive(Deserialize, TS)]
 struct NewLabel {
     title: String,
     color: String,
 }
 
-#[derive(Serialize)]
+/// The answer to making something: the number it got.
+#[derive(Serialize, TS)]
 struct Created {
     id: i32,
 }
@@ -107,7 +121,10 @@ async fn add(
 }
 
 /// What to change about a label; what is left out stays.
-#[derive(Deserialize)]
+///
+/// What `PATCH /api/labels/{id}` reads.
+#[derive(Deserialize, TS)]
+#[ts(rename = "LabelChange", optional_fields = nullable)]
 struct Change {
     title: Option<String>,
     color: Option<String>,
@@ -160,7 +177,8 @@ async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
+/// A new order: every number once, in the order they shall stand in.
+#[derive(Deserialize, TS)]
 struct Order {
     ids: Vec<i32>,
 }

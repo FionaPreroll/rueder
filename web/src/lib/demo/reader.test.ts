@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FilterRule } from '#lib/filters.ts';
 import { MAX_FOLDER_DEPTH } from '#lib/model.ts';
 import { feedIds, findNode } from '#lib/tree.ts';
-import { Reader } from './reader.svelte.ts';
+import { DemoReader } from './reader.svelte.ts';
 
 const start = Date.parse('2026-11-10T14:30:00Z');
 const DAY = 86_400_000;
@@ -10,12 +10,12 @@ const DAY = 86_400_000;
 /** A reader at a fixed time, which the test can move on. */
 function setup() {
 	const clock = { now: start };
-	const reader = new Reader(() => clock.now);
+	const reader = new DemoReader(() => clock.now);
 	return { reader, clock };
 }
 
 /** The unread count worked out the slow way, article by article. */
-const counted = (reader: Reader, feedId: string) =>
+const counted = (reader: DemoReader, feedId: string) =>
 	reader.articles[feedId].filter((article) => !reader.isHidden(article) && !reader.isRead(article))
 		.length;
 

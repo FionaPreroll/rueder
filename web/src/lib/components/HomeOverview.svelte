@@ -1,36 +1,18 @@
 <script lang="ts">
 	// The start page, after Google Reader's: what is new in each subscription, and
 	// beside it the latest stars, feeds whose fetch fails, and a few tips.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { formatAgo } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
 	import type { Article } from '#lib/model.ts';
-	import { feedIds } from '#lib/tree.ts';
 	import FeedIcon from './FeedIcon.svelte';
 	import Icon from './Icon.svelte';
 
 	let { reader, now }: { reader: Reader; now: number } = $props();
 
-	/** Feeds with something unread, each with its two newest unread articles. */
-	const fresh = $derived(
-		feedIds(reader.tree)
-			.map((id) => {
-				const unread = (reader.articles[id] ?? []).filter(
-					(article) => !reader.isHidden(article) && !reader.isRead(article)
-				);
-				return { feed: reader.feeds[id], count: unread.length, top: unread.slice(-2).reverse() };
-			})
-			.filter((entry) => entry.count > 0)
-	);
-
-	const starred = $derived(
-		Object.values(reader.articles)
-			.flat()
-			.filter((article) => reader.isStarred(article))
-			.sort((a, b) => b.publishedAt - a.publishedAt)
-			.slice(0, 5)
-	);
+	const fresh = $derived(reader.fresh);
+	const starred = $derived(reader.latestStarred);
 
 	const broken = $derived(Object.values(reader.feeds).filter((feed) => feed.error));
 
@@ -63,7 +45,7 @@
 							<li>
 								<button
 									type="button"
-									class="cursor-pointer text-left text-sm font-semibold hover:underline"
+									class="cursor-pointer text-left text-sm font-semibold wrap-anywhere hover:underline"
 									onclick={() => open(article)}
 								>
 									{article.title}
@@ -74,7 +56,9 @@
 					</ul>
 				</div>
 			{:else}
-				<p class="mt-5 text-soft">{m.home.allRead}</p>
+				<p class="mt-5 text-soft" role={reader.loading ? 'status' : undefined}>
+					{reader.loading ? m.list.loadingList : m.home.allRead}
+				</p>
 			{/each}
 		</section>
 
@@ -86,13 +70,13 @@
 						<li>
 							<button
 								type="button"
-								class="cursor-pointer text-left text-link hover:underline"
+								class="cursor-pointer text-left wrap-anywhere text-link hover:underline"
 								onclick={() => open(article)}
 							>
 								{article.title}
 							</button>
 							<p class="text-xs text-soft">
-								{reader.feeds[article.feedId].title} · {formatAgo(article.publishedAt, now)}
+								{reader.feeds[article.feedId]?.title} · {formatAgo(article.publishedAt, now)}
 							</p>
 						</li>
 					{:else}

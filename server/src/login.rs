@@ -19,6 +19,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{
     AppError, AppState, accounts,
@@ -158,18 +159,45 @@ impl FromRequestParts<AppState> for Sender {
     }
 }
 
-#[derive(Deserialize)]
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types.add::<Credentials>().add::<Me>().add::<Ways>();
+}
+
+/// What `POST /api/login` reads. It answers with `Me` and sets the session's
+/// cookie.
+#[derive(Deserialize, TS)]
 pub struct Credentials {
     username: String,
     password: String,
 }
 
 /// Who is logged in, as the API says it.
-#[derive(Serialize)]
+///
+/// `GET /api/me` and `POST /api/login` answer with it.
+#[derive(Serialize, TS)]
 pub struct Me {
     id: i32,
     username: String,
     is_admin: bool,
+}
+
+/// The ways to log in this server has besides name and password.
+///
+/// `GET /api/login/ways` answers with it, to anybody.
+#[derive(Serialize, TS)]
+#[ts(rename = "LoginWays")]
+pub struct Ways {
+    /// Through the OpenID Connect provider, at `/api/oidc/start`.
+    oidc: bool,
+}
+
+/// What the login page asks before anybody is logged in, to know whether to
+/// offer the way through the provider. It says nothing about any account.
+pub async fn ways(State(state): State<AppState>) -> Json<Ways> {
+    Json(Ways {
+        oidc: state.oidc.is_some(),
+    })
 }
 
 pub async fn login(

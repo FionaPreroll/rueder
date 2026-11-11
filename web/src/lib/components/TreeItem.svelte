@@ -14,7 +14,7 @@
 	// sorted by dragging them (before, after or into a folder), or with Alt and the
 	// arrow keys.
 	import { tick } from 'svelte';
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { TreeNode } from '#lib/model.ts';
 	import Counter from './Counter.svelte';

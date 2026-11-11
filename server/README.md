@@ -47,6 +47,9 @@ What is here:
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
+- The API's types for the frontend (`src/typescript.rs`): every type that is
+  sent or read as JSON is written to `../web/src/lib/api/types.ts`, and a test
+  fails when that file is out of date.
 - Hardening (`src/hardening.rs`, `src/rate.rs`): every answer carries a
   Content-Security-Policy and the other security headers, a request that
   changes something is refused when a page of another site sent it, each
@@ -60,8 +63,8 @@ What is here:
   `rueder health`, which asks the running server whether it is well. How to
   install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan and work packages 2.1 to 2.7, 2.9 and 2.10 of
-step 2. The API's types for the frontend, fuzzing and the search follow.
+This is step 1 of the plan and work packages 2.1 to 2.10 of step 2. Fuzzing
+and the search follow.
 
 ## Commands
 
@@ -75,6 +78,7 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo sqlx prepare -- --all-targets  # after changing a query: renew the cache in .sqlx/
 cargo audit && cargo deny check      # after changing dependencies: advisories, licenses, sources
+UPDATE_API_TYPES=1 cargo test --test api_types   # after changing a type of the API: write the frontend's types anew
 ```
 
 Queries are checked against the schema when compiling. Without a database the
@@ -82,6 +86,12 @@ build uses the cache in `.sqlx/` (`SQLX_OFFLINE=true`, as in CI); `cargo sqlx` c
 with `cargo install sqlx-cli`. `cargo audit` and `cargo deny` come with
 `cargo install cargo-audit cargo-deny`; what they allow is in `deny.toml`, and an
 advisory that does not apply is listed with its reason in `.cargo/audit.toml`.
+
+A type that goes over the API as JSON derives `TS` next to `Serialize` or
+`Deserialize`, and its module lists it in its function `types`. In TypeScript
+all types share one room: where the Rust name says little outside its module,
+`#[ts(rename = "...")]` gives the type a name of its own there. The comment
+on a type goes into the file with it and names the endpoint the type is for.
 
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 (default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).

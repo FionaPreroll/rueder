@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Subscribing to a feed by its address.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import Dialog from './Dialog.svelte';
 

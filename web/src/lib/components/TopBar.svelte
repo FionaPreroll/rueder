@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The bar across the top: the sidebar switch, the name, the search, and on the
-	// right whether updates are live, the keyboard help and the settings.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	// right the keyboard help, the settings and who is logged in. With made-up data
+	// there are the draft's own switches instead of an account.
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
@@ -20,10 +21,12 @@
 		onhelp: () => void;
 	} = $props();
 
+	const demo = $derived(reader.demo);
+
 	/** The draft's own switch: change the open article, to try the versions. */
 	function revise() {
 		const article = reader.current;
-		if (article) reader.revise(article, m.demo.revised);
+		if (article) demo?.revise(article, m.demo.revised);
 	}
 </script>
 
@@ -55,30 +58,32 @@
 		<span class="hidden sm:inline">rueder</span>
 	</button>
 
-	<Menu
-		class="cursor-pointer rounded-full border border-line px-2 py-0.5 text-xs font-medium text-soft hover:bg-hover"
-		title={m.demo.note}
-	>
-		{#snippet button()}
-			{m.demo.badge}
-		{/snippet}
-		<p class="max-w-64 px-3 py-1.5 text-xs text-soft">{m.demo.note}</p>
-		<button type="button" role="menuitem" class="menu-item" onclick={() => reader.arrive()}>
-			<Icon name="plus" />
-			{m.demo.arrive}
-		</button>
-		<button
-			type="button"
-			role="menuitem"
-			class="menu-item disabled:opacity-50"
-			disabled={!reader.current}
-			title={reader.current ? undefined : m.demo.reviseHint}
-			onclick={revise}
+	{#if demo}
+		<Menu
+			class="cursor-pointer rounded-full border border-line px-2 py-0.5 text-xs font-medium text-soft hover:bg-hover"
+			title={m.demo.note}
 		>
-			<Icon name="versions" />
-			{m.demo.revise}
-		</button>
-	</Menu>
+			{#snippet button()}
+				{m.demo.badge}
+			{/snippet}
+			<p class="max-w-64 px-3 py-1.5 text-xs text-soft">{m.demo.note}</p>
+			<button type="button" role="menuitem" class="menu-item" onclick={() => demo?.arrive()}>
+				<Icon name="plus" />
+				{m.demo.arrive}
+			</button>
+			<button
+				type="button"
+				role="menuitem"
+				class="menu-item disabled:opacity-50"
+				disabled={!reader.current}
+				title={reader.current ? undefined : m.demo.reviseHint}
+				onclick={revise}
+			>
+				<Icon name="versions" />
+				{m.demo.revise}
+			</button>
+		</Menu>
+	{/if}
 
 	<label class="relative mx-auto w-full max-w-xl">
 		<span class="sr-only">{m.nav.search}</span>
@@ -94,16 +99,18 @@
 		/>
 	</label>
 
-	<button
-		type="button"
-		class="plain h-8 gap-1.5 px-2 text-sm"
-		aria-pressed={reader.live}
-		title={reader.live ? m.nav.liveOn : m.nav.liveOff}
-		onclick={() => (reader.live = !reader.live)}
-	>
-		<span class={['size-2 rounded-full', reader.live ? 'animate-pulse bg-live' : 'bg-soft']}></span>
-		<span class="hidden md:inline">{reader.live ? m.nav.live : m.nav.paused}</span>
-	</button>
+	{#if demo}
+		<button
+			type="button"
+			class="plain h-8 gap-1.5 px-2 text-sm"
+			aria-pressed={demo.live}
+			title={demo.live ? m.nav.liveOn : m.nav.liveOff}
+			onclick={() => (demo.live = !demo.live)}
+		>
+			<span class={['size-2 rounded-full', demo.live ? 'animate-pulse bg-live' : 'bg-soft']}></span>
+			<span class="hidden md:inline">{demo.live ? m.nav.live : m.nav.paused}</span>
+		</button>
+	{/if}
 	<button
 		type="button"
 		class="plain hidden size-9 sm:inline-flex"
@@ -122,4 +129,21 @@
 	>
 		<Icon name="settings" class="size-5" />
 	</button>
+	{#if reader.account}
+		<Menu
+			class="plain h-9 gap-1.5 px-2 text-sm"
+			align="right"
+			label={m.nav.account(reader.account.name)}
+			title={m.nav.account(reader.account.name)}
+		>
+			{#snippet button()}
+				<Icon name="user" class="size-5" />
+			{/snippet}
+			<p class="px-3 py-1.5 text-xs text-soft">{m.nav.account(reader.account.name)}</p>
+			<button type="button" role="menuitem" class="menu-item" onclick={() => reader.signOut()}>
+				<Icon name="logout" />
+				{m.nav.logout}
+			</button>
+		</Menu>
+	{/if}
 </header>
