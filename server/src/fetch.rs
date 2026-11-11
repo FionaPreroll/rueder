@@ -7,7 +7,11 @@
 //! one is due. A failure is written to the feed, where the interface shows it,
 //! and makes the next try come later each time.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::Context;
 use reqwest::{StatusCode, Url};
@@ -21,6 +25,7 @@ use crate::{
     feeds::{self, Stored},
     filters,
     http_client::{Agent, HttpClient, Request},
+    monitor::{Fetched, Monitor, Round},
 };
 
 /// The shortest and the longest time between two fetches of a feed, in seconds.
@@ -197,13 +202,15 @@ async fn failed(db: &PgPool, feed_id: i32, message: String) -> anyhow::Result<Ou
 
 /// Fetches the feeds that are due and have somebody reading them, and returns
 /// how many that were. At most [`AT_ONCE`] at a time, and never two from the
-/// same host at once.
+/// same host at once. Each fetch and the round count for the status page.
 pub async fn fetch_due(
     db: &PgPool,
     client: &HttpClient,
     rules: &Arc<Rules>,
     events: &Events,
+    monitor: &Arc<Monitor>,
 ) -> anyhow::Result<usize> {
+    let (started, began) = (Instant::now(), OffsetDateTime::now_utc());
     // Taking a feed moves its next fetch away, so a second server or a round
     // that overlaps does not take it too. The fetch sets the real time.
     let due = sqlx::query!(
@@ -238,13 +245,25 @@ pub async fn fetch_due(
     let mut fetches = JoinSet::new();
     for feeds in hosts.into_values() {
         let (db, client, at_once) = (db.clone(), client.clone(), at_once.clone());
-        let (rules, events) = (rules.clone(), events.clone());
+        let (rules, events, monitor) = (rules.clone(), events.clone(), monitor.clone());
         fetches.spawn(async move {
             for (feed_id, was_failing) in feeds {
                 let Ok(_permit) = at_once.acquire().await else {
                     return;
                 };
-                let outcome = match fetch_feed(&db, &client, &rules, feed_id).await {
+                let fetching = Instant::now();
+                let result = fetch_feed(&db, &client, &rules, feed_id).await;
+                let fetched = match &result {
+                    Ok(Outcome::Fetched(stored)) => Fetched::Fetched {
+                        new: u64::try_from(stored.new).unwrap_or(0),
+                    },
+                    Ok(Outcome::NotModified) => Fetched::Unchanged,
+                    Ok(Outcome::Failed(_)) => Fetched::Failed,
+                    Err(_) => Fetched::Broken,
+                };
+                let now = Instant::now();
+                monitor.fetch(fetched, now - fetching, now);
+                let outcome = match result {
                     Ok(outcome) => outcome,
                     Err(err) => {
                         tracing::error!(feed_id, "fetching: {err:#}");
@@ -264,6 +283,11 @@ pub async fn fetch_due(
         });
     }
     while fetches.join_next().await.is_some() {}
+    monitor.round(Round {
+        at: began,
+        feeds: count,
+        took: started.elapsed(),
+    });
     Ok(count)
 }
 
@@ -311,11 +335,18 @@ pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<Change>
 }
 
 /// Fetches what is due, again and again, for as long as the server runs.
-pub async fn run(db: PgPool, client: HttpClient, rules: Arc<Rules>, events: Events) {
+pub async fn run(
+    db: PgPool,
+    client: HttpClient,
+    rules: Arc<Rules>,
+    events: Events,
+    monitor: Arc<Monitor>,
+) {
+    monitor.fetching_runs();
     let mut every = tokio::time::interval(Duration::from_secs(30));
     loop {
         every.tick().await;
-        if let Err(err) = fetch_due(&db, &client, &rules, &events).await {
+        if let Err(err) = fetch_due(&db, &client, &rules, &events, &monitor).await {
             tracing::error!("fetching feeds: {err:#}");
         }
     }

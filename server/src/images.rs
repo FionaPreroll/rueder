@@ -40,6 +40,7 @@ use url::Url;
 use crate::{
     cleaning,
     http_client::{self, HttpClient, Request},
+    monitor::{self, Window},
 };
 
 /// The most pixels an image may have. Decoding takes four bytes for each.
@@ -377,6 +378,11 @@ impl Cache {
         self.used.load(Ordering::Relaxed)
     }
 
+    /// How many bytes it may hold.
+    pub fn max_bytes(&self) -> u64 {
+        self.max_bytes
+    }
+
     /// Removes the files unused longest until the cache is well under its
     /// limit, and files a write left behind unfinished.
     pub fn sweep(&self) {
@@ -463,6 +469,8 @@ pub struct ImageProxy {
     decodes: Arc<Semaphore>,
     /// Sources that failed, and until when they are left alone.
     failed: Mutex<HashMap<String, Instant>>,
+    /// What it served in the last hour, for the status page.
+    served: Mutex<Window<monitor::Images>>,
 }
 
 impl ImageProxy {
@@ -480,6 +488,7 @@ impl ImageProxy {
             fetches: Semaphore::new(FETCHES_AT_ONCE),
             decodes: Arc::new(Semaphore::new(DECODES_AT_ONCE)),
             failed: Mutex::default(),
+            served: Mutex::default(),
         })
     }
 
@@ -492,6 +501,22 @@ impl ImageProxy {
         &self.cache
     }
 
+    /// What the proxy served in the last hour.
+    pub fn served(&self, now: Instant) -> monitor::Images {
+        self.served
+            .lock()
+            .map(|window| window.last_hour(now))
+            .unwrap_or_default()
+    }
+
+    /// How many sources are left alone for now because they failed.
+    pub fn failing_sources(&self) -> usize {
+        let now = Instant::now();
+        self.failed.lock().map_or(0, |failed| {
+            failed.values().filter(|until| **until > now).count()
+        })
+    }
+
     /// The image behind an address of the proxy: from the cache, or fetched
     /// from its source, checked, made to fit and kept.
     pub async fn get(
@@ -500,6 +525,35 @@ impl ImageProxy {
         size: &str,
         address: &str,
     ) -> Result<Picture, Refused> {
+        let started = Instant::now();
+        let found = self.find(signature, size, address).await;
+        let cached = matches!(found, Ok((_, true)));
+        let got = found.map(|(picture, _)| picture);
+        let now = Instant::now();
+        if let Ok(mut window) = self.served.lock() {
+            let served = window.at(now);
+            match &got {
+                Ok(_) if cached => served.cached += 1,
+                Ok(_) => served.fetched += 1,
+                Err(Refused::NotFound) => served.not_found += 1,
+                Err(Refused::Source(_)) => served.source_failed += 1,
+                Err(Refused::NotAnImage) => served.not_image += 1,
+                Err(Refused::TooLarge) => served.too_large += 1,
+            }
+            if !cached && !matches!(got, Err(Refused::NotFound)) {
+                served.timing.note(now - started);
+            }
+        }
+        got
+    }
+
+    /// The image, and whether it came from the cache.
+    async fn find(
+        &self,
+        signature: &str,
+        size: &str,
+        address: &str,
+    ) -> Result<(Picture, bool), Refused> {
         let (size, url) = self
             .signer
             .open(signature, size, address)
@@ -509,7 +563,7 @@ impl ImageProxy {
             tokio::task::spawn_blocking(move || cache.get(size, &url)).await
         };
         if let Ok(Some(picture)) = cached {
-            return Ok(picture);
+            return Ok((picture, true));
         }
         if self.has_failed(&url) {
             return Err(Refused::Source("it failed a moment ago".into()));
@@ -518,7 +572,7 @@ impl ImageProxy {
         if fetched.is_err() {
             self.note_failed(url);
         }
-        fetched
+        fetched.map(|picture| (picture, false))
     }
 
     async fn fetch(&self, size: Size, url: &str) -> Result<Picture, Refused> {

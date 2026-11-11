@@ -16,7 +16,9 @@ use rueder::{
     fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import, oidc,
+    import,
+    monitor::{Monitor, Problems},
+    oidc,
     oidc::Oidc,
     reclean, router, sessions,
 };
@@ -28,7 +30,7 @@ use tokio::{
     net::TcpListener,
     signal::unix::{SignalKind, signal},
 };
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Where the server listens if LISTEN_ADDR does not say.
 const LISTEN_ADDR: &str = "127.0.0.1:3000";
@@ -62,6 +64,10 @@ enum Command {
     /// Make accounts and set their passwords. There is no other way to get one.
     #[command(subcommand)]
     Account(AccountCommand),
+    /// Say which accounts are admins: they see the status of the server and
+    /// make accounts in the browser.
+    #[command(subcommand)]
+    Admin(AdminCommand),
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
     /// old rueder. Adds what is not there yet, so it can run more than once.
     ImportLegacy {
@@ -92,6 +98,16 @@ enum AccountCommand {
 }
 
 #[derive(Subcommand)]
+enum AdminCommand {
+    /// Make an account an admin.
+    Add { name: String },
+    /// Make an admin a reader again. Their sessions stay.
+    Remove { name: String },
+    /// List the admins.
+    List,
+}
+
+#[derive(Subcommand)]
 enum BenchCommand {
     /// Make up accounts, feeds, articles and what the accounts have read.
     Generate {
@@ -113,13 +129,16 @@ enum BenchCommand {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(
+    // The warnings and errors of the log are kept for the status page, too.
+    let problems = Arc::new(Problems::default());
+    tracing_subscriber::registry()
+        .with(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "rueder=info,tower_http=info".into()),
         )
         // No color codes in `docker compose logs` and other redirected output.
-        .with_ansi(io::stdout().is_terminal())
+        .with(tracing_subscriber::fmt::layer().with_ansi(io::stdout().is_terminal()))
+        .with(problems.layer())
         .init();
     let cli = Cli::parse();
 
@@ -147,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
         .context("running migrations")?;
 
     match cli.command.unwrap_or(Command::Serve) {
-        Command::Serve => serve(db).await,
+        Command::Serve => serve(db, problems).await,
         Command::Health => unreachable!("answered before the database was opened"),
         Command::Bench(BenchCommand::Generate {
             accounts,
@@ -162,6 +181,7 @@ async fn main() -> anyhow::Result<()> {
             bench::generate(&db, size).await
         }
         Command::Account(command) => account(&db, command).await,
+        Command::Admin(command) => admin(&db, command).await,
         Command::Reclean { feed } => {
             let report = reclean::run(&db, &Rules::from_env()?, feed).await?;
             println!("{report}");
@@ -233,6 +253,38 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn admin(db: &PgPool, command: AdminCommand) -> anyhow::Result<()> {
+    match command {
+        AdminCommand::Add { name } => {
+            if !accounts::set_admin(db, &name, true).await? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            println!("Account {} is an admin.", name.trim());
+        }
+        AdminCommand::Remove { name } => {
+            if !accounts::set_admin(db, &name, false).await? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            println!("Account {} is no admin any more.", name.trim());
+            if !accounts::list(db)
+                .await?
+                .iter()
+                .any(|account| account.is_admin)
+            {
+                println!("There is no admin left; `rueder admin add` makes one.");
+            }
+        }
+        AdminCommand::List => {
+            for account in accounts::list(db).await? {
+                if account.is_admin {
+                    println!("{}", account.username);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A password from the terminal, asked for twice and not shown, or the first
 /// line of the input when a script pipes it in.
 fn ask_password() -> anyhow::Result<String> {
@@ -251,7 +303,8 @@ fn ask_password() -> anyhow::Result<String> {
     Ok(password)
 }
 
-async fn serve(db: PgPool) -> anyhow::Result<()> {
+async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
+    let monitor = Arc::new(Monitor::new(problems));
     let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
     let static_dir =
         PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../web/build".into()));
@@ -302,6 +355,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
             client.clone(),
             rules.clone(),
             events.clone(),
+            monitor.clone(),
         ));
     }
 
@@ -348,6 +402,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         .with_images(images)
         .with_rules(rules)
         .with_events(events)
+        .with_monitor(monitor)
         .with_client(client.clone());
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.

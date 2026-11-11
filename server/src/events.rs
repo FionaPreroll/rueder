@@ -436,6 +436,12 @@ impl Events {
         self.inner.kept.lock().map_or(0, |kept| kept.newest)
     }
 
+    /// How many connections are open, of all accounts.
+    pub fn all_streams(&self) -> usize {
+        let kept = self.inner.kept.lock();
+        kept.map_or(0, |kept| kept.streams.values().sum())
+    }
+
     /// How many connections the account holds open.
     pub fn streams(&self, account_id: i32) -> usize {
         let kept = self.inner.kept.lock();

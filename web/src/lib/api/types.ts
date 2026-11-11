@@ -723,3 +723,302 @@ export type FeedUnread = {
 	read_upto: number,
 	unread: number,
 };
+
+/**
+ * What `GET /api/status` answers, for admins only.
+ */
+export type ServerStatus = {
+	/**
+	 * The version of the server.
+	 */
+	version: string,
+	started_at: string,
+	uptime_s: number,
+	/**
+	 * The memory the server holds, if the system says.
+	 */
+	memory_bytes: number | null,
+	/**
+	 * What looks like a bottleneck or a problem, the most pressing first.
+	 */
+	hints: Array<StatusHint>,
+	counts: StatusCounts,
+	requests: StatusRequests,
+	database: StatusDatabase,
+	fetcher: StatusFetcher,
+	finder: StatusFinder,
+	images: StatusImages,
+	problems: StatusProblems,
+};
+
+/**
+ * How long things took in the last hour, in milliseconds. The times are null
+ * when nothing was timed.
+ */
+export type Durations = {
+	count: number,
+	mean_ms: number | null,
+	p50_ms: number | null,
+	p95_ms: number | null,
+	max_ms: number | null,
+};
+
+/**
+ * Why fetches fail.
+ */
+export type FetchFailure = "status" | "timeout" | "blocked" | "dns" | "network" | "too_large" | "redirects" | "unreadable" | "other";
+
+/**
+ * How much there is.
+ */
+export type StatusCounts = {
+	accounts: number,
+	feeds: number,
+	/**
+	 * Feeds somebody subscribes to, which are the ones fetched.
+	 */
+	subscribed_feeds: number,
+	/**
+	 * About how many articles: what PostgreSQL estimates.
+	 */
+	articles: number,
+	/**
+	 * Open streams of events: about how many tabs are open.
+	 */
+	live_connections: number,
+};
+
+/**
+ * The database.
+ */
+export type StatusDatabase = {
+	/**
+	 * The connections of the server: open, idle, at most.
+	 */
+	pool_size: number,
+	pool_idle: number,
+	pool_max: number,
+	/**
+	 * All connections to the database, the server's and others'.
+	 */
+	connections: number,
+	size_bytes: number,
+	/**
+	 * The share of blocks found in memory, since the statistics began.
+	 */
+	cache_hit_ratio: number | null,
+	deadlocks: number,
+	/**
+	 * The query that has been running longest, in seconds.
+	 */
+	longest_query_s: number | null,
+	tables: Array<StatusTable>,
+};
+
+export type StatusFailing = {
+	failure: FetchFailure,
+	/**
+	 * The status the site answered with, for `status`.
+	 */
+	status: number | null,
+	feeds: number,
+};
+
+/**
+ * Fetching feeds.
+ */
+export type StatusFetcher = {
+	/**
+	 * Whether the server fetches feeds at all.
+	 */
+	running: boolean,
+	last_round_at: string | null,
+	last_round_feeds: number | null,
+	last_round_s: number | null,
+	/**
+	 * The fetches of the last hour.
+	 */
+	took: Durations,
+	fetched: number,
+	unchanged: number,
+	failed: number,
+	/**
+	 * Fetches that failed at the database.
+	 */
+	broken: number,
+	new_articles: number,
+	/**
+	 * Feeds whose last fetch failed, by why.
+	 */
+	failing: Array<StatusFailing>,
+	/**
+	 * Feeds fetched more than ten minutes after they were due.
+	 */
+	overdue: number,
+	most_overdue_s: number | null,
+	/**
+	 * Feeds not fetched yet at all.
+	 */
+	waiting: number,
+};
+
+/**
+ * The feed search, in the last hour.
+ */
+export type StatusFinder = {
+	/**
+	 * Whether the server looks at addresses at all.
+	 */
+	on: boolean,
+	took: Durations,
+	found: number,
+	none: number,
+	failed: number,
+	limited: number,
+};
+
+/**
+ * Something on the status page that wants looking at.
+ */
+export type StatusHint =
+	| {
+		"kind": "slow_route",
+		route: string,
+		p95_ms: number,
+	}
+	| {
+		"kind": "server_errors",
+		route: string,
+		count: number,
+	}
+	| {
+		"kind": "pool_busy",
+		size: number,
+	}
+	| {
+		"kind": "fetch_backlog",
+		overdue: number,
+		most_overdue_s: number,
+	}
+	| {
+		"kind": "feeds_failing",
+		failing: number,
+		subscribed: number,
+	}
+	| {
+		"kind": "not_fetching",
+	}
+	| {
+		"kind": "cache_misses",
+		hit_ratio: number,
+	}
+	| {
+		"kind": "long_query",
+		seconds: number,
+	}
+	| {
+		"kind": "image_cache_full",
+		percent: number,
+	}
+	| {
+		"kind": "errors",
+		count: number,
+	}
+	| {
+		"kind": "limited",
+		count: number,
+	};
+
+/**
+ * The image proxy.
+ */
+export type StatusImages = {
+	on: boolean,
+	cache_bytes: number,
+	cache_max_bytes: number,
+	/**
+	 * Sources left alone for now because they failed.
+	 */
+	failing_sources: number,
+	/**
+	 * Images not in the cache, in the last hour.
+	 */
+	took: Durations,
+	cached: number,
+	fetched: number,
+	not_found: number,
+	source_failed: number,
+	not_image: number,
+	too_large: number,
+};
+
+export type StatusProblem = {
+	error: boolean,
+	/**
+	 * Where in the server it comes from, such as "rueder::fetch".
+	 */
+	target: string,
+	text: string,
+	count: number,
+	first: string,
+	last: string,
+};
+
+/**
+ * The warnings and errors of the log.
+ */
+export type StatusProblems = {
+	errors_last_hour: number,
+	warnings_last_hour: number,
+	/**
+	 * The latest first. The same text from the same place is one.
+	 */
+	recent: Array<StatusProblem>,
+};
+
+/**
+ * The requests of the last hour.
+ */
+export type StatusRequests = {
+	all: Durations,
+	/**
+	 * Answers by their first digit: 1xx to 5xx.
+	 */
+	answers: [number,
+	number,
+	number,
+	number,
+	number],
+	/**
+	 * Answers that said "too many requests".
+	 */
+	limited: number,
+	/**
+	 * The routes, the slowest first by their 95th percentile.
+	 */
+	routes: Array<StatusRoute>,
+};
+
+export type StatusRoute = {
+	/**
+	 * The method and the route, such as "GET /api/feeds/{id}/articles".
+	 */
+	route: string,
+	took: Durations,
+	/**
+	 * Answers with an error of the server.
+	 */
+	errors: number,
+};
+
+export type StatusTable = {
+	name: string,
+	/**
+	 * With its indexes and, for a table in parts, all of them.
+	 */
+	bytes: number,
+	/**
+	 * What PostgreSQL estimates.
+	 */
+	rows: number,
+};
