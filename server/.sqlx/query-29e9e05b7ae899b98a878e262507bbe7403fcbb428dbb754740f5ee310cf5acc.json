@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(sum(greatest(r.reltuples, 0)), 0)::bigint AS \"n!\"\n           FROM (SELECT relid FROM pg_partition_tree('articles'::regclass)\n                 UNION SELECT 'articles'::regclass) t\n           JOIN pg_class r ON r.oid = t.relid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "29e9e05b7ae899b98a878e262507bbe7403fcbb428dbb754740f5ee310cf5acc"
+}

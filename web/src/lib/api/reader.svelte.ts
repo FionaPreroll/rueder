@@ -275,7 +275,7 @@ export class ServerReader implements Reader {
 	/** The filter rules are this reader's own methods. */
 	readonly filters = this;
 	readonly demo = null;
-	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true, opml: true };
+	readonly can: Abilities;
 	readonly account: Account;
 
 	/** Unread articles per feed, as the server counted them and as changes here moved them. */
@@ -333,6 +333,13 @@ export class ServerReader implements Reader {
 
 	constructor(account: Account, session: SessionEnds, api: Api = theApi) {
 		this.account = account;
+		this.can = {
+			oldestFirst: true,
+			markOlder: true,
+			subscribe: true,
+			opml: true,
+			status: account.admin
+		};
 		this.session = session;
 		this.api = api;
 	}
@@ -1457,6 +1464,15 @@ export class ServerReader implements Reader {
 	async exportOpml() {
 		try {
 			return await this.after(() => this.api.exportOpml());
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
+
+	async status() {
+		try {
+			return await this.api.status();
 		} catch (error) {
 			this.refusal(error);
 			return null;

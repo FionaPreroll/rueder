@@ -34,6 +34,7 @@ import type {
 	RulePreview,
 	RuleScope,
 	RulesHits,
+	ServerStatus,
 	StateChange,
 	Subscribed,
 	Tree,
@@ -291,7 +292,10 @@ export const api = {
 	/** Tries a rule without storing it; a pattern that cannot be used is refused with 400. */
 	previewRule: (rule: ApiNewRule) => call<ApiRulePreview>('POST', '/rules/preview', rule),
 	/** What each of the stored rules finds. */
-	ruleHits: async () => (await call<RulesHits>('GET', '/rules/hits')).hits
+	ruleHits: async () => (await call<RulesHits>('GET', '/rules/hits')).hits,
+
+	/** For admins only. */
+	status: () => call<ServerStatus>('GET', '/status')
 };
 
 export type Api = typeof api;

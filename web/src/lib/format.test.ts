@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { formatAgo, formatBytes, formatFull, formatWhen } from '#lib/format.ts';
+import {
+	formatAgo,
+	formatBytes,
+	formatDuration,
+	formatFull,
+	formatPercent,
+	formatWhen
+} from '#lib/format.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 
 const MINUTE = 60_000;
@@ -65,5 +72,28 @@ describe('formatBytes', () => {
 		expect(formatBytes(5e12)).toBe('5,000 GB');
 		useLanguage('de');
 		expect(formatBytes(1500)).toBe('1,5 kB');
+	});
+});
+
+describe('formatDuration', () => {
+	it('is how long something took, in the unit that fits', () => {
+		expect(formatDuration(0.42)).toBe('0.4 ms');
+		expect(formatDuration(12.4)).toBe('12 ms');
+		expect(formatDuration(2380)).toBe('2.4 sec');
+		expect(formatDuration(12 * 60_000)).toBe('12 min');
+		expect(formatDuration(5 * 3_600_000)).toBe('5 hr');
+		expect(formatDuration(3 * 86_400_000)).toBe('3 days');
+		expect(formatDuration(-5)).toBe('0 ms');
+		useLanguage('de');
+		expect(formatDuration(2380)).toBe('2,4 Sek.');
+	});
+});
+
+describe('formatPercent', () => {
+	it('is a share as a percentage', () => {
+		expect(formatPercent(0.9987)).toBe('99.9%');
+		expect(formatPercent(1)).toBe('100%');
+		useLanguage('de');
+		expect(formatPercent(0.25)).toBe('25\u00a0%');
 	});
 });

@@ -7,7 +7,11 @@
 //! exception: its feeds are taken on trust and fetched by the next round,
 //! and the ones that are none show their error in the tree.
 
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use axum::{
     Json, Router,
@@ -31,6 +35,7 @@ use crate::{
     fetch::{self, Outcome},
     filters,
     http_client::{self, HttpClient, Request},
+    monitor::Looked,
     sessions::Session,
     tree::{self, bad},
 };
@@ -231,7 +236,25 @@ async fn find(
     Json(find): Json<Find>,
 ) -> Result<Json<Found>, AppError> {
     let url = address(&find.url)?;
-    state.rates.lookup(session.account_id, Instant::now())?;
+    if let Err(refused) = state.rates.lookup(session.account_id, Instant::now()) {
+        let monitor = &state.monitor;
+        monitor.lookup(Looked::Limited, Duration::ZERO, Instant::now());
+        return Err(refused);
+    }
+    let started = Instant::now();
+    let found = look(&state, &session, url).await;
+    let looked = match &found {
+        Ok(Json(found)) if found.feeds.is_empty() => Looked::None,
+        Ok(_) => Looked::Found,
+        Err(_) => Looked::Failed,
+    };
+    let now = Instant::now();
+    state.monitor.lookup(looked, now - started, now);
+    found
+}
+
+/// The feeds at an address, for [`find`].
+async fn look(state: &AppState, session: &Session, url: Url) -> Result<Json<Found>, AppError> {
     // The page of a channel is not needed to know its feed, and what YouTube
     // sends in its place before somebody agreed to its cookies has none.
     let url = youtube_feed(&url).unwrap_or(url);
@@ -239,7 +262,7 @@ async fn find(
         accept: Some(ACCEPT),
         ..Request::new(url.as_str())
     };
-    let response = client(&state)?
+    let response = client(state)?
         .get(request)
         .await
         .map_err(|err| AppError::BadRequest(format!("the address cannot be fetched: {err}")))?;
@@ -248,7 +271,7 @@ async fn find(
         return Err(AppError::BadRequest(message));
     }
     let moved_to = (response.url != url).then(|| response.url.to_string());
-    let rules = rules(&state)?;
+    let rules = rules(state)?;
     // Reading a feed or a page takes a while.
     let mut feeds = tokio::task::spawn_blocking(move || candidates(&response, &rules)).await?;
     // What the reader subscribes to already says so.

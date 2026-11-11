@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET is_admin = $2 WHERE lower(username) = lower($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "637592322eda4bbc2127ae78f6139a740bc2fcf7b9617b1204756a6b9fac5b02"
+}

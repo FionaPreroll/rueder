@@ -474,6 +474,13 @@ async fn an_image_is_fetched_once_and_served_as_an_image(db: PgPool) {
     );
     assert_eq!(asked(&site, "photo.jpg"), 2);
     assert!(images.cache().used() > 0);
+
+    // The status page hears what came from the cache and what was fetched.
+    let served = images.served(std::time::Instant::now());
+    assert_eq!((served.cached, served.fetched), (1, 3));
+    assert_eq!(served.timing.count, 3);
+    let (_, _, _) = get_path(state.clone(), "/img/x/image/eA").await;
+    assert_eq!(images.served(std::time::Instant::now()).not_found, 1);
 }
 
 #[sqlx::test]
