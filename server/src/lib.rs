@@ -13,6 +13,7 @@ pub mod oidc;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
+pub mod tree;
 
 use std::{path::Path, sync::Arc};
 
@@ -118,6 +119,7 @@ fn api() -> Router<AppState> {
         .route("/oidc/start", get(oidc::start))
         .route("/oidc/callback", get(oidc::callback))
         .merge(api::routes())
+        .merge(tree::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

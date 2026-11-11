@@ -5,46 +5,15 @@ mod common;
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    http::{Method, Request, StatusCode, header},
-};
-use http_body_util::BodyExt;
+use axum::http::{Method, StatusCode};
+use common::call;
 use rueder::{
     AppState, articles,
     http_client::{self, HttpClient},
     images::{Config, ImageProxy},
-    router,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
-
-async fn call(
-    state: &AppState,
-    method: Method,
-    path: &str,
-    cookie: Option<&str>,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut request = Request::builder().method(method).uri(path);
-    if let Some(cookie) = cookie {
-        request = request.header(header::COOKIE, cookie);
-    }
-    let body = match body {
-        Some(body) => {
-            request = request.header(header::CONTENT_TYPE, "application/json");
-            Body::from(body.to_string())
-        }
-        None => Body::empty(),
-    };
-    let app = router(state.clone(), "missing".as_ref());
-    let response = app.oneshot(request.body(body).unwrap()).await.unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    (status, json)
-}
 
 async fn get(state: &AppState, path: &str, cookie: &str) -> (StatusCode, Value) {
     call(state, Method::GET, path, Some(cookie), None).await

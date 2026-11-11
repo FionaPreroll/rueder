@@ -128,3 +128,35 @@ pub async fn move_to(db: &PgPool, account_id: i32, feed_id: i32, folder_id: i32)
         .await
         .unwrap();
 }
+
+/// Asks the server something, as the browser with this cookie, and returns
+/// the status and the JSON of the answer (`Null` if it has none).
+pub async fn call(
+    state: &rueder::AppState,
+    method: axum::http::Method,
+    path: &str,
+    cookie: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    use axum::{body::Body, http::header};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let mut request = axum::http::Request::builder().method(method).uri(path);
+    if let Some(cookie) = cookie {
+        request = request.header(header::COOKIE, cookie);
+    }
+    let body = match body {
+        Some(body) => {
+            request = request.header(header::CONTENT_TYPE, "application/json");
+            Body::from(body.to_string())
+        }
+        None => Body::empty(),
+    };
+    let app = rueder::router(state.clone(), "missing".as_ref());
+    let response = app.oneshot(request.body(body).unwrap()).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    (status, json)
+}
