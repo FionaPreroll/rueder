@@ -6,6 +6,7 @@ import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TreeNode } from '#lib/model.ts';
 import { MAX_OPML } from '#lib/reader.ts';
+import { TAB } from './client.ts';
 import { PAGE, ServerReader, toTree } from './reader.svelte.ts';
 import { FakeServer } from './test/fake-server.ts';
 
@@ -27,6 +28,7 @@ beforeEach(() => {
 	server.addArticles(blog, 2);
 	server.addArticles(lone, 1);
 	vi.stubGlobal('fetch', server.fetch);
+	vi.stubGlobal('EventSource', server.EventSource);
 	session.signOut.mockClear();
 	session.expired.mockClear();
 	localStorage.clear();
@@ -95,6 +97,7 @@ describe('the tree', () => {
 				site_url: null,
 				icon_url: null,
 				fetch_agent: 'rueder',
+				fetched: true,
 				error: null,
 				last_seq: 0,
 				read_upto: 0,
@@ -566,10 +569,11 @@ describe('reading', () => {
 		reader.show({ kind: 'feed', id: `feed-${tech}` });
 		await settle();
 		const [first, second] = reader.visible;
+		// Without a cursor, a step back starts at the top too.
 		reader.step(-1);
-		expect(reader.cursor).toBeNull();
-		reader.step(1);
 		expect([reader.cursor, reader.open, reader.moved]).toEqual([first.id, first.id, 1]);
+		reader.step(-1);
+		expect([reader.cursor, reader.moved]).toEqual([first.id, 1]);
 		reader.step(1, false);
 		expect([reader.cursor, reader.open]).toEqual([second.id, null]);
 		expect(reader.isRead(second)).toBe(false);
@@ -584,6 +588,27 @@ describe('reading', () => {
 		expect(reader.current?.seq).toBe(1);
 		reader.step(-1);
 		expect(reader.current?.seq).toBe(2);
+	});
+
+	it('takes a step that comes while the list is on its way once it is there', async () => {
+		const reader = await started();
+		for (const by of [1, -1] as const) {
+			const release = server.hold(/^\/feeds\/\d+\/articles\?/);
+			reader.show({ kind: 'feed', id: `feed-${tech}` });
+			reader.step(by);
+			expect(reader.cursor).toBeNull();
+			release();
+			await settle();
+			expect([reader.current?.seq, reader.open]).toEqual([3, reader.cursor]);
+		}
+		// A step for a list that is no longer shown is forgotten.
+		const release = server.hold(/^\/feeds\/\d+\/articles\?/);
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		reader.step(1);
+		reader.show({ kind: 'feed', id: `feed-${blog}` });
+		release();
+		await settle();
+		expect(reader.cursor).toBeNull();
 	});
 
 	it('goes on to the next page when the cursor steps past the end', async () => {
@@ -1179,6 +1204,42 @@ describe('the subscriptions', () => {
 		expect(server.writes).toEqual([`PATCH /feeds/${tech}`, `PATCH /feeds/${tech}`]);
 	});
 
+	it('go two into a new folder where the one dropped on was', async () => {
+		const reader = await started();
+		expect(reader.canGroup(`feed-${blog}`, `feed-${tech}`)).toBe(true);
+		reader.group(`feed-${blog}`, `feed-${tech}`, 'Together');
+		await settle();
+		const folder = server.folders.find((f) => f.title === 'Together')!;
+		expect(server.writes).toEqual([
+			'POST /folders',
+			'POST /tree/move',
+			'POST /tree/move',
+			'POST /tree/move'
+		]);
+		expect(server.requests.find((r) => r.path === '/folders')?.body).toEqual({
+			title: 'Together',
+			parent_id: news
+		});
+		expect(shape(reader.tree)).toEqual([
+			{
+				[`News (folder-${news})`]: [
+					{ [`Together (folder-${folder.id})`]: [`feed-${tech}`, `feed-${blog}`] }
+				]
+			},
+			`feed-${lone}`
+		]);
+		// At the top, the new folder is made there.
+		reader.group(`feed-${tech}`, `feed-${lone}`, 'Top');
+		await settle();
+		expect(server.requests.filter((r) => r.path === '/folders').at(-1)?.body).toEqual({
+			title: 'Top',
+			parent_id: null
+		});
+		expect(shape(reader.tree)[1]).toEqual({
+			[`Top (folder-${server.folders.at(-1)?.id})`]: [`feed-${lone}`, `feed-${tech}`]
+		});
+	});
+
 	it('get their old name back when the server refuses the new one', async () => {
 		const reader = await started();
 		server.refuse('PATCH', /^\/feeds\/\d+$/, 400);
@@ -1283,5 +1344,194 @@ describe('OPML', () => {
 		server.signedIn = null;
 		expect(await reader.exportOpml()).toBeNull();
 		expect(session.expired).toHaveBeenCalled();
+	});
+});
+
+describe('live updates', () => {
+	/** Lets the events that came close together be answered, and what follows from it. */
+	async function settled() {
+		await new Promise((resolve) => setTimeout(resolve, 350));
+		await settle();
+	}
+
+	const unread = (reader: ServerReader, feed: number) =>
+		reader.unreadIn({ kind: 'feed', id: `feed-${feed}` });
+
+	it('opens the connection before anything is loaded, and closes it again', async () => {
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		const stop = reader.start();
+		expect(server.streams).toHaveLength(1);
+		expect(server.streams[0].after).toBe(0);
+		await settle();
+		// Every request names the tab, so its own changes come back as its own.
+		expect(server.requests.length).toBeGreaterThan(0);
+		expect(server.requests.every((request) => request.tab === TAB)).toBe(true);
+		stop();
+		expect(server.streams).toHaveLength(0);
+	});
+
+	it('says how many articles arrived in what is shown, and brings them in', async () => {
+		const reader = await started();
+		reader.show({ kind: 'folder', id: `folder-${news}` });
+		await settle();
+		server.addArticles(tech, 2);
+		server.emit({ event: 'articles', data: { feed_id: tech, last_seq: 5, new: 2 } });
+		// Somewhere else, it is not counted here.
+		server.addArticles(lone, 1);
+		server.emit({ event: 'articles', data: { feed_id: lone, last_seq: 2, new: 1 } });
+		expect(reader.pending).toBe(2);
+		expect(reader.feeds[`feed-${tech}`].lastSeq).toBe(5);
+		// The list stays as it is until the reader asks for what is new.
+		expect(reader.visible).toHaveLength(5);
+		await settled();
+		expect([unread(reader, tech), unread(reader, lone)]).toEqual([5, 2]);
+		reader.showNew();
+		await settle();
+		expect(reader.visible).toHaveLength(7);
+		expect(reader.pending).toBe(0);
+	});
+
+	it('loads the start page anew when articles arrive, and the list when they change', async () => {
+		const reader = await started();
+		server.addArticles(blog, 1, { title: 'Fresh' });
+		server.emit({ event: 'articles', data: { feed_id: blog, last_seq: 3, new: 1 } });
+		await settled();
+		expect(reader.fresh.flatMap((fresh) => fresh.top.map((a) => a.title))).toContain('Fresh');
+		expect(reader.pending).toBe(0);
+
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		const article = server.article(tech, 3)!;
+		article.version = 2;
+		article.title = 'Changed';
+		server.emit({ event: 'updated', data: { feed_id: blog, count: 1 } });
+		await settled();
+		expect(titles(reader)).not.toContain('Changed');
+		server.emit({ event: 'updated', data: { feed_id: tech, count: 1 } });
+		await settled();
+		expect(titles(reader)).toContain('Changed');
+		expect(reader.visible.find((a) => a.title === 'Changed')?.changes).toBe(1);
+	});
+
+	it('takes what was read on another device, and leaves its own alone', async () => {
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		const first = reader.visible[0];
+		server.article(tech, first.seq)!.read = true;
+		server.emit({
+			event: 'reading',
+			data: {
+				feed: { feed_id: tech, last_seq: 3, read_upto: 0, unread: 2 },
+				seq: first.seq,
+				by: 'another-tab'
+			}
+		});
+		expect(unread(reader, tech)).toBe(2);
+		await settled();
+		expect(reader.isRead(reader.visible[0])).toBe(true);
+
+		// What this tab did itself comes back too, and changes nothing.
+		const asked = server.requests.length;
+		server.emit({
+			event: 'reading',
+			data: { feed: { feed_id: tech, last_seq: 3, read_upto: 0, unread: 0 }, seq: 2, by: TAB }
+		});
+		server.emit({ event: 'tree', data: { by: TAB } });
+		server.emit({ event: 'rules', data: { by: TAB } });
+		await settled();
+		expect(server.requests.length).toBe(asked);
+		expect(unread(reader, tech)).toBe(2);
+
+		// Marked all as read elsewhere: the tree says the counts.
+		for (const article of server.articles) article.read = true;
+		server.emit({ event: 'reading', data: { feed: null, seq: null, by: 'another-tab' } });
+		await settled();
+		expect(reader.totalUnread).toBe(0);
+	});
+
+	it('follows the tree, the rules and the errors of feeds', async () => {
+		const reader = await started();
+		server.addFeed('Elsewhere');
+		server.emit({ event: 'tree', data: { by: 'another-tab' } });
+		await settled();
+		expect(Object.values(reader.feeds).map((feed) => feed.title)).toContain('Elsewhere');
+
+		server.rules.push({
+			id: 99,
+			enabled: true,
+			scope: { kind: 'all' },
+			field: 'title',
+			match: 'contains',
+			pattern: 'Article 1 of',
+			action: 'hide'
+		});
+		server.applyRules();
+		server.emit({ event: 'rules', data: { by: null } });
+		await settled();
+		expect(reader.rules.map((rule) => rule.id)).toEqual(['rule-99']);
+		expect(reader.hiddenCount).toBe(3);
+
+		server.emit({ event: 'feed', data: { feed_id: lone, error: 'timed out' } });
+		expect(reader.feeds[`feed-${lone}`].error).toBe('timed out');
+		server.emit({ event: 'feed', data: { feed_id: lone, error: null } });
+		expect(reader.feeds[`feed-${lone}`].error).toBeNull();
+		// Events of feeds it does not read, and nonsense, change nothing.
+		server.emit({ event: 'feed', data: { feed_id: 999, error: 'gone' } });
+		server.emit({ event: 'articles', raw: 'not json' });
+		server.emit({ event: 'labels', data: { by: null } });
+		server.emit({ event: 'settings', data: { by: null } });
+		expect(reader.feeds['feed-999']).toBeUndefined();
+	});
+
+	it('asks whether the session holds when one of the account ends', async () => {
+		await started();
+		server.emit({ event: 'session', data: { by: 'another-tab' } });
+		await settle();
+		expect(session.expired).not.toHaveBeenCalled();
+		server.signedIn = null;
+		server.emit({ event: 'session', data: { by: 'another-tab' } });
+		await settle();
+		expect(session.expired).toHaveBeenCalledOnce();
+	});
+
+	it('loads everything anew when the server cannot say what was missed', async () => {
+		const reader = await started();
+		server.addArticles(lone, 3);
+		server.emit({ event: 'resync', data: {} });
+		await settled();
+		expect(unread(reader, lone)).toBe(4);
+		expect(server.requests.some((r) => r.path === '/rules' && r.method === 'GET')).toBe(true);
+	});
+
+	it('opens a connection the server ended anew after a while, and catches up', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		try {
+			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+			reader.start();
+			await vi.advanceTimersByTimeAsync(10);
+			server.dropStreams();
+			expect(server.streams).toHaveLength(0);
+			server.addArticles(lone, 2);
+			await vi.advanceTimersByTimeAsync(29_000);
+			expect(server.streams).toHaveLength(0);
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(server.streams).toHaveLength(1);
+			// The new connection starts afresh, so what came meanwhile is asked for.
+			server.emit({ event: 'hello', data: {} });
+			await vi.advanceTimersByTimeAsync(400);
+			expect(unread(reader, lone)).toBe(3);
+			expect(session.expired).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('ends the session when the server refused the connection for want of one', async () => {
+		await started();
+		server.signedIn = null;
+		server.dropStreams();
+		await settle();
+		expect(session.expired).toHaveBeenCalledOnce();
 	});
 });

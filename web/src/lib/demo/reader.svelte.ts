@@ -19,10 +19,12 @@ import type {
 import {
 	addFeed,
 	addFolder,
+	canGroup,
 	canMove,
 	feedIds,
 	findNode,
 	moveNode,
+	groupFeeds,
 	nudge,
 	removeFeed,
 	removeFolder,
@@ -383,7 +385,8 @@ export class DemoReader implements Reader {
 		const list = this.list;
 		if (list.length === 0) return null;
 		const at = list.findIndex((article) => article.id === this.cursor);
-		const next = at === -1 ? (by === 1 ? 0 : -1) : at + by;
+		// Without a cursor, either step goes to the first article.
+		const next = at === -1 ? 0 : at + by;
 		const article = list[next];
 		if (!article) return null;
 		if (next >= this.limit) this.limit = next + PAGE;
@@ -446,6 +449,14 @@ export class DemoReader implements Reader {
 
 	renameFolder(id: string, title: string) {
 		this.tree = renameFolder(this.tree, id, title);
+	}
+
+	canGroup = (id: string, targetId: string) => canGroup(this.tree, id, targetId);
+
+	group(id: string, targetId: string, title: string) {
+		if (!this.canGroup(id, targetId)) return;
+		this.tree = groupFeeds(this.tree, id, targetId, `folder-new-${++this.folderCount}`, title);
+		this.applyRules();
 	}
 
 	removeFolder(id: string) {

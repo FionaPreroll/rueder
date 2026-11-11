@@ -13,6 +13,8 @@ import type {
 	ApiRule,
 	ApiVersion
 } from '#lib/api/client.ts';
+import type { EventStream } from '#lib/api/client.ts';
+import type { ServerEvent } from '#lib/api/types.ts';
 import { compile, ruleMatches } from '#lib/filters.ts';
 
 interface FakeFeed {
@@ -25,6 +27,8 @@ interface FakeFeed {
 	url: string;
 	error: string | null;
 	icon_url: string | null;
+	/** Whether the server fetched it yet; a feed from an OPML file waits. */
+	fetched: boolean;
 }
 
 /** A feed the made-up web has, at the address of a site or of the feed itself. */
@@ -62,7 +66,11 @@ interface Request {
 	body: unknown;
 	/** The type of the body, as the request says it. */
 	type: string | null;
+	/** The tab that sent it, as it names itself. */
+	tab: string | null;
 }
+
+type Listener = (event: MessageEvent<string>) => void;
 
 interface Refusal {
 	method: string;
@@ -104,6 +112,28 @@ export class FakeServer {
 	moves = new Map<string, string>();
 
 	requests: Request[] = [];
+	/** The connections for live updates that are open, and how many requests came before each. */
+	streams: { stream: EventStream; after: number }[] = [];
+
+	/** What the page opens as `EventSource`: a connection this server sends its events to. */
+	readonly EventSource = (() => {
+		const server = this;
+		return class implements EventStream {
+			readyState = 1;
+			onerror: ((event: Event) => void) | null = null;
+			listeners = new Map<string, Listener[]>();
+			constructor(readonly url: string) {
+				server.streams.push({ stream: this, after: server.requests.length });
+			}
+			addEventListener(type: string, listener: Listener) {
+				this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+			}
+			close() {
+				this.readyState = 2;
+				server.streams = server.streams.filter((open) => open.stream !== this);
+			}
+		};
+	})();
 	/** What time it is for the server, for what it does by age. */
 	now = () => Date.now();
 	/** The server is not there at all: `fetch` fails. */
@@ -132,6 +162,7 @@ export class FakeServer {
 			url: `https://feed-${id}.example/feed.xml`,
 			error: null,
 			icon_url: null,
+			fetched: true,
 			...over
 		});
 		return id;
@@ -216,6 +247,27 @@ export class FakeServer {
 			.map((request) => `${request.method} ${request.path}`);
 	}
 
+	// Live updates
+
+	/** Sends an event to every connection that is open; `raw` as it is, for nonsense. */
+	emit(event: ServerEvent | { event: string; raw: string }) {
+		const data = 'raw' in event ? event.raw : JSON.stringify(event.data);
+		for (const { stream } of this.streams) {
+			const listeners = (stream as unknown as { listeners: Map<string, Listener[]> }).listeners;
+			for (const listener of listeners.get(event.event) ?? []) {
+				listener(new MessageEvent(event.event, { data }));
+			}
+		}
+	}
+
+	/** Ends every connection for good, as a server that refuses it does. */
+	dropStreams() {
+		for (const { stream } of [...this.streams]) {
+			stream.close();
+			stream.onerror?.(new Event('error'));
+		}
+	}
+
 	// Answering
 
 	fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
@@ -228,8 +280,9 @@ export class FakeServer {
 				: init.body instanceof Blob
 					? await init.body.text()
 					: undefined;
-		const type = new Headers(init.headers).get('Content-Type');
-		this.requests.push({ method, path, body, type });
+		const headers = new Headers(init.headers);
+		const type = headers.get('Content-Type');
+		this.requests.push({ method, path, body, type, tab: headers.get('X-Rueder-Tab') });
 		if (this.down) throw new TypeError('fetch failed');
 		for (const held of this.held) if (held.path.test(path)) await held.wait;
 		const refusal = this.refusals.find((r) => r.method === method && r.path.test(path));
@@ -366,7 +419,9 @@ export class FakeServer {
 		if (method === 'POST' && path === '/folders') {
 			const title = String(data.title).trim();
 			if (!title) return refused(400, 'the name is empty');
-			return json({ id: this.addFolder(title) }, 201);
+			const parent = typeof data.parent_id === 'number' ? data.parent_id : null;
+			if (parent !== null && !this.folders.some((f) => f.id === parent)) return refused(404);
+			return json({ id: this.addFolder(title, parent) }, 201);
 		}
 		const subscribing = this.subscribing(method, path, data, body, type);
 		if (subscribing) return subscribing;
@@ -479,7 +534,7 @@ export class FakeServer {
 				if (!/^https?:\/\//.test(url)) imported.skipped++;
 				else if (this.feeds.some((f) => f.url === url)) imported.known++;
 				else {
-					this.addFeed(title, null, { url });
+					this.addFeed(title, null, { url, fetched: false });
 					imported.feeds++;
 				}
 			}

@@ -32,6 +32,8 @@ export interface Feed {
 	lastSeq: number;
 	/** Why the last fetch failed, or null when it worked. */
 	error: string | null;
+	/** The feed waits for its first fetch, as one does that came with an OPML file. */
+	waiting?: boolean;
 }
 
 export interface ArticleVersion {

@@ -102,7 +102,8 @@ struct Feed {
     id: i32,
     folder_id: Option<i32>,
     position: f64,
-    /// The name the reader gave it, else the feed's own.
+    /// The name the reader gave it, else the feed's own, else, for a feed
+    /// that has none (yet), the host of its address.
     title: String,
     feed_title: String,
     feed_url: String,
@@ -112,6 +113,9 @@ struct Feed {
     fetch_agent: String,
     /// Why the last fetch failed, if it did.
     error: Option<String>,
+    /// Whether the feed was fetched at all yet. One that came with an OPML
+    /// file waits for the next round.
+    fetched: bool,
     last_seq: i32,
     read_upto: i32,
     unread: i64,
@@ -126,6 +130,20 @@ struct Tree {
     feeds: Vec<Feed>,
     /// How many articles the account's rules hide, for the list of them.
     hidden: i64,
+}
+
+/// The name a subscription goes by: the reader's own, the feed's, or, where the
+/// feed has none, the host of its address, so that no row is without a name.
+fn shown_title(own: Option<String>, feed: &str, url: &str) -> String {
+    let named = |title: &str| !title.trim().is_empty();
+    match own {
+        Some(own) if named(&own) => own,
+        _ if named(feed) => feed.to_owned(),
+        _ => Url::parse(url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned))
+            .unwrap_or_else(|| url.to_owned()),
+    }
 }
 
 async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tree>, AppError> {
@@ -143,10 +161,11 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
         .map(|count| (count.feed_id, count))
         .collect();
     let subscriptions = sqlx::query!(
-        "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,
-                f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message
-         FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
-         WHERE s.account_id = $1 ORDER BY s.position, s.feed_id",
+        r#"SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,
+                  f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message,
+                  f.fetched_at IS NOT NULL AS "fetched!"
+           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+           WHERE s.account_id = $1 ORDER BY s.position, s.feed_id"#,
         session.account_id
     )
     .fetch_all(&state.db)
@@ -159,13 +178,14 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
                 id: row.feed_id,
                 folder_id: row.folder_id,
                 position: row.position,
-                title: row.own_title.unwrap_or_else(|| row.feed_title.clone()),
+                title: shown_title(row.own_title, &row.feed_title, &row.feed_url),
                 feed_title: row.feed_title,
                 feed_url: row.feed_url,
                 site_url: row.site_url,
                 icon_url: state.picture(Size::Icon, row.icon_url),
                 fetch_agent: row.fetch_agent,
                 error: row.error_message,
+                fetched: row.fetched,
                 last_seq: count.map_or(0, |count| count.last_seq),
                 read_upto: count.map_or(0, |count| count.read_upto),
                 unread: count.map_or(0, |count| count.unread),

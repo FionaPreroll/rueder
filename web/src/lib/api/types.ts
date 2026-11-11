@@ -133,7 +133,8 @@ export type Feed = {
 	folder_id: number | null,
 	position: number,
 	/**
-	 * The name the reader gave it, else the feed's own.
+	 * The name the reader gave it, else the feed's own, else, for a feed
+	 * that has none (yet), the host of its address.
 	 */
 	title: string,
 	feed_title: string,
@@ -145,6 +146,11 @@ export type Feed = {
 	 * Why the last fetch failed, if it did.
 	 */
 	error: string | null,
+	/**
+	 * Whether the feed was fetched at all yet. One that came with an OPML
+	 * file waits for the next round.
+	 */
+	fetched: boolean,
 	last_seq: number,
 	read_upto: number,
 	unread: number,

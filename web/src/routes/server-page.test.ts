@@ -18,6 +18,7 @@ beforeEach(() => {
 	server.addArticles(tech, 3);
 	server.addArticles(server.addFeed('Lone', null, { error: 'timed out' }), 1);
 	vi.stubGlobal('fetch', server.fetch);
+	vi.stubGlobal('EventSource', server.EventSource);
 });
 
 afterEach(() => {
@@ -128,6 +129,44 @@ describe('the page with a server', () => {
 		const dialog = await screen.findByRole('dialog', { name: 'Versions of this article' });
 		const added = [...dialog.querySelectorAll('.article-body ins')].map((el) => el.textContent);
 		expect(added.join('').trim()).toBe('With an addition.');
+	});
+
+	it('says what arrived while reading, and brings it in on request', async () => {
+		await reading();
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		await screen.findByRole('button', { name: /Article 3 of feed/ });
+		server.addArticles(tech, 2);
+		server.emit({ event: 'articles', data: { feed_id: tech, last_seq: 5, new: 2 } });
+		const arrived = await screen.findByRole('button', { name: /2 new articles/ });
+		expect(screen.queryByRole('button', { name: /Article 5 of feed/ })).toBeNull();
+		await userEvent.click(arrived);
+		expect(await screen.findByRole('button', { name: /Article 5 of feed/ })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /new articles/ })).toBeNull();
+	});
+
+	it('says when a feed waits for its first fetch', async () => {
+		server.addFeed('', null, { url: 'https://later.example/feed.xml', fetched: false });
+		await reading();
+		const row = within(sidebar()).getByRole('button', { name: /Not fetched yet/ });
+		await userEvent.click(row);
+		expect(
+			await screen.findByText(/This feed has not been fetched yet\. Its articles come/)
+		).toBeInTheDocument();
+	});
+
+	it('opens the first article with j or k from the start page', async () => {
+		for (const key of ['j', 'k']) {
+			const { unmount } = render(Page);
+			expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();
+			await userEvent.keyboard(key);
+			await vi.waitFor(() =>
+				expect(document.querySelector('[aria-expanded="true"][class*="py-"]')).toHaveTextContent(
+					'Lone Article 1 of feed'
+				)
+			);
+			expect(heading()).toHaveTextContent('All items');
+			unmount();
+		}
 	});
 
 	it('leaves out what the server cannot do yet', async () => {

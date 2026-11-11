@@ -252,6 +252,13 @@ describe('the keyboard', () => {
 		expect(openArticle()).toBeNull();
 	});
 
+	it('opens the first article with k from the start page too', async () => {
+		render(Page);
+		await press('k');
+		expect(heading()).toHaveTextContent('All items');
+		expect(openArticle()).not.toBeNull();
+	});
+
 	it('stars, marks and opens the original of the article under the cursor', async () => {
 		const open = vi.fn();
 		vi.stubGlobal('open', open);

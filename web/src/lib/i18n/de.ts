@@ -25,6 +25,7 @@ const de: Messages = {
 		hidden: 'Von Filtern ausgeblendet',
 		subscriptions: 'Abonnements',
 		newFolder: 'Neuer Ordner',
+		groupedFolder: 'Neuer Ordner',
 		folderName: 'Name des Ordners',
 		renameFolder: 'Umbenennen',
 		removeFolder: 'Ordner entfernen, Inhalt behalten',
@@ -53,6 +54,7 @@ const de: Messages = {
 		logout: 'Abmelden',
 		unread: (count) => `${n(count)} ungelesen`,
 		fetchFailed: (reason) => `Der letzte Abruf ist fehlgeschlagen: ${reason}`,
+		waiting: 'Noch nicht abgerufen',
 		moveHint: 'Zum Sortieren ziehen, oder Alt mit den Pfeiltasten drücken',
 		tooDeep: (levels) => `Ordner lassen sich höchstens ${levels} Ebenen tief verschachteln.`
 	},
@@ -82,6 +84,8 @@ const de: Messages = {
 		emptyUnread: 'Hier ist nichts ungelesen.',
 		emptySearch: 'Kein Artikel passt zur Suche.',
 		emptyFeed: 'Dieser Feed hat noch keine Artikel.',
+		waitingFeed:
+			'Dieser Feed wurde noch nicht abgerufen. Seine Artikel kommen mit der nächsten Runde des Abrufs, in wenigen Minuten.',
 		showAll: 'Alle Artikel anzeigen',
 		more: 'Mehr anzeigen',
 		star: 'Markierung hinzufügen',

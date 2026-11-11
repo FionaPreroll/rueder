@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FilterRule } from '#lib/filters.ts';
 import { MAX_FOLDER_DEPTH } from '#lib/model.ts';
-import { feedIds, findNode } from '#lib/tree.ts';
+import { ancestorIds, feedIds, findNode } from '#lib/tree.ts';
 import { DemoReader } from './reader.svelte.ts';
 
 const start = Date.parse('2026-11-10T14:30:00Z');
@@ -191,6 +191,13 @@ describe('the cursor', () => {
 		expect(reader.moved).toBe(3);
 	});
 
+	it('starts at the top with either step', () => {
+		const { reader } = setup();
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		expect(reader.step(-1)).toBe(reader.list[0]);
+		expect(reader.open).toBe(reader.list[0].id);
+	});
+
 	it('steps without opening', () => {
 		const { reader } = setup();
 		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
@@ -201,11 +208,12 @@ describe('the cursor', () => {
 		expect(reader.unread('feed-tagesbote')).toBe(unread);
 	});
 
-	it('stays put going up from nowhere, and brings more of the list going down', () => {
+	it('starts at the top going up from nowhere, and brings more of the list going down', () => {
 		const { reader } = setup();
 		reader.show({ kind: 'all' });
-		expect(reader.step(-1, false)).toBeNull();
-		expect(reader.cursor).toBeNull();
+		expect(reader.step(-1, false)).toBe(reader.list[0]);
+		expect(reader.open).toBeNull();
+		reader.show({ kind: 'all' });
 		for (let i = 0; i <= 40; i++) reader.step(1, false);
 		expect(reader.current).toBe(reader.list[40]);
 		expect(reader.visible).toContain(reader.current);
@@ -523,6 +531,25 @@ describe('the tree', () => {
 		});
 		// The draft cannot fetch, so nothing arrives there.
 		expect(reader.arrive(id)).toBeNull();
+	});
+
+	it('puts two feeds into a new folder where the one dropped on was', () => {
+		const { reader } = setup();
+		expect(reader.canGroup('feed-wort', 'feed-harbor')).toBe(true);
+		expect(reader.canGroup('folder-news', 'feed-harbor')).toBe(false);
+		reader.group('feed-wort', 'feed-harbor', 'Together');
+		const [folderId] = ancestorIds(reader.tree, 'feed-harbor').slice(-1);
+		const folder = findNode(reader.tree, folderId);
+		expect(folder).toMatchObject({ kind: 'folder', title: 'Together' });
+		expect(folder?.kind === 'folder' && folder.children.map((node) => node.id)).toEqual([
+			'feed-harbor',
+			'feed-wort'
+		]);
+		expect(ancestorIds(reader.tree, folderId)).toEqual(['folder-news']);
+		// What cannot be is left as it is.
+		const before = reader.tree;
+		reader.group('feed-wort', 'feed-wort', 'Nothing');
+		expect(reader.tree).toBe(before);
 	});
 
 	it('renames a feed, and gives it its own name back', async () => {

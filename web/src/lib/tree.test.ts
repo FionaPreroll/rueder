@@ -4,10 +4,12 @@ import {
 	addFeed,
 	addFolder,
 	ancestorIds,
+	canGroup,
 	canMove,
 	feedIds,
 	findNode,
 	folderList,
+	groupFeeds,
 	moveNode,
 	nudge,
 	removeFeed,
@@ -136,6 +138,36 @@ describe('feeds', () => {
 			'x:0'
 		]);
 		expect(folderList([feed('a')])).toEqual([]);
+	});
+});
+
+describe('putting two feeds into a new folder', () => {
+	it('puts the new folder where the feed dropped on was', () => {
+		expect(shape(groupFeeds(tree, 'd', 'a', 'new', 'New'))).toBe('tech[rust[new[a d] b] c]');
+		expect(shape(groupFeeds(tree, 'a', 'd', 'new', 'New'))).toBe('tech[rust[b] c] new[d a]');
+		expect(shape(groupFeeds(tree, 'b', 'a', 'new', 'New'))).toBe('tech[rust[new[a b]] c] d');
+		expect(findNode(groupFeeds(tree, 'a', 'd', 'new', 'New'), 'new')).toMatchObject({
+			title: 'New'
+		});
+		expect(shape(tree)).toBe('tech[rust[a b] c] d');
+	});
+
+	it('only with two feeds, and not deeper than folders go', () => {
+		for (const [id, target] of [
+			['a', 'a'],
+			['rust', 'd'],
+			['d', 'rust'],
+			['gone', 'd'],
+			['d', 'gone']
+		]) {
+			expect(canGroup(tree, id, target)).toBe(false);
+			expect(groupFeeds(tree, id, target, 'new', 'New')).toBe(tree);
+		}
+		// A feed at the bottom of the deepest folders has no room for one more.
+		const deep = [nested(MAX_FOLDER_DEPTH), feed('x')];
+		expect(canGroup(deep, 'x', 'n-feed')).toBe(false);
+		const shallower = [nested(MAX_FOLDER_DEPTH - 1), feed('x')];
+		expect(canGroup(shallower, 'x', 'n-feed')).toBe(true);
 	});
 });
 

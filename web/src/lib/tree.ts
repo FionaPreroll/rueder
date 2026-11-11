@@ -104,6 +104,42 @@ export function removeFolder(tree: readonly TreeNode[], id: string): TreeNode[] 
 	return next;
 }
 
+/** Whether dropping the feed `id` on the feed `targetId` can put both into a new folder. */
+export function canGroup(tree: readonly TreeNode[], id: string, targetId: string) {
+	if (id === targetId) return false;
+	const moved = find(tree as TreeNode[], id);
+	const target = find(tree as TreeNode[], targetId);
+	if (moved?.node.kind !== 'feed' || target?.node.kind !== 'feed') return false;
+	// The new folder takes the target's place, one level deeper than the target's folders.
+	return target.path.length + 1 <= MAX_FOLDER_DEPTH;
+}
+
+/**
+ * The tree with a new folder where the feed `targetId` was, holding that feed and
+ * then the feed `id`; the same tree when that is not allowed.
+ */
+export function groupFeeds(
+	tree: readonly TreeNode[],
+	id: string,
+	targetId: string,
+	folderId: string,
+	title: string
+): TreeNode[] {
+	if (!canGroup(tree, id, targetId)) return tree as TreeNode[];
+	const next = clone(tree);
+	const moved = find(next, id)!;
+	moved.siblings.splice(moved.index, 1);
+	const target = find(next, targetId)!;
+	const folder: Folder = {
+		kind: 'folder',
+		id: folderId,
+		title,
+		children: [target.node, moved.node]
+	};
+	target.siblings.splice(target.index, 1, folder);
+	return next;
+}
+
 /** The tree with a new feed at the end of a folder, or of the top level for `null`. */
 export function addFeed(
 	tree: readonly TreeNode[],
