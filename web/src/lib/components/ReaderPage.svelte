@@ -8,6 +8,7 @@
 	import { formatNumber } from '#lib/i18n/intl.ts';
 	import type { Article, ArticleVersion, Stream } from '#lib/model.ts';
 	import type { Reader } from '#lib/reader.ts';
+	import { keyMap, type Action } from '#lib/keys.ts';
 	import { settings } from '#lib/settings.svelte.ts';
 	import ArticleList from './ArticleList.svelte';
 	import HomeOverview from './HomeOverview.svelte';
@@ -60,6 +61,9 @@
 
 	const narrow = () => window.matchMedia?.('(max-width: 767px)').matches ?? false;
 
+	// Whatever changes in the settings is kept with the account, where there is one.
+	$effect(() => reader.saveSettings({ ...settings }));
+
 	onMount(() => {
 		// On a phone the sidebar lies over the list, so it starts closed.
 		if (narrow()) sidebarOpen = false;
@@ -98,6 +102,60 @@
 	const pressable = (target: EventTarget | null) =>
 		target instanceof HTMLElement && target.closest('button, a, summary, [role="menuitem"]');
 
+	/** Does what a shortcut says; false for a key that is none. */
+	function act(action: Action | undefined, article: Article | null, inList: boolean) {
+		switch (action) {
+			case 'next':
+			case 'previous':
+			case 'nextCursor':
+			case 'previousCursor': {
+				// From the start page the first step goes into all items.
+				if (!inList) go({ kind: 'all' });
+				const forward = action === 'next' || action === 'nextCursor';
+				reader.step(forward ? 1 : -1, action === 'next' || action === 'previous');
+				return true;
+			}
+			case 'toggle':
+				if (article) reader.toggleOpen(article);
+				return true;
+			case 'star':
+				if (article) reader.toggleStar(article);
+				return true;
+			case 'read':
+				if (article) reader.setRead(article, !reader.isRead(article));
+				return true;
+			case 'original':
+				if (article) openOriginal(article);
+				return true;
+			case 'markAll':
+				if (inList) reader.markAllRead();
+				return true;
+			case 'refresh':
+				reader.refresh();
+				return true;
+			case 'unreadOnly':
+				reader.unreadOnly = !reader.unreadOnly;
+				return true;
+			case 'expandedView':
+				settings.view = 'expanded';
+				return true;
+			case 'listView':
+				settings.view = 'list';
+				return true;
+			case 'search':
+				document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+				return true;
+			case 'sidebar':
+				sidebarOpen = !sidebarOpen;
+				return true;
+			case 'help':
+				openSettings('keys');
+				return true;
+			default:
+				return false;
+		}
+	}
+
 	function keydown(event: KeyboardEvent) {
 		if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
 		if (dialog || comparing || typing(event.target)) return;
@@ -105,16 +163,18 @@
 		const key = event.key;
 		const article = reader.current;
 		const inList = reader.stream.kind !== 'home';
+		const keys = keyMap(settings.keys);
 
 		if (lead === 'g') {
 			lead = null;
 			clearTimeout(leadTimer);
+			const action = keys.afterG.get(key);
 			const target: Stream | null =
-				key === 'h'
+				action === 'goHome'
 					? { kind: 'home' }
-					: key === 'a'
+					: action === 'goAll'
 						? { kind: 'all' }
-						: key === 's'
+						: action === 'goStarred'
 							? { kind: 'starred' }
 							: null;
 			if (target) {
@@ -131,61 +191,17 @@
 				clearTimeout(leadTimer);
 				leadTimer = setTimeout(() => (lead = null), 1500);
 				break;
-			case 'j':
-			case 'k':
-			case 'n':
-			case 'p':
-				// From the start page the first step goes into all items.
-				if (!inList) go({ kind: 'all' });
-				reader.step(key === 'j' || key === 'n' ? 1 : -1, key === 'j' || key === 'k');
-				break;
-			case 'o':
-				if (article) reader.toggleOpen(article);
-				break;
 			case 'Enter':
 				// On a button or a link, Enter presses that.
 				if (pressable(event.target) || !article) handled = false;
 				else reader.toggleOpen(article);
-				break;
-			case 's':
-				if (article) reader.toggleStar(article);
-				break;
-			case 'm':
-				if (article) reader.setRead(article, !reader.isRead(article));
-				break;
-			case 'v':
-				if (article) openOriginal(article);
-				break;
-			case 'A':
-				if (inList) reader.markAllRead();
-				break;
-			case 'r':
-				reader.refresh();
-				break;
-			case 'U':
-				reader.unreadOnly = !reader.unreadOnly;
-				break;
-			case '1':
-				settings.view = 'expanded';
-				break;
-			case '2':
-				settings.view = 'list';
-				break;
-			case '/':
-				document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
-				break;
-			case 'u':
-				sidebarOpen = !sidebarOpen;
-				break;
-			case '?':
-				openSettings('keys');
 				break;
 			case 'Escape':
 				if (reader.open) reader.open = null;
 				else handled = false;
 				break;
 			default:
-				handled = false;
+				handled = act(keys.single.get(key), article, inList);
 		}
 		if (handled) event.preventDefault();
 	}

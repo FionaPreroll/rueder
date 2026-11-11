@@ -106,6 +106,8 @@ export class FakeServer {
 	feeds: FakeFeed[] = [];
 	articles: FakeArticle[] = [];
 	rules: ApiRule[] = [];
+	/** The settings of the account, as the page stored them; `{}` for a new account. */
+	settings: unknown = { theme: 'system' };
 	/** The feeds at an address of the made-up web, by the address with its scheme. */
 	sites = new Map<string, FakeSiteFeed[]>();
 	/** Addresses that send the request on to another, like a site's login. */
@@ -370,6 +372,11 @@ export class FakeServer {
 			return empty();
 		}
 
+		if (method === 'GET' && path === '/settings') return json(this.settings);
+		if (method === 'PUT' && path === '/settings') {
+			this.settings = body;
+			return empty();
+		}
 		if (method === 'GET' && path === '/rules') return json(this.rules);
 		if (method === 'GET' && path === '/rules/hits') {
 			const hits = this.rules.map((rule) => ({

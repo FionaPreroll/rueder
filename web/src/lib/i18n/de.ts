@@ -187,7 +187,8 @@ const de: Messages = {
 		views: { list: 'Liste', expanded: 'Erweitert' },
 		markOnScroll: 'Artikel in der erweiterten Ansicht beim Vorbeiscrollen als gelesen markieren',
 		teasers: 'In der Liste nach dem Titel die ersten Worte des Textes zeigen',
-		note: 'Änderungen gelten sofort und bleiben in diesem Browser. Später liegen sie bei deinem Konto und gelten auf jedem Gerät.'
+		note: 'Änderungen gelten sofort, liegen bei deinem Konto und gelten auf jedem Gerät.',
+		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.'
 	},
 
 	rules: {
@@ -222,7 +223,13 @@ const de: Messages = {
 
 	keys: {
 		title: 'Tastaturkürzel',
-		later: 'Die Belegung wird änderbar, sobald die Einstellungen auf dem Server liegen.',
+		note: 'Deine Tasten liegen bei den Einstellungen. Enter, Escape und g bleiben, wie sie sind.',
+		change: (what) => `Taste ändern für: ${what}`,
+		changeShort: 'Ändern',
+		press: 'Taste drücken …',
+		taken: (key, other) => `${key} ist schon die Taste für: ${other}`,
+		fixed: (key) => `${key} lässt sich keinem Kürzel geben.`,
+		reset: 'Zurück zu den Tasten von rueder',
 		groups: { articles: 'Artikel', lists: 'Listen', go: 'Gehe zu', app: 'Überall' },
 		next: 'Nächster Artikel, geöffnet',
 		previous: 'Vorheriger Artikel, geöffnet',

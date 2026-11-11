@@ -130,6 +130,8 @@ export class DemoReader implements Reader {
 	readonly demo = this;
 	dismissNotice() {}
 	signOut() {}
+	/** The draft keeps the settings in the browser only. */
+	saveSettings() {}
 	/** Every made-up article has its text with it. */
 	load() {}
 

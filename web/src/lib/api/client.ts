@@ -265,6 +265,10 @@ export const api = {
 	importOpml: (file: Blob) => call<OpmlImported>('POST', '/opml', file),
 	exportOpml: () => text('GET', '/opml'),
 
+	/** The settings as the account keeps them; what is in them is the page's business. */
+	settings: () => call<unknown>('GET', '/settings'),
+	saveSettings: (settings: unknown) => call<void>('PUT', '/settings', settings),
+
 	rules: () => call<ApiRule[]>('GET', '/rules'),
 	addRule: (rule: ApiNewRule) => call<RuleOutcome>('POST', '/rules', rule),
 	changeRule: (id: number, rule: ApiNewRule) => call<RuleOutcome>('PUT', `/rules/${id}`, rule),

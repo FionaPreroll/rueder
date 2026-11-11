@@ -5,6 +5,7 @@
 // the build that runs without a server.
 
 import type { FilterRule } from './filters.ts';
+import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
 
@@ -179,6 +180,12 @@ export interface Reader {
 	readonly filters: RuleBook;
 	/** Only the reader with made-up data has these. */
 	readonly demo: DemoSwitches | null;
+
+	/**
+	 * Keeps the settings with the account, where there is one; called with them
+	 * whenever they change. The reader puts what the account has into `settings`.
+	 */
+	saveSettings(settings: Settings): void;
 
 	/** Starts what goes on in the background; returns how to stop it. */
 	start(): () => void;

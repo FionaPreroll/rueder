@@ -121,6 +121,43 @@ describe('Shortcuts', () => {
 		);
 	});
 
+	it('takes a key of ones own, and refuses one that is taken or fixed', async () => {
+		render(Shortcuts);
+		const change = (what: string) =>
+			userEvent.click(screen.getByRole('button', { name: `Change the key for: ${what}` }));
+		await change('Next article, opened');
+		expect(screen.getByRole('status')).toHaveTextContent('Press a key');
+		await userEvent.keyboard('l');
+		expect(settings.keys).toEqual({ next: 'l' });
+		expect(screen.getByText('Next article, opened').previousElementSibling).toHaveTextContent('l');
+
+		await change('Previous article, opened');
+		await userEvent.keyboard('l');
+		expect(screen.getByRole('alert')).toHaveTextContent(
+			'l is already the key for: Next article, opened'
+		);
+		await change('Previous article, opened');
+		await userEvent.keyboard('g');
+		expect(screen.getByRole('alert')).toHaveTextContent('g cannot be given to a shortcut.');
+		// Escape gives up, and Shift alone waits for the key it goes with.
+		await change('Previous article, opened');
+		await userEvent.keyboard('{Escape}');
+		expect(settings.keys).toEqual({ next: 'l' });
+		await change('Mark all as read');
+		await userEvent.keyboard('{Shift>}M{/Shift}');
+		expect(settings.keys).toEqual({ next: 'l', markAll: 'M' });
+
+		// After g, the second key is what changes.
+		await change('Home');
+		await userEvent.keyboard('x');
+		expect(settings.keys.goHome).toBe('g x');
+		expect(screen.getByText('Home').previousElementSibling).toHaveTextContent(/g\s+then\s+x/);
+
+		await userEvent.click(screen.getByRole('button', { name: "Back to rueder's keys" }));
+		expect(settings.keys).toEqual({});
+		expect(screen.queryByRole('button', { name: "Back to rueder's keys" })).toBeNull();
+	});
+
 	it('speaks German', () => {
 		useLanguage('de');
 		render(Shortcuts);
