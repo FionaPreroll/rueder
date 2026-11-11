@@ -251,6 +251,11 @@ const de: Messages = {
 		found: (count) =>
 			count === 1 ? 'Dort gibt es einen Feed:' : `Dort gibt es ${n(count)} Feeds:`,
 		none: 'Unter dieser Adresse gibt es keinen Feed.',
+		movedTo: (url) => `Die Website hat die Anfrage weitergeleitet an ${url}.`,
+		loginWall:
+			'Manche Websites schicken alle, die nicht eingeloggt sind, auf ihre Login-Seite. Ihre Feeds lassen sich dann nicht lesen.',
+		subscribed: 'Abonniert',
+		show: 'Zeigen',
 		untitled: 'Ohne Namen',
 		folder: 'In den Ordner',
 		topLevel: 'Kein Ordner',

@@ -220,8 +220,7 @@ export const api = {
 	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`),
 
 	/** The feeds at an address: the feed itself, or those a web page names. */
-	findFeeds: async (url: string) =>
-		(await call<FoundFeeds>('POST', '/feeds/find', { url } satisfies FindFeeds)).feeds,
+	findFeeds: (url: string) => call<FoundFeeds>('POST', '/feeds/find', { url } satisfies FindFeeds),
 	/** Subscribes to the feed at an address and gives back its number. */
 	subscribe: async (url: string, folderId: number | null) => {
 		const body: NewSubscription = { url, folder_id: folderId };

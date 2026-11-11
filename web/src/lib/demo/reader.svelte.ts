@@ -461,7 +461,9 @@ export class DemoReader implements Reader {
 	async findFeeds(address: string): Promise<Found> {
 		const url = webAddress(address);
 		if (!url) return { problem: 'refused', reason: '' };
-		return { feeds: [{ url: url.href, title: url.hostname }] };
+		const known = this.addresses.get(url.href);
+		const feedId = known && this.feeds[known] ? known : null;
+		return { feeds: [{ url: url.href, title: url.hostname, feedId }], movedTo: null };
 	}
 
 	/** Adds a feed for an address; it starts empty and stays so. */

@@ -1048,8 +1048,15 @@ describe('subscribing', () => {
 	it('finds the feeds of an address, and what is not there', async () => {
 		server.addSite('https://site.example', site, other);
 		const reader = await started();
-		expect(await reader.findFeeds('site.example')).toEqual({ feeds: [site, other] });
-		expect(await reader.findFeeds('https://site.example/feed.xml')).toEqual({ feeds: [site] });
+		const fresh = (feed: typeof site) => ({ ...feed, feedId: null });
+		expect(await reader.findFeeds('site.example')).toEqual({
+			feeds: [fresh(site), fresh(other)],
+			movedTo: null
+		});
+		expect(await reader.findFeeds('https://site.example/feed.xml')).toEqual({
+			feeds: [fresh(site)],
+			movedTo: null
+		});
 		expect(await reader.findFeeds('nothing.example')).toEqual({
 			problem: 'refused',
 			reason: 'the address cannot be fetched: no such site'
@@ -1061,6 +1068,21 @@ describe('subscribing', () => {
 		]);
 		// Looking changes nothing.
 		expect(server.writes.filter((write) => write !== 'POST /feeds/find')).toEqual([]);
+	});
+
+	it('marks what is subscribed already, and says where a site sent the request', async () => {
+		server.addSite('https://site.example', site, other);
+		server.moves.set('https://members.example', 'https://site.example');
+		const reader = await started();
+		const subscribed = await reader.subscribe(site.url, null);
+		const feedId = 'feedId' in subscribed ? subscribed.feedId : '';
+		expect(await reader.findFeeds('members.example')).toEqual({
+			feeds: [
+				{ ...site, feedId },
+				{ ...other, feedId: null }
+			],
+			movedTo: 'https://site.example'
+		});
 	});
 
 	it('says why the server would not look', async () => {

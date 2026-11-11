@@ -191,7 +191,9 @@ describe('SubscribeDialog with a server', () => {
 		reader.start();
 		const onclose = vi.fn();
 		render(SubscribeDialog, { reader, onclose });
-		await vi.waitFor(() => expect(reader.tree).toHaveLength(2));
+		await vi.waitFor(() =>
+			expect(reader.tree.length).toBe(server.folders.length + server.feeds.length)
+		);
 		return { reader, onclose };
 	}
 
@@ -212,6 +214,32 @@ describe('SubscribeDialog with a server', () => {
 		await vi.waitFor(() => expect(onclose).toHaveBeenCalledOnce());
 		expect(reader.stream.kind).toBe('feed');
 		expect(server.feeds.at(-1)?.url).toBe('https://site.example/comments.xml');
+	});
+
+	it('shows a feed that is subscribed already instead of subscribing again', async () => {
+		server.addSite('https://site.example', { url: 'https://site.example/feed.xml', title: 'Old' });
+		server.addFeed('Old', null, { url: 'https://site.example/feed.xml' });
+		const { reader, onclose } = await open();
+		await userEvent.type(address(), 'site.example{Enter}');
+		expect(await screen.findByText('Subscribed')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Subscribe: Old' })).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: 'Show: Old' }));
+		expect(onclose).toHaveBeenCalledOnce();
+		expect(reader.stream).toEqual({ kind: 'feed', id: `feed-${server.feeds.at(-1)?.id}` });
+		expect(server.writes.filter((write) => write === 'POST /feeds')).toEqual([]);
+	});
+
+	it('says where a site sent the request when there is no feed', async () => {
+		server.addSite('https://login.example');
+		server.moves.set('https://walled.example/r/news', 'https://login.example');
+		await open();
+		await userEvent.type(address(), 'walled.example/r/news{Enter}');
+		const status = await screen.findByRole('status');
+		expect(status).toHaveTextContent('There is no feed at this address.');
+		expect(status).toHaveTextContent('The site sent the request on to https://login.example.');
+		expect(status).toHaveTextContent(
+			'Some sites send whoever is not logged in to their login page.'
+		);
 	});
 
 	it('says what the server would not do, in its own words too', async () => {

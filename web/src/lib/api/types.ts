@@ -386,6 +386,11 @@ export type FindFeeds = {
  */
 export type FoundFeeds = {
 	feeds: Array<FeedCandidate>,
+	/**
+	 * Where the site sent the request on to, if it did: a site that turns
+	 * readers away often sends them to its login.
+	 */
+	moved_to: string | null,
 };
 
 /**
@@ -394,6 +399,10 @@ export type FoundFeeds = {
 export type FeedCandidate = {
 	url: string,
 	title: string,
+	/**
+	 * The number of the feed if the reader subscribes to it already.
+	 */
+	feed_id: number | null,
 };
 
 /**

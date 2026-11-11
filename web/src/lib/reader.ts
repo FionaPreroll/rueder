@@ -48,6 +48,8 @@ export interface FeedCandidate {
 	url: string;
 	/** Its name, as far as the feed or the page says; it may be empty. */
 	title: string;
+	/** The feed in the tree, if it is subscribed to already. */
+	feedId: string | null;
 }
 
 /** Why looking for feeds, subscribing or an import did not work. The page has the words. */
@@ -67,7 +69,13 @@ export type Refusal =
 	| { problem: 'unreachable' };
 
 /** The feeds at an address: the feed itself, or what a web page names. */
-export type Found = { feeds: FeedCandidate[] } | Refusal;
+export type Found =
+	| {
+			feeds: FeedCandidate[];
+			/** Where the site sent the request on to, if it did; often to its login. */
+			movedTo: string | null;
+	  }
+	| Refusal;
 
 /** A subscription that holds now; `known` if it held before. */
 export type Subscribed = { feedId: string; known: boolean } | Refusal;

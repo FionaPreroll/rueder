@@ -132,6 +132,8 @@ struct Find {
 struct Candidate {
     url: String,
     title: String,
+    /// The number of the feed if the reader subscribes to it already.
+    feed_id: Option<i32>,
 }
 
 /// What `POST /api/feeds/find` answers.
@@ -139,6 +141,9 @@ struct Candidate {
 #[ts(rename = "FoundFeeds")]
 struct Found {
     feeds: Vec<Candidate>,
+    /// Where the site sent the request on to, if it did: a site that turns
+    /// readers away often sends them to its login.
+    moved_to: Option<String>,
 }
 
 /// What is at an address: the feed itself, or the feeds a web page points to.
@@ -148,6 +153,7 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
         return vec![Candidate {
             url: response.url.to_string(),
             title: feed.title.unwrap_or_default(),
+            feed_id: None,
         }];
     }
     let page = &response.body[..response.body.len().min(MAX_PAGE)];
@@ -155,6 +161,7 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
     let candidate = |link: cleaning::FeedLink| Candidate {
         url: link.url.into(),
         title: link.title,
+        feed_id: None,
     };
     links.into_iter().map(candidate).collect()
 }
@@ -180,10 +187,27 @@ async fn find(
         let message = format!("the site answers with {}", response.status);
         return Err(AppError::BadRequest(message));
     }
+    let moved_to = (response.url != url).then(|| response.url.to_string());
     let rules = rules(&state)?;
     // Reading a feed or a page takes a while.
-    let feeds = tokio::task::spawn_blocking(move || candidates(&response, &rules)).await?;
-    Ok(Json(Found { feeds }))
+    let mut feeds = tokio::task::spawn_blocking(move || candidates(&response, &rules)).await?;
+    // What the reader subscribes to already says so.
+    let urls: Vec<String> = feeds.iter().map(|feed| feed.url.clone()).collect();
+    let read = sqlx::query!(
+        "SELECT f.id, f.feed_url FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+         WHERE s.account_id = $1 AND f.feed_url = ANY($2)",
+        session.account_id,
+        &urls,
+    )
+    .fetch_all(&state.db)
+    .await?;
+    for feed in &mut feeds {
+        feed.feed_id = read
+            .iter()
+            .find(|row| row.feed_url == feed.url)
+            .map(|row| row.id);
+    }
+    Ok(Json(Found { feeds, moved_to }))
 }
 
 /// What `POST /api/feeds` reads. It answers with `Subscribed`.
