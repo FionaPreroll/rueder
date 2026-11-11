@@ -552,6 +552,31 @@ describe('the tree', () => {
 		expect(reader.tree).toBe(before);
 	});
 
+	it('has labels, and a list for each', () => {
+		const { reader } = setup();
+		expect(reader.labels.map((label) => label.id)).toEqual(['label-later', 'label-work']);
+		reader.show({ kind: 'label', id: 'label-later' });
+		expect(reader.list).toHaveLength(2);
+		expect(reader.title()).toBe('Später lesen');
+		expect(reader.pending).toBe(0);
+		const [article] = reader.list;
+		reader.setLabel(article, 'label-later', false);
+		expect(reader.list).toHaveLength(1);
+		reader.setLabel(article, 'label-gone', true);
+		expect(reader.labelsOf(article)).toEqual([]);
+
+		reader.addLabel('Neu', '#9334e6');
+		const added = reader.labels.at(-1)!;
+		reader.setLabel(article, added.id, true);
+		reader.setLabel(article, 'label-later', true);
+		expect(reader.labelsOf(article)).toEqual(['label-later', added.id]);
+		reader.changeLabel(added.id, { title: 'Anders' });
+		expect(reader.labels.at(-1)?.title).toBe('Anders');
+		reader.removeLabel('label-later');
+		expect(reader.labelsOf(article)).toEqual([added.id]);
+		expect(reader.stream).toEqual({ kind: 'all' });
+	});
+
 	it('renames a feed, and gives it its own name back', async () => {
 		const { reader } = setup();
 		const before = reader.feeds['feed-tagesbote'].title;
