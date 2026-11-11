@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmln@:content="http://purl.org/rss/1.0/modules/content/" xglns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title;Example</tit>https://example.org/</link>
+<image><url>https://example.org/logo.gif</url></image>
+<item><title>A &amp; B</tit;b&gt;bold&lt;/b&gt;ed</title>
+  <link href="https://example.org/"/>
+  <icon>/favicon.png</icon>
+  <uple.org/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+    <id>urn:uuid:1225c695-cfb8-4eple.org/a.mp3" length="1" type="audio/mpeg"/></item>
+<item><title>No guid</title><link>https://example.org/b</link></item>
+<item><description>Neither</description></item>
+</channel></rss>

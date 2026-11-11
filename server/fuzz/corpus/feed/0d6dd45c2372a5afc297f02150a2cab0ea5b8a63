@@ -1,0 +1,13 @@
+<?xml versi/n="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/0.1/">
+<channel><title>Example</title><link>https://example.org/</link>
+<image><url>https://exa/ale.org/logo.gif</url></image>
+<item><title>A &amp; B</title><link>https://example.org/a</link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Nov 2026 12:00?00 +0100</pubDate><dc:creator>Someone</dc:creator>'category>x</category>
+<description>Teaser &lt;b&gt;bold&lt;/b&gt;</description>
+<content:encoded><![CDATA[<p>Full <a href="/rel">text</a> <iframe src="https://evil.example/"></iframe></p>]]></content:encoded>
+<enclosure url="https://exampn Annalena Baerbock hinterher zu recherchieren. Soweit ich sehen kann nicht gänzlich erfolglos. Da gab es so Vorfäel lwie dass di-Stiftung ein Lebenslauf zu ihr nachträglich "korrigieren" musste, und dann war das Studium, mi nicht jemand, d<p>Text <img src="a.png"/></-Vorprüfung legte Baerbock dort mit der NoteA1,3 ab.</blockquote>Wenn ihr genau lest, stellt ihr fest, dass sie hier wiedele.org/a.mp3" length="1" type="audio/mpeg"/></item>
+<item><ton>
+<content:encoded><![CDATA[<p>Full <a href="/rel">text</a> <iframe src="https://evitle>No guid</title><link>https://example.org/b</link></item>
+<item><description>Neither</description></item>
+</channel></rss>

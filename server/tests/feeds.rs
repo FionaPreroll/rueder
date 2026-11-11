@@ -179,6 +179,65 @@ fn the_text_for_reading_is_cleaned_and_the_original_is_kept() {
     );
 }
 
+#[test]
+fn the_encoding_is_taken_from_the_declaration_wherever_it_ends() {
+    // ISO-8859-1, with a declaration longer than the 64 bytes the library
+    // reads ahead: it used to panic on that.
+    let mut latin1 =
+        b"<?xml version=\"1.0\"   encoding=\"ISO-8859-1\"   standalone=\"yes\" ?>\n".to_vec();
+    latin1.extend_from_slice(
+        b"<rss version=\"2.0\"><channel><title>K\xe4se</title><item><guid>1</guid>\
+          <title>Gr\xfc\xdfe</title><description>\xb5</description></item></channel></rss>",
+    );
+    let parsed = parse(&latin1);
+    assert_eq!(parsed.title.as_deref(), Some("Käse"));
+    assert_eq!(parsed.articles[0].original.title, "Grüße");
+    assert_eq!(parsed.articles[0].html, "µ");
+
+    // A second declaration further down, as when two feeds were written one
+    // after the other, names an encoding that no longer counts.
+    let mut twice = latin1.clone();
+    twice.extend_from_slice(b"\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss/>");
+    let parsed = feeds::parse(
+        &twice,
+        "https://example.org/feed.xml",
+        NOW,
+        &Rules::built_in().unwrap(),
+    );
+    if let Ok(parsed) = parsed {
+        assert_eq!(parsed.title.as_deref(), Some("Käse"));
+    }
+
+    // A byte order mark says more than the declaration.
+    let mut utf_16 = vec![0xff, 0xfe];
+    for unit in "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><rss version=\"2.0\"><channel>\
+                 <title>Käse</title><item><guid>1</guid><title>x</title></item></channel></rss>"
+        .encode_utf16()
+    {
+        utf_16.extend_from_slice(&unit.to_le_bytes());
+    }
+    assert_eq!(parse(&utf_16).title.as_deref(), Some("Käse"));
+}
+
+#[test]
+fn only_whole_web_addresses_are_kept_as_links() {
+    let feed = "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>x</title>\
+        <link>https://ex\u{8}ample.org/</link>\
+        <item><title>a</title><link>https://exa mple.org/a</link></item>\
+        <item><title>b</title><link>https://example.org/b?utm_source=x</link></item>\
+        </channel></rss>";
+    let parsed = parse(feed.as_bytes());
+    assert_eq!(parsed.site_url, None);
+    // Oldest first: the feed lists the newest on top.
+    let [b, a] = &parsed.articles[..] else {
+        panic!("two articles: {:?}", parsed.articles);
+    };
+    // The link still tells the article apart, as the old rueder did.
+    assert_eq!(a.guid, "https://exa mple.org/a");
+    assert_eq!(a.original.url, None);
+    assert_eq!(b.original.url.as_deref(), Some("https://example.org/b"));
+}
+
 /// A feed in Atom 0.3, made up after the one tagesschau.de sends: its texts
 /// escaped, one of them wrapped in a CDATA marker before it was escaped, and
 /// its dates only as `dc:date`.

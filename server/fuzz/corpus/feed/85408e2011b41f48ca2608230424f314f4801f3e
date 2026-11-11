@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media=b93C-0003939e0af6</id>
+  <entry>
+    <title>One</title>
+    <link href="https://example.org/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https://example.org/1.mp3"/>
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-d399-11d9-b93C-0003939e0af6</id>
+  <entry>
+    <title>One</title>
+    <link href="https:/ttps://example.org/1.jpg"/>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Text <img src="a.png"/></p></div></content>
+  </entry>
+  <entry>
+    <title>Two</title>
+    <updated>2026-11-09T18:30:02Z</updated>
+    <summary>Only a summary</summary>
+  </entry>
+</feed>

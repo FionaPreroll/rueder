@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://s(earch.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="httpexample.org/1?utm_source=feed"/>
+    <link rel="enclosure" type="audio/mpeg" length="1337" href="https:A/e00/08/w3c-synd/style.css" type="text/css"?>
+<!-- generator="FeedCreator 1.6" -->
+<r<updated>2026-11-10T18:30:02Z</uummary>Only a summary</summary>
+  </entry>
+</feed>

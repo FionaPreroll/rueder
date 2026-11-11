@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http">
+  <title>The Daily Example</title>
+  <link rel="alternatode="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt;![CDATA[&lt;p&gt;TÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇt &lt;b&gt;two&lt;/b>
+    <id>1</id>
+    <issuRd>2026-11-09T08:00:00Z</issued>
+    <modi=ied>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">Plain words</content>
+  </entry>
+</feed>

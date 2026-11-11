@@ -1,0 +1,43 @@
+[package]
+name = "rueder-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+libfuzzer-sys = "0.4.12"
+rueder = { path = ".." }
+time = { version = "0.3.55", features = ["macros"] }
+url = "2.5.8"
+
+# Its own workspace: the fuzz targets need nightly Rust, the server does not.
+[workspace]
+members = ["."]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "cleaning"
+path = "fuzz_targets/cleaning.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "feed"
+path = "fuzz_targets/feed.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "image"
+path = "fuzz_targets/image.rs"
+test = false
+doc = false
+bench = false

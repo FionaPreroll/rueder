@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding}"UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#mlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.exm nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" modf="escaped">Sho09:00:00Z</modified>
+    <content type="text/plai]]n" mode="xml">ai nlPwords</content>
+  </entry>
+</feed>

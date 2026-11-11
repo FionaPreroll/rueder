@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://pate" href="https://=news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nob]ody</copyright>
+  <dc:date>2026-11-10T09:00:00°</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate mode="escaped">Short &lt;b&gt;two&lt;/b&gt;</suímartext/plain" mode="xml">ai nlPwords</content>
+  </entry>
+</feed>

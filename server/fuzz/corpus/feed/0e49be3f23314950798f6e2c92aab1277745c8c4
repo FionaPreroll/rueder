@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlAns:media="http://search.yahoo.com/mrss/">
+  <title type="html">Example &amp;lt;b&amp;gt;feed</title>
+  <link href="https://example.org/"/>
+  <icon>/favicon.png</icon>
+  <updated>2026-11-10T18:300:02Z</updated>
+  <id>urn:uuid:60a76c80-d399-1Z</updated>
+    <media:thumbnry</summary>
+  </entry>
+</feed>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" ve+rsion="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" hxml:baseref="http6b49/florian-sellmaier_256x.jpg 2x, https://raumzeit-podcast.de/podlove/image/687474703a2f2f6d6574612e6d6574616.org/dc/elements/1.1/" ve+rsion="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" hxml:baseref="http6b49/florian-sellmaier_256x.jpg 2x, https://raumzeit-podcast.de/podlove/image/687474703a2f2f6d6574612e6d6574616562656e652e6d652f6d656469612f7261756d7a6569742f636f6e7472696275746f72732f666c6f7269616e2d73656c6c6d616965722e6a7067/384/0/0/florian-sellmaier 3x"/>
+
+
+<br/>
+<strong>Florian Sellmaier</strong>
+                                <br/>
+    562656e652e6d652f6d656469612f7261756d7a6569742f636f6e7472696275746f72732f666c6f7269616e2d73656c6c6d616965722e6a7067/384/0/0/florian-sellmaier 3x"/>
+
+
+<br/>
+<strong>Florian Sellmaier</strong>
+                                <br/>
+                <em>We="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt;]]&gt;</content>
+    <dc:date>2026-11-10T08:00:00Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="https://news.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">ai nlPwords</content>
+  </entry>
+</feed>

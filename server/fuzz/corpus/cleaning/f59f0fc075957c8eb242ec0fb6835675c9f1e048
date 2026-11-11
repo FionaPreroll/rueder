@@ -1,0 +1,1 @@
+<form><button formaction=javas/form><input onfocus=alert(1) autofocus>

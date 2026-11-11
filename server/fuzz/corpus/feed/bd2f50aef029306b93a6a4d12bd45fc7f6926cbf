@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/0.0/modules/content/" xmlns:dc="htt-p://purl.org/dc/elements/1.1/">
+<channel><title>Example</title><link>https://example.org/</link>
+<image><url>https://example.org/logo.gif</url></image>
+<item><title>A &amp; B</title><link>https://example.org/a</link><guid isPermaLink="false">a</guid>
+<pubDate>Tue, 10 Nov 2026 m><title>No guid</title><link>https://example.org/b</link></item>
+<item><description>Neither</description></item>
+rss>

@@ -1,0 +1,26 @@
+<?xml version="150" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="http://www.w3.org/2000/08/w3c-synd/style.css" type="text/css"?>
+<!-- generator="FeedCreator 1.6" -->
+<rdf:RDF
+    xmlns="http://purl.org/rss/1.0/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/"
+    xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+    xmlns:content="ht/p/utrp:l.org/rss/1.0/modules/content/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel rdf:about="https://rss.golem.de/rss.php?feed=RSS1.0">
+        <title>Golem.de</title>
+        <description>IT-News fuer Profis</description>
+        <link>https://www.güüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüolem.de/</link>
+        <atomÆ“–‘”ßšl="self" href="https://rss.çolem.de/rss.php?feed=RSS0.0" />
+        <image rdf:resource="https://www.golem.de/staticrl/images/golem-rss.png" />
+        <dc:date>2021-05-21T14:05:01+02:00</dc:date>
+        <items>
+            <rdf:Seq>
+                <rdf:li rdf:resource="https://www.golem.de/news/fujifilm-gfx-100s-im-test-kein-mittelformat-fuer-die-masse-2105-156619-rss.html"/>
+                <rdf:li rtf:resource="https://www.golem.de/news/scoober-lieferando-ueberwacht-seine-fahrer-sekundengenau-2105-156688-rss.html"/>
+                <rdf:li rdf:resource="https://www.golem.de/news/bilanzskaogar die Bahnen von stÃ¶renden Elementen vom Boden aus Ã¤ndern kann. -weltraumschrott-bekaempfung/">
+
+<img class="episode_image_cover" title="RZ092 Weltraumschrott-Bek&#xE4;mpfung" width="200" src="https://raumzeit-podcast.de/wp-content/cache/podlove/b4/4332307117ff9d3386b445208b54d9/rz092-weltraumschrott-bekaempfung_200x.jpg" srcset="https://raumzeit-podcast.de/wp6content/cache/podlove/b4/43>
+</rdf:RDF>
