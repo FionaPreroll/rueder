@@ -32,13 +32,13 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | Vorarbeit: klickbarer Entwurf der Oberfläche | Fertig und abgenommen am 2026-11-10 | `web/`, Pull Request #1 |
 | 1 Fundament und Daten | Fertig am 2026-11-10: Schema, Artikelspeicher, Lesestand, Import und Messung | `server/` |
 | 2 Backend | Begonnen am 2026-11-10: Pakete 2.1 (gehärteter HTTP-Client), 2.2 (Abruf mit Versionen), 2.3 (Bereinigung), 2.4 (Bild-Proxy), 2.5 (Konten und Sitzungen) und 2.10 (Betrieb) sind fertig | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs`, `server/src/cleaning.rs`, `server/src/images.rs`, `server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs`, `Dockerfile`, `deploy/` |
-| 3 Frontend | Entwurf steht, Anbindung an den Server offen | `web/` |
+| 3 Frontend | Begonnen am 2026-11-11: Paket 3.1 (Anbindung) steht bis auf die Filterregeln | `web/src/lib/api/`, `web/src/lib/reader.ts` |
 | 4 Umstieg | Offen | |
 
 Was es heute gibt:
 
-- `web/`: die neue Oberfläche als Entwurf mit erfundenen Daten, 154 Tests, CI-Job `web`.
-- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client, dem Abruf der Feeds, der mit `serve` läuft, der Bereinigung der Artikeltexte mit eigenen Regeln, dem Bild-Proxy unter `/img/`, Konten mit Passwort, Sitzungen und dem Login, auch über OpenID Connect. 134 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es `GET /api/health`, Login, Logout und `GET /api/me`; ausgeliefert wird das gebaute Frontend. `rueder health` fragt den laufenden Server, ob es ihm gut geht.
+- `web/`: die neue Oberfläche. Sie spricht mit dem Server (Login, Baum, Listen, Artikel, Versionen, Lesestand) und läuft mit erfundenen Daten weiter für Tests, `pnpm dev:demo` und die Ein-Datei-Fassung. 218 Tests, CI-Job `web`.
+- `server/`: das Rust-Programm mit dem neuen Schema, dem Artikelspeicher (einfügen, neue Version, Listen, öffnen, Versionen), dem Lesestand (lesen, wieder ungelesen, alle als gelesen, Stern, ausblenden, Ungelesen-Zahlen), dem Import der alten Datenbank, dem Mess-Werkzeug, dem gehärteten HTTP-Client, dem Abruf der Feeds, der mit `serve` läuft, der Bereinigung der Artikeltexte mit eigenen Regeln, dem Bild-Proxy unter `/img/`, Konten mit Passwort, Sitzungen und dem Login, auch über OpenID Connect. 135 Tests, die meisten gegen PostgreSQL, CI-Job `server`. Von der API gibt es `GET /api/health`, Login, Logout und `GET /api/me`; ausgeliefert wird das gebaute Frontend. `rueder health` fragt den laufenden Server, ob es ihm gut geht.
 - `Dockerfile` und `deploy/`: das Container-Image mit Server und Frontend, die Compose-Datei mit PostgreSQL und die [Anleitung zur Installation](../deploy/README.md), CI-Job `image`.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
@@ -58,7 +58,7 @@ Was es noch nicht gibt: die API für Feeds, Artikel und Lesestand. Das ist der R
 | `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/`. |
 | `server/fuzz/` | Kommt mit Paket 2.11: Fuzz-Targets für Bereinigung, Feed-Verarbeitung und Bild-Proxy samt Korpus. |
 | `web/` | Neu. SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
-| `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`), erfundene Daten (`demo/`). |
+| `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`). `reader.ts` ist die Naht: was die Seite von ihrer Datenquelle braucht. `api/` erfüllt sie mit dem Server (`client.ts` die Endpunkte, `reader.svelte.ts` der Reader, `session.svelte.ts` Login und Sitzung), `demo/` mit erfundenen Daten. |
 | `Dockerfile`, `.dockerignore` | Neu. Das Container-Image mit Server und gebautem Frontend. |
 | `deploy/` | Neu. Betrieb: `compose.yaml` startet rueder und PostgreSQL, `.env.example` nennt die Einstellungen, `README.md` ist die Anleitung zur Installation, `smoke-test.sh` baut und startet alles zur Probe. |
 | `docs/` | Diese Dokumente. `user_data.md` beschreibt die Daten des alten Frontends im Browser. |
@@ -102,12 +102,13 @@ Der alte Code wird nicht mehr weiterentwickelt, nur noch gelesen: als Vorlage f�
 
 Voraussetzungen: Rust (stable), Node 22, pnpm, PostgreSQL 16 (lokal oder per Docker).
 
-Das Frontend, heute schon:
+Das Frontend:
 
 ```sh
 cd web
 pnpm install
-pnpm dev             # der Entwurf auf http://localhost:5173
+pnpm dev             # die Oberfläche auf http://localhost:5173, mit dem Server von http://127.0.0.1:3000 dahinter
+pnpm dev:demo        # dasselbe ohne Server, mit erfundenen Daten
 pnpm lint            # prettier --check
 pnpm check           # svelte-check und TypeScript
 pnpm test            # Vitest
@@ -116,7 +117,7 @@ pnpm build           # die Anwendung für den Server, in build/
 pnpm build:single    # die ganze Anwendung als eine build/index.html
 ```
 
-`pnpm build:single` packt alles in eine HTML-Datei, die ohne Server läuft. Die CI hängt sie an jeden Lauf als Artefakt `rueder-ui-draft`; so lässt sich ein Stand der Oberfläche herumreichen.
+`pnpm dev` reicht `/api` und `/img` an einen rueder-Server auf demselben Rechner weiter (`cargo run` in `server/`, ein Konto mit `cargo run -- account add <name>`); `RUEDER_SERVER` nennt einen anderen. `pnpm build:single` packt die Oberfläche mit erfundenen Daten in eine HTML-Datei, die ohne Server läuft. Die CI hängt sie an jeden Lauf als Artefakt `rueder-ui-draft`; so lässt sich ein Stand der Oberfläche herumreichen.
 
 Der Server:
 
@@ -219,7 +220,12 @@ Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übern
 
 Ergebnis: rueder ist täglich benutzbar.
 
-- [ ] **3.1 Anbindung.** Eine Fassung der Klasse `Reader`, die aus der API liest und schreibt, an Stelle von `web/src/lib/demo/reader.svelte.ts`. Änderungen am Lesestand wirken sofort und werden bei Ablehnung zurückgenommen. Dazu die Login-Seite. Die erfundenen Daten bleiben für Tests und die Ein-Datei-Fassung.
+- [ ] **3.1 Anbindung.** Eine Fassung der Klasse `Reader`, die aus der API liest und schreibt, an Stelle von `web/src/lib/demo/reader.svelte.ts`. Änderungen am Lesestand wirken sofort und werden bei Ablehnung zurückgenommen. Dazu die Login-Seite. Die erfundenen Daten bleiben für Tests und die Ein-Datei-Fassung. Teil 1 fertig am 2026-11-11, beschrieben unter [Frontend](architecture.md#frontend): die Naht `web/src/lib/reader.ts`, der Reader für den Server in `web/src/lib/api/` (Baum mit Zügen und Ordnern, Listen mit Blättern, Text und Versionen eines Artikels, Lesestand und Stern, alle als gelesen), die Login-Seite mit Abmelden und dem Weg über OpenID Connect. Dazugekommen ist `GET /api/login/ways`, das der Login-Seite sagt, ob es den Weg über OpenID Connect gibt. Geprüft mit einem nachgebauten Server in den Tests und im Browser gegen den echten Server mit der API aus Paket 2.6, auch mit einem lokal ausgelieferten Feed (Abruf, Bild über den Proxy, zweite Version). **Offen, Teil 2:** die Filterregeln über `/api/rules` samt Vorschau; bis dahin zeigt die Oberfläche mit Server den Reiter „Filterregeln“ nicht. Was die Oberfläche mit Server außerdem weglässt, weil der API etwas fehlt oder ein späteres Paket es bringt:
+  - „Älteste zuerst“: Die Listen der API beginnen immer beim neuesten Artikel. Es braucht eine Liste in aufsteigender Reihenfolge (`after` statt `before`).
+  - „Als gelesen markieren: älter als ein Tag, eine Woche“: Die API markiert bis zu einer Nummer oder ID, nicht bis zu einem Alter.
+  - Die Zahl der ausgeblendeten Artikel neben „Ausgeblendet“: Die API nennt sie nicht.
+  - Abonnieren, OPML (Paket 3.5), Labels (3.4), Live-Updates und der Hinweis „N neue Artikel“ (3.2), Einstellungen auf dem Server (3.3).
+  - Anhänge (`enclosures`, also auch Audio und Video) und das Aufmacherbild eines Artikels: Der Entwurf hat dafür keinen Platz, die API liefert beides.
 - [ ] **3.2 Live-Updates (A6).** SSE-Verbindung, Hinweis „N neue Artikel“, Lesestand von anderen Geräten, Wiederverbinden und Neuabgleich.
 - [ ] **3.3 Einstellungen auf dem Server (A5)**, dazu die änderbare Tastaturbelegung.
 - [ ] **3.4 Labels (A12).** Im Entwurf gibt es nur den Stern.

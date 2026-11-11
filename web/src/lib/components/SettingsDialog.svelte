@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
 	// rules and the keyboard shortcuts. Everything applies as it is changed.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
 	import {
 		accents,
@@ -18,14 +18,17 @@
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const tabs = ['look', 'reading', 'rules', 'keys'] as const;
-	type Tab = (typeof tabs)[number];
+	const allTabs = ['look', 'reading', 'rules', 'keys'] as const;
+	type Tab = (typeof allTabs)[number];
 
 	let {
 		reader,
 		tab = $bindable('look'),
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
+
+	// The filter rules have a tab only where the reader has rules.
+	const tabs = $derived(allTabs.filter((name) => name !== 'rules' || reader.filters));
 
 	const swatch: Record<(typeof accents)[number], string> = {
 		red: '#c8402e',
@@ -139,8 +142,8 @@
 					{m.settings.teasers}
 				</label>
 			</div>
-		{:else if tab === 'rules'}
-			<RulesEditor {reader} />
+		{:else if tab === 'rules' && reader.filters}
+			<RulesEditor {reader} book={reader.filters} />
 		{:else}
 			<Shortcuts />
 		{/if}

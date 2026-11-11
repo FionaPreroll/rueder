@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The left column, as in Google Reader: Subscribe on top, then the fixed lists and
 	// the tree of folders and feeds with their unread counts.
-	import type { Reader } from '#lib/demo/reader.svelte.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
 	import { sameStream, type Stream } from '#lib/model.ts';
@@ -63,15 +63,19 @@
 {/snippet}
 
 <nav class="flex h-full flex-col bg-panel" aria-label={m.nav.subscriptions}>
-	<div class="p-3">
-		<button
-			type="button"
-			class="cursor-pointer rounded bg-accent px-4 py-1.5 text-xs font-bold tracking-wider text-on-accent uppercase shadow-sm hover:brightness-110"
-			onclick={onsubscribe}
-		>
-			{m.nav.subscribe}
-		</button>
-	</div>
+	{#if reader.can.subscribe}
+		<div class="p-3">
+			<button
+				type="button"
+				class="cursor-pointer rounded bg-accent px-4 py-1.5 text-xs font-bold tracking-wider text-on-accent uppercase shadow-sm hover:brightness-110"
+				onclick={onsubscribe}
+			>
+				{m.nav.subscribe}
+			</button>
+		</div>
+	{:else}
+		<div class="pt-3"></div>
+	{/if}
 
 	<div class="min-h-0 flex-1 overflow-y-auto pb-6">
 		{@render entry({ kind: 'home' }, 'home', m.nav.home, 0)}

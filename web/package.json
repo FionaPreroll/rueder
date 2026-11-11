@@ -6,6 +6,7 @@
 	"packageManager": "pnpm@12.8.1",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:demo": "RUEDER_DEMO=1 vite dev",
 		"build": "vite build",
 		"build:single": "RUEDER_SINGLE_FILE=1 vite build",
 		"preview": "vite preview",

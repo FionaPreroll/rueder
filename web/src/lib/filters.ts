@@ -55,13 +55,13 @@ function fields(article: Article, field: RuleField): string[] {
 		case 'title':
 			return [article.title];
 		case 'content':
-			return [textOf(article.html)];
+			return [textOf(article.html ?? '')];
 		case 'author':
 			return [article.author];
 		case 'tag':
 			return article.tags;
 		case 'any':
-			return [article.title, textOf(article.html), article.author, ...article.tags];
+			return [article.title, textOf(article.html ?? ''), article.author, ...article.tags];
 	}
 }
 

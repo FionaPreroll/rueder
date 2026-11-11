@@ -1,11 +1,13 @@
-// Everything the reader page shows and does, held in the browser. In the draft this
-// stands in for the server: feeds, articles, what was read, the filter rules and the
-// tree of folders live here, and "live updates" are made up on a timer. The rules for
-// unread counts (unread.ts), filters (filters.ts) and the tree (tree.ts) are the ones
-// the server will follow.
+// Everything the reader page shows and does, held in the browser, with made-up
+// data. This stands in for the server in tests and in the build that runs without
+// one (`pnpm build:single`, `pnpm dev:demo`): feeds, articles, what was read, the
+// filter rules and the tree of folders live here, and "live updates" are made up on
+// a timer. The rules for unread counts (unread.ts), filters (filters.ts) and the tree
+// (tree.ts) are the ones the server follows.
 
 import { ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
-import type { Article, Feed, Stream, TreeNode } from '#lib/model.ts';
+import type { Article, ArticleVersion, Feed, Stream, TreeNode } from '#lib/model.ts';
+import type { Abilities, Fresh, Reader } from '#lib/reader.ts';
 import {
 	addFolder,
 	canMove,
@@ -31,7 +33,7 @@ import {
 	unreadCount,
 	type FeedState
 } from '#lib/unread.ts';
-import { demoData, random, type DemoData } from './data.ts';
+import { demoData, random, type DemoArticle, type DemoData } from './data.ts';
 
 const PAGE = 40;
 
@@ -68,11 +70,11 @@ const startRules: FilterRule[] = [
 	}
 ];
 
-export class Reader {
+export class DemoReader implements Reader {
 	tree = $state.raw<TreeNode[]>([]);
 	feeds = $state.raw<Record<string, Feed>>({});
 	/** Articles per feed, oldest first. */
-	articles = $state.raw<Record<string, Article[]>>({});
+	articles = $state.raw<Record<string, DemoArticle[]>>({});
 	states = $state.raw<Record<string, FeedState>>({});
 	rules = $state.raw<FilterRule[]>([]);
 	/** Folders shown closed in the sidebar. */
@@ -91,6 +93,19 @@ export class Reader {
 	live = $state(true);
 	/** Counts the steps of the cursor, so the list can scroll to where it went. */
 	moved = $state(0);
+
+	// What only a reader with a server has, and what only this one has.
+	readonly loading = false;
+	readonly notice = null;
+	readonly account = null;
+	readonly can: Abilities = { oldestFirst: true, markOlder: true, subscribe: true };
+	/** The filter rules and the draft's own switches are this reader's own methods. */
+	readonly filters = this;
+	readonly demo = this;
+	dismissNotice() {}
+	signOut() {}
+	/** Every made-up article has its text with it. */
+	load() {}
 
 	/** Per feed, the newest article the list shows; later ones wait behind "N new articles". */
 	private shownUpto = $state.raw<Record<string, number>>({});
@@ -191,7 +206,7 @@ export class Reader {
 		const stream = this.stream;
 		const query = this.query.trim().toLowerCase();
 		const onlyUnread = this.unreadOnly && stream.kind !== 'starred' && stream.kind !== 'hidden';
-		const found: Article[] = [];
+		const found: DemoArticle[] = [];
 		for (const feedId of this.feedsOf(stream)) {
 			const state = this.states[feedId];
 			const upto = this.shownUpto[feedId] ?? 0;
@@ -217,6 +232,28 @@ export class Reader {
 
 	/** The part of the list that is on the page. */
 	visible = $derived(this.list.slice(0, this.limit));
+
+	hasMore = $derived(this.limit < this.list.length);
+
+	/** Feeds with something unread, each with its two newest unread articles. */
+	fresh: Fresh[] = $derived(
+		feedIds(this.tree)
+			.map((id) => {
+				const unread = (this.articles[id] ?? []).filter(
+					(article) => !this.isHidden(article) && !this.isRead(article)
+				);
+				return { feed: this.feeds[id], count: unread.length, top: unread.slice(-2).reverse() };
+			})
+			.filter((entry) => entry.count > 0)
+	);
+
+	latestStarred = $derived(
+		Object.values(this.articles)
+			.flat()
+			.filter((article) => this.isStarred(article))
+			.sort((a, b) => b.publishedAt - a.publishedAt)
+			.slice(0, 5)
+	);
 
 	/** Articles that arrived since the list was drawn. */
 	pending = $derived.by(() => {
@@ -256,6 +293,12 @@ export class Reader {
 
 	showMore() {
 		if (this.limit < this.list.length) this.limit += PAGE;
+	}
+
+	/** The article's earlier versions, oldest first. */
+	versions(article: Article): Promise<ArticleVersion[]> {
+		const mine = this.articles[article.feedId]?.find((a) => a.id === article.id);
+		return Promise.resolve(mine?.versions ?? []);
 	}
 
 	// Reading
@@ -490,18 +533,21 @@ export class Reader {
 
 	/** An article changes at its source: the text so far becomes an earlier version. */
 	revise(article: Article, note: string) {
-		const revised: Article = {
-			...article,
+		// Every article of this reader has its text and its versions with it.
+		const before = article as DemoArticle;
+		const revised: DemoArticle = {
+			...before,
+			changes: before.versions.length + 1,
 			versions: [
-				...article.versions,
+				...before.versions,
 				{
-					rev: article.versions.length + 1,
-					fetchedAt: article.updatedAt ?? article.publishedAt,
-					title: article.title,
-					html: article.html
+					rev: before.versions.length + 1,
+					fetchedAt: before.updatedAt ?? before.publishedAt,
+					title: before.title,
+					html: before.html
 				}
 			],
-			html: `${article.html}<p>${note}</p>`,
+			html: `${before.html}<p>${note}</p>`,
 			updatedAt: this.now()
 		};
 		this.articles = {
@@ -511,6 +557,10 @@ export class Reader {
 			)
 		};
 		return revised;
+	}
+
+	start() {
+		return this.startLive();
 	}
 
 	/** Lets articles arrive every few seconds while `live` is on; returns how to stop. */

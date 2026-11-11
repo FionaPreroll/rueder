@@ -38,7 +38,8 @@ What is here:
   readers only.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
-- `GET /api/health`, `POST /api/login`, `POST /api/logout`, `GET /api/me`, and
+- `GET /api/health`, `POST /api/login`, `GET /api/login/ways`, `POST /api/logout`,
+  `GET /api/me`, and
   the built frontend from `../web/build`.
 - The container image (`../Dockerfile`) with the server and the frontend, and
   `rueder health`, which asks the running server whether it is well. How to

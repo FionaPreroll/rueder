@@ -1,5 +1,6 @@
 // What the reader shows: feeds in a tree of folders, articles with their versions.
-// The draft fills these from made-up data (demo/); later they come from the server.
+// They come from the server (api/), or from made-up data (demo/) in tests and
+// in the build that runs without a server.
 
 /** Folders nest this deep at most; feeds may sit in a folder of the last level. */
 export const MAX_FOLDER_DEPTH = 5;
@@ -25,6 +26,8 @@ export interface Feed {
 	siteUrl: string;
 	/** Hue of the stand-in for the feed's icon, 0 to 360. */
 	hue: number;
+	/** Where the feed's icon is, at the server's image proxy; without one the stand-in shows. */
+	icon?: string | null;
 	/** Number of the feed's newest article; articles are numbered from 1 as they arrive. */
 	lastSeq: number;
 	/** Why the last fetch failed, or null when it worked. */
@@ -49,10 +52,13 @@ export interface Article {
 	tags: string[];
 	link: string;
 	publishedAt: number;
-	/** The cleaned text of the current version. */
-	html: string;
-	/** Earlier versions, oldest first; empty for an article that never changed. */
-	versions: ArticleVersion[];
+	/**
+	 * The cleaned text of the current version. Lists come without it: null until the
+	 * article is opened and `Reader.load` has fetched it. The tags come with the text.
+	 */
+	html: string | null;
+	/** How many earlier versions there are; 0 for an article that never changed. */
+	changes: number;
 	/** When the current version replaced the one before, or null. */
 	updatedAt: number | null;
 }

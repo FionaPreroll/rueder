@@ -13,7 +13,7 @@ const article: Article = {
 	link: 'https://blog.example/1',
 	publishedAt: 0,
 	html: '<p>Jetzt <b>zugreifen</b>, nur diese Woche.</p>',
-	versions: [],
+	changes: 0,
 	updatedAt: null
 };
 
