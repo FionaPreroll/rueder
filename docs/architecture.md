@@ -614,8 +614,8 @@ Gebaut in Paket 2.10 (`Dockerfile`, `deploy/`). Die Anleitung zur Installation i
 
 Abweichungen vom Entwurf, und was offen ist:
 
-- Die Compose-Datei liegt in `deploy/` und nicht im Wurzelverzeichnis. Dort liegen bis zum Abbau (Paket 4.7) die Dateien des alten Systems, und `docker compose` würde eine neue `compose.yaml` daneben der alten `docker-compose.yaml` vorziehen.
-- Das Image wird nirgends veröffentlicht. Wer rueder installiert, baut es aus dem Repository. Ob und wo es veröffentlicht wird, ist nicht entschieden.
+- Die Compose-Datei liegt in `deploy/` und nicht im Wurzelverzeichnis. Dort lagen die Compose-Dateien des alten Systems, als sie entstand; sie sind seit dem 2026-11-11 weg, `deploy/` bleibt trotzdem, weil `.env.example`, Anleitung und Smoke-Test dazugehören.
+- **Veröffentlicht** wird das Image seit dem 2026-11-11 von der CI, auf Fionas Wunsch: Jeder Push auf `main`, dessen Jobs grün sind, wird `ghcr.io/fionapreroll/rueder:sha-<commit>` und, solange `main` noch darauf zeigt, `:latest`. Gebaut wird es einmal im Job `image` und vom Smoke-Test gestartet; der Job `publish` baut es aus deren Cache noch einmal und schiebt es. Wer installiert, kann es nehmen (`RUEDER_IMAGE` in `deploy/.env`) oder weiter selbst bauen. Es gibt das Image nur für amd64: Den Server unter Emulation für arm64 zu bauen, dauerte länger als alle anderen Jobs zusammen. Versionsnummern gibt es noch keine.
 - PostgreSQL läuft mit seinen Standardwerten; nur `shared_buffers` lässt sich über `POSTGRES_SHARED_BUFFERS` setzen. Die [Messung](implementation.md#messung) lief mit 2 GB.
 
 ## Status für Admins
