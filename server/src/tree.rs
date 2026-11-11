@@ -64,7 +64,7 @@ pub(crate) fn title(title: &str) -> Result<&str, AppError> {
 
 /// What the database says when a change breaks a rule of the tree becomes an
 /// answer the reader can do something with.
-fn rule(err: sqlx::Error) -> AppError {
+pub(crate) fn rule(err: sqlx::Error) -> AppError {
     let broken = match &err {
         sqlx::Error::Database(db) => db.constraint().map(str::to_owned),
         _ => None,
@@ -77,7 +77,7 @@ fn rule(err: sqlx::Error) -> AppError {
 }
 
 /// One change to an account's tree at a time.
-async fn lock(conn: &mut PgConnection, account_id: i32) -> Result<(), AppError> {
+pub(crate) async fn lock(conn: &mut PgConnection, account_id: i32) -> Result<(), AppError> {
     sqlx::query!(
         "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
         account_id
@@ -85,6 +85,26 @@ async fn lock(conn: &mut PgConnection, account_id: i32) -> Result<(), AppError> 
     .fetch_one(conn)
     .await?;
     Ok(())
+}
+
+/// The position after the last node of a level.
+pub(crate) async fn end_of(
+    conn: &mut PgConnection,
+    account_id: i32,
+    parent: Option<i32>,
+) -> Result<f64, AppError> {
+    let last = sqlx::query_scalar!(
+        r#"SELECT greatest(
+               (SELECT max(position) FROM folders
+                WHERE account_id = $1 AND parent_id IS NOT DISTINCT FROM $2),
+               (SELECT max(position) FROM subscriptions
+                WHERE account_id = $1 AND folder_id IS NOT DISTINCT FROM $2))"#,
+        account_id,
+        parent,
+    )
+    .fetch_one(conn)
+    .await?;
+    Ok(last.unwrap_or(0.0) + 1.0)
 }
 
 /// Where a node is: `None` if the account has no such node, else its folder.

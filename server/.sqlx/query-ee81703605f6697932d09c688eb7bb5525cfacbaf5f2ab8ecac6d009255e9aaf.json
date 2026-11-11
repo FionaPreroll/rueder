@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO subscriptions (account_id, feed_id, folder_id, position, read_upto)\n         SELECT $1, f.id, $3, $4, CASE WHEN $5 THEN 0 ELSE greatest(f.last_seq - $6, 0) END\n         FROM feeds f\n         WHERE f.id = $2\n           AND (SELECT count(*) FROM subscriptions WHERE account_id = $1) < $7\n         ON CONFLICT (account_id, feed_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Float8",
+        "Bool",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee81703605f6697932d09c688eb7bb5525cfacbaf5f2ab8ecac6d009255e9aaf"
+}

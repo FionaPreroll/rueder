@@ -323,7 +323,10 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         }
     });
 
-    let mut state = AppState::new(db).with_images(images).with_rules(rules);
+    let mut state = AppState::new(db)
+        .with_images(images)
+        .with_rules(rules)
+        .with_client(client.clone());
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.
     if let Some(config) = oidc::Config::from_env()? {

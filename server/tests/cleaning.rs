@@ -625,3 +625,75 @@ fn the_lists_are_read_from_files() {
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn the_feeds_a_page_names_are_found_within_limits() {
+    use rueder::cleaning::{MAX_FEED_LINKS, MAX_NODES, feed_links};
+    let base = Url::parse("https://blog.example/posts/").unwrap();
+    let urls = |html: &str| -> Vec<String> {
+        let links = feed_links(html, &base).into_iter();
+        links.map(|link| link.url.into()).collect()
+    };
+    let link = |rel: &str, kind: &str, href: &str| {
+        format!("<link rel=\"{rel}\" type=\"{kind}\" href=\"{href}\">")
+    };
+    let rss = "application/rss+xml";
+
+    assert_eq!(urls(""), Vec::<String>::new());
+    assert_eq!(
+        urls(&link("alternate", rss, "../feed")),
+        ["https://blog.example/feed"]
+    );
+    // Not an alternate, not a feed, no address, or none of the web.
+    for (rel, kind, href) in [
+        ("stylesheet", rss, "/feed"),
+        ("alternate", "text/html", "/feed"),
+        ("alternate", rss, "data:application/rss+xml,x"),
+        ("alternate", rss, "javascript:alert(1)"),
+        ("alternate", rss, "https://"),
+    ] {
+        assert_eq!(
+            urls(&link(rel, kind, href)),
+            Vec::<String>::new(),
+            "{rel} {kind} {href}"
+        );
+    }
+    let no_href = "<link rel=\"alternate\" type=\"application/rss+xml\">";
+    assert_eq!(urls(no_href), Vec::<String>::new());
+    // Links in the text of a page are not the page's word.
+    let anchor = "<a rel=\"alternate\" type=\"application/rss+xml\" href=\"/feed\">Feed</a>";
+    assert_eq!(urls(anchor), Vec::<String>::new());
+
+    // A name is a text of one line and no more than fits.
+    let named = format!(
+        "<link rel=\"alternate\" type=\"{rss}\" href=\"/feed\" title=\" A\n {} \">",
+        "b".repeat(500)
+    );
+    let title = &feed_links(&named, &base)[0].title;
+    assert!(title.starts_with("A bbb"));
+    assert_eq!(title.chars().count(), 200);
+
+    // No more than the limit, in the order of the page.
+    let many: String = (0..MAX_FEED_LINKS + 5)
+        .map(|n| link("alternate", rss, &format!("/feed/{n}")))
+        .collect();
+    let found = urls(&many);
+    assert_eq!(found.len(), MAX_FEED_LINKS);
+    assert_eq!(found[0], "https://blog.example/feed/0");
+    assert_eq!(found[1], "https://blog.example/feed/1");
+    // A page beyond what the parser reads has none, and takes no time.
+    let started = Instant::now();
+    let huge = format!(
+        "{}{}",
+        "<i></i>".repeat(MAX_NODES),
+        link("alternate", rss, "/feed")
+    );
+    assert_eq!(urls(&huge), Vec::<String>::new());
+    let deep = format!(
+        "{}{}",
+        "<div>".repeat(100_000),
+        link("alternate", rss, "/feed")
+    );
+    assert_eq!(urls(&deep), Vec::<String>::new());
+    assert!(started.elapsed() < Duration::from_secs(20));
+}

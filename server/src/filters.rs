@@ -471,6 +471,36 @@ pub async fn apply_new(conn: &mut PgConnection, feed_id: i32, first: i32) -> any
     Ok(())
 }
 
+/// The rules of an account look at a feed it just subscribed to: at its newest
+/// [`RECENT`] articles.
+pub async fn subscribed(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+) -> anyhow::Result<()> {
+    let rules = stored(conn, account_id).await?;
+    if rules.is_empty() {
+        return Ok(());
+    }
+    let folders = folders_of(conn, account_id, Some(feed_id)).await?;
+    let none = HashSet::new();
+    let folders = folders.get(&feed_id).unwrap_or(&none);
+    let tests: Vec<Test> = rules
+        .iter()
+        .filter(|rule| in_scope(rule.scope, feed_id, folders))
+        .map(|rule| rule.test.clone())
+        .collect();
+    if tests.is_empty() {
+        return Ok(());
+    }
+    let last = sqlx::query_scalar!("SELECT last_seq FROM feeds WHERE id = $1", feed_id)
+        .fetch_one(&mut *conn)
+        .await?;
+    let mut changed = Changed::default();
+    let from = last - RECENT + 1;
+    settle(conn, account_id, feed_id, tests, from, true, &mut changed).await
+}
+
 /// The rules of an account look again at what is there: each feed's newest
 /// [`RECENT`] articles and everything that is hidden. For after a rule
 /// changed, or the tree did.

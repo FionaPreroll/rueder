@@ -15,6 +15,7 @@ pub mod oidc;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
+pub mod subscribe;
 pub mod tree;
 
 use std::{path::Path, sync::Arc};
@@ -31,6 +32,7 @@ use sqlx::PgPool;
 
 use crate::{
     cleaning::Rules,
+    http_client::HttpClient,
     images::{ImageProxy, Refused},
     login::Limiter,
     oidc::Oidc,
@@ -56,6 +58,9 @@ pub struct AppState {
     /// The rules of the cleaning, for what is cleaned when it is asked for.
     /// Without them, the ones that come with rueder count.
     pub rules: Option<Arc<Rules>>,
+    /// The hardened HTTP client, for looking at an address a reader wants to
+    /// subscribe to. Without it, nobody subscribes to a feed that is new.
+    pub client: Option<HttpClient>,
 }
 
 impl AppState {
@@ -67,6 +72,14 @@ impl AppState {
             client_ip_header: None,
             oidc: None,
             rules: None,
+            client: None,
+        }
+    }
+
+    pub fn with_client(self, client: HttpClient) -> Self {
+        Self {
+            client: Some(client),
+            ..self
         }
     }
 
@@ -124,6 +137,7 @@ fn api() -> Router<AppState> {
         .merge(tree::routes())
         .merge(labels::routes())
         .merge(filters::routes())
+        .merge(subscribe::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

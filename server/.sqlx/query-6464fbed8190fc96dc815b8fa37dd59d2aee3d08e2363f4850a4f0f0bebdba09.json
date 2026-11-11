@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT greatest(\n               (SELECT max(position) FROM folders\n                WHERE account_id = $1 AND parent_id IS NOT DISTINCT FROM $2),\n               (SELECT max(position) FROM subscriptions\n                WHERE account_id = $1 AND folder_id IS NOT DISTINCT FROM $2))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "greatest",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6464fbed8190fc96dc815b8fa37dd59d2aee3d08e2363f4850a4f0f0bebdba09"
+}
