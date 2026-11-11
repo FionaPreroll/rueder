@@ -20,6 +20,7 @@ pub mod reclean;
 pub mod sessions;
 pub mod subscribe;
 pub mod tree;
+pub mod typescript;
 
 use std::{path::Path, sync::Arc};
 
@@ -33,6 +34,7 @@ use axum::{
 };
 use serde::Serialize;
 use sqlx::PgPool;
+use ts_rs::TS;
 
 use crate::{
     cleaning::Rules,
@@ -162,7 +164,13 @@ fn api(state: &AppState) -> Router<AppState> {
         ))
 }
 
-#[derive(Serialize)]
+/// The types of this module for the frontend, see [`typescript`].
+pub(crate) fn types(types: &mut typescript::Types) {
+    types.add::<Health>();
+}
+
+/// What `GET /api/health` answers.
+#[derive(Serialize, TS)]
 struct Health {
     status: &'static str,
     feeds: i64,

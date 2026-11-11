@@ -21,6 +21,7 @@ use quick_xml::{Reader, XmlVersion, events::BytesStart, events::Event};
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use time::OffsetDateTime;
+use ts_rs::TS;
 use url::Url;
 
 use crate::{
@@ -54,6 +55,16 @@ const MAX_FOLDER_DEPTH: usize = 5;
 
 const ACCEPT: &str = "application/atom+xml, application/rss+xml, application/feed+json, \
                       application/xml;q=0.9, text/html;q=0.8, */*;q=0.5";
+
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types
+        .add::<Find>()
+        .add::<Found>()
+        .add::<New>()
+        .add::<Subscribed>()
+        .add::<Imported>();
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -107,19 +118,25 @@ fn rules(state: &AppState) -> anyhow::Result<Arc<Rules>> {
     }
 }
 
-#[derive(Deserialize)]
+/// What `POST /api/feeds/find` reads: the address of a feed or of a page that
+/// names its feeds.
+#[derive(Deserialize, TS)]
+#[ts(rename = "FindFeeds")]
 struct Find {
     url: String,
 }
 
 /// A feed found at an address.
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(rename = "FeedCandidate")]
 struct Candidate {
     url: String,
     title: String,
 }
 
-#[derive(Serialize)]
+/// What `POST /api/feeds/find` answers.
+#[derive(Serialize, TS)]
+#[ts(rename = "FoundFeeds")]
 struct Found {
     feeds: Vec<Candidate>,
 }
@@ -168,13 +185,16 @@ async fn find(
     Ok(Json(Found { feeds }))
 }
 
-#[derive(Deserialize)]
+/// What `POST /api/feeds` reads. It answers with `Subscribed`.
+#[derive(Deserialize, TS)]
+#[ts(rename = "NewSubscription", optional_fields = nullable)]
 struct New {
     url: String,
     folder_id: Option<i32>,
 }
 
-#[derive(Serialize)]
+/// The answer to subscribing: the number of the feed.
+#[derive(Serialize, TS)]
 struct Subscribed {
     id: i32,
 }
@@ -549,7 +569,10 @@ pub fn outline(file: &str) -> Result<Outline, &'static str> {
 }
 
 /// What an import did.
-#[derive(Serialize)]
+///
+/// `POST /api/opml` answers with it; the request is the file itself.
+#[derive(Serialize, TS)]
+#[ts(rename = "OpmlImported")]
 struct Imported {
     /// Feeds the account reads now and did not before.
     feeds: usize,

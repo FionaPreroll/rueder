@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
+use ts_rs::TS;
 
 /// An article keeps at most this many versions: the first and the newest ones.
 pub const MAX_VERSIONS: i64 = 20;
@@ -400,16 +401,18 @@ pub(crate) async fn recleaned(
 }
 
 /// One line of a list.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct ListItem {
     pub feed_id: i32,
     pub seq: i32,
     /// Where the article stands in the order of arrival; the anchor for the next page.
     pub id: i64,
     #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
     pub published_at: OffsetDateTime,
     /// When the current version replaced the one before, if it ever did.
     #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
     pub updated_at: Option<OffsetDateTime>,
     pub version: i16,
     pub title: String,
@@ -623,14 +626,16 @@ pub async fn marked(
 }
 
 /// An article opened for reading: the cleaned text of its current version.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct Opened {
     pub feed_id: i32,
     pub seq: i32,
     pub id: i64,
     #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
     pub published_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
     pub updated_at: Option<OffsetDateTime>,
     pub version: i16,
     pub title: String,
@@ -638,6 +643,10 @@ pub struct Opened {
     pub url: Option<String>,
     pub html: String,
     pub tags: Vec<String>,
+    /// As they are stored, which for imported articles is as the old rueder
+    /// kept them. The API sends them out in one shape, see `api::Enclosure`.
+    #[serde(skip)]
+    #[ts(skip)]
     pub enclosures: serde_json::Value,
     pub image_url: Option<String>,
     pub image_title: Option<String>,

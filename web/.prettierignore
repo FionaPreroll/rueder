@@ -10,3 +10,6 @@ bun.lockb
 
 # Tests
 /coverage
+
+# Written by the server out of its Rust types, see server/src/typescript.rs
+/src/lib/api/types.ts

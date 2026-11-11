@@ -16,6 +16,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
+use ts_rs::TS;
 
 use crate::{AppError, AppState, filters, sessions::Session};
 
@@ -28,6 +29,16 @@ pub const MAX_FEEDS_IN_FOLDER: i64 = 1000;
 /// The largest settings of an account, in bytes of JSON.
 pub const MAX_SETTINGS: usize = 16 * 1024;
 
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types
+        .add::<Move>()
+        .add::<NewFolder>()
+        .add::<Created>()
+        .add::<Rename>()
+        .add::<NewAgent>();
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/tree/move", post(move_node))
@@ -39,8 +50,9 @@ pub fn routes() -> Router<AppState> {
 }
 
 /// A folder or a subscription, as the tree's changes name them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
 #[serde(tag = "kind", content = "id", rename_all = "lowercase")]
+#[ts(rename = "NodeRef")]
 pub enum Node {
     Folder(i32),
     Feed(i32),
@@ -235,8 +247,11 @@ async fn renumber(
     Ok(())
 }
 
-#[derive(Deserialize)]
+/// The side of the node it is dropped on that a node lands on: before it,
+/// after it or, for a folder, inside it.
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(rename = "DropPosition")]
 enum Drop {
     Before,
     After,
@@ -245,7 +260,9 @@ enum Drop {
 
 /// Where a node goes, seen from the node it is dropped on, as in the
 /// interface's own model of the tree.
-#[derive(Deserialize)]
+///
+/// What `POST /api/tree/move` reads.
+#[derive(Deserialize, TS)]
 struct Move {
     node: Node,
     target: Node,
@@ -315,13 +332,16 @@ async fn move_node(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
+/// What `POST /api/folders` reads. It answers with `Created`.
+#[derive(Deserialize, TS)]
+#[ts(optional_fields = nullable)]
 struct NewFolder {
     title: String,
     parent_id: Option<i32>,
 }
 
-#[derive(Serialize)]
+/// The answer to making something: the number it got.
+#[derive(Serialize, TS)]
 struct Created {
     id: i32,
 }
@@ -370,7 +390,10 @@ async fn add_folder(
     Ok((StatusCode::CREATED, Json(Created { id })))
 }
 
-#[derive(Deserialize)]
+/// What `PATCH /api/folders/{id}` and `PATCH /api/feeds/{id}` read. A
+/// subscription without a title of its own goes by its feed's.
+#[derive(Deserialize, TS)]
+#[ts(optional_fields = nullable)]
 struct Rename {
     title: Option<String>,
 }
@@ -469,14 +492,17 @@ async fn rename_feed(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
+/// Who a feed is fetched as: as rueder, or as a browser, for sites that turn
+/// readers like rueder away.
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
-enum FetchAgent {
+pub(crate) enum FetchAgent {
     Rueder,
     Browser,
 }
 
-#[derive(Deserialize)]
+/// What `PUT /api/feeds/{id}/agent` reads.
+#[derive(Deserialize, TS)]
 struct NewAgent {
     agent: FetchAgent,
 }

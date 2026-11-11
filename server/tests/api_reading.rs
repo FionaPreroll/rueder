@@ -432,6 +432,69 @@ async fn an_article_goes_out_with_its_pictures_at_the_proxy(db: PgPool) {
     }
 }
 
+/// The files of an article are stored as they came, from a feed, from a text
+/// or from the old rueder. They go out in one shape, which is the one the
+/// frontend's types name.
+#[sqlx::test]
+async fn the_files_of_an_article_go_out_in_one_shape(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 0).await;
+    let mut article = common::article(1);
+    article.enclosures = json!([
+        { "url": "https://a.example/1.mp3", "type": "audio/mpeg", "length": 123 },
+        // As the old rueder kept them: the size as text, and what it did not
+        // know left out or empty.
+        { "url": " https://a.example/2.mp3 ", "length": " 456 ", "type": "" },
+        { "url": "https://a.example/3.mp4", "length": "big" },
+        { "url": "https://a.example/4.mp4", "type": "video/mp4", "inline": true },
+        // Nothing the browser should be handed as an address.
+        { "url": "javascript:alert(1)", "type": "audio/mpeg" },
+        { "url": "/5.mp3" },
+        { "url": 6 },
+        { "length": 7 },
+        "https://a.example/8.mp3",
+        null,
+    ]);
+    let mut tx = db.begin().await.unwrap();
+    articles::insert(&mut tx, feed, &[article, common::article(2)])
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    // Not a list at all, which only a database written by hand can hold.
+    sqlx::query("UPDATE article_content SET enclosures = '{\"url\": \"https://a.example/9.mp3\"}' WHERE seq = 2")
+        .execute(&db)
+        .await
+        .unwrap();
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+
+    let (status, article) = get(&state, &format!("/api/feeds/{feed}/articles/1"), &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        article["enclosures"],
+        json!([
+            { "url": "https://a.example/1.mp3", "type": "audio/mpeg", "length": 123, "inline": false },
+            { "url": "https://a.example/2.mp3", "type": null, "length": 456, "inline": false },
+            { "url": "https://a.example/3.mp4", "type": null, "length": null, "inline": false },
+            { "url": "https://a.example/4.mp4", "type": "video/mp4", "length": null, "inline": true },
+        ])
+    );
+    let (status, article) = get(&state, &format!("/api/feeds/{feed}/articles/2"), &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(article["enclosures"], json!([]));
+
+    // No more than a hundred, however many a feed lists.
+    let many: Vec<_> = (0..150)
+        .map(|n| json!({ "url": format!("https://a.example/{n}.mp3") }))
+        .collect();
+    sqlx::query("UPDATE article_content SET enclosures = $1 WHERE seq = 2")
+        .bind(json!(many))
+        .execute(&db)
+        .await
+        .unwrap();
+    let (_, article) = get(&state, &format!("/api/feeds/{feed}/articles/2"), &cookie).await;
+    assert_eq!(article["enclosures"].as_array().unwrap().len(), 100);
+}
+
 #[sqlx::test]
 async fn reading_and_starring_change_what_the_reader_sees(db: PgPool) {
     let (ada, feed) = common::reader(&db, "ada", 5).await;

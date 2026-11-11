@@ -34,6 +34,8 @@ tokio = { version = "1.53.2", features = ["full"] }
 tower-http = { version = "0.7.1", features = ["fs", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+# Writes the API's types in TypeScript for the frontend, see src/typescript.rs.
+ts-rs = { version = "12.0.1", default-features = false, features = ["serde-compat", "no-serde-warnings"] }
 url = "2.5.8"
 uuid = { version = "1", features = ["serde", "v4"] }
 webpki-roots = "1.0.11"

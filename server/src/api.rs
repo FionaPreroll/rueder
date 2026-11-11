@@ -20,6 +20,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use ts_rs::TS;
+use url::Url;
 
 use crate::{
     AppError, AppState,
@@ -33,6 +35,18 @@ use crate::{
 /// How many articles a page of a list has if nothing else is asked, and at most.
 const PAGE: i64 = 50;
 const MAX_PAGE: i64 = 200;
+
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types
+        .add::<Tree>()
+        .add::<ListQuery>()
+        .add::<List>()
+        .add::<Article>()
+        .add::<Versions>()
+        .add::<StateChange>()
+        .add::<Upto>();
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -70,7 +84,8 @@ impl AppState {
     }
 }
 
-#[derive(Serialize)]
+/// A folder of the tree. `parent_id` is the folder it lies in, null at the top.
+#[derive(Serialize, TS)]
 struct Folder {
     id: i32,
     parent_id: Option<i32>,
@@ -79,7 +94,9 @@ struct Folder {
 }
 
 /// A subscription with what the tree shows of its feed.
-#[derive(Serialize)]
+///
+/// `folder_id` is the folder it lies in, null at the top.
+#[derive(Serialize, TS)]
 struct Feed {
     id: i32,
     folder_id: Option<i32>,
@@ -90,6 +107,7 @@ struct Feed {
     feed_url: String,
     site_url: Option<String>,
     icon_url: Option<String>,
+    #[ts(as = "crate::tree::FetchAgent")]
     fetch_agent: String,
     /// Why the last fetch failed, if it did.
     error: Option<String>,
@@ -98,7 +116,10 @@ struct Feed {
     unread: i64,
 }
 
-#[derive(Serialize)]
+/// What `GET /api/tree` answers: the account's folders and subscriptions, each
+/// as a plain list. `parent_id` and `folder_id` say what lies where, `position`
+/// in which order.
+#[derive(Serialize, TS)]
 struct Tree {
     folders: Vec<Folder>,
     feeds: Vec<Feed>,
@@ -152,25 +173,34 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
 }
 
 /// Which part of a list is asked for.
-#[derive(Deserialize)]
+///
+/// The query of every list: `GET /api/articles`, `/api/starred`, `/api/hidden`,
+/// `/api/feeds/{id}/articles`, `/api/folders/{id}/articles` and
+/// `/api/labels/{id}/articles`. Each answers with `List`.
+#[derive(Deserialize, TS)]
+#[ts(optional_fields)]
 struct ListQuery {
     /// Only what arrived before the article of this `id`.
     before: Option<i64>,
     limit: Option<i64>,
     /// Leave out what was read.
     #[serde(default)]
+    #[ts(as = "Option<bool>")]
     unread: bool,
 }
 
 /// A line of a list, with the labels the reader gave the article.
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
+#[ts(rename = "ListItem")]
 struct Item {
     #[serde(flatten)]
     article: ListItem,
     labels: Vec<i32>,
 }
 
-#[derive(Serialize)]
+/// A page of a list, the newest article first. For the next page, ask again
+/// with `before` set to the `id` of the last article of this one.
+#[derive(Serialize, TS)]
 struct List {
     articles: Vec<Item>,
 }
@@ -375,11 +405,63 @@ async fn feed_articles(
 }
 
 /// An article for reading, with the labels the reader gave it.
-#[derive(Serialize)]
+///
+/// `GET /api/feeds/{id}/articles/{seq}` answers with it.
+#[derive(Serialize, TS)]
 struct Article {
     #[serde(flatten)]
     article: Opened,
+    enclosures: Vec<Enclosure>,
     labels: Vec<i32>,
+}
+
+/// A file that comes with an article, like the episode of a podcast.
+#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+struct Enclosure {
+    url: String,
+    /// Its media type, such as `audio/mpeg`, if the feed says.
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    /// Its size in bytes, if the feed says.
+    length: Option<u64>,
+    /// It stood in the article's text and not in the feed's own list.
+    inline: bool,
+}
+
+/// How many files an article is sent out with at most.
+const MAX_ENCLOSURES: usize = 100;
+
+/// The files of an article in the one shape the API has for them. They are
+/// stored as they came: the feed's own with a size as a number, those of the
+/// old rueder with a size as text, and nothing has looked at their addresses.
+/// Whatever is no web address stays behind.
+fn enclosures(stored: &serde_json::Value) -> Vec<Enclosure> {
+    let stored = stored.as_array().map(Vec::as_slice).unwrap_or_default();
+    let enclosure = |stored: &serde_json::Value| {
+        let url = stored.get("url")?.as_str()?.trim();
+        let address = Url::parse(url).ok()?;
+        let web = matches!(address.scheme(), "http" | "https") && address.host_str().is_some();
+        let kind = stored.get("type").and_then(|kind| kind.as_str());
+        let length = stored.get("length").and_then(|length| match length {
+            serde_json::Value::String(text) => text.trim().parse().ok(),
+            number => number.as_u64(),
+        });
+        let inline = stored.get("inline").and_then(|inline| inline.as_bool());
+        web.then(|| Enclosure {
+            url: url.to_owned(),
+            kind: kind
+                .map(str::trim)
+                .filter(|kind| !kind.is_empty())
+                .map(str::to_owned),
+            length,
+            inline: inline.unwrap_or(false),
+        })
+    };
+    stored
+        .iter()
+        .filter_map(enclosure)
+        .take(MAX_ENCLOSURES)
+        .collect()
 }
 
 async fn article(
@@ -394,16 +476,19 @@ async fn article(
     opened.image_url = state.picture(Size::Image, opened.image_url.take());
     let mut labels = labels_of(&state, &session, &[(feed_id, seq)]).await?;
     Ok(Json(Article {
+        enclosures: enclosures(&opened.enclosures),
         article: opened,
         labels: labels.remove(&(feed_id, seq)).unwrap_or_default(),
     }))
 }
 
 /// One version of an article, cleaned for reading like the current one.
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
+#[ts(rename = "ArticleVersion")]
 struct Version {
     version: i16,
     #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
     fetched_at: OffsetDateTime,
     title: String,
     html: String,
@@ -412,7 +497,9 @@ struct Version {
     url: Option<String>,
 }
 
-#[derive(Serialize)]
+/// What `GET /api/feeds/{id}/articles/{seq}/versions` answers: the versions of
+/// the article that are kept, oldest first.
+#[derive(Serialize, TS)]
 struct Versions {
     versions: Vec<Version>,
 }
@@ -466,7 +553,10 @@ async fn versions(
 }
 
 /// What to change about one article; what is left out stays.
-#[derive(Deserialize)]
+///
+/// What `PUT /api/feeds/{id}/articles/{seq}/state` reads.
+#[derive(Deserialize, TS)]
+#[ts(optional_fields = nullable)]
 struct StateChange {
     read: Option<bool>,
     starred: Option<bool>,
@@ -497,7 +587,11 @@ async fn set_state(
 
 /// How far to mark as read: up to a number in the feed, or up to the article
 /// of this `id` in the order of arrival, which is what a mixed list knows.
-#[derive(Deserialize)]
+///
+/// What `POST /api/feeds/{id}/read`, `/api/folders/{id}/read` and `/api/read`
+/// read.
+#[derive(Deserialize, TS)]
+#[ts(optional_fields = nullable)]
 struct Upto {
     upto: Option<i32>,
     upto_id: Option<i64>,

@@ -19,6 +19,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{
     AppError, AppState, accounts,
@@ -153,14 +154,23 @@ impl FromRequestParts<AppState> for Sender {
     }
 }
 
-#[derive(Deserialize)]
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types.add::<Credentials>().add::<Me>();
+}
+
+/// What `POST /api/login` reads. It answers with `Me` and sets the session's
+/// cookie.
+#[derive(Deserialize, TS)]
 pub struct Credentials {
     username: String,
     password: String,
 }
 
 /// Who is logged in, as the API says it.
-#[derive(Serialize)]
+///
+/// `GET /api/me` and `POST /api/login` answer with it.
+#[derive(Serialize, TS)]
 pub struct Me {
     id: i32,
     username: String,
