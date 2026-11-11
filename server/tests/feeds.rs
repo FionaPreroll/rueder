@@ -179,6 +179,91 @@ fn the_text_for_reading_is_cleaned_and_the_original_is_kept() {
     );
 }
 
+/// A feed in Atom 0.3, made up after the one tagesschau.de sends: its texts
+/// escaped, one of them wrapped in a CDATA marker before it was escaped, and
+/// its dates only as `dc:date`.
+const ATOM_03: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://purl.org/atom/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" version="0.3">
+  <title>The Daily Example</title>
+  <link rel="alternate" href="https://news.example/" />
+  <tagline>News from nowhere</tagline>
+  <copyright>Nobody</copyright>
+  <dc:date>2026-11-10T09:00:00Z</dc:date>
+  <entry>
+    <title>Second &amp; last</title>
+    <link rel="alternate" href="https://news.example/2.html" />
+    <id>2</id>
+    <summary type="text/html" mode="escaped">Short &lt;b&gt;two&lt;/b&gt;</summary>
+    <content mode="escaped">&lt;![CDATA[&lt;p&gt;Text &lt;b&gt;two&lt;/b&gt;&amp;nbsp;here.&lt;/p&gt;]]&gt;</content>
+    <dc:date>2026-11-10T08:00:00Z</dc:date>
+  </entry>
+  <entry>
+    <title>First</title>
+    <link rel="alternate" href="https://news.example/1.html" />
+    <id>1</id>
+    <issued>2026-11-09T08:00:00Z</issued>
+    <modified>2026-11-09T09:00:00Z</modified>
+    <content type="text/plain" mode="xml">Plain words</content>
+  </entry>
+</feed>"#;
+
+#[test]
+fn atom_0_3_is_read_like_atom_1() {
+    let parsed = parse(ATOM_03.as_bytes());
+    assert_eq!(parsed.title.as_deref(), Some("The Daily Example"));
+    assert_eq!(parsed.site_url.as_deref(), Some("https://news.example/"));
+    assert_eq!(parsed.skipped, 0);
+    let [first, second] = &parsed.articles[..] else {
+        panic!("two articles: {:?}", parsed.articles);
+    };
+    assert_eq!((first.guid.as_str(), second.guid.as_str()), ("1", "2"));
+    assert_eq!(first.published_at, datetime!(2026-11-09 08:00 UTC));
+    assert_eq!(second.published_at, datetime!(2026-11-10 08:00 UTC));
+    assert_eq!(second.original.title, "Second & last");
+    assert_eq!(
+        second.original.url.as_deref(),
+        Some("https://news.example/2.html")
+    );
+    // The escaped HTML is HTML, without the marker around it.
+    assert_eq!(second.html, "<p>Text <b>two</b>&nbsp;here.</p>");
+    assert_eq!(second.teaser, "Short two");
+    assert_eq!(first.html, "Plain words");
+}
+
+#[test]
+fn only_atom_0_3_is_written_anew() {
+    // Atom 1.0 that happens to say "issued" is read as it is.
+    let atom_1 = r#"<feed xmlns="http://www.w3.org/2005/Atom"><title>One</title>
+        <entry><id>a</id><title>A</title><issued>2020-01-01T00:00:00Z</issued>
+        <updated>2026-11-09T08:00:00Z</updated><content type="html">&lt;p&gt;A&lt;/p&gt;</content></entry></feed>"#;
+    let parsed = parse(atom_1.as_bytes());
+    assert_eq!(
+        parsed.articles[0].published_at,
+        datetime!(2026-11-09 08:00 UTC)
+    );
+    // Atom 0.3 that is no well-formed XML goes to the library as it is, which
+    // says what it says about it.
+    let broken = ATOM_03.replace("</feed>", "");
+    let parsed = feeds::parse(
+        broken.as_bytes(),
+        "https://example.org/feed.xml",
+        NOW,
+        &Rules::built_in().unwrap(),
+    );
+    assert!(parsed.map_or(true, |parsed| parsed.articles.len() <= 2));
+    // A prefix for Atom 0.3 instead of the default namespace.
+    let prefixed = r#"<a:feed xmlns:a="http://purl.org/atom/ns#"><a:title>Prefixed</a:title>
+        <a:entry><a:id>p</a:id><a:title>P</a:title><a:issued>2026-11-09T07:00:00Z</a:issued>
+        <a:content mode="escaped">&lt;p&gt;P&lt;/p&gt;</a:content></a:entry></a:feed>"#;
+    let parsed = parse(prefixed.as_bytes());
+    assert_eq!(parsed.title.as_deref(), Some("Prefixed"));
+    assert_eq!(
+        parsed.articles[0].published_at,
+        datetime!(2026-11-09 07:00 UTC)
+    );
+    assert_eq!(parsed.articles[0].html, "<p>P</p>");
+}
+
 #[test]
 fn an_entry_keeps_its_identity_from_fetch_to_fetch() {
     // No id: the link stands in. No link either: title and text do.

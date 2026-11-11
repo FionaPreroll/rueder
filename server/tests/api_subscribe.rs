@@ -16,7 +16,7 @@ use axum::{
     Router,
     extract::State,
     http::{Method, StatusCode, header},
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
     routing::get,
 };
 use common::{call, raw};
@@ -64,6 +64,8 @@ async fn site() -> (String, Arc<AtomicUsize>) {
         .route("/feed.xml", get(feed))
         .route("/blog/", get(page))
         .route("/plain", get(async || "<p>Nothing to see</p>"))
+        // A site that turns readers away sends them to its login.
+        .route("/members/", get(async || Redirect::to("/plain")))
         .route(
             "/broken",
             get(async || StatusCode::INTERNAL_SERVER_ERROR.into_response()),
@@ -149,28 +151,72 @@ async fn the_search_finds_the_feed_at_an_address_or_the_feeds_a_page_names(db: P
 
     let (status, found) = find(format!(" {site}/feed.xml ")).await;
     assert_eq!(status, StatusCode::OK);
+    let feed = |url: String, title: &str, feed_id: Value| json!({ "url": url, "title": title, "feed_id": feed_id });
     assert_eq!(
         found,
-        json!({ "feeds": [{ "url": format!("{site}/feed.xml"), "title": "The Example" }] })
+        json!({ "feeds": [feed(format!("{site}/feed.xml"), "The Example", Value::Null)], "moved_to": null })
     );
 
     // A page names its feeds; addresses are made whole, each is there once,
     // and what is no feed on the web is left out.
     let (status, found) = find(format!("{site}/blog/")).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        found,
-        json!({ "feeds": [
-            { "url": format!("{site}/feed.xml"), "title": "The blog" },
-            { "url": format!("{site}/blog/comments.atom"), "title": "" },
-            { "url": "https://other.example/feed.json", "title": "" },
-        ] })
-    );
+    let named = json!({ "feeds": [
+        feed(format!("{site}/feed.xml"), "The blog", Value::Null),
+        feed(format!("{site}/blog/comments.atom"), "", Value::Null),
+        feed("https://other.example/feed.json".into(), "", Value::Null),
+    ], "moved_to": null });
+    assert_eq!(found, named);
     let (status, found) = find(format!("{site}/plain")).await;
-    assert_eq!((status, found), (StatusCode::OK, json!({ "feeds": [] })));
+    assert_eq!(
+        (status, found),
+        (StatusCode::OK, json!({ "feeds": [], "moved_to": null }))
+    );
+    // Where the site sent the request on to is said.
+    let (status, found) = find(format!("{site}/members/")).await;
+    assert_eq!(
+        (status, found),
+        (
+            StatusCode::OK,
+            json!({ "feeds": [], "moved_to": format!("{site}/plain") })
+        )
+    );
 
     // Looking for feeds makes none.
     assert_eq!(feed_rows(&db).await, 0);
+
+    // A feed the reader subscribes to says which it is; somebody else's
+    // subscription to it does not show.
+    let grace = common::account(&db, "grace").await;
+    let theirs = common::feed(&db, "theirs").await;
+    sqlx::query("UPDATE feeds SET feed_url = $1 WHERE id = $2")
+        .bind(format!("{site}/blog/comments.atom"))
+        .bind(theirs)
+        .execute(&db)
+        .await
+        .unwrap();
+    common::subscribe(&db, grace, theirs).await;
+    let mine = common::feed(&db, "mine").await;
+    sqlx::query("UPDATE feeds SET feed_url = $1 WHERE id = $2")
+        .bind(format!("{site}/feed.xml"))
+        .bind(mine)
+        .execute(&db)
+        .await
+        .unwrap();
+    common::subscribe(&db, ada, mine).await;
+    let (_, found) = find(format!("{site}/blog/")).await;
+    assert_eq!(found["feeds"][0]["feed_id"], json!(mine));
+    assert_eq!(found["feeds"][1]["feed_id"], Value::Null);
+    let grace_cookie = common::session(&db, grace).await;
+    let (_, found) = post(
+        &state,
+        "/api/feeds/find",
+        &grace_cookie,
+        json!({ "url": format!("{site}/blog/") }),
+    )
+    .await;
+    assert_eq!(found["feeds"][0]["feed_id"], Value::Null);
+    assert_eq!(found["feeds"][1]["feed_id"], json!(theirs));
 
     for wrong in [
         format!("{site}/broken"),

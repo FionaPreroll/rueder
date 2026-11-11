@@ -1,6 +1,8 @@
 //! From the bytes of a feed to articles in the store.
 //!
-//! [`parse`] reads RSS, Atom and JSON Feed and turns every entry into an article:
+//! [`parse`] reads RSS, Atom and JSON Feed and turns every entry into an article
+//! (Atom 0.3, which some sites still send, after [`atom_1`] has written it as
+//! Atom 1.0):
 //! with the id it has in its feed, the text as it came (kept as the version) and
 //! the text cleaned for reading (see [`crate::cleaning`]). [`store`] then sorts
 //! out what the feed already has: unknown ids are new articles, known ones that
@@ -10,6 +12,12 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Context;
 use feed_rs::model::{Entry, Link};
+use quick_xml::{
+    NsReader, Writer, XmlVersion,
+    escape::{escape, unescape},
+    events::{BytesEnd, BytesStart, BytesText, Event},
+    name::{Namespace, ResolveResult},
+};
 use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
 use time::OffsetDateTime;
@@ -56,6 +64,8 @@ pub fn parse(
         // article would be new on every fetch. Leave it empty; see `guid`.
         .id_generator(|_, _, _| String::new())
         .build();
+    let written = atom_1(body);
+    let body = written.as_deref().unwrap_or(body);
     let feed = parser.parse(body).context("not a feed that can be read")?;
 
     let listed = feed.entries.len();
@@ -328,4 +338,183 @@ pub async fn store(
         stored.new = new.len();
     }
     Ok(stored)
+}
+
+/// The namespace of Atom 0.3, which some sites still send. The feed library
+/// reads only Atom 1.0 and passes over every element of the older one.
+const ATOM_03: &str = "http://purl.org/atom/ns#";
+const ATOM_10: &str = "http://www.w3.org/2005/Atom";
+const DUBLIN_CORE: &str = "http://purl.org/dc/elements/1.1/";
+
+/// What a text of Atom 0.3 holds, by its `type` (a media type) and its `mode`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Text,
+    /// HTML written as escaped text.
+    Html,
+    /// Markup as elements.
+    Xhtml,
+}
+
+fn kind(media: Option<&str>, mode: Option<&str>) -> Kind {
+    let media = media.unwrap_or_default().to_ascii_lowercase();
+    match mode.unwrap_or("xml") {
+        "escaped" if media.is_empty() || media.contains("html") => Kind::Html,
+        "xml" if media.contains("html") => Kind::Xhtml,
+        _ => Kind::Text,
+    }
+}
+
+/// A feed in Atom 0.3 written as Atom 1.0: its namespace, the names that
+/// changed (`issued`, `modified`, `tagline`, `copyright`), the kind of its texts,
+/// and `dc:date`, the only date some of these feeds have, as `updated`. Escaped
+/// HTML that is wrapped in a CDATA marker of its own loses the wrapper.
+///
+/// `None` for every other feed, and for one that cannot be read through as
+/// XML: then the library gets the bytes as they came.
+fn atom_1(body: &[u8]) -> Option<Vec<u8>> {
+    let mut reader = NsReader::from_reader(body);
+    let mut writer = Writer::new(Vec::with_capacity(body.len() + 1024));
+    let mut buf = Vec::new();
+    // The prefix Atom's elements have, empty where it is the default namespace.
+    let mut atom: Option<String> = None;
+    // Inside an escaped HTML text: what it says so far, still escaped.
+    let mut html: Option<String> = None;
+    loop {
+        let (ns, event) = reader.read_resolved_event_into(&mut buf).ok()?;
+        let is = |uri: &str| matches!(ns, ResolveResult::Bound(Namespace(n)) if n == uri);
+        let (in_atom, in_dc) = (is(ATOM_03), is(DUBLIN_CORE));
+        match event {
+            Event::Start(ref start) | Event::Empty(ref start) => {
+                if let Some(text) = html.take() {
+                    writer
+                        .write_event(Event::Text(BytesText::from_escaped(text)))
+                        .ok()?;
+                }
+                let empty = matches!(event, Event::Empty(_));
+                let local = start.local_name().into_inner();
+                let prefix = match start.name().prefix() {
+                    Some(prefix) => format!("{}:", prefix.into_inner()),
+                    None => String::new(),
+                };
+                if atom.is_none() {
+                    // Only a feed of Atom 0.3 is written anew.
+                    if !(in_atom && local == "feed") {
+                        return None;
+                    }
+                    atom = Some(prefix.clone());
+                }
+                let name = match (in_atom, in_dc, local) {
+                    (true, _, _) => format!("{prefix}{}", renamed(local)),
+                    (_, true, "date") => format!("{}updated", atom.as_deref().unwrap_or_default()),
+                    _ => start.name().into_inner().to_owned(),
+                };
+                let mut written = BytesStart::new(name);
+                let (mut media, mut mode) = (None, None);
+                for attribute in start.attributes() {
+                    let attribute = attribute.ok()?;
+                    let key = attribute.key.into_inner();
+                    let value = attribute.normalized_value(XmlVersion::Implicit1_0).ok()?;
+                    let declares = key == "xmlns" || key.starts_with("xmlns:");
+                    if declares && value == ATOM_03 {
+                        written.push_attribute((key, ATOM_10));
+                    } else if in_atom && key == "type" {
+                        media = Some(value.into_owned());
+                    } else if in_atom && key == "mode" {
+                        mode = Some(value.into_owned());
+                    } else {
+                        written.push_attribute(attribute);
+                    }
+                }
+                let text = in_atom && TEXTS.contains(&local);
+                if text {
+                    let kind = kind(media.as_deref(), mode.as_deref());
+                    let kind = match kind {
+                        Kind::Text => "text",
+                        Kind::Html => "html",
+                        Kind::Xhtml => "xhtml",
+                    };
+                    written.push_attribute(("type", kind));
+                    if kind == "html" && !empty {
+                        html = Some(String::new());
+                    }
+                } else if let Some(media) = media {
+                    // A link's or a source's type stays.
+                    written.push_attribute(("type", media.as_str()));
+                }
+                let written = if empty {
+                    Event::Empty(written)
+                } else {
+                    Event::Start(written)
+                };
+                writer.write_event(written).ok()?;
+            }
+            Event::End(ref end) => {
+                if let Some(text) = html.take() {
+                    writer.write_event(Event::Text(unwrapped(&text)?)).ok()?;
+                }
+                let local = end.local_name().into_inner();
+                let name = match (in_atom, in_dc, local) {
+                    (true, _, _) => {
+                        let prefix = match end.name().prefix() {
+                            Some(p) => format!("{}:", p.into_inner()),
+                            None => String::new(),
+                        };
+                        format!("{prefix}{}", renamed(local))
+                    }
+                    (_, true, "date") => format!("{}updated", atom.as_deref().unwrap_or_default()),
+                    _ => end.name().into_inner().to_owned(),
+                };
+                writer.write_event(Event::End(BytesEnd::new(name))).ok()?;
+            }
+            Event::Text(ref text) if html.is_some() => {
+                html.as_mut()?.push_str(text);
+            }
+            Event::GeneralRef(ref reference) if html.is_some() => {
+                html.as_mut()?.push_str(&format!("&{};", &**reference));
+            }
+            Event::CData(ref data) if html.is_some() => {
+                html.as_mut()?.push_str(&escape(&**data));
+            }
+            Event::Eof => break,
+            other => writer.write_event(other).ok()?,
+        }
+        buf.clear();
+    }
+    atom.is_some().then(|| writer.into_inner())
+}
+
+/// The elements of Atom 0.3 that hold a text.
+const TEXTS: [&str; 6] = [
+    "title",
+    "tagline",
+    "copyright",
+    "summary",
+    "content",
+    "info",
+];
+
+/// An element's name in Atom 1.0.
+fn renamed(local: &str) -> &str {
+    match local {
+        "issued" => "published",
+        "modified" => "updated",
+        "tagline" => "subtitle",
+        "copyright" => "rights",
+        other => other,
+    }
+}
+
+/// Escaped HTML as a text again, without a CDATA marker that stands around all
+/// of it as text: tagesschau.de wraps its articles in one before escaping them.
+fn unwrapped(escaped: &str) -> Option<BytesText<'static>> {
+    let html = unescape(escaped).ok()?;
+    let trimmed = html.trim();
+    let inner = trimmed
+        .strip_prefix("<![CDATA[")
+        .and_then(|rest| rest.strip_suffix("]]>"));
+    Some(match inner {
+        Some(inner) => BytesText::from_escaped(escape(inner).into_owned()),
+        None => BytesText::from_escaped(escaped.to_owned()),
+    })
 }

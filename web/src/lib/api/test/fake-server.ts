@@ -100,6 +100,8 @@ export class FakeServer {
 	rules: ApiRule[] = [];
 	/** The feeds at an address of the made-up web, by the address with its scheme. */
 	sites = new Map<string, FakeSiteFeed[]>();
+	/** Addresses that send the request on to another, like a site's login. */
+	moves = new Map<string, string>();
 
 	requests: Request[] = [];
 	/** What time it is for the server, for what it does by age. */
@@ -423,9 +425,15 @@ export class FakeServer {
 		type: string | null
 	): Response | null {
 		if (method === 'POST' && path === '/feeds/find') {
-			const found = this.sites.get(this.address(String(data.url)));
+			const asked = this.address(String(data.url));
+			const moved = this.moves.get(asked);
+			const found = this.sites.get(moved ?? asked);
 			if (!found) return refused(400, 'the address cannot be fetched: no such site');
-			return json({ feeds: found });
+			const feeds = found.map((feed) => ({
+				...feed,
+				feed_id: this.feeds.find((known) => known.url === feed.url)?.id ?? null
+			}));
+			return json({ feeds, moved_to: moved ?? null });
 		}
 		if (method === 'POST' && path === '/feeds') {
 			const url = this.address(String(data.url));

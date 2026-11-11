@@ -975,7 +975,13 @@ export class ServerReader implements Reader {
 
 	async findFeeds(address: string): Promise<Found> {
 		try {
-			return { feeds: await this.after(() => this.api.findFeeds(address)) };
+			const found = await this.after(() => this.api.findFeeds(address));
+			const feeds = found.feeds.map(({ url, title, feed_id }) => ({
+				url,
+				title,
+				feedId: feed_id === null ? null : feedKey(feed_id)
+			}));
+			return { feeds, movedTo: found.moved_to };
 		} catch (error) {
 			return this.refusal(error);
 		}

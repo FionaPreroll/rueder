@@ -253,6 +253,11 @@ const en = {
 		note: 'The draft cannot fetch anything, so the feed stays empty.',
 		found: (count: number) => (count === 1 ? 'There is one feed:' : `There are ${n(count)} feeds:`),
 		none: 'There is no feed at this address.',
+		movedTo: (url: string) => `The site sent the request on to ${url}.`,
+		loginWall:
+			'Some sites send whoever is not logged in to their login page. Their feeds cannot be read then.',
+		subscribed: 'Subscribed',
+		show: 'Show',
 		untitled: 'Without a name',
 		folder: 'Into the folder',
 		topLevel: 'No folder',

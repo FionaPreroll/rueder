@@ -18,6 +18,8 @@
 	let address = $state('');
 	/** The feeds at the address that was looked at last; null before. */
 	let found = $state<FeedCandidate[] | null>(null);
+	/** Where the site sent the request on to, if it did. */
+	let movedTo = $state<string | null>(null);
 	let folder = $state('');
 	let finding = $state(false);
 	/** The feed being subscribed to. */
@@ -42,10 +44,19 @@
 		finding = true;
 		problem = null;
 		found = null;
+		movedTo = null;
 		const result = await reader.findFeeds(address);
 		finding = false;
-		if ('feeds' in result) found = result.feeds;
-		else problem = result;
+		if ('feeds' in result) {
+			found = result.feeds;
+			movedTo = result.movedTo;
+		} else problem = result;
+	}
+
+	/** A feed that is subscribed to already is shown instead. */
+	function show(feedId: string) {
+		reader.show({ kind: 'feed', id: feedId });
+		onclose();
 	}
 
 	async function subscribe(url: string) {
@@ -133,7 +144,13 @@
 	{#if found !== null}
 		<div class="mt-4">
 			{#if found.length === 0}
-				<p class="text-sm" role="status">{m.subscribe.none}</p>
+				<div class="text-sm" role="status">
+					<p>{m.subscribe.none}</p>
+					{#if movedTo}
+						<p class="mt-1 text-xs break-all text-soft">{m.subscribe.movedTo(movedTo)}</p>
+						<p class="mt-1 text-xs text-soft">{m.subscribe.loginWall}</p>
+					{/if}
+				</div>
 			{:else}
 				<p class="text-sm" role="status">{m.subscribe.found(found.length)}</p>
 				{#if folders.length > 0}
@@ -156,18 +173,31 @@
 								<p class="truncate text-sm font-medium">{feed.title || m.subscribe.untitled}</p>
 								<p class="truncate text-xs text-soft">{feed.url}</p>
 							</div>
-							<button
-								type="button"
-								class={[
-									'cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110',
-									waits
-								]}
-								aria-label={`${m.subscribe.add}: ${feed.title || feed.url}`}
-								aria-disabled={busy}
-								onclick={() => subscribe(feed.url)}
-							>
-								{adding === feed.url ? m.subscribe.adding : m.subscribe.add}
-							</button>
+							{#if feed.feedId}
+								{@const feedId = feed.feedId}
+								<span class="text-xs text-soft">{m.subscribe.subscribed}</span>
+								<button
+									type="button"
+									class="tool"
+									aria-label={`${m.subscribe.show}: ${feed.title || feed.url}`}
+									onclick={() => show(feedId)}
+								>
+									{m.subscribe.show}
+								</button>
+							{:else}
+								<button
+									type="button"
+									class={[
+										'cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110',
+										waits
+									]}
+									aria-label={`${m.subscribe.add}: ${feed.title || feed.url}`}
+									aria-disabled={busy}
+									onclick={() => subscribe(feed.url)}
+								>
+									{adding === feed.url ? m.subscribe.adding : m.subscribe.add}
+								</button>
+							{/if}
 						</li>
 					{/each}
 				</ul>

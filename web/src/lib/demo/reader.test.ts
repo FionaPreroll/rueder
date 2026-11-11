@@ -470,9 +470,17 @@ describe('the tree', () => {
 
 	it('finds the feed at an address, which is the address itself', async () => {
 		const { reader } = setup();
-		expect(await reader.findFeeds(' blog.example/feed.xml ')).toEqual({
-			feeds: [{ url: 'https://blog.example/feed.xml', title: 'blog.example' }]
+		const found = (feedId: string | null) => ({
+			feeds: [{ url: 'https://blog.example/feed.xml', title: 'blog.example', feedId }],
+			movedTo: null
 		});
+		expect(await reader.findFeeds(' blog.example/feed.xml ')).toEqual(found(null));
+		// Once subscribed, it says so.
+		const subscribed = await reader.subscribe('blog.example/feed.xml', null);
+		const feedId = 'feedId' in subscribed ? subscribed.feedId : '';
+		expect(await reader.findFeeds('https://blog.example/feed.xml')).toEqual(found(feedId));
+		reader.unsubscribe(feedId);
+		expect(await reader.findFeeds('blog.example/feed.xml')).toEqual(found(null));
 		for (const nothing of ['', 'not an address', 'localhost', 'ftp://files.example/feed']) {
 			expect(await reader.findFeeds(nothing)).toEqual({ problem: 'refused', reason: '' });
 		}
