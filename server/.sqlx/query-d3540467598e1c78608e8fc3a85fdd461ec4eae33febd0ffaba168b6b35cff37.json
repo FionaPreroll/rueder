@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT s.feed_id, f.last_seq, s.read_upto,\n               f.last_seq - s.read_upto\n               - (SELECT count(*) FROM article_states x\n                  WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id\n                    AND x.seq > s.read_upto AND (x.read OR x.hidden))\n               + (SELECT count(*) FROM article_states x\n                  WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id\n                    AND x.seq <= s.read_upto AND x.kept_unread AND NOT x.hidden)\n               AS \"unread!\"\n        FROM subscriptions s\n        JOIN feeds f ON f.id = s.feed_id\n        WHERE s.account_id = $1 AND s.feed_id = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "read_upto",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "read_upto"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "unread!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "d3540467598e1c78608e8fc3a85fdd461ec4eae33febd0ffaba168b6b35cff37"
+}

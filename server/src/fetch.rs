@@ -17,6 +17,7 @@ use tokio::{sync::Semaphore, task::JoinSet};
 
 use crate::{
     cleaning::Rules,
+    events::{Change, Events},
     feeds::{self, Stored},
     http_client::{Agent, HttpClient, Request},
 };
@@ -196,11 +197,12 @@ pub async fn fetch_due(
     db: &PgPool,
     client: &HttpClient,
     rules: &Arc<Rules>,
+    events: &Events,
 ) -> anyhow::Result<usize> {
     // Taking a feed moves its next fetch away, so a second server or a round
     // that overlaps does not take it too. The fetch sets the real time.
     let due = sqlx::query!(
-        "UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'
+        r#"UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'
          WHERE id IN (
              SELECT f.id FROM feeds f
              WHERE f.next_fetch_at <= now()
@@ -209,7 +211,7 @@ pub async fn fetch_due(
              LIMIT $1
              FOR UPDATE SKIP LOCKED
          )
-         RETURNING id, feed_url",
+         RETURNING id, feed_url, error_message IS NOT NULL AS "failing!""#,
         ROUND,
         LEASE_S,
     )
@@ -217,7 +219,7 @@ pub async fn fetch_due(
     .await?;
     let count = due.len();
 
-    let mut hosts: HashMap<String, Vec<i32>> = HashMap::new();
+    let mut hosts: HashMap<String, Vec<(i32, bool)>> = HashMap::new();
     for feed in due {
         let host = Url::parse(&feed.feed_url)
             .ok()
@@ -225,22 +227,33 @@ pub async fn fetch_due(
         hosts
             .entry(host.unwrap_or_default())
             .or_default()
-            .push(feed.id);
+            .push((feed.id, feed.failing));
     }
     let at_once = Arc::new(Semaphore::new(AT_ONCE));
     let mut fetches = JoinSet::new();
     for feeds in hosts.into_values() {
         let (db, client, at_once) = (db.clone(), client.clone(), at_once.clone());
-        let rules = rules.clone();
+        let (rules, events) = (rules.clone(), events.clone());
         fetches.spawn(async move {
-            for feed_id in feeds {
+            for (feed_id, was_failing) in feeds {
                 let Ok(_permit) = at_once.acquire().await else {
                     return;
                 };
-                match fetch_feed(&db, &client, &rules, feed_id).await {
-                    Ok(Outcome::Failed(why)) => tracing::info!(feed_id, "fetch failed: {why}"),
-                    Ok(outcome) => tracing::debug!(feed_id, ?outcome, "fetched"),
-                    Err(err) => tracing::error!(feed_id, "fetching: {err:#}"),
+                let outcome = match fetch_feed(&db, &client, &rules, feed_id).await {
+                    Ok(outcome) => outcome,
+                    Err(err) => {
+                        tracing::error!(feed_id, "fetching: {err:#}");
+                        continue;
+                    }
+                };
+                match &outcome {
+                    Outcome::Failed(why) => tracing::info!(feed_id, "fetch failed: {why}"),
+                    outcome => tracing::debug!(feed_id, ?outcome, "fetched"),
+                }
+                for change in changes(feed_id, was_failing, outcome) {
+                    if let Err(err) = events.publish_to_readers(&db, feed_id, change).await {
+                        tracing::error!(feed_id, "telling readers: {err:#}");
+                    }
                 }
             }
         });
@@ -249,12 +262,55 @@ pub async fn fetch_due(
     Ok(count)
 }
 
+/// What the readers of a feed hear about a fetch of it: new articles, new
+/// versions, and the feed starting or ceasing to fail. `was_failing` says how
+/// the feed stood before.
+pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<Change> {
+    let mut changes = Vec::new();
+    let works_again = || Change::Feed {
+        feed_id,
+        error: None,
+    };
+    match outcome {
+        Outcome::Failed(error) => {
+            // Said once, when it starts; the reason is at the feed after that.
+            if !was_failing {
+                changes.push(Change::Feed {
+                    feed_id,
+                    error: Some(error),
+                });
+            }
+        }
+        Outcome::NotModified => changes.extend(was_failing.then(works_again)),
+        Outcome::Fetched(stored) => {
+            changes.extend(was_failing.then(works_again));
+            if let Some(first_new) = stored.first_new
+                && stored.new > 0
+            {
+                let last_seq = first_new.saturating_add(stored.new as i32 - 1);
+                changes.push(Change::Articles {
+                    feed_id,
+                    last_seq,
+                    new: stored.new,
+                });
+            }
+            if stored.updated > 0 {
+                changes.push(Change::Updated {
+                    feed_id,
+                    count: stored.updated,
+                });
+            }
+        }
+    }
+    changes
+}
+
 /// Fetches what is due, again and again, for as long as the server runs.
-pub async fn run(db: PgPool, client: HttpClient, rules: Arc<Rules>) {
+pub async fn run(db: PgPool, client: HttpClient, rules: Arc<Rules>, events: Events) {
     let mut every = tokio::time::interval(Duration::from_secs(30));
     loop {
         every.tick().await;
-        if let Err(err) = fetch_due(&db, &client, &rules).await {
+        if let Err(err) = fetch_due(&db, &client, &rules, &events).await {
             tracing::error!("fetching feeds: {err:#}");
         }
     }
