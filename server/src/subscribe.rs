@@ -36,8 +36,8 @@ use crate::{
 
 /// The longest address of a feed or a page, in bytes.
 pub const MAX_URL: usize = 2000;
-/// How many feeds an account can subscribe to.
-pub const MAX_FEEDS: i64 = 2000;
+/// How many feeds one OPML file can bring.
+pub const MAX_OPML_FEEDS: usize = 2000;
 /// Who subscribes to a feed that others read already finds this many of its
 /// newest articles unread, and the rest read.
 pub const NEWEST_UNREAD: i32 = 20;
@@ -246,39 +246,34 @@ async fn add(
     folder: Option<i32>,
     fresh: bool,
 ) -> Result<bool, AppError> {
+    let reads = sqlx::query_scalar!(
+        "SELECT feed_id FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
+        account_id,
+        feed_id
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    if reads.is_some() {
+        return Ok(false);
+    }
+    tree::room_for_feed(conn, account_id, folder).await?;
     let position = tree::end_of(conn, account_id, folder).await?;
-    let added = sqlx::query!(
+    sqlx::query!(
         "INSERT INTO subscriptions (account_id, feed_id, folder_id, position, read_upto)
          SELECT $1, f.id, $3, $4, CASE WHEN $5 THEN 0 ELSE greatest(f.last_seq - $6, 0) END
          FROM feeds f
-         WHERE f.id = $2
-           AND (SELECT count(*) FROM subscriptions WHERE account_id = $1) < $7
-         ON CONFLICT (account_id, feed_id) DO NOTHING",
+         WHERE f.id = $2",
         account_id,
         feed_id,
         folder,
         position,
         fresh,
         NEWEST_UNREAD,
-        MAX_FEEDS,
     )
     .execute(&mut *conn)
     .await?;
-    if added.rows_affected() == 1 {
-        filters::subscribed(conn, account_id, feed_id).await?;
-        return Ok(true);
-    }
-    let reads = sqlx::query_scalar!(
-        "SELECT feed_id FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
-        account_id,
-        feed_id
-    )
-    .fetch_optional(conn)
-    .await?;
-    match reads {
-        Some(_) => Ok(false),
-        None => Err(bad("too many feeds")),
-    }
+    filters::subscribed(conn, account_id, feed_id).await?;
+    Ok(true)
 }
 
 async fn own_folder(conn: &mut PgConnection, account_id: i32, id: i32) -> Result<(), AppError> {
@@ -445,7 +440,7 @@ pub struct Outline {
     /// Both in the order of the file, by their place in the lists above.
     pub order: Vec<Step>,
     /// Outlines that were left out: a feed without an address that can be
-    /// fetched, or one beyond [`MAX_FEEDS`].
+    /// fetched, or one beyond [`MAX_OPML_FEEDS`].
     pub skipped: usize,
 }
 
@@ -517,7 +512,7 @@ pub fn outline(file: &str) -> Result<Outline, &'static str> {
         let mut is_folder = false;
         match attributes.get("xmlurl") {
             Some(url) => match address(url) {
-                Ok(url) if result.feeds.len() as i64 >= MAX_FEEDS => {
+                Ok(url) if result.feeds.len() >= MAX_OPML_FEEDS => {
                     drop(url);
                     result.skipped += 1;
                 }
@@ -820,11 +815,11 @@ mod tests {
             outline(&format!("<opml><body>{many}</body></opml>")),
             Err("this file has too many folders")
         );
-        let feeds: String = (0..MAX_FEEDS + 3)
+        let feeds: String = (0..MAX_OPML_FEEDS + 3)
             .map(|n| format!("<outline xmlUrl=\"https://a.example/{n}\"/>"))
             .collect();
         let read = outline(&format!("<opml><body>{feeds}</body></opml>")).unwrap();
-        assert_eq!((read.feeds.len() as i64, read.skipped), (MAX_FEEDS, 3));
+        assert_eq!((read.feeds.len(), read.skipped), (MAX_OPML_FEEDS, 3));
         // Names are cut to what the tree takes.
         let long = format!(
             "<opml><body><outline text=\" {}\u{7} \"><outline xmlUrl=\"a.example\"/></outline></body></opml>",

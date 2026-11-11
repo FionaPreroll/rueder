@@ -12,7 +12,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
@@ -22,7 +22,9 @@ use crate::{AppError, AppState, filters, sessions::Session};
 /// The longest name of a folder or a subscription, in characters.
 pub const MAX_TITLE: usize = 100;
 /// How many folders an account can have.
-pub const MAX_FOLDERS: i64 = 500;
+pub const MAX_FOLDERS: i64 = 100;
+/// How many feeds one folder, or the top level, can hold.
+pub const MAX_FEEDS_IN_FOLDER: i64 = 1000;
 /// The largest settings of an account, in bytes of JSON.
 pub const MAX_SETTINGS: usize = 16 * 1024;
 
@@ -32,6 +34,7 @@ pub fn routes() -> Router<AppState> {
         .route("/folders", post(add_folder))
         .route("/folders/{id}", patch(rename_folder).delete(remove_folder))
         .route("/feeds/{id}", patch(rename_feed).delete(unsubscribe))
+        .route("/feeds/{id}/agent", put(set_agent))
         .route("/settings", get(settings).put(set_settings))
 }
 
@@ -84,6 +87,26 @@ pub(crate) async fn lock(conn: &mut PgConnection, account_id: i32) -> Result<(),
     )
     .fetch_one(conn)
     .await?;
+    Ok(())
+}
+
+/// Whether a folder, or the top level, can take one more feed.
+pub(crate) async fn room_for_feed(
+    conn: &mut PgConnection,
+    account_id: i32,
+    parent: Option<i32>,
+) -> Result<(), AppError> {
+    let have = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM subscriptions
+           WHERE account_id = $1 AND folder_id IS NOT DISTINCT FROM $2"#,
+        account_id,
+        parent,
+    )
+    .fetch_one(conn)
+    .await?;
+    if have >= MAX_FEEDS_IN_FOLDER {
+        return Err(bad("too many feeds in this folder"));
+    }
     Ok(())
 }
 
@@ -240,9 +263,9 @@ async fn move_node(
     }
     let mut tx = state.db.begin().await?;
     lock(&mut tx, account_id).await?;
-    if parent_of(&mut tx, account_id, change.node).await?.is_none() {
+    let Some(from) = parent_of(&mut tx, account_id, change.node).await? else {
         return Err(AppError::NotFound);
-    }
+    };
     let Some(beside) = parent_of(&mut tx, account_id, change.target).await? else {
         return Err(AppError::NotFound);
     };
@@ -251,6 +274,9 @@ async fn move_node(
         (Drop::Inside, Node::Feed(_)) => return Err(bad("only a folder has an inside")),
         _ => beside,
     };
+    if matches!(change.node, Node::Feed(_)) && from != parent {
+        room_for_feed(&mut tx, account_id, parent).await?;
+    }
 
     match change.node {
         Node::Folder(id) => sqlx::query!(
@@ -438,6 +464,47 @@ async fn rename_feed(
     .execute(&state.db)
     .await?;
     if renamed.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum FetchAgent {
+    Rueder,
+    Browser,
+}
+
+#[derive(Deserialize)]
+struct NewAgent {
+    agent: FetchAgent,
+}
+
+/// Says as what a feed is fetched: as rueder, or as a browser for sites that
+/// turn rueder away. The feed is one for all who read it, so this holds for
+/// all of them, and any of them can say it. The next fetch comes at once.
+async fn set_agent(
+    State(state): State<AppState>,
+    session: Session,
+    Path(feed_id): Path<i32>,
+    Json(new): Json<NewAgent>,
+) -> Result<StatusCode, AppError> {
+    let agent = match new.agent {
+        FetchAgent::Rueder => "rueder",
+        FetchAgent::Browser => "browser",
+    };
+    let changed = sqlx::query!(
+        "UPDATE feeds f SET fetch_agent = $3, next_fetch_at = now()
+         FROM subscriptions s
+         WHERE s.account_id = $1 AND s.feed_id = $2 AND f.id = s.feed_id",
+        session.account_id,
+        feed_id,
+        agent,
+    )
+    .execute(&state.db)
+    .await?;
+    if changed.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
