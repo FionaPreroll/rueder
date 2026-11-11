@@ -72,8 +72,8 @@ describe('catalogs', () => {
 	it('describe every shortcut once', () => {
 		for (const code of languages) {
 			const all = shortcutGroups(catalogs[code]).flatMap((group) => group.shortcuts);
-			const keys = all.flatMap((shortcut) => shortcut.keys);
-			expect(new Set(keys).size, code).toBe(keys.length);
+			const actions = all.map((shortcut) => shortcut.action);
+			expect(new Set(actions).size, code).toBe(actions.length);
 			expect(new Set(all.map((shortcut) => shortcut.text)).size, code).toBe(all.length);
 		}
 	});

@@ -4,6 +4,7 @@
 // device shows the same (see the reader's `saveSettings`).
 
 import { languages, useLanguage, type Language } from './i18n/locale.svelte.ts';
+import { understoodKeys, type KeyChoices } from './keys.ts';
 
 export const themes = ['system', 'light', 'dark'] as const;
 export const accents = ['red', 'blue', 'green', 'orange', 'purple', 'graphite'] as const;
@@ -24,6 +25,8 @@ export interface Settings {
 	view: (typeof views)[number];
 	markOnScroll: boolean;
 	teasers: boolean;
+	/** The keyboard shortcuts the reader gave keys of their own. */
+	keys: KeyChoices;
 }
 
 export const defaults: Settings = {
@@ -36,7 +39,8 @@ export const defaults: Settings = {
 	language: 'auto',
 	view: 'list',
 	markOnScroll: true,
-	teasers: true
+	teasers: true,
+	keys: {}
 };
 
 const KEY = 'rueder.settings';
@@ -70,12 +74,14 @@ export function understood(stored: unknown): Settings {
 			: {};
 	const settings: Record<string, unknown> = { ...defaults };
 	for (const key of Object.keys(defaults) as (keyof Settings)[]) {
+		if (key === 'keys') continue;
 		const value = found[key];
 		const allowed = choices[key];
 		if (allowed ? allowed.includes(value as string) : typeof value === typeof defaults[key]) {
 			settings[key] = value;
 		}
 	}
+	settings.keys = understoodKeys(found.keys);
 	return settings as unknown as Settings;
 }
 

@@ -226,7 +226,13 @@ const en = {
 
 	keys: {
 		title: 'Keyboard shortcuts',
-		later: 'Changing the keys comes with the settings on the server.',
+		note: 'Your keys are kept with the settings. Enter, Escape and g stay as they are.',
+		change: (what: string) => `Change the key for: ${what}`,
+		changeShort: 'Change',
+		press: 'Press a key …',
+		taken: (key: string, other: string) => `${key} is already the key for: ${other}`,
+		fixed: (key: string) => `${key} cannot be given to a shortcut.`,
+		reset: "Back to rueder's keys",
 		groups: { articles: 'Articles', lists: 'Lists', go: 'Go to', app: 'Everywhere' },
 		next: 'Next article, opened',
 		previous: 'Previous article, opened',
