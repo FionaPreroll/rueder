@@ -7,6 +7,7 @@ import type {
 	ApiArticle,
 	ApiFeed,
 	ApiFolder,
+	ApiLabel,
 	ApiListItem,
 	ApiNewRule,
 	ApiNode,
@@ -54,6 +55,7 @@ export interface FakeArticle {
 	starred: boolean;
 	hidden: boolean;
 	versions: ApiVersion[];
+	labels: number[];
 	enclosures: ApiArticle['enclosures'];
 	image_url: string | null;
 	image_title: string | null;
@@ -106,6 +108,7 @@ export class FakeServer {
 	feeds: FakeFeed[] = [];
 	articles: FakeArticle[] = [];
 	rules: ApiRule[] = [];
+	labels: ApiLabel[] = [];
 	/** The settings of the account, as the page stored them; `{}` for a new account. */
 	settings: unknown = { theme: 'system' };
 	/** The feeds at an address of the made-up web, by the address with its scheme. */
@@ -199,6 +202,7 @@ export class FakeServer {
 				starred: false,
 				hidden: false,
 				versions: [],
+				labels: [],
 				enclosures: [],
 				image_url: null,
 				image_title: null,
@@ -320,6 +324,9 @@ export class FakeServer {
 		if (method === 'GET' && path === '/me') return json(this.me());
 		if (method === 'GET' && path === '/tree') return json(this.tree());
 
+		const labelled = this.labelling(method, path, query, body);
+		if (labelled) return labelled;
+
 		const list = /^\/(articles|starred|hidden)$|^\/(feeds|folders)\/(\d+)\/articles$/.exec(path);
 		if (method === 'GET' && list) {
 			const scope = list[1] ?? list[2];
@@ -345,7 +352,6 @@ export class FakeServer {
 				);
 				return json({
 					...opened,
-					labels: [],
 					hidden_by: article.hidden ? (hiding?.id ?? null) : null
 				});
 			}
@@ -477,6 +483,60 @@ export class FakeServer {
 		};
 	}
 
+	// Labels
+
+	addLabel(title: string, color = '#1a73e8') {
+		const id = this.nextId++;
+		this.labels.push({ id, title, color, position: this.labels.length + 1 });
+		return id;
+	}
+
+	private labelling(
+		method: string,
+		path: string,
+		query: URLSearchParams,
+		body: unknown
+	): Response | null {
+		const data = (body ?? {}) as Record<string, unknown>;
+		if (method === 'GET' && path === '/labels') return json(this.labels);
+		if (method === 'POST' && path === '/labels') {
+			const title = String(data.title ?? '').trim();
+			if (!title || !/^#[0-9a-f]{6}$/i.test(String(data.color))) return refused(400, 'no label');
+			return json({ id: this.addLabel(title, String(data.color)) }, 201);
+		}
+		const one = /^\/labels\/(\d+)(\/articles)?$/.exec(path);
+		if (one) {
+			const label = this.labels.find((l) => l.id === Number(one[1]));
+			if (!label) return refused(404);
+			if (method === 'GET' && one[2]) {
+				const all = new Set(this.feeds.map((feed) => feed.id));
+				return json({ articles: this.list('label', all, query, label.id) });
+			}
+			if (method === 'PATCH') {
+				if (typeof data.title === 'string') label.title = data.title;
+				if (typeof data.color === 'string') label.color = data.color;
+				return empty();
+			}
+			if (method === 'DELETE') {
+				this.labels = this.labels.filter((l) => l !== label);
+				for (const article of this.articles) {
+					article.labels = article.labels.filter((id) => id !== label.id);
+				}
+				return empty();
+			}
+		}
+		const on = /^\/feeds\/(\d+)\/articles\/(\d+)\/labels\/(\d+)$/.exec(path);
+		if (on) {
+			const article = this.article(Number(on[1]), Number(on[2]));
+			const label = Number(on[3]);
+			if (!article || !this.labels.some((l) => l.id === label)) return refused(404);
+			article.labels = article.labels.filter((id) => id !== label);
+			if (method === 'PUT') article.labels.push(label);
+			return empty();
+		}
+		return null;
+	}
+
 	// Subscribing and OPML
 
 	private subscribing(
@@ -570,7 +630,7 @@ export class FakeServer {
 		return new Set(this.feeds.map((feed) => feed.id));
 	}
 
-	private list(kind: string, feeds: Set<number>, query: URLSearchParams): ApiListItem[] {
+	private list(kind: string, feeds: Set<number>, query: URLSearchParams, label = 0): ApiListItem[] {
 		const before = Number(query.get('before') ?? Infinity);
 		// With `after` the list starts with the oldest article.
 		const after = query.has('after') ? Number(query.get('after')) : null;
@@ -584,6 +644,7 @@ export class FakeServer {
 					a.id > (after ?? 0) &&
 					a.hidden === (kind === 'hidden') &&
 					(kind !== 'starred' || a.starred) &&
+					(kind !== 'label' || a.labels.includes(label)) &&
 					!(unread && a.read)
 			)
 			.sort((a, b) => (after === null ? b.id - a.id : a.id - b.id))
@@ -602,7 +663,7 @@ export class FakeServer {
 				thumbnail_url: null,
 				read: a.read,
 				starred: a.starred,
-				labels: []
+				labels: a.labels
 			}));
 	}
 
