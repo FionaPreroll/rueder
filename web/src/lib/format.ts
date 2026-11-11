@@ -61,3 +61,41 @@ export function formatBytes(bytes: number) {
 
 /** Day and time in full, for the head of an open article and for tooltips. */
 export const formatFull = (at: number) => whole().format(new Date(at));
+
+/** Formats of numbers with a unit, made once per unit and number of digits. */
+const units = localized((locale) => {
+	const made = new Map<string, Intl.NumberFormat>();
+	return (unit: string, digits: number) => {
+		const key = `${unit}/${digits}`;
+		let format = made.get(key);
+		if (!format) {
+			format = new Intl.NumberFormat(locale, {
+				style: 'unit',
+				unit,
+				unitDisplay: 'short',
+				maximumFractionDigits: digits
+			});
+			made.set(key, format);
+		}
+		return format;
+	};
+});
+
+/** How long something took: "0.4 ms", "12 ms", "2.4 s", "12 min", "5 hr", "3 days". */
+export function formatDuration(ms: number) {
+	const format = (value: number, unit: string, digits = 0) => units()(unit, digits).format(value);
+	const span = Math.max(0, ms);
+	if (span < 10) return format(span, 'millisecond', 1);
+	if (span < 1000) return format(span, 'millisecond');
+	if (span < 60_000) return format(span / 1000, 'second', 1);
+	if (span < HOUR) return format(span / MINUTE, 'minute');
+	if (span < 2 * DAY) return format(span / HOUR, 'hour');
+	return format(span / DAY, 'day');
+}
+
+const percent = localized(
+	(locale) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 })
+);
+
+/** A share as a percentage: 0.987 is "98.7%". */
+export const formatPercent = (share: number) => percent().format(share);

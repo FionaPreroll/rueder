@@ -312,6 +312,144 @@ const de: Messages = {
 		export: 'Als OPML exportieren'
 	},
 
+	status: {
+		title: 'Serverstatus',
+		open: 'Serverstatus',
+		loading: 'Frage den Server …',
+		failed: 'Der Server antwortet nicht. Versuch es gleich noch einmal.',
+		refresh: 'Aktualisieren',
+		asOf: (time) => `Stand ${time}. Gezählt wird die letzte Stunde.`,
+		demo: 'Erfunden, denn hier gibt es keinen Server.',
+		empty: '–',
+		on: 'An',
+		off: 'Aus',
+		took: (median, p95) => `Median ${median}, 95 % in ${p95}`,
+		hintsTitle: 'Einen Blick wert',
+		allWell: 'Nichts fällt auf.',
+		hints: {
+			slowRoute: (route, took) =>
+				`${route} ist langsam: Jede zwanzigste Anfrage braucht länger als ${took}.`,
+			serverErrors: (route, count) =>
+				`${route} hat ${n(count)}-mal mit einem Fehler des Servers geantwortet.`,
+			poolBusy: (size) =>
+				`Alle ${n(size)} Verbindungen zur Datenbank sind belegt, Anfragen warten auf eine.`,
+			fetchBacklog: (count, late) =>
+				`${n(count)} ${plural(count, { one: 'Feed wird', other: 'Feeds werden' })} zu spät abgerufen, der späteste um ${late}.`,
+			feedsFailing: (failing, subscribed) =>
+				`${n(failing)} von ${n(subscribed)} Feeds schlagen fehl.`,
+			notFetching: 'Der Server ruft keine Feeds ab. Steht FETCH auf off?',
+			cacheMisses: (share) =>
+				`Die Datenbank findet nur ${share} dessen, was sie liest, im Speicher; mehr shared_buffers würden helfen.`,
+			longQuery: (took) => `Eine Abfrage läuft seit ${took}.`,
+			imageCacheFull: (share) => `Der Bild-Cache ist zu ${share} voll.`,
+			errors: (count) => `Der Server hat in der letzten Stunde ${n(count)} Fehler geloggt.`,
+			limited: (count) =>
+				`${n(count)} ${plural(count, { one: 'Anfrage wurde', other: 'Anfragen wurden' })} als zu viele abgewiesen.`
+		},
+		server: {
+			title: 'Server',
+			version: 'Version',
+			running: 'Läuft seit',
+			memory: 'Speicher',
+			accounts: 'Konten',
+			feeds: 'Feeds',
+			feedsValue: (subscribed, all) => `${n(subscribed)} abonniert, ${n(all)} insgesamt`,
+			articles: 'Artikel',
+			articlesValue: (count) => `etwa ${n(count)}`,
+			live: 'Offene Tabs'
+		},
+		database: {
+			title: 'Datenbank',
+			pool: 'Verbindungen von rueder',
+			poolValue: (size, idle, max) => `${n(size)} offen, ${n(idle)} frei, höchstens ${n(max)}`,
+			connections: 'Alle Verbindungen',
+			size: 'Größe',
+			hitRatio: 'Aus dem Speicher gelesen',
+			deadlocks: 'Deadlocks',
+			longest: 'Längste laufende Abfrage',
+			tables: 'Größte Tabellen',
+			table: 'Tabelle',
+			bytes: 'Größe',
+			rows: 'Zeilen, etwa'
+		},
+		fetcher: {
+			title: 'Abruf der Feeds',
+			state: 'Abruf',
+			lastRound: 'Letzte Runde',
+			lastRoundValue: (ago, feeds, took) => `${ago}: ${n(feeds)} Feeds in ${took}`,
+			fetches: 'Abrufe',
+			fetchesValue: (fetched, unchanged, failed) =>
+				`${n(fetched)} mit Inhalt, ${n(unchanged)} unverändert, ${n(failed)} fehlgeschlagen`,
+			broken: 'An der Datenbank gescheitert',
+			newArticles: 'Neue Artikel',
+			took: 'Zeit je Abruf',
+			overdue: 'Zu spät abgerufen',
+			overdueValue: (count, late) => `${n(count)}, der späteste um ${late}`,
+			waiting: 'Noch nie abgerufen',
+			failing: 'Fehlschlagende Feeds, nach Grund',
+			noneFailing: 'Kein Feed schlägt fehl.',
+			feeds: (count) => `${n(count)} ${plural(count, { one: 'Feed', other: 'Feeds' })}`,
+			failures: {
+				status: (code) =>
+					code ? `Die Seite antwortet mit ${code}` : 'Die Seite antwortet mit einem Fehler',
+				timeout: 'Die Seite braucht zu lange',
+				blocked: 'Die Adresse liegt in einem Netz, aus dem rueder nicht abruft',
+				dns: 'Der Name hat keine Adresse',
+				network: 'Keine Verbindung, oder sie bricht ab',
+				too_large: 'Zu groß',
+				redirects: 'Zu viele Weiterleitungen, oder eine kaputte',
+				unreadable: 'Kein Feed, den rueder lesen kann',
+				other: 'Etwas anderes'
+			}
+		},
+		finder: {
+			title: 'Feed-Suche',
+			state: 'Adressen ansehen',
+			lookups: 'Suchen',
+			lookupsValue: (found, none, failed) =>
+				`${n(found)} mit Feeds, ${n(none)} ohne, ${n(failed)} fehlgeschlagen`,
+			limited: 'Über dem Limit des Kontos',
+			took: 'Zeit je Suche'
+		},
+		images: {
+			title: 'Bild-Proxy',
+			state: 'Proxy',
+			cache: 'Cache',
+			cacheValue: (used, max) => `${used} von ${max}`,
+			served: 'Bilder',
+			servedValue: (cached, fetched) => `${n(cached)} aus dem Cache, ${n(fetched)} abgerufen`,
+			refused: 'Abgelehnt',
+			refusedValue: (source, notImage, tooLarge, notFound) =>
+				`${n(source)} Quelle fehlgeschlagen, ${n(notImage)} kein Bild, ${n(tooLarge)} zu groß, ${n(notFound)} falsche Adresse`,
+			took: 'Zeit je abgerufenem Bild',
+			failingSources: 'Vorerst gemiedene Quellen'
+		},
+		requests: {
+			title: 'Anfragen',
+			all: 'Alle Anfragen',
+			allValue: (count, took) => `${n(count)}, ${took}`,
+			answers: 'Antworten',
+			answersValue: (fine, refused, errors) =>
+				`${n(fine)} in Ordnung, ${n(refused)} abgelehnt, ${n(errors)} Fehler des Servers`,
+			route: 'Route',
+			count: 'Anzahl',
+			median: 'Median',
+			p95: '95 %',
+			max: 'Längste',
+			errors: 'Fehler',
+			none: 'Keine Anfragen in der letzten Stunde.'
+		},
+		problems: {
+			title: 'Warnungen und Fehler',
+			counts: (errors, warnings) =>
+				`In der letzten Stunde ${n(errors)} Fehler und ${n(warnings)} ${plural(warnings, { one: 'Warnung', other: 'Warnungen' })}.`,
+			none: 'Seit dem Start wurde nichts geloggt.',
+			error: 'Fehler',
+			warning: 'Warnung',
+			times: (count, last) => (count > 1 ? `${n(count)}-mal, zuletzt ${last}` : last)
+		}
+	},
+
 	demo: {
 		badge: 'Entwurf',
 		note: 'Ein Entwurf mit erfundenen Feeds. Nichts wird auf einem Server gespeichert.',

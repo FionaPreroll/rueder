@@ -58,6 +58,8 @@ async fn the_status_counts_and_names_nobody(db: PgPool) {
             .await
             .unwrap();
     }
+    // What PostgreSQL estimates is right after it has looked.
+    sqlx::query("ANALYZE").execute(&db).await.unwrap();
     let state = AppState::new(db.clone());
     let (admin, reader) = (
         common::session(&db, root).await,
@@ -115,7 +117,13 @@ async fn the_status_counts_and_names_nobody(db: PgPool) {
 
     // The tables are there, the articles among them.
     let tables = body["database"]["tables"].as_array().unwrap();
-    assert!(tables.iter().any(|table| table["name"] == "articles"));
+    let accounts = tables
+        .iter()
+        .find(|table| table["name"] == "accounts")
+        .unwrap();
+    assert!(accounts["bytes"].as_i64().unwrap() > 0, "{accounts}");
+    assert_eq!(accounts["rows"], 4);
+    assert_eq!(body["counts"]["articles"], 3);
     assert!(body["database"]["size_bytes"].as_i64().unwrap() > 0);
 
     // Nothing names a feed, an address or an account.

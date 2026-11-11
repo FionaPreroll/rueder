@@ -14,6 +14,7 @@
 	import HomeOverview from './HomeOverview.svelte';
 	import Icon from './Icon.svelte';
 	import SettingsDialog from './SettingsDialog.svelte';
+	import StatusDialog from './StatusDialog.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import SubscribeDialog from './SubscribeDialog.svelte';
 	import Toolbar from './Toolbar.svelte';
@@ -27,7 +28,7 @@
 	let now = $state(Date.now());
 
 	let sidebarOpen = $state(true);
-	let dialog: 'settings' | 'subscribe' | null = $state(null);
+	let dialog: 'settings' | 'subscribe' | 'status' | null = $state(null);
 	let settingsTab: 'look' | 'reading' | 'rules' | 'keys' = $state('look');
 	/** The article whose versions are compared, by id: it is replaced when it changes. */
 	let comparing: { id: string; versions: ArticleVersion[] } | null = $state(null);
@@ -220,6 +221,7 @@
 		ontogglesidebar={() => (sidebarOpen = !sidebarOpen)}
 		onsettings={() => openSettings('look')}
 		onhelp={() => openSettings('keys')}
+		onstatus={() => (dialog = 'status')}
 	/>
 
 	<div class="relative flex min-h-0 flex-1">
@@ -275,6 +277,8 @@
 	<SettingsDialog {reader} bind:tab={settingsTab} onclose={() => (dialog = null)} />
 {:else if dialog === 'subscribe'}
 	<SubscribeDialog {reader} onclose={() => (dialog = null)} />
+{:else if dialog === 'status'}
+	<StatusDialog {reader} onclose={() => (dialog = null)} />
 {/if}
 
 {#if compared && comparing}

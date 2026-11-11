@@ -16,6 +16,7 @@ import type {
 } from '#lib/api/client.ts';
 import type { EventStream } from '#lib/api/client.ts';
 import type { ServerEvent } from '#lib/api/types.ts';
+import { demoStatus } from '#lib/demo/status.ts';
 import { compile, ruleMatches } from '#lib/filters.ts';
 
 interface FakeFeed {
@@ -100,6 +101,8 @@ export class FakeServer {
 	accounts = new Map([['fiona', 'correct horse']]);
 	/** Who the browser's session belongs to. */
 	signedIn: string | null = 'fiona';
+	/** Whether the account that is logged in is an admin, who sees the status. */
+	admin = true;
 	oidc = false;
 	/** Wrong tries are refused for this many seconds. */
 	lockedFor = 0;
@@ -323,6 +326,9 @@ export class FakeServer {
 		if (!this.signedIn) return refused(401);
 		if (method === 'GET' && path === '/me') return json(this.me());
 		if (method === 'GET' && path === '/tree') return json(this.tree());
+		if (method === 'GET' && path === '/status') {
+			return this.admin ? json(demoStatus(Date.now())) : refused(403, 'only an admin can do this');
+		}
 
 		const labelled = this.labelling(method, path, query, body);
 		if (labelled) return labelled;
@@ -462,7 +468,7 @@ export class FakeServer {
 	}
 
 	private me() {
-		return { id: 1, username: this.signedIn, is_admin: true };
+		return { id: 1, username: this.signedIn, is_admin: this.admin };
 	}
 
 	private tree(): { folders: ApiFolder[]; feeds: ApiFeed[]; hidden: number } {

@@ -28,7 +28,8 @@
 		user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20a8 8 0 0 1 16 0',
 		logout: 'M10 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4M15 8l4 4-4 4M19 12H9',
 		pause: 'M8 5v14M16 5v14',
-		play: 'M7 5l12 7-12 7z'
+		play: 'M7 5l12 7-12 7z',
+		pulse: 'M3 12h4l3-7 4 14 3-7h4'
 	} as const;
 
 	export type IconName = keyof typeof paths;

@@ -733,11 +733,13 @@ describe('reading', () => {
 		await settle();
 		expect(server.writes).toEqual([]);
 		expect(reader.totalUnread).toBe(6);
+		// An admin sees the status of the server too.
 		expect(reader.can).toEqual({
 			oldestFirst: true,
 			markOlder: true,
 			subscribe: true,
-			opml: true
+			opml: true,
+			status: true
 		});
 	});
 });

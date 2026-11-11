@@ -317,9 +317,11 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
     let tables = sqlx::query!(
         r#"SELECT c.relname::text AS "name!",
                   (SELECT coalesce(sum(pg_total_relation_size(t.relid)), 0)
-                   FROM pg_partition_tree(c.oid) t)::bigint AS "bytes!",
+                   FROM (SELECT relid FROM pg_partition_tree(c.oid) UNION SELECT c.oid) t
+                  )::bigint AS "bytes!",
                   (SELECT coalesce(sum(greatest(r.reltuples, 0)), 0)
-                   FROM pg_partition_tree(c.oid) t JOIN pg_class r ON r.oid = t.relid)::bigint AS "rows!"
+                   FROM (SELECT relid FROM pg_partition_tree(c.oid) UNION SELECT c.oid) t
+                   JOIN pg_class r ON r.oid = t.relid)::bigint AS "rows!"
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
            WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p') AND NOT c.relispartition
            ORDER BY 2 DESC, 1
@@ -338,7 +340,9 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         .collect();
     let articles = sqlx::query_scalar!(
         r#"SELECT coalesce(sum(greatest(r.reltuples, 0)), 0)::bigint AS "n!"
-           FROM pg_partition_tree('articles'::regclass) t JOIN pg_class r ON r.oid = t.relid"#
+           FROM (SELECT relid FROM pg_partition_tree('articles'::regclass)
+                 UNION SELECT 'articles'::regclass) t
+           JOIN pg_class r ON r.oid = t.relid"#
     )
     .fetch_one(&state.db)
     .await?;
