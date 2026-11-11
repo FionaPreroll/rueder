@@ -413,7 +413,7 @@ Der Ertrag ist kleiner als in einem Programm mit `unsafe`: Fuzzing findet hier P
 
 ## API
 
-JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; die TypeScript-Typen des Frontends werden aus den Rust-Typen erzeugt (Paket 2.8), damit beide Seiten nicht auseinanderlaufen.
+JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; die TypeScript-Typen des Frontends werden aus den Rust-Typen erzeugt (Paket 2.8), damit beide Seiten nicht auseinanderlaufen, siehe [Typen für das Frontend](#typen-für-das-frontend).
 
 | Bereich | Endpunkte |
 |---|---|
@@ -428,7 +428,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 | Regeln | `GET` und `POST /api/rules`, `PUT` und `DELETE /api/rules/{id}`, `POST /api/rules/order`, `POST /api/rules/preview` |
 | Labels | `GET` und `POST /api/labels`, `PATCH` und `DELETE /api/labels/{id}`, `POST /api/labels/order`, `PUT` und `DELETE /api/feeds/{id}/articles/{seq}/labels/{label}` |
 | Einstellungen | `GET` und `PUT /api/settings` |
-| Live | `GET /api/events` (SSE), kommt mit Paket 2.7 |
+| Live | `GET /api/events` (SSE), siehe [Live-Updates](#live-updates) |
 | Bilder | `GET /img/<signatur>/<größe>/<adresse>` |
 
 Was für alle gilt:
@@ -447,6 +447,19 @@ Abweichungen vom Entwurf:
 - Alte Versionen eines Artikels sind gespeichert, wie sie kamen, und werden beim Ausliefern bereinigt, mit denselben Regeln wie der aktuelle Text. Das kostet beim seltenen Blick in die Versionen etwas Zeit und spart einen zweiten, bereinigten Bestand.
 - Ausblenden von Hand gibt es nicht, siehe [Filterregeln](#filterregeln).
 - Die Volltextsuche auf dem Server (Detailfrage in [plan.md](plan.md#detailfragen)) ist nicht Teil dieses Pakets. Sie hängt an der Messung ihres Index und ist als eigenes Paket 2.13 geführt.
+
+### Typen für das Frontend
+
+Was die API als JSON sendet und liest, gibt es als TypeScript-Typen in `web/src/lib/api/types.ts`. Die Datei schreibt der Server aus seinen eigenen Typen; von Hand geändert wird sie nicht.
+
+- **Ableiten.** Jeder Typ, der als JSON hinausgeht oder hereinkommt, leitet neben `Serialize` oder `Deserialize` auch `TS` ab (Crate `ts-rs`), das die Angaben von `serde` mitliest: umbenannte Felder, Enums als Text, eingebettete Typen. Sein Modul nennt ihn in der Funktion `types`; die Typen, aus denen er besteht, kommen von selbst mit.
+- **Schreiben.** `server/src/typescript.rs` fragt alle Module und schreibt eine Datei. Die Kommentare der Rust-Typen stehen darin als Kommentare der TypeScript-Typen und nennen zu jedem Typ seinen Endpunkt. In TypeScript teilen sich alle Typen einen Namensraum; ein Typ, dessen Name nur in seinem Modul etwas sagt, bekommt dort einen eigenen (`labels::Change` heißt `LabelChange`). Zwei Module dürfen denselben Namen nur für denselben Typ verwenden, sonst scheitert das Schreiben. Die Reihenfolge in der Datei ist fest: die Typen, wie die Module sie nennen, hinter jedem seine Teile nach Namen. In welcher Reihenfolge `ts-rs` die Teile findet, wechselt von einem Compiler zum nächsten und darf die Datei nicht ändern.
+- **Prüfen.** Die Datei ist eingecheckt. Der Test `server/tests/api_types.rs` läuft mit `cargo test` und in der CI: Er scheitert, wenn die Datei nicht dem entspricht, was die Typen heute sagen, und schreibt sie mit `UPDATE_API_TYPES=1` neu. Ein zweiter Test liest den Quelltext und scheitert, wenn ein Typ JSON ist und in der Datei fehlt; ausgenommen ist nur, was nicht zur API gehört (gespeicherte Versionen, die alte Datenbank, die Antworten des OpenID-Anbieters). Auf der anderen Seite hält `web/src/lib/api/types.test.ts` Antworten des Servers gegen die Typen, was `pnpm check` prüft.
+- **Was die Typen sagen.** Zeiten sind Text nach RFC 3339. Zahlen mit 64 Bit (IDs von Artikeln, Zähler) sind gewöhnliche Zahlen; keine kommt in die Nähe von 2^53, ab wo JavaScript sie nicht mehr unterscheidet. Ein Feld mit `?` darf in einer Anfrage fehlen. Fehler kommen als Text, nicht als JSON, und haben keinen Typ.
+- **Ereignisse.** Die Live-Updates haben einen Typ für alles, was über die Verbindung geht (`ServerEvent`): der Name des Ereignisses und was es trägt. Der Server schreibt die Ereignisse aus genau diesem Typ, er kann also nichts senden, was das Frontend nicht kennt.
+- **Anhänge.** Die Dateien eines Artikels (`enclosures`) sind gespeichert, wie sie kamen: aus dem Feed mit der Größe als Zahl, aus dem alten rueder mit der Größe als Text. Hinaus gehen sie in einer Form (`url`, `type`, `length`, `inline`), höchstens 100 je Artikel, und nur mit Adressen, die mit `http` oder `https` beginnen.
+
+Ohne Typ bleiben die Einstellungen eines Kontos: Ihr Inhalt gehört dem Frontend, der Server speichert ihn als JSON und begrenzt nur die Größe. Welcher Endpunkt welchen Typ nimmt und gibt, steht im Kommentar am Typ; eine Tabelle, die das prüfbar festhält, gibt es nicht.
 
 ## Frontend
 
@@ -475,7 +488,7 @@ Gebaut in Paket 3.1 (`web/src/lib/api/`):
 
 - **Die Seite.** `src/routes/+page.svelte` fragt mit `GET /api/me`, wer da ist, und zeigt den Reader oder die Login-Seite. Die Seite selbst ist die Komponente `ReaderPage`, die ihren `Reader` gereicht bekommt; die Fassungen ohne Server (`src/single`) geben ihr den `DemoReader`.
 - **Login.** Name und Passwort gehen an `POST /api/login`; die Sitzung ist das Cookie, von dem das Frontend nichts sieht. `GET /api/login/ways` sagt, ob es den Weg über OpenID Connect gibt, dann zeigt die Seite den Knopf dafür. Antwortet irgendein Endpunkt mit 401, ist die Sitzung zu Ende, und die Login-Seite erscheint wieder.
-- **Die API im Frontend** ist `client.ts`: eine Funktion je Endpunkt, mit den Formen der Antworten. Die Formen sind bis Paket 2.8 von Hand nach den Rust-Typen geschrieben. Feeds und Ordner heißen in der Seite `feed-12` und `folder-3`, weil der Baum beide in einer Liste führt und ihre Nummern sich überschneiden.
+- **Die API im Frontend** ist `client.ts`: eine Funktion je Endpunkt, mit den Formen der Antworten. Die Formen kommen aus `types.ts`, das der Server aus seinen Rust-Typen schreibt (siehe [Typen für das Frontend](#typen-für-das-frontend)); `client.ts` gibt ihnen nur die Namen, unter denen die Seite sie kennt. Feeds und Ordner heißen in der Seite `feed-12` und `folder-3`, weil der Baum beide in einer Liste führt und ihre Nummern sich überschneiden.
 - **Listen** kommen seitenweise (40 Artikel, Anker `before`) und ohne Texte. Der Text eines Artikels wird geholt, wenn er gezeigt wird, höchstens vier zugleich; die erweiterte Ansicht fragt für eine ganze Seite auf einmal. Die Suche durchsucht, was geladen ist.
 - **Änderungen wirken sofort.** Lesen, Stern, alle als gelesen und jeder Zug im Baum zeigen sich gleich und gehen im Hintergrund an den Server, eine nach der anderen in der Reihenfolge, in der sie gemacht wurden. Lehnt der Server eine ab, wird sie zurückgenommen, eine Zeile über der Liste sagt es, und Baum und Zahlen werden neu geholt. Eine abgelehnte Änderung, die eine spätere schon überholt hat, wird nicht zurückgenommen.
 - **Filterregeln** kommen aus `/api/rules`. Eine Änderung zeigt sich in der Liste der Regeln sofort; was sie ausblendet und als gelesen markiert, rechnet der Server, deshalb werden Baum und Liste danach neu geholt. Während eine Regel geschrieben wird, fragt der Editor `POST /api/rules/preview`, sobald das Tippen eine Viertelsekunde ruht: So erfährt er, was die Regel träfe und ob ihr Muster eines ist, denn die regulären Ausdrücke des Servers sind nicht die des Browsers.

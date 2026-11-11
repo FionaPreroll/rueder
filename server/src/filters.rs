@@ -22,6 +22,7 @@ use axum::{
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
+use ts_rs::TS;
 
 use crate::{AppError, AppState, reading, sessions::Session, tree::bad};
 
@@ -35,6 +36,15 @@ pub const RECENT: i32 = 200;
 /// How large a compiled pattern may get, in bytes.
 const MAX_PROGRAM: usize = 1024 * 1024;
 
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types
+        .add::<Rule>()
+        .add::<Outcome>()
+        .add::<Order>()
+        .add::<Preview>();
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/rules", get(rules).post(add))
@@ -43,8 +53,10 @@ pub fn routes() -> Router<AppState> {
         .route("/rules/{id}", put(change).delete(remove))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The part of an article a rule looks at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(rename = "RuleField")]
 pub enum Field {
     Any,
     Title,
@@ -53,16 +65,21 @@ pub enum Field {
     Tag,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// How a rule's pattern is read: as text that stands anywhere, as a whole
+/// word, or as a regular expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(rename = "RuleMatch")]
 pub enum Match {
     Contains,
     Word,
     Regex,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// What a rule does with an article it matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(rename = "RuleAction")]
 pub enum Action {
     Hide,
     Read,
@@ -70,8 +87,9 @@ pub enum Action {
 
 /// Where a rule holds: everywhere, in a folder with all that is in it, or in
 /// one feed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", content = "id", rename_all = "lowercase")]
+#[ts(rename = "RuleScope")]
 pub enum Scope {
     All,
     Folder(i32),
@@ -403,7 +421,8 @@ async fn verdicts(tests: Vec<Test>, candidates: Vec<Candidate>) -> anyhow::Resul
 }
 
 /// What a look at the articles changed.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(rename = "RuleChanged")]
 pub struct Changed {
     /// Articles that are hidden now and were not.
     pub hidden: usize,
@@ -565,7 +584,11 @@ pub async fn tree_changed(db: &PgPool, account_id: i32) -> anyhow::Result<()> {
 }
 
 /// A rule as the API takes and gives it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `GET /api/rules` answers with a list of them. `POST /api/rules`,
+/// `PUT /api/rules/{id}` and `POST /api/rules/preview` read one; there the `id`
+/// counts for nothing, and a rule without `enabled` is enabled.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct Rule {
     #[serde(default, skip_deserializing)]
     pub id: i32,
@@ -658,7 +681,10 @@ async fn rules(
 }
 
 /// What a change to the rules did to the articles that are there.
-#[derive(Serialize)]
+///
+/// `POST /api/rules`, `PUT` and `DELETE /api/rules/{id}` answer with it.
+#[derive(Serialize, TS)]
+#[ts(rename = "RuleOutcome")]
 struct Outcome {
     id: i32,
     changed: Changed,
@@ -746,7 +772,8 @@ async fn remove(
     Ok(Json(Outcome { id, changed }))
 }
 
-#[derive(Deserialize)]
+/// A new order: every number once, in the order they shall stand in.
+#[derive(Deserialize, TS)]
 struct Order {
     ids: Vec<i32>,
 }
@@ -782,7 +809,10 @@ async fn order(
 }
 
 /// How many articles a rule would catch.
-#[derive(Serialize)]
+///
+/// What `POST /api/rules/preview` answers.
+#[derive(Serialize, TS)]
+#[ts(rename = "RulePreview")]
 struct Preview {
     /// The articles the rule matches,
     matches: usize,

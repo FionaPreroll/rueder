@@ -1,12 +1,36 @@
-// The server's API as functions: one per endpoint the page uses, with the shapes
-// of what the server sends. The shapes are written by hand after the Rust types in
-// server/src/ until they are generated from them (work package 2.8).
+// The server's API as functions: one per endpoint the page uses. The shapes of
+// what the server sends and reads come from types.ts, which the server writes
+// out of its Rust types (see server/src/typescript.rs).
 //
 // The session is a cookie the browser keeps and scripts cannot read, so nothing
 // here knows a token. Every address is rueder's own.
 
 import type { Stream } from '#lib/model.ts';
 import type { DropPosition } from '#lib/tree.ts';
+import type {
+	Article,
+	ArticleVersion,
+	Created,
+	Credentials,
+	Feed,
+	Folder,
+	List,
+	ListItem,
+	LoginWays,
+	Me,
+	Move,
+	NewFolder,
+	NodeRef,
+	Rename,
+	Rule,
+	RuleOutcome,
+	RulePreview,
+	RuleScope,
+	StateChange,
+	Tree,
+	Upto,
+	Versions
+} from './types.ts';
 
 /** A request the server refused, or one it did not answer (`status` 0). */
 export class ApiError extends Error {
@@ -26,123 +50,22 @@ export class ApiError extends Error {
 	}
 }
 
-export interface ApiAccount {
-	id: number;
-	username: string;
-	is_admin: boolean;
-}
-
-/** The ways to log in this server has, besides name and password. */
-export interface ApiLoginWays {
-	oidc: boolean;
-}
-
-export interface ApiFolder {
-	id: number;
-	parent_id: number | null;
-	title: string;
-	position: number;
-}
-
-/** A subscription with what the tree shows of its feed. */
-export interface ApiFeed {
-	id: number;
-	folder_id: number | null;
-	position: number;
-	/** The name the reader gave it, else the feed's own. */
-	title: string;
-	feed_title: string;
-	feed_url: string;
-	site_url: string | null;
-	icon_url: string | null;
-	fetch_agent: string;
-	error: string | null;
-	last_seq: number;
-	read_upto: number;
-	unread: number;
-}
-
-export interface ApiTree {
-	folders: ApiFolder[];
-	feeds: ApiFeed[];
-}
-
-/** One line of a list. */
-export interface ApiListItem {
-	feed_id: number;
-	seq: number;
-	/** Where the article stands in the order of arrival; the anchor for the next page. */
-	id: number;
-	published_at: string;
-	updated_at: string | null;
-	version: number;
-	title: string;
-	teaser: string;
-	author: string;
-	url: string | null;
-	thumbnail_url: string | null;
-	read: boolean;
-	starred: boolean;
-	labels: number[];
-}
-
-/** An article opened for reading. */
-export interface ApiArticle {
-	feed_id: number;
-	seq: number;
-	id: number;
-	published_at: string;
-	updated_at: string | null;
-	version: number;
-	title: string;
-	author: string;
-	url: string | null;
-	html: string;
-	tags: string[];
-	enclosures: unknown;
-	image_url: string | null;
-	image_title: string | null;
-	labels: number[];
-}
-
-export interface ApiVersion {
-	version: number;
-	fetched_at: string;
-	title: string;
-	html: string;
-	authors: string[];
-	tags: string[];
-	url: string | null;
-}
-
-/** Where a filter rule holds. */
-export type ApiRuleScope =
-	{ kind: 'all' } | { kind: 'folder'; id: number } | { kind: 'feed'; id: number };
-
-/** A filter rule. A new one is sent without its id. */
-export interface ApiRule {
-	id: number;
-	enabled: boolean;
-	scope: ApiRuleScope;
-	field: 'any' | 'title' | 'content' | 'author' | 'tag';
-	match: 'contains' | 'word' | 'regex';
-	pattern: string;
-	action: 'hide' | 'read';
-}
-
-export type ApiNewRule = Omit<ApiRule, 'id'>;
-
-/** What a rule would catch: the articles it matches, of this many it looked at. */
-export interface ApiRulePreview {
-	matches: number;
-	of: number;
-}
-
-/** A folder or a subscription, as the tree's changes name them. */
-export interface ApiNode {
-	kind: 'folder' | 'feed';
-	id: number;
-}
+// The shapes of what the server sends, under the names the page knows them by.
+// They are the server's own: types.ts is written out of its Rust types.
+export type ApiAccount = Me;
+export type ApiLoginWays = LoginWays;
+export type ApiFolder = Folder;
+export type ApiFeed = Feed;
+export type ApiTree = Tree;
+export type ApiListItem = ListItem;
+export type ApiArticle = Article;
+export type ApiVersion = ArticleVersion;
+export type ApiRuleScope = RuleScope;
+export type ApiRule = Rule;
+/** A new rule is sent without its id. */
+export type ApiNewRule = Omit<Rule, 'id'>;
+export type ApiRulePreview = RulePreview;
+export type ApiNode = NodeRef;
 
 /** Which part of a list is asked for. */
 export interface PageQuery {
@@ -219,7 +142,7 @@ export const api = {
 	me: () => call<ApiAccount>('GET', '/me'),
 	loginWays: () => call<ApiLoginWays>('GET', '/login/ways'),
 	login: (username: string, password: string) =>
-		call<ApiAccount>('POST', '/login', { username, password }),
+		call<ApiAccount>('POST', '/login', { username, password } satisfies Credentials),
 	logout: () => call<void>('POST', '/logout'),
 
 	tree: () => call<ApiTree>('GET', '/tree'),
@@ -228,7 +151,7 @@ export const api = {
 		const query = new URLSearchParams({ limit: String(page.limit) });
 		if (page.before !== undefined) query.set('before', String(page.before));
 		if (page.unread) query.set('unread', 'true');
-		const list = await call<{ articles: ApiListItem[] }>('GET', `${listPath(stream)}?${query}`);
+		const list = await call<List>('GET', `${listPath(stream)}?${query}`);
 		return list.articles;
 	},
 
@@ -236,30 +159,28 @@ export const api = {
 		call<ApiArticle>('GET', `/feeds/${feedId}/articles/${seq}`),
 
 	versions: async (feedId: number, seq: number) => {
-		const kept = await call<{ versions: ApiVersion[] }>(
-			'GET',
-			`/feeds/${feedId}/articles/${seq}/versions`
-		);
+		const kept = await call<Versions>('GET', `/feeds/${feedId}/articles/${seq}/versions`);
 		return kept.versions;
 	},
 
 	setState: (feedId: number, seq: number, change: { read?: boolean; starred?: boolean }) =>
-		call<void>('PUT', `/feeds/${feedId}/articles/${seq}/state`, change),
+		call<void>('PUT', `/feeds/${feedId}/articles/${seq}/state`, change satisfies StateChange),
 
 	/** Marks as read what arrived in the stream up to the article of this id. */
 	readUpto: (stream: ListStream, uptoId: number) =>
-		call<void>('POST', readPath(stream), { upto_id: uptoId }),
+		call<void>('POST', readPath(stream), { upto_id: uptoId } satisfies Upto),
 
 	move: (node: ApiNode, target: ApiNode, position: DropPosition) =>
-		call<void>('POST', '/tree/move', { node, target, position }),
-	addFolder: (title: string) => call<{ id: number }>('POST', '/folders', { title }),
-	renameFolder: (id: number, title: string) => call<void>('PATCH', `/folders/${id}`, { title }),
+		call<void>('POST', '/tree/move', { node, target, position } satisfies Move),
+	addFolder: (title: string) => call<Created>('POST', '/folders', { title } satisfies NewFolder),
+	renameFolder: (id: number, title: string) =>
+		call<void>('PATCH', `/folders/${id}`, { title } satisfies Rename),
 	removeFolder: (id: number) => call<void>('DELETE', `/folders/${id}`),
 
 	rules: () => call<ApiRule[]>('GET', '/rules'),
-	addRule: (rule: ApiNewRule) => call<{ id: number }>('POST', '/rules', rule),
-	changeRule: (id: number, rule: ApiNewRule) => call<{ id: number }>('PUT', `/rules/${id}`, rule),
-	removeRule: (id: number) => call<{ id: number }>('DELETE', `/rules/${id}`),
+	addRule: (rule: ApiNewRule) => call<RuleOutcome>('POST', '/rules', rule),
+	changeRule: (id: number, rule: ApiNewRule) => call<RuleOutcome>('PUT', `/rules/${id}`, rule),
+	removeRule: (id: number) => call<RuleOutcome>('DELETE', `/rules/${id}`),
 	/** Tries a rule without storing it; a pattern that cannot be used is refused with 400. */
 	previewRule: (rule: ApiNewRule) => call<ApiRulePreview>('POST', '/rules/preview', rule)
 };

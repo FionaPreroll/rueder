@@ -45,14 +45,18 @@ What is here:
   of a web page, OPML in and out, settings, the own sessions, and accounts for
   admins. Every query is bound to the account of the session; the list of
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
+- Live updates (`src/events.rs`): `GET /api/events` tells an account's open
+  tabs what changed, as server-sent events.
+- The API's types for the frontend (`src/typescript.rs`): every type that is
+  sent or read as JSON is written to `../web/src/lib/api/types.ts`, and a test
+  fails when that file is out of date.
 - The built frontend from `../web/build`.
 - The container image (`../Dockerfile`) with the server and the frontend, and
   `rueder health`, which asks the running server whether it is well. How to
   install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan, the first six work packages of step 2 and its
-work package 2.10. Live updates, the API's types for the frontend and the
-hardening follow.
+This is step 1 of the plan, the first eight work packages of step 2 and its
+work package 2.10. The hardening, fuzzing and the search follow.
 
 ## Commands
 
@@ -65,11 +69,18 @@ cargo test                           # creates a database per test on the server
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo sqlx prepare -- --all-targets  # after changing a query: renew the cache in .sqlx/
+UPDATE_API_TYPES=1 cargo test --test api_types   # after changing a type of the API: write the frontend's types anew
 ```
 
 Queries are checked against the schema when compiling. Without a database the
 build uses the cache in `.sqlx/` (`SQLX_OFFLINE=true`, as in CI); `cargo sqlx` comes
 with `cargo install sqlx-cli`.
+
+A type that goes over the API as JSON derives `TS` next to `Serialize` or
+`Deserialize`, and its module lists it in its function `types`. In TypeScript
+all types share one room: where the Rust name says little outside its module,
+`#[ts(rename = "...")]` gives the type a name of its own there. The comment
+on a type goes into the file with it and names the endpoint the type is for.
 
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 (default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).

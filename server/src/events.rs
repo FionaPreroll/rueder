@@ -35,9 +35,11 @@ use axum::{
     },
 };
 use futures_util::{Stream, stream};
+use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio::{sync::broadcast, time::Instant};
+use ts_rs::TS;
 
 use crate::{
     AppError, AppState,
@@ -105,36 +107,139 @@ pub enum Area {
 
 impl Change {
     /// The name of the event, which says what the browser has to do.
-    pub fn kind(&self) -> &'static str {
-        match self {
-            Self::Articles { .. } => "articles",
-            Self::Updated { .. } => "updated",
-            Self::Feed { .. } => "feed",
-            Self::Reading { .. } => "reading",
-            Self::Area { area, .. } => match area {
-                Area::Tree => "tree",
-                Area::Labels => "labels",
-                Area::Settings => "settings",
-                Area::Rules => "rules",
-                Area::Session => "session",
-            },
-        }
+    pub fn kind(&self) -> String {
+        Sent::from(self).parts().0
     }
 
     /// What the event carries.
     pub fn data(&self) -> Value {
-        match self {
-            Self::Articles {
+        Sent::from(self).parts().1
+    }
+}
+
+/// An event of `GET /api/events` as it goes over the connection: `event` is
+/// its name there and `data` what it carries, as JSON.
+///
+/// Events are notices: one says what changed, and the browser loads what it
+/// shows of that anew.
+///
+/// - `hello`: the connection is up, and what is loaded from now on misses
+///   nothing.
+/// - `resync`: the server cannot say what the browser missed; load everything
+///   anew.
+/// - `articles`: a feed got new articles.
+/// - `updated`: articles of a feed were changed by their publisher and have a
+///   new version.
+/// - `feed`: a feed cannot be fetched any more (`error` says why) or can
+///   again (`error` is null).
+/// - `reading`: what the account has read or starred changed.
+/// - `tree`: folders or subscriptions changed.
+/// - `labels`, `settings`: they changed.
+/// - `rules`: filter rules changed. They hide articles and mark them as read,
+///   so the unread counts may have changed with them.
+/// - `session`: a session of the account ended.
+///
+/// `by` is the name the tab that made the change gave itself in the header
+/// `X-Rueder-Tab`, if it did, so that a tab knows its own change when it
+/// comes back.
+#[derive(Debug, Serialize, TS)]
+#[serde(tag = "event", content = "data", rename_all = "lowercase")]
+#[ts(rename = "ServerEvent")]
+enum Sent {
+    /// The connection is up, and what is loaded from now on misses nothing.
+    Hello {},
+    /// The server cannot say what the browser missed: load everything anew.
+    Resync {},
+    /// A feed got new articles.
+    Articles {
+        feed_id: i32,
+        /// The number of the feed's newest article now.
+        last_seq: i32,
+        /// How many came.
+        new: usize,
+    },
+    /// Articles of a feed were changed by their publisher and have a new version.
+    Updated {
+        feed_id: i32,
+        count: usize,
+    },
+    /// A feed cannot be fetched any more (`error` says why) or can again.
+    Feed {
+        feed_id: i32,
+        error: Option<String>,
+    },
+    /// What the account has read or starred changed.
+    Reading {
+        /// The feed's numbers after the change, if it was about one feed.
+        feed: Option<FeedUnread>,
+        /// The article's number in the feed, if it was about one article.
+        seq: Option<i32>,
+        by: Option<String>,
+    },
+    /// Folders or subscriptions changed.
+    Tree {
+        by: Option<String>,
+    },
+    Labels {
+        by: Option<String>,
+    },
+    Settings {
+        by: Option<String>,
+    },
+    /// Filter rules changed. They hide articles and mark them as read, so the
+    /// unread counts may have changed with them.
+    Rules {
+        by: Option<String>,
+    },
+    /// A session of the account ended.
+    Session {
+        by: Option<String>,
+    },
+}
+
+impl From<&Change> for Sent {
+    fn from(change: &Change) -> Self {
+        match change.clone() {
+            Change::Articles {
                 feed_id,
                 last_seq,
                 new,
-            } => json!({ "feed_id": feed_id, "last_seq": last_seq, "new": new }),
-            Self::Updated { feed_id, count } => json!({ "feed_id": feed_id, "count": count }),
-            Self::Feed { feed_id, error } => json!({ "feed_id": feed_id, "error": error }),
-            Self::Reading { feed, seq, by } => json!({ "feed": feed, "seq": seq, "by": by }),
-            Self::Area { by, .. } => json!({ "by": by }),
+            } => Self::Articles {
+                feed_id,
+                last_seq,
+                new,
+            },
+            Change::Updated { feed_id, count } => Self::Updated { feed_id, count },
+            Change::Feed { feed_id, error } => Self::Feed { feed_id, error },
+            Change::Reading { feed, seq, by } => Self::Reading { feed, seq, by },
+            Change::Area { area, by } => match area {
+                Area::Tree => Self::Tree { by },
+                Area::Labels => Self::Labels { by },
+                Area::Settings => Self::Settings { by },
+                Area::Rules => Self::Rules { by },
+                Area::Session => Self::Session { by },
+            },
         }
     }
+}
+
+impl Sent {
+    /// The name and what it carries, as they are written to the connection.
+    fn parts(&self) -> (String, Value) {
+        let Ok(Value::Object(mut whole)) = serde_json::to_value(self) else {
+            return (String::new(), json!({}));
+        };
+        let kind = match whole.remove("event") {
+            Some(Value::String(kind)) => kind,
+            _ => String::new(),
+        };
+        (kind, whole.remove("data").unwrap_or_else(|| json!({})))
+    }
+}
+
+/// The types of the events, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types.add::<Sent>();
 }
 
 /// An event as it is kept and passed on.
@@ -275,7 +380,8 @@ impl Events {
         format!("{}-{number}", self.inner.run)
     }
 
-    fn sse(&self, number: u64, kind: &str, data: &Value) -> SseEvent {
+    fn sse(&self, number: u64, sent: &Sent) -> SseEvent {
+        let (kind, data) = sent.parts();
         SseEvent::default()
             .id(self.id(number))
             .event(kind)
@@ -308,13 +414,13 @@ impl Events {
             (run == self.inner.run && number <= newest && number + 1 >= oldest).then_some(number)
         });
         let first = match (last_seen, seen) {
-            (None, _) => VecDeque::from([self.sse(newest, "hello", &json!({}))]),
-            (Some(_), None) => VecDeque::from([self.sse(newest, "resync", &json!({}))]),
+            (None, _) => VecDeque::from([self.sse(newest, &Sent::Hello {})]),
+            (Some(_), None) => VecDeque::from([self.sse(newest, &Sent::Resync {})]),
             (Some(_), Some(seen)) => kept
                 .events
                 .iter()
                 .filter(|event| event.number > seen && event.accounts.contains(&account_id))
-                .map(|event| self.sse(event.number, event.change.kind(), &event.change.data()))
+                .map(|event| self.sse(event.number, &Sent::from(&event.change)))
                 .collect(),
         };
         Some(Opened {
@@ -369,7 +475,7 @@ impl Serving {
                 // missed.
                 Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
                     self.seen = self.events.newest();
-                    return Some(self.events.sse(self.seen, "resync", &json!({})));
+                    return Some(self.events.sse(self.seen, &Sent::Resync {}));
                 }
                 Ok(Ok(event)) => event,
             };
@@ -390,8 +496,7 @@ impl Serving {
             {
                 return None;
             }
-            let (kind, data) = (event.change.kind(), event.change.data());
-            return Some(self.events.sse(event.number, kind, &data));
+            return Some(self.events.sse(event.number, &Sent::from(&event.change)));
         }
     }
 }

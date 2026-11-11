@@ -933,7 +933,7 @@ fn events_say_what_they_are_about() {
             json!({ "by": null }),
         ),
     ] {
-        assert_eq!((change.kind(), change.data()), (kind, data));
+        assert_eq!((change.kind().as_str(), change.data()), (kind, data));
     }
     // Nobody to tell is nothing to keep.
     let events = Events::new();

@@ -92,7 +92,7 @@ describe('the tree', () => {
 				feed_url: '',
 				site_url: null,
 				icon_url: null,
-				fetch_agent: '',
+				fetch_agent: 'rueder',
 				error: null,
 				last_seq: 0,
 				read_upto: 0,
