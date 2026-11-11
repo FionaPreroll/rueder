@@ -860,6 +860,70 @@ pub fn with_images(html: &str, address: impl Fn(&str) -> Option<String>) -> Stri
     written(root)
 }
 
+/// A feed a web page says it has.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedLink {
+    pub url: Url,
+    /// The name the page gives it; often empty.
+    pub title: String,
+}
+
+/// How many feeds are taken from one page.
+pub const MAX_FEED_LINKS: usize = 20;
+/// The longest name of a feed taken from a page, in characters.
+const MAX_FEED_TITLE: usize = 200;
+
+/// The feeds a web page points to with `<link rel="alternate">`, in the order
+/// of the page and each address once. `base` is where the page came from. A
+/// page beyond the limits of the parser has none.
+pub fn feed_links(html: &str, base: &Url) -> Vec<FeedLink> {
+    const TYPES: [&str; 4] = [
+        "application/rss+xml",
+        "application/atom+xml",
+        "application/feed+json",
+        "application/rdf+xml",
+    ];
+    let Some(root) = read_within_limits(html) else {
+        return Vec::new();
+    };
+    let mut found: Vec<FeedLink> = Vec::new();
+    let mut waiting = vec![root];
+    while let Some(node) = waiting.pop() {
+        if let NodeData::Element { name, attrs, .. } = &node.data
+            && &*name.local == "link"
+        {
+            let attrs = attrs.borrow();
+            let is = |name: &str, wanted: &[&str]| {
+                attribute(&attrs, name).is_some_and(|value| {
+                    let value = value.to_ascii_lowercase();
+                    let mut words = value.split([' ', '\t', '\n', ';']);
+                    words.any(|word| wanted.contains(&word))
+                })
+            };
+            let url = attribute(&attrs, "href")
+                .filter(|_| is("rel", &["alternate"]) && is("type", &TYPES))
+                .and_then(|href| base.join(href.trim()).ok())
+                .filter(is_web);
+            if let Some(url) = url
+                && found.iter().all(|link| link.url != url)
+            {
+                let title = attribute(&attrs, "title").unwrap_or_default();
+                let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+                found.push(FeedLink {
+                    url,
+                    title: title.chars().take(MAX_FEED_TITLE).collect(),
+                });
+                if found.len() == MAX_FEED_LINKS {
+                    break;
+                }
+            }
+        }
+        // The first child comes off the pile first: the order of the page.
+        waiting.extend(node.children.borrow().iter().rev().cloned());
+    }
+    found
+}
+
 fn element_name(node: &Handle) -> Option<&str> {
     match &node.data {
         NodeData::Element { name, .. } => Some(&*name.local),

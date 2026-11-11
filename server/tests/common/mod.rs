@@ -99,3 +99,96 @@ impl Random {
         (self.next() % n as u64) as usize
     }
 }
+
+/// What a logged-in browser of this account sends as its `Cookie` header.
+pub async fn session(db: &PgPool, account_id: i32) -> String {
+    let token = rueder::sessions::start(db, account_id).await.unwrap();
+    format!("{}={token}", rueder::sessions::COOKIE)
+}
+
+pub async fn folder(db: &PgPool, account_id: i32, parent: Option<i32>, title: &str) -> i32 {
+    sqlx::query_scalar(
+        "INSERT INTO folders (account_id, parent_id, title, position)
+         VALUES ($1, $2, $3, 1) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(parent)
+    .bind(title)
+    .fetch_one(db)
+    .await
+    .unwrap()
+}
+
+pub async fn move_to(db: &PgPool, account_id: i32, feed_id: i32, folder_id: i32) {
+    sqlx::query("UPDATE subscriptions SET folder_id = $3 WHERE account_id = $1 AND feed_id = $2")
+        .bind(account_id)
+        .bind(feed_id)
+        .bind(folder_id)
+        .execute(db)
+        .await
+        .unwrap();
+}
+
+/// Asks the server something, as the browser with this cookie, and returns
+/// the status and the JSON of the answer (`Null` if it has none).
+pub async fn call(
+    state: &rueder::AppState,
+    method: axum::http::Method,
+    path: &str,
+    cookie: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    use axum::{body::Body, http::header};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let mut request = axum::http::Request::builder().method(method).uri(path);
+    if let Some(cookie) = cookie {
+        request = request.header(header::COOKIE, cookie);
+    }
+    let body = match body {
+        Some(body) => {
+            request = request.header(header::CONTENT_TYPE, "application/json");
+            Body::from(body.to_string())
+        }
+        None => Body::empty(),
+    };
+    let app = rueder::router(state.clone(), "missing".as_ref());
+    let response = app.oneshot(request.body(body).unwrap()).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    (status, json)
+}
+
+/// Asks the server something with a body of the given content type, and
+/// returns the answer as it came, with its headers.
+pub async fn raw(
+    state: &rueder::AppState,
+    method: axum::http::Method,
+    path: &str,
+    cookie: Option<&str>,
+    body: Option<(&str, Vec<u8>)>,
+) -> (axum::http::StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    use axum::{body::Body, http::header};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let mut request = axum::http::Request::builder().method(method).uri(path);
+    if let Some(cookie) = cookie {
+        request = request.header(header::COOKIE, cookie);
+    }
+    let body = match body {
+        Some((kind, body)) => {
+            request = request.header(header::CONTENT_TYPE, kind);
+            Body::from(body)
+        }
+        None => Body::empty(),
+    };
+    let app = rueder::router(state.clone(), "missing".as_ref());
+    let request = request.body(body).unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    let (status, headers) = (response.status(), response.headers().clone());
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, headers, bytes.to_vec())
+}

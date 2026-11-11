@@ -553,6 +553,75 @@ pub async fn page(
     Ok(items)
 }
 
+/// The lists that are not a feed's: what the account starred, what its rules
+/// or the reader hid, and what carries one of its labels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Marked {
+    Starred,
+    Hidden,
+    Label(i32),
+}
+
+/// A page of such a list, newest first. Only articles of feeds the account
+/// subscribes to, and, except in the list of the hidden ones, nothing hidden.
+/// These lists are as long as what a reader marked by hand, so they are read
+/// from the marks and not from the feeds.
+pub async fn marked(
+    db: &PgPool,
+    account_id: i32,
+    which: Marked,
+    page: Page,
+) -> anyhow::Result<Vec<ListItem>> {
+    let (kind, label) = match which {
+        Marked::Starred => ("starred", None),
+        Marked::Hidden => ("hidden", None),
+        Marked::Label(id) => ("label", Some(id)),
+    };
+    let items = sqlx::query_as!(
+        ListItem,
+        r#"
+        WITH marks AS (
+            SELECT x.feed_id, x.seq FROM article_states x
+            WHERE $2 = 'starred' AND x.account_id = $1 AND x.starred
+          UNION ALL
+            SELECT x.feed_id, x.seq FROM article_states x
+            WHERE $2 = 'hidden' AND x.account_id = $1 AND x.hidden
+          UNION ALL
+            SELECT al.feed_id, al.seq
+            FROM labels l JOIN article_labels al ON al.label_id = l.id
+            WHERE $2 = 'label' AND l.account_id = $1 AND l.id = $3
+        )
+        SELECT a.feed_id AS "feed_id!", a.seq AS "seq!", a.id AS "id!",
+               a.published_at AS "published_at!", a.updated_at, a.version AS "version!",
+               a.title AS "title!", a.teaser AS "teaser!", a.author AS "author!", a.url,
+               a.thumbnail_url,
+               CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
+                    ELSE coalesce(st.read, false) END AS "read!",
+               coalesce(st.starred, false) AS "starred!"
+        FROM marks m
+        JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = m.feed_id
+        JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq
+        LEFT JOIN article_states st
+            ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq
+        WHERE a.id < $4 AND ($2 = 'hidden' OR NOT coalesce(st.hidden, false))
+              AND ($5::boolean IS NOT TRUE
+                   OR NOT CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
+                               ELSE coalesce(st.read, false) END)
+        ORDER BY a.id DESC
+        LIMIT $6
+        "#,
+        account_id,
+        kind,
+        label,
+        page.before.unwrap_or(i64::MAX),
+        page.unread_only,
+        page.limit,
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(items)
+}
+
 /// An article opened for reading: the cleaned text of its current version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Opened {

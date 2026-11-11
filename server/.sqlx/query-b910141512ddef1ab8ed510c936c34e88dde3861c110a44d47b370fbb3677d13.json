@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.feed_id,\n                  (SELECT a.seq FROM articles a\n                   WHERE a.feed_id = s.feed_id AND a.id <= $3\n                   ORDER BY a.id DESC LIMIT 1) AS upto\n           FROM subscriptions s\n           WHERE s.account_id = $1 AND s.feed_id = ANY($2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "upto",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "b910141512ddef1ab8ed510c936c34e88dde3861c110a44d47b370fbb3677d13"
+}

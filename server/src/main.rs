@@ -287,14 +287,14 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         ..Default::default()
     })?;
 
+    // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
+    // that come with rueder.
+    let rules = Arc::new(Rules::from_env()?);
     // FETCH=off keeps the server from fetching feeds.
     if env::var("FETCH").is_ok_and(|value| value == "off") {
         tracing::info!("not fetching feeds (FETCH=off)");
     } else {
-        // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
-        // that come with rueder.
-        let rules = Arc::new(Rules::from_env()?);
-        tokio::spawn(fetch::run(db.clone(), client.clone(), rules));
+        tokio::spawn(fetch::run(db.clone(), client.clone(), rules.clone()));
     }
 
     // Images reach readers through the proxy. IMAGE_CACHE_DIR is where it keeps
@@ -336,7 +336,10 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         }
     });
 
-    let mut state = AppState::new(db).with_images(images);
+    let mut state = AppState::new(db)
+        .with_images(images)
+        .with_rules(rules)
+        .with_client(client.clone());
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.
     if let Some(config) = oidc::Config::from_env()? {

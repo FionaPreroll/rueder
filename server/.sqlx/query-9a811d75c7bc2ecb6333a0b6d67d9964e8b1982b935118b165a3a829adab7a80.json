@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE subscriptions s SET position = t.position\n         FROM unnest($2::int4[], $3::float8[]) AS t(id, position)\n         WHERE s.account_id = $1 AND s.feed_id = t.id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Float8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9a811d75c7bc2ecb6333a0b6d67d9964e8b1982b935118b165a3a829adab7a80"
+}

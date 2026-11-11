@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching, cleaning, images and login
+## State: foundation, data, fetching, cleaning, images, login and the API
 
 What is here:
 
@@ -38,15 +38,21 @@ What is here:
   readers only.
 - Made-up data in the size of a real installation and timings of these queries
   (`src/bench.rs`).
-- `GET /api/health`, `POST /api/login`, `POST /api/logout`, `GET /api/me`, and
-  the built frontend from `../web/build`.
+- The API under `/api` (`src/api.rs`, `src/tree.rs`, `src/labels.rs`,
+  `src/filters.rs`, `src/subscribe.rs`, `src/profile.rs`): the tree with unread
+  counts, lists, articles and their versions, what was read and starred,
+  labels, filter rules with a preview, subscribing with a search for the feeds
+  of a web page, OPML in and out, settings, the own sessions, and accounts for
+  admins. Every query is bound to the account of the session; the list of
+  endpoints is in [docs/architecture.md](../docs/architecture.md#api).
+- The built frontend from `../web/build`.
 - The container image (`../Dockerfile`) with the server and the frontend, and
   `rueder health`, which asks the running server whether it is well. How to
   install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan, the first five work packages of step 2 and its
-work package 2.10. The API
-for feeds, articles and what was read follows.
+This is step 1 of the plan, the first six work packages of step 2 and its
+work package 2.10. Live updates, the API's types for the frontend and the
+hardening follow.
 
 ## Commands
 
@@ -70,7 +76,8 @@ Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 
 ## Accounts and login
 
-Nobody can register. Accounts are made on the command line:
+Nobody can register. Accounts are made on the command line, or by an admin
+with `POST /api/accounts`:
 
 ```sh
 cargo run -- account add ada            # asks for the password; --admin for an admin

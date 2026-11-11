@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.feed_id, f.last_seq FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0db39bbb7e4f42f7eaa4e1d48dda0aa2fe26c8a85dc13badddabe62d1b1eb933"
+}

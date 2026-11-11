@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds f SET fetch_agent = $3, next_fetch_at = now()\n         FROM subscriptions s\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND f.id = s.feed_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d5f44d10fd3e08f5bb73b98fc471e204791f1ca8442bef517cc6a6fb6ac62b4"
+}

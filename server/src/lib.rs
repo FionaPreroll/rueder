@@ -1,18 +1,24 @@
 pub mod accounts;
+pub mod api;
 pub mod articles;
 pub mod bench;
 pub mod cleaning;
 pub mod feeds;
 pub mod fetch;
+pub mod filters;
 pub mod health;
 pub mod http_client;
 pub mod images;
 pub mod import;
+pub mod labels;
 pub mod login;
 pub mod oidc;
+pub mod profile;
 pub mod reading;
 pub mod reclean;
 pub mod sessions;
+pub mod subscribe;
+pub mod tree;
 
 use std::{path::Path, sync::Arc};
 
@@ -27,6 +33,8 @@ use serde::Serialize;
 use sqlx::PgPool;
 
 use crate::{
+    cleaning::Rules,
+    http_client::HttpClient,
     images::{ImageProxy, Refused},
     login::Limiter,
     oidc::Oidc,
@@ -49,6 +57,12 @@ pub struct AppState {
     pub client_ip_header: Option<HeaderName>,
     /// The login through an OpenID Connect provider, if this server has one.
     pub oidc: Option<Arc<Oidc>>,
+    /// The rules of the cleaning, for what is cleaned when it is asked for.
+    /// Without them, the ones that come with rueder count.
+    pub rules: Option<Arc<Rules>>,
+    /// The hardened HTTP client, for looking at an address a reader wants to
+    /// subscribe to. Without it, nobody subscribes to a feed that is new.
+    pub client: Option<HttpClient>,
 }
 
 impl AppState {
@@ -59,6 +73,22 @@ impl AppState {
             logins: Arc::default(),
             client_ip_header: None,
             oidc: None,
+            rules: None,
+            client: None,
+        }
+    }
+
+    pub fn with_client(self, client: HttpClient) -> Self {
+        Self {
+            client: Some(client),
+            ..self
+        }
+    }
+
+    pub fn with_rules(self, rules: Arc<Rules>) -> Self {
+        Self {
+            rules: Some(rules),
+            ..self
         }
     }
 
@@ -105,6 +135,12 @@ fn api() -> Router<AppState> {
         .route("/me", get(login::me))
         .route("/oidc/start", get(oidc::start))
         .route("/oidc/callback", get(oidc::callback))
+        .merge(api::routes())
+        .merge(tree::routes())
+        .merge(labels::routes())
+        .merge(filters::routes())
+        .merge(subscribe::routes())
+        .merge(profile::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 
