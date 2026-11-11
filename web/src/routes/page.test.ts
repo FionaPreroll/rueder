@@ -263,6 +263,25 @@ describe('the keyboard', () => {
 		expect(openArticle()).not.toBeNull();
 	});
 
+	it('puts labels on the open article and takes them off', async () => {
+		render(Page);
+		await press('gaj');
+		const article = openArticle()!;
+		const body = article.parentElement!.parentElement!;
+		const menu = () => within(body).getByRole('button', { name: 'Labels' });
+		await userEvent.click(menu());
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' }));
+		// The row shows it as a dot, the article as a chip.
+		expect(within(body).getAllByLabelText('Label: Arbeit')).toHaveLength(2);
+		await userEvent.click(menu());
+		expect(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' }));
+		expect(within(body).queryAllByLabelText('Label: Arbeit')).toHaveLength(0);
+	});
+
 	it('opens the first article with k from the start page too', async () => {
 		render(Page);
 		await press('k');

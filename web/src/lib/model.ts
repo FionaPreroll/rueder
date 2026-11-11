@@ -85,6 +85,26 @@ export interface Article {
 	updatedAt: number | null;
 }
 
+/** A reader's own mark for articles, with a name and a color. */
+export interface Label {
+	id: string;
+	title: string;
+	/** As `#rrggbb`, one of `labelColors`. */
+	color: string;
+}
+
+/** The colors a label can have; the server takes any `#rrggbb`. */
+export const labelColors = [
+	'#d93025',
+	'#e8710a',
+	'#f9ab00',
+	'#1e8e3e',
+	'#12b5cb',
+	'#1a73e8',
+	'#9334e6',
+	'#5f6368'
+] as const;
+
 /** What the main pane shows. */
 export type Stream =
 	| { kind: 'home' }
@@ -92,7 +112,8 @@ export type Stream =
 	| { kind: 'starred' }
 	| { kind: 'hidden' }
 	| { kind: 'folder'; id: string }
-	| { kind: 'feed'; id: string };
+	| { kind: 'feed'; id: string }
+	| { kind: 'label'; id: string };
 
 export const sameStream = (a: Stream, b: Stream) =>
 	a.kind === b.kind && ('id' in a ? a.id : '') === ('id' in b ? b.id : '');

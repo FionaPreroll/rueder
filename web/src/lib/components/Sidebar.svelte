@@ -7,6 +7,7 @@
 	import { sameStream, type Stream } from '#lib/model.ts';
 	import Counter from './Counter.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
+	import LabelList from './LabelList.svelte';
 	import TreeItem, { type DragState } from './TreeItem.svelte';
 
 	let {
@@ -82,6 +83,8 @@
 		{@render entry({ kind: 'all' }, 'list', m.nav.all, reader.totalUnread)}
 		{@render entry({ kind: 'starred' }, 'star', m.nav.starred, 0)}
 		{@render entry({ kind: 'hidden' }, 'hidden', m.nav.hidden, 0, reader.hiddenCount)}
+
+		<LabelList {reader} {onpick} />
 
 		<div class="mt-4 flex items-center px-3 pb-1">
 			<h2 class="text-xs font-semibold tracking-wide text-soft uppercase">

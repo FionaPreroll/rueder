@@ -17,6 +17,9 @@
 
 	const read = $derived(reader.isRead(article));
 	const starred = $derived(reader.isStarred(article));
+	const labels = $derived(
+		reader.labels.filter((label) => reader.labelsOf(article).includes(label.id))
+	);
 	const feed = $derived(reader.feeds[article.feedId]);
 </script>
 
@@ -54,6 +57,15 @@
 				<span class="text-soft"> – {article.teaser}</span>
 			{/if}
 		</span>
+		{#each labels as label (label.id)}
+			<span
+				class="size-2 shrink-0 self-center rounded-full"
+				style:background-color={label.color}
+				title={label.title}
+				aria-label={m.labels.set(label.title)}
+				role="img"
+			></span>
+		{/each}
 		{#if article.changes > 0}
 			<span
 				class="shrink-0 rounded border border-line px-1 text-xs text-soft"
