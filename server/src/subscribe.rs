@@ -146,7 +146,42 @@ struct Found {
     moved_to: Option<String>,
 }
 
+/// The hosts of YouTube whose pages are of a channel.
+const YOUTUBE: [&str; 3] = ["youtube.com", "www.youtube.com", "m.youtube.com"];
+
+fn is_youtube(url: &Url) -> bool {
+    url.host_str().is_some_and(|host| YOUTUBE.contains(&host))
+}
+
+/// The feed of a YouTube channel, if the address is the page of one:
+/// `https://www.youtube.com/channel/UC…` and what lies under it. A channel's
+/// id is "UC" and 22 letters, digits, `-` or `_`.
+fn youtube_feed(url: &Url) -> Option<Url> {
+    if !is_youtube(url) {
+        return None;
+    }
+    let mut path = url.path_segments()?;
+    let id = path
+        .next()
+        .filter(|first| *first == "channel")
+        .and(path.next())?;
+    let valid = id.len() == 24
+        && id.starts_with("UC")
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    valid
+        .then(|| {
+            Url::parse(&format!(
+                "https://www.youtube.com/feeds/videos.xml?channel_id={id}"
+            ))
+        })?
+        .ok()
+}
+
 /// What is at an address: the feed itself, or the feeds a web page points to.
+/// A page of YouTube names its channel's feed first: a page like
+/// `youtube.com/@name` says which channel it is of in its `og:url`.
 fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate> {
     let now = OffsetDateTime::now_utc();
     if let Ok(feed) = feeds::parse(&response.body, response.url.as_str(), now, rules) {
@@ -156,14 +191,36 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
             feed_id: None,
         }];
     }
-    let page = &response.body[..response.body.len().min(MAX_PAGE)];
-    let links = cleaning::feed_links(&String::from_utf8_lossy(page), &response.url);
-    let candidate = |link: cleaning::FeedLink| Candidate {
-        url: link.url.into(),
-        title: link.title,
-        feed_id: None,
-    };
-    links.into_iter().map(candidate).collect()
+    let body = &response.body[..response.body.len().min(MAX_PAGE)];
+    let page = cleaning::feed_page(&String::from_utf8_lossy(body), &response.url);
+    let channel = is_youtube(&response.url)
+        .then(|| page.address.as_ref().and_then(youtube_feed))
+        .flatten()
+        .or_else(|| youtube_feed(&response.url));
+    let mut feeds: Vec<Candidate> = Vec::new();
+    if let Some(channel) = channel {
+        // The page may name the same feed, often without a name.
+        let named = page.links.iter().find(|link| link.url == channel);
+        let title = match named {
+            Some(link) if !link.title.is_empty() && page.title.is_empty() => link.title.clone(),
+            _ => page.title.clone(),
+        };
+        feeds.push(Candidate {
+            url: channel.into(),
+            title,
+            feed_id: None,
+        });
+    }
+    for link in page.links {
+        if feeds.iter().all(|feed| feed.url != link.url.as_str()) {
+            feeds.push(Candidate {
+                url: link.url.into(),
+                title: link.title,
+                feed_id: None,
+            });
+        }
+    }
+    feeds
 }
 
 /// Looks at an address for feeds. An address that is a feed is the one feed;
@@ -175,6 +232,9 @@ async fn find(
 ) -> Result<Json<Found>, AppError> {
     let url = address(&find.url)?;
     state.rates.lookup(session.account_id, Instant::now())?;
+    // The page of a channel is not needed to know its feed, and what YouTube
+    // sends in its place before somebody agreed to its cookies has none.
+    let url = youtube_feed(&url).unwrap_or(url);
     let request = Request {
         accept: Some(ACCEPT),
         ..Request::new(url.as_str())
@@ -736,6 +796,109 @@ mod tests {
 
     fn names(path: &[&str]) -> Vec<String> {
         path.iter().map(|name| (*name).to_owned()).collect()
+    }
+
+    /// A made-up channel: "UC" and 22 more.
+    const CHANNEL: &str = "UC0123456789abcdefABCD_-";
+
+    fn feed_of(channel: &str) -> String {
+        format!("https://www.youtube.com/feeds/videos.xml?channel_id={channel}")
+    }
+
+    #[test]
+    fn the_page_of_a_youtube_channel_has_the_channels_feed() {
+        let feed = |text: &str| youtube_feed(&url(text)).map(String::from);
+        let expected = Some(feed_of(CHANNEL));
+        for page in [
+            format!("https://www.youtube.com/channel/{CHANNEL}"),
+            format!("https://youtube.com/channel/{CHANNEL}/videos"),
+            format!("https://m.youtube.com/channel/{CHANNEL}?si=x"),
+            format!("http://www.youtube.com/channel/{CHANNEL}/"),
+        ] {
+            assert_eq!(feed(&page), expected, "{page}");
+        }
+        for page in [
+            "https://www.youtube.com/@someone".to_owned(),
+            "https://www.youtube.com/channel/".to_owned(),
+            format!("https://www.youtube.com/c/{CHANNEL}"),
+            format!("https://www.youtube.com/watch/channel/{CHANNEL}"),
+            format!("https://notyoutube.com/channel/{CHANNEL}"),
+            format!("https://www.youtube.com.example/channel/{CHANNEL}"),
+            // Too short, too long, not "UC", a letter that is none.
+            "https://www.youtube.com/channel/UC0123".to_owned(),
+            format!("https://www.youtube.com/channel/{CHANNEL}x"),
+            format!("https://www.youtube.com/channel/XX{}", &CHANNEL[2..]),
+            format!("https://www.youtube.com/channel/{}%26", &CHANNEL[..22]),
+            format!("https://www.youtube.com/channel/{}&a", &CHANNEL[..22]),
+        ] {
+            assert_eq!(feed(&page), None, "{page}");
+        }
+    }
+
+    fn page(at: &str, html: &str) -> Vec<(String, String)> {
+        let response = http_client::Response {
+            url: url(at),
+            status: StatusCode::OK,
+            headers: HeaderMap::new(),
+            body: html.as_bytes().to_vec(),
+        };
+        let rules = Rules::built_in().unwrap();
+        let found = candidates(&response, &rules).into_iter();
+        found.map(|feed| (feed.url, feed.title)).collect()
+    }
+
+    #[test]
+    fn a_youtube_page_names_its_channels_feed_first() {
+        let og = |address: &str| {
+            format!(
+                "<html><head><meta property=\"og:title\" content=\"Made &amp; Up\">\
+                 <meta property=\"og:url\" content=\"{address}\"></head></html>"
+            )
+        };
+        let channel = format!("https://www.youtube.com/channel/{CHANNEL}");
+        let at = "https://www.youtube.com/@madeup";
+        assert_eq!(
+            page(at, &og(&channel)),
+            [(feed_of(CHANNEL), "Made & Up".to_owned())]
+        );
+        // The feed the page names itself comes once, with the other one after it.
+        let named = format!(
+            "<link rel=\"alternate\" type=\"application/rss+xml\" title=\"RSS\" href=\"{}\">\
+             <link rel=\"alternate\" type=\"application/atom+xml\" href=\"/other.xml\">{}",
+            feed_of(CHANNEL),
+            og(&channel)
+        );
+        assert_eq!(
+            page(at, &named),
+            [
+                (feed_of(CHANNEL), "Made & Up".to_owned()),
+                (
+                    "https://www.youtube.com/other.xml".to_owned(),
+                    String::new()
+                ),
+            ]
+        );
+        // Only the first og:url counts.
+        let twice = format!(
+            "{}{}",
+            og(&channel),
+            og("https://www.youtube.com/channel/UCzz")
+        );
+        assert_eq!(page(at, &twice)[0].0, feed_of(CHANNEL));
+
+        // An og:url that is no channel, or that some other site gives: nothing.
+        assert_eq!(page(at, &og("https://www.youtube.com/@madeup")), []);
+        assert_eq!(page(at, &og("javascript:alert(1)")), []);
+        assert_eq!(page(at, &og(&format!("{channel}{}", "x".repeat(3000)))), []);
+        assert_eq!(page("https://blog.example/", &og(&channel)), []);
+        // A page that came from the channel's own address needs no og:url.
+        assert_eq!(
+            page(&channel, "<html></html>"),
+            [(feed_of(CHANNEL), String::new())]
+        );
+        // Nor does a page beyond the limits of the parser.
+        let huge = format!("{}{}", "<i></i>".repeat(cleaning::MAX_NODES), og(&channel));
+        assert_eq!(page(at, &huge), []);
     }
 
     #[test]

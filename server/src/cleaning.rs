@@ -872,11 +872,38 @@ pub struct FeedLink {
 pub const MAX_FEED_LINKS: usize = 20;
 /// The longest name of a feed taken from a page, in characters.
 const MAX_FEED_TITLE: usize = 200;
+/// The longest address a page may give for itself, in bytes.
+const MAX_PAGE_ADDRESS: usize = 2000;
+
+/// What the search for feeds learns from a web page.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FeedPage {
+    /// The feeds it points to, see [`feed_links`].
+    pub links: Vec<FeedLink>,
+    /// The address the page gives for itself in `<meta property="og:url">`,
+    /// if it is one of the web.
+    pub address: Option<Url>,
+    /// The name it gives itself in `<meta property="og:title">`; often empty.
+    pub title: String,
+}
 
 /// The feeds a web page points to with `<link rel="alternate">`, in the order
 /// of the page and each address once. `base` is where the page came from. A
 /// page beyond the limits of the parser has none.
 pub fn feed_links(html: &str, base: &Url) -> Vec<FeedLink> {
+    feed_page(html, base).links
+}
+
+/// One line of text, cut to what fits a name.
+fn one_line(text: &str) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    text.chars().take(MAX_FEED_TITLE).collect()
+}
+
+/// What a web page says about its feeds and itself: the feeds it points to
+/// (see [`feed_links`]), and the address and the name it gives itself, which
+/// is how a site like YouTube says which channel a page is of.
+pub fn feed_page(html: &str, base: &Url) -> FeedPage {
     const TYPES: [&str; 4] = [
         "application/rss+xml",
         "application/atom+xml",
@@ -884,44 +911,63 @@ pub fn feed_links(html: &str, base: &Url) -> Vec<FeedLink> {
         "application/rdf+xml",
     ];
     let Some(root) = read_within_limits(html) else {
-        return Vec::new();
+        return FeedPage::default();
     };
-    let mut found: Vec<FeedLink> = Vec::new();
+    let mut page = FeedPage::default();
+    let (mut seen_address, mut seen_title) = (false, false);
     let mut waiting = vec![root];
     while let Some(node) = waiting.pop() {
-        if let NodeData::Element { name, attrs, .. } = &node.data
-            && &*name.local == "link"
-        {
+        if let NodeData::Element { name, attrs, .. } = &node.data {
             let attrs = attrs.borrow();
-            let is = |name: &str, wanted: &[&str]| {
-                attribute(&attrs, name).is_some_and(|value| {
-                    let value = value.to_ascii_lowercase();
-                    let mut words = value.split([' ', '\t', '\n', ';']);
-                    words.any(|word| wanted.contains(&word))
-                })
-            };
-            let url = attribute(&attrs, "href")
-                .filter(|_| is("rel", &["alternate"]) && is("type", &TYPES))
-                .and_then(|href| base.join(href.trim()).ok())
-                .filter(is_web);
-            if let Some(url) = url
-                && found.iter().all(|link| link.url != url)
-            {
-                let title = attribute(&attrs, "title").unwrap_or_default();
-                let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
-                found.push(FeedLink {
-                    url,
-                    title: title.chars().take(MAX_FEED_TITLE).collect(),
-                });
-                if found.len() == MAX_FEED_LINKS {
-                    break;
+            match &*name.local {
+                "link" if page.links.len() < MAX_FEED_LINKS => {
+                    let is = |name: &str, wanted: &[&str]| {
+                        attribute(&attrs, name).is_some_and(|value| {
+                            let value = value.to_ascii_lowercase();
+                            let mut words = value.split([' ', '\t', '\n', ';']);
+                            words.any(|word| wanted.contains(&word))
+                        })
+                    };
+                    let url = attribute(&attrs, "href")
+                        .filter(|_| is("rel", &["alternate"]) && is("type", &TYPES))
+                        .and_then(|href| base.join(href.trim()).ok())
+                        .filter(is_web);
+                    if let Some(url) = url
+                        && page.links.iter().all(|link| link.url != url)
+                    {
+                        let title = attribute(&attrs, "title").unwrap_or_default();
+                        page.links.push(FeedLink {
+                            url,
+                            title: one_line(&title),
+                        });
+                    }
                 }
+                // Only the first of each counts, as for the sites that read them.
+                "meta" => {
+                    let property = attribute(&attrs, "property").map(|p| p.to_ascii_lowercase());
+                    let content = attribute(&attrs, "content");
+                    match (property.as_deref(), content) {
+                        (Some("og:url"), Some(content)) if !seen_address => {
+                            seen_address = true;
+                            page.address = (content.len() <= MAX_PAGE_ADDRESS)
+                                .then(|| base.join(content.trim()).ok())
+                                .flatten()
+                                .filter(is_web);
+                        }
+                        (Some("og:title"), Some(content)) if !seen_title => {
+                            seen_title = true;
+                            page.title = one_line(&content);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
         }
         // The first child comes off the pile first: the order of the page.
         waiting.extend(node.children.borrow().iter().rev().cloned());
     }
-    found
+    page
 }
 
 fn element_name(node: &Handle) -> Option<&str> {
