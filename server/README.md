@@ -40,8 +40,12 @@ What is here:
   (`src/bench.rs`).
 - `GET /api/health`, `POST /api/login`, `POST /api/logout`, `GET /api/me`, and
   the built frontend from `../web/build`.
+- The container image (`../Dockerfile`) with the server and the frontend, and
+  `rueder health`, which asks the running server whether it is well. How to
+  install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-This is step 1 of the plan and the first five work packages of step 2. The API
+This is step 1 of the plan, the first five work packages of step 2 and its
+work package 2.10. The API
 for feeds, articles and what was read follows.
 
 ## Commands
