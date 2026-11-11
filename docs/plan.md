@@ -37,7 +37,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A10 | Werbung und Tracker aus Artikeln entfernen | Die vorhandenen Regeln ziehen auf den Server, die Listen werden Daten statt Code. |
 | A11 | Bilder über den Server leiten (Privacy) | Eigener Bild-Proxy in Rust mit signierten Adressen. |
 | A12 | Vorhandenes bleibt: OPML-Import und -Export, Feed-Suche auf Webseiten, Labels mit Farben | Zieht mit um. |
-| A13 | Den Betrieb überblicken | Eine Statusseite für Admins: Tempo und Engpässe, Fehler des Servers, Zustand von Abruf, Feed-Suche und Bild-Proxy. Admins werden auf der Kommandozeile bestimmt. Später, für User, die zustimmen: Fehler aus ihren Browsern. |
+| A13 | Den Betrieb überblicken | Eine Statusseite für Admins: Tempo und Engpässe, Fehler des Servers, Zustand von Abruf, Feed-Suche und Bild-Proxy. Admins werden auf der Kommandozeile bestimmt. Dazu, von Usern, die zustimmen, Fehler aus ihren Browsern. |
 
 ## Ausgangslage
 
@@ -80,7 +80,7 @@ Von Fiona am 2026-11-10 entschieden.
 | User-Agent beim Abruf | Ehrlich als „rueder“, je Feed umstellbar. | Manche Seiten sperren unbekannte Clients. |
 | Oberfläche | Der klickbare Entwurf in `web/` ist abgenommen („sieht perfekt aus“). | Schritt 3 baut ihn aus, statt neu zu entwerfen. |
 | Umstieg und alte Daten | Kein Parallelbetrieb von altem und neuem rueder. Die alte Produktion ist abgeschaltet, ihre Daten kommen aus einem Backup von vor der Abschaltung. Der neue rueder geht ohne alte Daten in Betrieb, mit neuen Usern und Feeds. Später werden die alten Daten einmalig importiert und mit den Konten zusammengeführt, die es dann gibt, bei Bedarf unter anderem Namen. Mehrfache Importe sind nicht nötig. | Schritt 4 und der Import: Er muss in einen Bestand schreiben können, der schon Konten, Feeds und Artikel hat. |
-| Statusseite (2026-11-11) | Eine Seite für Admins mit Tempo und Engpässen, den Warnungen und Fehlern des Servers und dem Zustand von Feed-Suche, Bild-Proxy und Abruf. Admins bestimmt die Kommandozeile (`rueder admin add`, `remove`, `list`). Laufzeitfehler aus den Browsern der User kommen später, nur von denen, die zustimmen, und mit einer eigenen, offenen Lösung statt eines fremden Dienstes; bis dahin ist das nur geplant. | Paket 3.8 baut die Seite, Paket 3.9 plant die Fehlerberichte. |
+| Statusseite (2026-11-11) | Eine Seite für Admins mit Tempo und Engpässen, den Warnungen und Fehlern des Servers und dem Zustand von Feed-Suche, Bild-Proxy und Abruf. Admins bestimmt die Kommandozeile (`rueder admin add`, `remove`, `list`). Laufzeitfehler aus den Browsern der User kommen dazu, nur von denen, die zustimmen, und mit einer eigenen, offenen Lösung statt eines fremden Dienstes. Am 2026-11-11 entschieden: aus als Standard, 30 Tage Aufbewahrung, Admins sehen keine Namen von Konten. | Paket 3.8 baut die Seite, Paket 3.9 die Fehlerberichte. |
 | Fuzzing | Ja, gezielt dort, wo eigener Code über Sicherheit entscheidet: Bereinigung, Feed-Verarbeitung und Bild-Proxy bekommen Fuzz-Targets, die Adressprüfung des HTTP-Clients einen Property-Test. Kein Fuzz-Target für jeden Parser. | Arbeitspaket in Schritt 2, läuft vor beiden Security-Reviews. |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).

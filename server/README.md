@@ -118,6 +118,11 @@ by route, the database, fetching, the feed search, the image proxy and the
 warnings and errors of the log, for the last hour, kept in memory. It counts
 failing feeds by why and names none.
 
+Readers who agree in the settings (Privacy) send reports of errors in their
+browser to `POST /api/reports` (`src/reports.rs`): scrubbed of addresses and
+numbers, counted per error, kept 30 days, and shown on the status page with how
+many accounts they hit, never which. `CLIENT_REPORTS=off` takes none.
+
 Without a terminal the password is read as one line from the input, for
 scripts. The session cookie is `Secure`, so logging in needs HTTPS in front of
 the server; `http://localhost:3000` works for development.
