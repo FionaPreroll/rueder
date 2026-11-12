@@ -12,7 +12,7 @@ export const densities = ['compact', 'comfortable'] as const;
 export const textSizes = ['small', 'medium', 'large'] as const;
 export const readingFonts = ['sans', 'serif'] as const;
 export const counterStyles = ['parens', 'badge'] as const;
-export const views = ['list', 'expanded'] as const;
+export const views = ['list', 'expanded', 'split', 'magazine'] as const;
 
 export interface Settings {
 	theme: (typeof themes)[number];

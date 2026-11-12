@@ -28,7 +28,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A1 | Schnell bleiben, auch wenn die Artikelzahl wächst | Listen lesen nur eine schmale Tabelle und blättern über eine feste Nummer je Feed. |
 | A2 | Mehrere Versionen alter Artikel aufbewahren, ohne dass neuere, häufig gelesene Artikel darunter leiden | Aktueller Text und alte Versionen liegen in getrennten Tabellen; das Archiv ist komprimiert und nach Monaten geteilt. |
 | A3 | Durchdachte Security | Sitzungs-Cookies, ein gehärteter HTTP-Client für alle fremden Adressen, Bereinigung und Bild-Proxy auf dem Server, Zugriff nur auf eigene Abos. |
-| A4 | Schnelle, bequeme, intuitive UX im Stil des Google Reader, modernisiert | Dichte Listenansicht, Volltextansicht, Tastaturbedienung, Dark Mode, Ansicht fürs Handy. |
+| A4 | Schnelle, bequeme, intuitive UX im Stil des Google Reader, modernisiert | Dichte Listenansicht, Volltextansicht, seit 2026-11-12 auch drei Bereiche und ein Magazin, Tastaturbedienung, Dark Mode, Ansicht fürs Handy. |
 | A5 | Anpassbar | Thema, Akzentfarbe, Dichte, Schrift, Ansicht und Sortierung, Tastaturbelegung; gespeichert auf dem Server. |
 | A6 | Live-Updates von Feeds | Eine SSE-Verbindung meldet neue Artikel, Lesestand anderer Geräte, Ordneränderungen und Abruffehler. |
 | A7 | Verlässliche Ungelesen-Zahlen | Lesestand auf dem Server als Lesemarke je Feed plus Ausnahmen; die Zahl wird immer berechnet, nie mitgezählt. |
@@ -86,6 +86,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Apps (2026-11-12) | Nach dem Vorbild von vibe-wormholesurfing: zuerst eine PWA mit Service Worker und Hinweis auf neue Versionen, dann eine Android-App mit Capacitor, die nach Updates sucht, wenn der User zustimmt, und deren Update-Suche sich für Builds für den Play Store abschalten lässt. Je ein eigener Pull Request. Für die App am 2026-11-12 entschieden: Sie fragt nach der Adresse des eigenen rueder und lädt dann dessen Seite (Server und Härtung bleiben, wie sie sind); Updates kommen aus einem GitHub-Release, der Signaturschlüssel liegt nur in den Secrets der CI; die Update-Logik ist eigener Code statt der Bibliothek des Vorbilds, die nicht aus der npm-Registry kommt. | Pakete 3.10 und 3.11. |
 | Fuzzing | Ja, gezielt dort, wo eigener Code über Sicherheit entscheidet: Bereinigung, Feed-Verarbeitung und Bild-Proxy bekommen Fuzz-Targets, die Adressprüfung des HTTP-Clients einen Property-Test. Kein Fuzz-Target für jeden Parser. | Arbeitspaket in Schritt 2, läuft vor beiden Security-Reviews. |
 | Registrierung (entschieden am 2026-11-12) | User können sich selbst registrieren, wenn der Betreiber es einschaltet; ohne sein Zutun bleibt alles zu. Er begrenzt die Gesamtzahl der Konten und die Registrierungen je Tag. Bei geschlossener Registrierung laden User mit einem Kontingent ein, das die Kommandozeile setzt; ihre Einladungen halten dieselben Grenzen ein. Admins können immer Einladungslinks erzeugen, deren Konten gegen ein eigenes Kontingent zählen. Links gelten eine einstellbare Zeit und für ein oder mehrere Konten. Alle Grenzen stehen in der Datenbank und werden per Kommandozeile gesetzt. Das ersetzt „Konten legt nur der Betreiber an“. | Login-Seite, Einstellungen, Kommandozeile; neue Angriffsfläche für das Security-Review. |
+| Weitere Ansichten (2026-11-12) | Neben Liste und erweiterter Ansicht drei Bereiche (Baum, Liste, Artikel) und ein Magazin mit großem Aufmacherbild und Kachelraster, vorgezogen aus „Nach dem Umstieg“. Je ein eigener Pull Request. | Pakete 3.13 und 3.14. |
 | Umzug eines Kontos (2026-11-12) | Import und Export der Daten eines Users mit Einstellungen und Lesestand, mit Feed- und Artikel-ID und -Adresse; weil die IDs auf einer anderen rueder-Instanz andere sind, erkennt der Import Feeds an der Adresse und Artikel an Kennung und Adresse. Der Plan dazu (ein Import, der nur hinzufügt; der Lesestand eines Feeds, den das Ziel noch nie abgerufen hat, wartet auf den ersten Abruf) ist freigegeben. Geändert am 2026-11-12 nach dem Security-Review: Texte von Artikeln kommen nicht mehr mit. Vorher kamen die mit Stern oder Label mit und standen dann im geteilten Feed, so dass jede selbst geschriebene Datei erfundene Artikel in Feeds anderer stellen konnte; Fiona hat das Weglassen den Kopien nur für das eigene Konto vorgezogen. Was ein Artikel, den das Ziel nicht hat, an Lesestand, Stern und Labels trug, geht verloren. | Paket 3.12, [Umzug eines Kontos](architecture.md#umzug-eines-kontos). |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
@@ -125,8 +126,8 @@ Ergebnis vom 2026-11-10: Das Ziel ist erreicht. Mit 10 Millionen Artikeln brauch
 Bewusst zurückgestellt, damit der Umstieg nicht daran hängt:
 
 - „Hot“: Themen, auf die mehrere Feeds verlinken (Vorbild Fever).
-- Magazin-Ansicht mit großem Aufmacherbild und Kachelraster.
-- Aufteilung in drei Bereiche (Baum, Liste, Artikel) als weitere Ansicht.
+
+Vorgezogen hat Fiona am 2026-11-12 die beiden Ansichten, die hier standen: die Aufteilung in drei Bereiche (Baum, Liste, Artikel) und eine Magazin-Ansicht mit großem Aufmacherbild und Kachelraster (Pakete 3.13 und 3.14).
 
 ## Risiken
 

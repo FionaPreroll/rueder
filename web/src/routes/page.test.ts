@@ -279,6 +279,68 @@ describe('the keyboard', () => {
 		expect(openArticle()).not.toBeNull();
 	});
 
+	it('shows the open article in a pane of its own beside the list in three panes', async () => {
+		render(Page);
+		await press('3');
+		expect(settings.view).toBe('split');
+		await press('ga');
+		const pane = () => document.querySelector<HTMLElement>('section[aria-label]')!;
+		expect(pane()).toHaveTextContent('Pick an article to read it here.');
+		await press('j');
+		const shown = () =>
+			document.querySelector('[data-pane-article]')?.getAttribute('data-pane-article');
+		const first = shown();
+		const title = within(pane()).getByRole('heading', { level: 2 }).textContent;
+		// The row stays a row: the text is in the pane, not under it.
+		const list = document.querySelector<HTMLElement>('[data-pane="list"]')!;
+		expect(within(list).queryByRole('heading', { level: 2 })).toBeNull();
+		expect(within(list).getByRole('button', { current: true })).toHaveTextContent(title!);
+
+		// A click on another row shows that one; Escape closes it.
+		const rows = within(list).getAllByRole('button', { current: false });
+		const other = rows.find((row) => !row.getAttribute('aria-label'))!;
+		await userEvent.click(other);
+		expect(shown()).not.toBe(first);
+		expect(other).toHaveAttribute('aria-current', 'true');
+		await press('{Escape}');
+		expect(pane()).toHaveTextContent('Pick an article to read it here.');
+
+		// The toolbar switches back to the list.
+		await userEvent.click(screen.getByRole('button', { name: 'List view' }));
+		expect(document.querySelector('[data-pane="list"]')).toBeNull();
+	});
+
+	it('shows a magazine: one article large, the others as tiles, read over them', async () => {
+		render(Page);
+		await press('4');
+		expect(settings.view).toBe('magazine');
+		await press('ga');
+		const tiles = document.querySelectorAll('li[data-article]');
+		const lead = document.querySelector<HTMLElement>('article[data-article]')!;
+		expect(tiles.length).toBeGreaterThan(10);
+		// The large place has a picture: the first of the newest articles that has one.
+		expect(lead.querySelector('img')).not.toBeNull();
+		expect(document.querySelectorAll('[data-article]')).toHaveLength(tiles.length + 1);
+
+		// A tile opens the article over the tiles; the arrows and j step on, Escape closes.
+		const tile = tiles[0] as HTMLElement;
+		const title = tile.querySelector('button span span + span')!.textContent!.trim();
+		await userEvent.click(within(tile).getAllByRole('button')[0]);
+		const sheet = screen.getByRole('dialog');
+		expect(within(sheet).getByRole('heading', { level: 2 })).toHaveTextContent(title);
+		await userEvent.click(within(sheet).getByRole('button', { name: 'Next item' }));
+		expect(
+			within(screen.getByRole('dialog')).getByRole('heading', { level: 2 })
+		).not.toHaveTextContent(title);
+		await press('{Escape}');
+		expect(screen.queryByRole('dialog')).toBeNull();
+		await press('j');
+		await userEvent.click(
+			within(screen.getByRole('dialog')).getByRole('button', { name: 'Close the article' })
+		);
+		expect(screen.queryByRole('dialog')).toBeNull();
+	});
+
 	it('puts labels on the open article and takes them off', async () => {
 		render(Page);
 		await press('gaj');
@@ -362,6 +424,11 @@ describe('the keyboard', () => {
 		expect(settings.view).toBe('expanded');
 		await press('2');
 		expect(settings.view).toBe('list');
+		await press('3');
+		expect(settings.view).toBe('split');
+		await press('4');
+		expect(settings.view).toBe('magazine');
+		await press('2');
 		await press('u');
 		expect(screen.queryByRole('navigation')).toBeNull();
 		await press('u');

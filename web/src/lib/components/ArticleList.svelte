@@ -1,6 +1,9 @@
 <script lang="ts">
 	// The articles of what is picked in the sidebar, in one of two views: a dense list
 	// whose rows open in place, or every article in full, one card after the other.
+	// Beside the article in the view of three panes (`pane`), the list is narrow, its
+	// rows stacked, and an article opens in the pane instead of under its row. The
+	// magazine shows tiles (`Magazine.svelte`); they are light, so all are drawn.
 	// A long list draws only what is near the view; the rest is space of its height.
 	import { tick, untrack } from 'svelte';
 	import type { Reader } from '#lib/reader.ts';
@@ -10,6 +13,7 @@
 	import ArticleBody from './ArticleBody.svelte';
 	import ArticleRow from './ArticleRow.svelte';
 	import Icon from './Icon.svelte';
+	import Magazine from './Magazine.svelte';
 	import { offsets, rowsInSight } from '#lib/virtual.ts';
 
 	/** Up to this many rows, or this many cards with their whole text, all are drawn. */
@@ -19,13 +23,20 @@
 	const MARGIN = 1200;
 	/** The height of a row or a card, as a guess before any was drawn. */
 	const GUESS_ROW = 56;
+	const GUESS_STACKED = 80;
 	const GUESS_CARD = 480;
 
 	let {
 		reader,
 		now,
-		onversions
-	}: { reader: Reader; now: number; onversions: (article: Article) => void } = $props();
+		onversions,
+		pane = false
+	}: {
+		reader: Reader;
+		now: number;
+		onversions: (article: Article) => void;
+		pane?: boolean;
+	} = $props();
 
 	let scroller: HTMLElement | undefined = $state();
 	/** Where the rows begin within what scrolls. */
@@ -63,6 +74,7 @@
 	}
 
 	const expanded = $derived(settings.view === 'expanded');
+	const magazine = $derived(settings.view === 'magazine');
 	const showFeed = $derived(reader.stream.kind !== 'feed');
 	const shownFeed = $derived(
 		reader.stream.kind === 'feed' ? reader.feeds[reader.stream.id] : undefined
@@ -76,7 +88,8 @@
 	const guess = $derived.by(() => {
 		let sum = 0;
 		for (const height of heights.values()) sum += height;
-		return heights.size > 0 ? sum / heights.size : expanded ? GUESS_CARD : GUESS_ROW;
+		if (heights.size > 0) return sum / heights.size;
+		return expanded ? GUESS_CARD : pane ? GUESS_STACKED : GUESS_ROW;
 	});
 	const tops = $derived(offsets(ids, heights, guess));
 	// Without a view to measure, as before the page is laid out, everything is drawn.
@@ -107,7 +120,7 @@
 			await tick();
 			await reach(id);
 			rowOf(id)?.scrollIntoView({
-				block: expanded || reader.open === id ? 'start' : 'nearest'
+				block: expanded || (!pane && !magazine && reader.open === id) ? 'start' : 'nearest'
 			});
 		});
 	});
@@ -120,7 +133,7 @@
 		const opened = reader.open;
 		const id = opened ?? lastOpen;
 		lastOpen = opened;
-		if (!id || expanded) return;
+		if (!id || expanded || pane || magazine) return;
 		untrack(async () => {
 			await tick();
 			const row = rowOf(id);
@@ -143,6 +156,8 @@
 	$effect(() => {
 		void reader.stream;
 		void expanded;
+		void pane;
+		void magazine;
 		untrack(() => {
 			scroller?.scrollTo?.({ top: 0 });
 			scrollTop = 0;
@@ -231,6 +246,8 @@
 					<p>{m.list.empty}</p>
 				{/if}
 			</div>
+		{:else if magazine}
+			<Magazine {reader} {now} articles={reader.visible} />
 		{:else if expanded}
 			<div class="mx-auto max-w-4xl px-3 pb-3" bind:this={list}>
 				<div style:height="{above}px"></div>
@@ -258,8 +275,8 @@
 				<ul class="divide-y divide-line border-b border-line">
 					{#each shown as article (article.id)}
 						<li data-article={article.id} use:measure={article.id}>
-							<ArticleRow {reader} {article} {now} {showFeed} />
-							{#if reader.open === article.id}
+							<ArticleRow {reader} {article} {now} {showFeed} stacked={pane} />
+							{#if !pane && reader.open === article.id}
 								<div class="border-t border-l-3 border-line border-l-accent bg-paper">
 									<ArticleBody {reader} {article} {now} {onversions} />
 								</div>

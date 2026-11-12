@@ -860,6 +860,42 @@ pub fn with_images(html: &str, address: impl Fn(&str) -> Option<String>) -> Stri
     written(root)
 }
 
+/// Below this many pixels wide or high, as a text says, an image is an icon or
+/// a smiley, not a picture to show an article by.
+const SMALLEST_PICTURE: u32 = 100;
+
+/// The first picture in a cleaned text, to show the article by where the feed
+/// names none: the address of the first image that does not say it is small.
+///
+/// This is for a text as [`clean`] left it.
+pub fn first_image(html: &str) -> Option<String> {
+    let small = |attrs: &[Attribute], name: &str| {
+        attribute(attrs, name)
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .is_some_and(|pixels| pixels < SMALLEST_PICTURE)
+    };
+    // The root stays held: the tree library empties all under a node that goes,
+    // held elsewhere or not.
+    let root = read(html);
+    // In the order of the text: the children of a node before its next sibling.
+    let mut waiting = vec![root.clone()];
+    while let Some(node) = waiting.pop() {
+        if let NodeData::Element { name, attrs, .. } = &node.data
+            && &*name.local == "img"
+        {
+            let attrs = attrs.borrow();
+            if !small(&attrs, "width")
+                && !small(&attrs, "height")
+                && let Some(src) = attribute(&attrs, "src")
+            {
+                return Some(src);
+            }
+        }
+        waiting.extend(node.children.borrow().iter().rev().cloned());
+    }
+    None
+}
+
 /// A feed a web page says it has.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeedLink {

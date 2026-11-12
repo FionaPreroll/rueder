@@ -8,6 +8,8 @@
 		up: 'M6 15l6-6 6 6',
 		list: 'M4 6h16M4 12h16M4 18h16',
 		expanded: 'M4 5h16v5H4zM4 14h16v5H4z',
+		split: 'M3 5h18v14H3zM8 5v14M14 5v14M10 9h2M10 12h2M10 15h2',
+		magazine: 'M3 4h18v8H3zM3 15h5v5H3zM10 15h4v5h-4zM16 15h5v5h-5z',
 		settings:
 			'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4M13 6a2 2 0 1 0 4 0 2 2 0 0 0-4 0M7 12a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 18a2 2 0 1 0 4 0 2 2 0 0 0-4 0',
 		search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5',
