@@ -1230,6 +1230,9 @@ async fn subscribe(
          SELECT $1, n.feed_id, $2, n.position, n.title, n.read_upto
          FROM unnest($3::integer[], $4::float8[], $5::text[], $6::integer[])
               AS n (feed_id, position, title, read_upto)
+         -- Nobody subscribes anew to a feed that is blocked here.
+         WHERE NOT EXISTS (
+             SELECT 1 FROM feeds f WHERE f.id = n.feed_id AND f.blocked_at IS NOT NULL)
          ON CONFLICT (account_id, feed_id) DO NOTHING
          RETURNING feed_id",
         account_id,

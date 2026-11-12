@@ -361,9 +361,21 @@ async fn create(state: &AppState, url: &Url) -> Result<i32, AppError> {
     }
 }
 
+/// What [`add`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Added {
+    /// The account reads the feed now.
+    New,
+    /// It read it already.
+    Known,
+    /// The feed is blocked on this server (see `moderation`): nobody
+    /// subscribes to it anew.
+    Blocked,
+}
+
 /// Subscribes an account to a feed, at the end of a folder or of the top
-/// level. `false` if it reads the feed already. The caller holds the lock of
-/// the account's tree.
+/// level, unless it reads the feed already or the feed is blocked. The caller
+/// holds the lock of the account's tree.
 ///
 /// Of a feed with a history only the newest articles are unread; a feed that
 /// is `fresh` brings what its first fetch finds.
@@ -373,7 +385,7 @@ async fn add(
     feed_id: i32,
     folder: Option<i32>,
     fresh: bool,
-) -> Result<bool, AppError> {
+) -> Result<Added, AppError> {
     let reads = sqlx::query_scalar!(
         "SELECT feed_id FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
         account_id,
@@ -382,7 +394,16 @@ async fn add(
     .fetch_optional(&mut *conn)
     .await?;
     if reads.is_some() {
-        return Ok(false);
+        return Ok(Added::Known);
+    }
+    let blocked = sqlx::query_scalar!(
+        r#"SELECT blocked_at IS NOT NULL AS "blocked!" FROM feeds WHERE id = $1"#,
+        feed_id
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    if blocked != Some(false) {
+        return Ok(Added::Blocked);
     }
     tree::room_for_subscription(conn, account_id).await?;
     tree::room_for_feed(conn, account_id, folder).await?;
@@ -402,7 +423,7 @@ async fn add(
     .execute(&mut *conn)
     .await?;
     filters::subscribed(conn, account_id, feed_id).await?;
-    Ok(true)
+    Ok(Added::New)
 }
 
 async fn own_folder(conn: &mut PgConnection, account_id: i32, id: i32) -> Result<(), AppError> {
@@ -454,12 +475,18 @@ async fn subscribe(
     }
     let added = add(&mut tx, account_id, id, new.folder_id, fresh).await?;
     tx.commit().await?;
-    let status = if added {
-        StatusCode::CREATED
-    } else {
-        StatusCode::OK
+    let status = match added {
+        Added::New => StatusCode::CREATED,
+        Added::Known => StatusCode::OK,
+        Added::Blocked => return Err(blocked()),
     };
     Ok((status, Json(Subscribed { id })))
+}
+
+/// The answer to subscribing to a blocked feed.
+fn blocked() -> AppError {
+    let message = "this feed is blocked on this server";
+    AppError::Status(StatusCode::FORBIDDEN, message.into())
 }
 
 /// A text as it stands in an XML attribute. Characters XML has no way to
@@ -695,7 +722,8 @@ struct Imported {
     folders: usize,
     /// Feeds of the file the account read already.
     known: usize,
-    /// Outlines that were left out, see [`Outline::skipped`].
+    /// Outlines that were left out, see [`Outline::skipped`], and feeds that
+    /// are blocked on this server.
     skipped: usize,
 }
 
@@ -735,11 +763,12 @@ async fn import(
         .new_feeds(account_id, taken.created(), Instant::now())?;
     tx.commit().await?;
     let added = taken.feeds.iter().filter(|feed| feed.added).count();
+    let blocked = taken.feeds.iter().filter(|feed| feed.blocked).count();
     Ok(Json(Imported {
         feeds: added,
         folders: taken.folders_made,
-        known: taken.feeds.len() - added,
-        skipped: outline.skipped,
+        known: taken.feeds.len() - added - blocked,
+        skipped: outline.skipped + blocked,
     }))
 }
 
@@ -767,6 +796,8 @@ pub(crate) struct TakenFeed {
     pub created: bool,
     /// The account did not read it before.
     pub added: bool,
+    /// The feed is blocked on this server: the account does not read it.
+    pub blocked: bool,
 }
 
 /// Takes the folders and feeds of an outline into an account's tree, inside
@@ -856,7 +887,8 @@ pub(crate) async fn take(
                 taken.feeds.push(TakenFeed {
                     feed_id,
                     created,
-                    added,
+                    added: added == Added::New,
+                    blocked: added == Added::Blocked,
                 });
             }
         }

@@ -16,7 +16,7 @@ use rueder::{
     fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import,
+    import, moderation,
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
@@ -34,6 +34,8 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 
 /// Where the server listens if LISTEN_ADDR does not say.
 const LISTEN_ADDR: &str = "127.0.0.1:3000";
+/// Where the image proxy keeps its cache if IMAGE_CACHE_DIR does not say.
+const IMAGE_CACHE_DIR: &str = "image-cache";
 
 /// rueder server. Configured through DATABASE_URL, LISTEN_ADDR and STATIC_DIR.
 #[derive(Parser)]
@@ -68,6 +70,10 @@ enum Command {
     /// make accounts in the browser.
     #[command(subcommand)]
     Admin(AdminCommand),
+    /// Block feeds that readers reported, or let them be read again, and see
+    /// the reports.
+    #[command(subcommand)]
+    Feed(FeedCommand),
     /// Say whether readers can make accounts for themselves or invite others,
     /// and how many. Nothing is open until it is said here.
     #[command(subcommand)]
@@ -195,6 +201,25 @@ enum RegistrationCommand {
 }
 
 #[derive(Subcommand)]
+enum FeedCommand {
+    /// Block the feed at this address for everybody: it is no longer
+    /// fetched, its articles are shown to nobody, nobody can subscribe to it,
+    /// and its images leave the cache of IMAGE_CACHE_DIR. The subscriptions
+    /// stay. An address no feed has yet is blocked too. Open pages see it when
+    /// they load the feeds again.
+    Block { address: String },
+    /// Lift the block of the feed at this address: it is fetched again, and
+    /// its articles and images are there again.
+    Unblock { address: String },
+    /// Delete the reports of the feed at this address and of its articles,
+    /// once they are dealt with.
+    Dismiss { address: String },
+    /// List the reported feeds as the status page shows them: address,
+    /// reports, accounts, whether it is blocked, and the reasons.
+    Reports,
+}
+
+#[derive(Subcommand)]
 enum AdminCommand {
     /// Make an account an admin.
     Add { name: String },
@@ -293,6 +318,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Account(command) => account(&db, command).await,
         Command::Admin(command) => admin(&db, command).await,
+        Command::Feed(command) => feed(&db, command).await,
         Command::Registration(command) => registering(&db, command).await,
         Command::Reclean { feed } => {
             let report = reclean::run(&db, &Rules::from_env()?, feed).await?;
@@ -423,6 +449,53 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                     },
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
+    match command {
+        FeedCommand::Block { address } => {
+            let dir = PathBuf::from(
+                env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| IMAGE_CACHE_DIR.into()),
+            );
+            let cache = moderation::cache_at(&dir)?;
+            let blocked = moderation::block(db, &address, cache.as_ref()).await?;
+            println!("{blocked}");
+            if cache.is_none() && !blocked.made {
+                println!(
+                    "There is no image cache at {}; set IMAGE_CACHE_DIR to the server's.",
+                    dir.display()
+                );
+            }
+        }
+        FeedCommand::Unblock { address } => match moderation::unblock(db, &address).await? {
+            0 => anyhow::bail!("no feed at {} is blocked", address.trim()),
+            feeds => println!("Lifted the block of {feeds} feed(s)."),
+        },
+        FeedCommand::Dismiss { address } => {
+            let dismissed = moderation::dismiss(db, &address).await?;
+            println!("Deleted {dismissed} report(s).");
+        }
+        FeedCommand::Reports => {
+            let summary = moderation::summary(db).await?;
+            for feed in summary.feeds {
+                let reasons: Vec<String> = feed
+                    .reasons
+                    .iter()
+                    .map(|counted| format!("{:?} {}", counted.reason, counted.count))
+                    .collect();
+                println!(
+                    "{}\t{} report(s)\t{} account(s)\t{}\t{}",
+                    feed.feed_url,
+                    feed.reports,
+                    feed.accounts,
+                    if feed.blocked { "blocked" } else { "open" },
+                    reasons.join(", "),
+                );
+            }
+            println!("Blocked addresses: {}", summary.blocked);
         }
     }
     Ok(())
@@ -594,7 +667,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     // them, IMAGE_CACHE_MB how much of them; IMAGE_PROXY_KEY is the secret for
     // its addresses, which it makes itself if there is none.
     let mut images =
-        images::Config::new(env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| "image-cache".into()));
+        images::Config::new(env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| IMAGE_CACHE_DIR.into()));
     if let Ok(megabytes) = env::var("IMAGE_CACHE_MB") {
         let megabytes: u64 = megabytes
             .parse()
@@ -605,7 +678,8 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         .ok()
         .filter(|key| !key.is_empty())
         .map(String::into_bytes);
-    let images = Arc::new(ImageProxy::open(images, client.clone())?);
+    // It fetches nothing that belongs to a blocked feed.
+    let images = Arc::new(ImageProxy::open(images, client.clone())?.with_blocked_from(db.clone()));
     // Once an hour, what the cache holds too much of goes.
     let cache = images.clone();
     tokio::spawn(async move {

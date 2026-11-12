@@ -439,10 +439,10 @@ pub struct Page {
 }
 
 /// A page of the articles of some feeds, newest first or, with `Page::after`,
-/// oldest first, as the account sees them:
-/// only feeds it subscribes to, without what its filter rules hide, each article
-/// with whether it is read and starred. One feed, a folder's feeds and all feeds
-/// are the same query.
+/// oldest first, as the account sees them: only feeds it subscribes to and
+/// that are not blocked, without what its filter rules hide, each article with
+/// whether it is read and starred. One feed, a folder's feeds and all feeds are
+/// the same query.
 ///
 /// The cost does not depend on how many articles the feeds hold, only on the
 /// number of feeds and the length of the page. The feeds are merged the way
@@ -480,6 +480,7 @@ pub async fn page(
                         WHERE m.feed_id = s.feed_id AND m.seq = s.read_upto), 0)
                    ELSE 0 END AS floor
             FROM subscriptions s
+            JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
             WHERE s.account_id = $1 AND s.feed_id = ANY($2)
         ), merge AS (
             -- Every feed's oldest article that belongs on the list.
@@ -567,6 +568,7 @@ pub async fn page(
                         WHERE m.feed_id = s.feed_id AND m.seq = s.read_upto), 0)
                    ELSE 0 END AS floor
             FROM subscriptions s
+            JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
             WHERE s.account_id = $1 AND s.feed_id = ANY($2)
         ), merge AS (
             -- Every feed's newest article that belongs on the list.
@@ -659,7 +661,7 @@ pub enum Marked {
 }
 
 /// A page of such a list, newest first or, with `Page::after`, oldest first. Only articles of feeds the account
-/// subscribes to, and, except in the list of the hidden ones, nothing hidden.
+/// subscribes to and that are not blocked, and, except in the list of the hidden ones, nothing hidden.
 /// These lists are as long as what a reader marked by hand, so they are read
 /// from the marks and not from the feeds.
 pub async fn marked(
@@ -697,6 +699,7 @@ pub async fn marked(
                coalesce(st.starred, false) AS "starred!"
         FROM marks m
         JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = m.feed_id
+        JOIN feeds f ON f.id = m.feed_id AND f.blocked_at IS NULL
         JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq
         LEFT JOIN article_states st
             ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq
@@ -752,7 +755,8 @@ pub struct Opened {
     pub image_title: Option<String>,
 }
 
-/// An article with its text, if the account subscribes to its feed.
+/// An article with its text, if the account subscribes to its feed and the
+/// feed is not blocked.
 pub async fn open(
     db: &PgPool,
     account_id: i32,
@@ -764,6 +768,7 @@ pub async fn open(
         "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
                 a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title
          FROM subscriptions s
+         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          JOIN articles a ON a.feed_id = s.feed_id
          JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
          WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
@@ -786,7 +791,7 @@ pub struct Version {
 }
 
 /// The versions of an article that are kept, oldest first, if the account
-/// subscribes to its feed. This is the only reader of the cold table.
+/// subscribes to its feed and the feed is not blocked. This is the only reader of the cold table.
 pub async fn versions(
     db: &PgPool,
     account_id: i32,
@@ -796,6 +801,7 @@ pub async fn versions(
     let rows = sqlx::query!(
         "SELECT v.version, v.fetched_at, v.raw
          FROM subscriptions s
+         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          JOIN article_versions v ON v.feed_id = s.feed_id
          WHERE s.account_id = $1 AND s.feed_id = $2 AND v.seq = $3
          ORDER BY v.version",

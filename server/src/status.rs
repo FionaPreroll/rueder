@@ -19,7 +19,7 @@ use time::OffsetDateTime;
 use ts_rs::TS;
 
 use crate::{
-    AppError, AppState,
+    AppError, AppState, moderation,
     monitor::{self, Severity, Timing},
     profile, reports,
     sessions::Session,
@@ -68,6 +68,9 @@ struct Status {
     problems: Problems,
     /// Errors in the browsers of readers who agreed to send them.
     browsers: reports::Summary,
+    /// Feeds and articles readers reported, by the address of the feed. The
+    /// one place where the status names feeds; it never names who reported.
+    reports: moderation::Summary,
 }
 
 /// How long things took in the last hour, in milliseconds. The times are null
@@ -125,6 +128,8 @@ enum Hint {
     Limited { count: u64 },
     /// Browsers reported errors in the last day.
     BrowserErrors { errors: usize },
+    /// Readers reported feeds that are not blocked.
+    ReportedFeeds { feeds: usize },
 }
 
 /// How much there is.
@@ -133,7 +138,8 @@ enum Hint {
 struct Counts {
     accounts: i64,
     feeds: i64,
-    /// Feeds somebody subscribes to, which are the ones fetched.
+    /// Feeds somebody subscribes to and that are not blocked, which are the
+    /// ones fetched.
     subscribed_feeds: i64,
     /// About how many articles: what PostgreSQL estimates.
     articles: i64,
@@ -335,7 +341,8 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
     let counts = sqlx::query!(
         r#"SELECT (SELECT count(*) FROM accounts) AS "accounts!",
                   (SELECT count(*) FROM feeds) AS "feeds!",
-                  (SELECT count(DISTINCT feed_id) FROM subscriptions) AS "subscribed!""#
+                  (SELECT count(DISTINCT s.feed_id) FROM subscriptions s
+                   JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL) AS "subscribed!""#
     )
     .fetch_one(&state.db)
     .await?;
@@ -394,7 +401,8 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
                   extract(epoch FROM now() - min(f.next_fetch_at)
                       FILTER (WHERE f.next_fetch_at < now()))::float8 AS behind
            FROM feeds f
-           WHERE EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)"#,
+           WHERE f.blocked_at IS NULL
+             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)"#,
         OVERDUE_S,
     )
     .fetch_one(&state.db)
@@ -402,7 +410,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
     let messages = sqlx::query!(
         r#"SELECT f.error_message AS "message!", count(*) AS "feeds!"
            FROM feeds f
-           WHERE f.error_message IS NOT NULL
+           WHERE f.error_message IS NOT NULL AND f.blocked_at IS NULL
              AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)
            GROUP BY f.error_message"#
     )
@@ -504,6 +512,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
     };
 
     let browsers = reports::summary(&state.db, state.reports).await?;
+    let reported = moderation::summary(&state.db).await?;
     let mut hints = hints(
         &routes,
         &all,
@@ -518,6 +527,10 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
     let errors = lately.count();
     if errors > 0 {
         hints.push(Hint::BrowserErrors { errors });
+    }
+    let waiting = moderation::waiting(&reported);
+    if waiting > 0 {
+        hints.push(Hint::ReportedFeeds { feeds: waiting });
     }
     let requests = Requests {
         all: Durations::from(&all.timing),
@@ -566,6 +579,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
             recent: recent.collect(),
         },
         browsers,
+        reports: reported,
     }))
 }
 

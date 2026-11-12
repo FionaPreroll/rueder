@@ -296,7 +296,7 @@ pub async fn fetch_due(
         r#"UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'
          WHERE id IN (
              SELECT f.id FROM feeds f
-             WHERE f.next_fetch_at <= now()
+             WHERE f.next_fetch_at <= now() AND f.blocked_at IS NULL
                AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)
              ORDER BY f.next_fetch_at
              LIMIT $1

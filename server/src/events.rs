@@ -697,6 +697,9 @@ pub fn changed(path: &str) -> Option<Changed> {
         // the reports themselves are nothing its tabs show.
         ["reports", "consent"] => Changed::Area(Area::Settings),
         ["reports", ..] => return None,
+        // A report of a feed or an article is for admins, not for the
+        // reader's tabs.
+        ["feeds", _, "report"] | ["feeds", _, "articles", _, "report"] => return None,
         ["rules", ..] => Changed::Area(Area::Rules),
         ["import"] => Changed::Everything,
         ["labels", ..] | ["feeds", _, "articles", _, "labels", ..] => Changed::Area(Area::Labels),

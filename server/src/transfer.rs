@@ -242,8 +242,9 @@ pub struct Imported {
     /// Rules that were added.
     pub rules: usize,
     /// What the file has that could not be taken: feeds without an address
-    /// that can be fetched, articles without an id, labels and rules that
-    /// break the rules, rules whose folder or feed is not there.
+    /// that can be fetched or blocked on this server, articles without an id,
+    /// labels and rules that break the rules, rules whose folder or feed is
+    /// not there.
     pub skipped: usize,
     /// Whether the settings came with it.
     pub settings: bool,
@@ -786,6 +787,11 @@ pub async fn import(
 
     let mut feed_ids: HashMap<String, i32> = HashMap::new();
     for (feed, found) in plan.feeds.into_iter().zip(&taken.feeds) {
+        // A feed blocked on this server is not read, and nothing of it taken.
+        if found.blocked {
+            imported.skipped += 1;
+            continue;
+        }
         if found.added {
             imported.feeds += 1;
         } else {

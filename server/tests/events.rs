@@ -204,6 +204,8 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/invites", None),
         ("/api/invites/4", None),
         ("/api/reports", None),
+        ("/api/feeds/3/report", None),
+        ("/api/feeds/3/articles/7/report", None),
         ("/api/feeds/not-a-number/read", reading(None, None)),
         ("/api/login", None),
         ("/api/oidc/callback", None),

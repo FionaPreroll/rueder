@@ -34,6 +34,8 @@ pub async fn unread_counts(db: &PgPool, account_id: i32) -> anyhow::Result<Vec<F
         FeedUnread,
         r#"
         SELECT s.feed_id, f.last_seq, s.read_upto,
+               -- Of a blocked feed nothing is shown, so nothing is unread.
+               CASE WHEN f.blocked_at IS NOT NULL THEN 0 ELSE
                f.last_seq - s.read_upto
                - (SELECT count(*) FROM article_states x
                   WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id
@@ -41,7 +43,7 @@ pub async fn unread_counts(db: &PgPool, account_id: i32) -> anyhow::Result<Vec<F
                + (SELECT count(*) FROM article_states x
                   WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id
                     AND x.seq <= s.read_upto AND x.kept_unread AND NOT x.hidden)
-               AS "unread!"
+               END AS "unread!"
         FROM subscriptions s
         JOIN feeds f ON f.id = s.feed_id
         WHERE s.account_id = $1
@@ -65,6 +67,8 @@ pub async fn unread_of(
         FeedUnread,
         r#"
         SELECT s.feed_id, f.last_seq, s.read_upto,
+               -- Of a blocked feed nothing is shown, so nothing is unread.
+               CASE WHEN f.blocked_at IS NOT NULL THEN 0 ELSE
                f.last_seq - s.read_upto
                - (SELECT count(*) FROM article_states x
                   WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id
@@ -72,7 +76,7 @@ pub async fn unread_of(
                + (SELECT count(*) FROM article_states x
                   WHERE x.account_id = s.account_id AND x.feed_id = s.feed_id
                     AND x.seq <= s.read_upto AND x.kept_unread AND NOT x.hidden)
-               AS "unread!"
+               END AS "unread!"
         FROM subscriptions s
         JOIN feeds f ON f.id = s.feed_id
         WHERE s.account_id = $1 AND s.feed_id = $2

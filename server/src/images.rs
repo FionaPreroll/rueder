@@ -34,6 +34,7 @@ use image::{
     DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder,
 };
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
 
@@ -376,6 +377,26 @@ impl Cache {
         }
     }
 
+    /// Removes the image at `url` in every size, and says how many files went.
+    pub fn remove(&self, url: &str) -> usize {
+        let mut removed = 0;
+        for size in Size::ALL {
+            let path = self.path(size, url);
+            if let Ok(meta) = fs::metadata(&path)
+                && fs::remove_file(&path).is_ok()
+            {
+                removed += 1;
+                let bytes = meta.len();
+                let _ = self
+                    .used
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                        Some(used.saturating_sub(bytes))
+                    });
+            }
+        }
+        removed
+    }
+
     /// How many bytes the cache holds, as far as it has counted.
     pub fn used(&self) -> u64 {
         self.used.load(Ordering::Relaxed)
@@ -437,6 +458,12 @@ struct Cached {
     used_at: SystemTime,
 }
 
+/// How an image of a blocked feed is known: the SHA-256 of its address, as
+/// the table `blocked_images` keeps it (see `moderation`).
+pub fn source_hash(url: &str) -> Vec<u8> {
+    Sha256::digest(url.as_bytes()).to_vec()
+}
+
 /// How the proxy is set up.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -475,6 +502,8 @@ pub struct ImageProxy {
     failed: Mutex<HashMap<String, Instant>>,
     /// What it served in the last hour, for the status page.
     served: Mutex<Window<monitor::Images>>,
+    /// Where the images of blocked feeds are listed, which it does not fetch.
+    db: Option<PgPool>,
 }
 
 impl ImageProxy {
@@ -494,6 +523,33 @@ impl ImageProxy {
             decodes: Arc::new(Semaphore::new(DECODES_AT_ONCE)),
             failed: Mutex::default(),
             served: Mutex::default(),
+            db: None,
+        })
+    }
+
+    /// Fetches no image of a feed that is blocked, as the database lists them.
+    pub fn with_blocked_from(self, db: PgPool) -> Self {
+        Self {
+            db: Some(db),
+            ..self
+        }
+    }
+
+    /// Whether the image at `url` belongs to a blocked feed. Without an answer
+    /// of the database it counts as blocked.
+    async fn blocked(&self, url: &str) -> bool {
+        let Some(db) = &self.db else {
+            return false;
+        };
+        let blocked = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM blocked_images WHERE url_hash = $1) AS "blocked!""#,
+            &source_hash(url)[..],
+        )
+        .fetch_one(db)
+        .await;
+        blocked.unwrap_or_else(|err| {
+            tracing::warn!("asking whether an image is blocked: {err:#}");
+            true
         })
     }
 
@@ -569,6 +625,11 @@ impl ImageProxy {
         };
         if let Ok(Some(picture)) = cached {
             return Ok((picture, true));
+        }
+        // The cache lost the images of a feed when it was blocked; a browser
+        // that still knows their addresses does not bring them back.
+        if self.blocked(&url).await {
+            return Err(Refused::NotFound);
         }
         if self.has_failed(&url) {
             return Err(Refused::Source("it failed a moment ago".into()));

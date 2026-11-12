@@ -860,6 +860,17 @@ pub fn with_images(html: &str, address: impl Fn(&str) -> Option<String>) -> Stri
     written(root)
 }
 
+/// The addresses of the images in a cleaned text, as [`with_images`] finds
+/// them: for clearing the images of a blocked feed from the cache.
+pub fn image_sources(html: &str) -> Vec<String> {
+    let found = std::cell::RefCell::new(Vec::new());
+    with_images(html, |source| {
+        found.borrow_mut().push(source.to_owned());
+        None
+    });
+    found.into_inner()
+}
+
 /// Below this many pixels wide or high, as a text says, an image is an icon or
 /// a smiley, not a picture to show an article by.
 const SMALLEST_PICTURE: u32 = 100;

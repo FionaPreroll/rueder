@@ -488,6 +488,7 @@ async fn read(
                coalesce(st.starred, false) AS "starred!"
         FROM unnest($2::int[], $3::int[]) AS k (feed_id, seq)
         JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id
+        JOIN feeds f ON f.id = k.feed_id AND f.blocked_at IS NULL
         JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq
         LEFT JOIN article_states st
             ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq

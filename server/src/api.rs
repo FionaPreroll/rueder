@@ -122,6 +122,9 @@ struct Feed {
     last_seq: i32,
     read_upto: i32,
     unread: i64,
+    /// The feed is blocked on this server: it is not fetched, and its
+    /// articles are shown to nobody.
+    blocked: bool,
 }
 
 /// What `GET /api/tree` answers: the account's folders and subscriptions, each
@@ -166,7 +169,7 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
     let subscriptions = sqlx::query!(
         r#"SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,
                   f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message,
-                  f.fetched_at IS NOT NULL AS "fetched!"
+                  f.fetched_at IS NOT NULL AS "fetched!", f.blocked_at IS NOT NULL AS "blocked!"
            FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
            WHERE s.account_id = $1 ORDER BY s.position, s.feed_id"#,
         session.account_id
@@ -185,19 +188,22 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
                 feed_title: row.feed_title,
                 feed_url: row.feed_url,
                 site_url: row.site_url,
-                icon_url: state.picture(Size::Icon, row.icon_url),
+                // The icon is one of the feed's images, which a block keeps away.
+                icon_url: state.picture(Size::Icon, row.icon_url.filter(|_| !row.blocked)),
                 fetch_agent: row.fetch_agent,
                 error: row.error_message,
                 fetched: row.fetched,
                 last_seq: count.map_or(0, |count| count.last_seq),
                 read_upto: count.map_or(0, |count| count.read_upto),
                 unread: count.map_or(0, |count| count.unread),
+                blocked: row.blocked,
             }
         })
         .collect();
     let hidden = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "hidden!" FROM article_states
-           WHERE account_id = $1 AND hidden"#,
+        r#"SELECT count(*) AS "hidden!" FROM article_states x
+           JOIN feeds f ON f.id = x.feed_id AND f.blocked_at IS NULL
+           WHERE x.account_id = $1 AND x.hidden"#,
         session.account_id
     )
     .fetch_one(&state.db)
@@ -374,7 +380,8 @@ async fn label_articles(
 }
 
 /// The feeds the account subscribes to: all of them, or the ones in a folder
-/// and the folders inside it. `None` if the folder is not the account's.
+/// and the folders inside it, without those that are blocked. `None` if the
+/// folder is not the account's.
 async fn feeds_of(
     state: &AppState,
     session: &Session,
@@ -382,7 +389,9 @@ async fn feeds_of(
 ) -> Result<Option<Vec<i32>>, AppError> {
     let Some(folder_id) = folder_id else {
         let all = sqlx::query_scalar!(
-            "SELECT feed_id FROM subscriptions WHERE account_id = $1",
+            "SELECT s.feed_id FROM subscriptions s
+             JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
+             WHERE s.account_id = $1",
             session.account_id
         )
         .fetch_all(&state.db)
@@ -407,6 +416,7 @@ async fn feeds_of(
              WHERE f.account_id = $1
          )
          SELECT s.feed_id FROM subscriptions s
+         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          WHERE s.account_id = $1 AND s.folder_id IN (SELECT id FROM inside)",
         session.account_id,
         folder_id
@@ -425,6 +435,26 @@ async fn subscribed(state: &AppState, session: &Session, feed_id: i32) -> Result
     .fetch_optional(&state.db)
     .await?;
     subscribed.map(|_| ()).ok_or(AppError::NotFound)
+}
+
+/// A feed the account subscribes to, as the feeds to list: none if it is
+/// blocked, as its articles are shown to nobody.
+async fn listed_feed(
+    state: &AppState,
+    session: &Session,
+    feed_id: i32,
+) -> Result<Vec<i32>, AppError> {
+    let blocked = sqlx::query_scalar!(
+        r#"SELECT f.blocked_at IS NOT NULL AS "blocked!"
+           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+           WHERE s.account_id = $1 AND s.feed_id = $2"#,
+        session.account_id,
+        feed_id
+    )
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    Ok(if blocked { Vec::new() } else { vec![feed_id] })
 }
 
 async fn all_articles(
@@ -454,8 +484,8 @@ async fn feed_articles(
     Path(feed_id): Path<i32>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<List>, AppError> {
-    subscribed(&state, &session, feed_id).await?;
-    list(&state, &session, &[feed_id], query).await
+    let feeds = listed_feed(&state, &session, feed_id).await?;
+    list(&state, &session, &feeds, query).await
 }
 
 /// A search through the articles of the account's feeds: `GET /api/search`.
@@ -498,10 +528,7 @@ async fn search_articles(
 ) -> Result<Json<SearchHits>, AppError> {
     let feeds = match (query.feed, query.folder) {
         (Some(_), Some(_)) => return Err(AppError::BadRequest("give feed or folder".into())),
-        (Some(feed_id), None) => {
-            subscribed(&state, &session, feed_id).await?;
-            vec![feed_id]
-        }
+        (Some(feed_id), None) => listed_feed(&state, &session, feed_id).await?,
         (None, folder_id) => feeds_of(&state, &session, folder_id)
             .await?
             .ok_or(AppError::NotFound)?,

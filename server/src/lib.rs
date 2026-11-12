@@ -14,6 +14,7 @@ pub mod images;
 pub mod import;
 pub mod labels;
 pub mod login;
+pub mod moderation;
 pub mod monitor;
 pub mod oidc;
 pub mod profile;
@@ -230,6 +231,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())
+        .merge(moderation::routes())
         .merge(transfer::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
         // Around all of the API: whatever a request changes is announced to
