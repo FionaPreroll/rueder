@@ -126,6 +126,36 @@ docker compose up --detach
 Set it only when a proxy really is in front: without one, anybody could write
 that header themselves.
 
+## Checking an installation
+
+`check.sh` looks at a running installation the way it is meant to run and
+changes nothing. From any machine, it checks TLS, the certificate, HSTS, the
+redirect from http, rueder's own headers, and that neither rueder's port nor
+PostgreSQL's answers from outside:
+
+```sh
+deploy/check.sh https://reader.example
+```
+
+On the server, in this folder, it also checks the containers, what listens
+where, the settings in `.env`, where the image comes from, and on Debian or
+Ubuntu the updates of the host:
+
+```sh
+deploy/check.sh --server https://reader.example
+```
+
+It needs `curl` and `openssl`, on the server also `docker`, and `gh` (logged
+in with `gh auth login`) to check an image's attestation. Every line says
+`ok`, `warn` or `FAIL`; it ends with status 1 if anything failed. Run it after
+an installation, after changing the proxy, and now and then.
+
+To check an image yourself before you pull it:
+
+```sh
+gh attestation verify oci://ghcr.io/fionapreroll/rueder:latest --repo FionaPreroll/rueder
+```
+
 ## Settings
 
 All settings are in `.env`; `.env.example` lists them with what they do. After
