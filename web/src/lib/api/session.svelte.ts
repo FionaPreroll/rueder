@@ -12,6 +12,32 @@ export type LoginFailure =
 	| { kind: 'tooMany'; minutes: number }
 	| { kind: 'unreachable' };
 
+/** Why nobody was registered. */
+export type RegisterFailure =
+	/** Registration is not open, and there was no invitation. */
+	| { kind: 'closed' }
+	/** The invitation cannot be used any more. */
+	| { kind: 'invite' }
+	/** There is no room for another account, for good or for today. */
+	| { kind: 'full' }
+	| { kind: 'today' }
+	| { kind: 'taken' }
+	/** The name or the password cannot be one; the server says why. */
+	| { kind: 'invalid'; reason: string }
+	| { kind: 'unreachable' };
+
+/** The invitation the page was opened with, and whether it can be used. */
+export interface Invitation {
+	token: string;
+	valid: boolean;
+}
+
+/** The token of the invitation in the page's address: `/?invite=<token>`. */
+function invitedBy(): string | null {
+	if (typeof location === 'undefined') return null;
+	return new URLSearchParams(location.search).get('invite') || null;
+}
+
 export class Session {
 	/**
 	 * `checking` until the server has said whether there is a session, `unreachable`
@@ -21,7 +47,9 @@ export class Session {
 	/** The reader of the account that is logged in. */
 	reader = $state.raw<ServerReader | null>(null);
 	/** The ways to log in besides name and password. */
-	ways = $state.raw<ApiLoginWays>({ oidc: false });
+	ways = $state.raw<ApiLoginWays>({ oidc: false, registration: false });
+	/** The invitation the page was opened with, once the server said whether it can be used. */
+	invitation = $state.raw<Invitation | null>(null);
 
 	private api: Api;
 
@@ -60,7 +88,34 @@ export class Session {
 		try {
 			this.ways = await this.api.loginWays();
 		} catch {
-			this.ways = { oidc: false };
+			this.ways = { oidc: false, registration: false };
+		}
+		const token = invitedBy();
+		if (!token) return;
+		try {
+			this.invitation = { token, valid: (await this.api.registering(token)).invite === true };
+		} catch {
+			this.invitation = { token, valid: false };
+		}
+	}
+
+	/** Makes an account and logs it in; null if it worked, else why it did not. */
+	async register(name: string, password: string): Promise<RegisterFailure | null> {
+		try {
+			this.enter(await this.api.register(name, password, this.invitation?.token));
+			this.invitation = null;
+			return null;
+		} catch (error) {
+			if (!(error instanceof ApiError)) throw error;
+			const word = error.message.trim();
+			if (error.status === 403 && ['closed', 'invite', 'full', 'today'].includes(word)) {
+				return { kind: word as 'closed' | 'invite' | 'full' | 'today' };
+			}
+			if (error.status === 409) return { kind: 'taken' };
+			if (error.status === 400 || error.status === 422) {
+				return { kind: 'invalid', reason: error.message };
+			}
+			return { kind: 'unreachable' };
 		}
 	}
 

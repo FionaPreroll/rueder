@@ -141,6 +141,7 @@ export class DemoReader implements Reader {
 		subscribe: true,
 		opml: false,
 		status: true,
+		invites: false,
 		reports: false
 	};
 	/** The draft sends nothing anywhere. */
@@ -573,6 +574,19 @@ export class DemoReader implements Reader {
 	setReportsConsent() {}
 
 	noteError() {}
+
+	/** There is no server to make an account on, so nobody to invite. */
+	async invites() {
+		return null;
+	}
+
+	async invite() {
+		return null;
+	}
+
+	async revokeInvite() {
+		return false;
+	}
 
 	/** A made-up status, so the page can be seen without a server. */
 	async status(): Promise<ServerStatus | null> {

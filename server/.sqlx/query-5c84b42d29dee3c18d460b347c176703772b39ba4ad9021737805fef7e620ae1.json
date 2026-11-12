@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, by_admin FROM invites\n             WHERE token_hash = $1 AND NOT revoked AND expires_at > now() AND uses < max_uses",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "by_admin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "by_admin"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5c84b42d29dee3c18d460b347c176703772b39ba4ad9021737805fef7e620ae1"
+}

@@ -62,6 +62,17 @@ export interface FakeArticle {
 	image_title: string | null;
 }
 
+/** An invitation, with the token the real server keeps only the hash of. */
+export interface FakeInvite {
+	id: number;
+	token: string;
+	max_uses: number;
+	uses: number;
+	created_at: string;
+	expires_at: string;
+	revoked: boolean;
+}
+
 interface Request {
 	method: string;
 	/** The path after /api, with its query. */
@@ -108,6 +119,14 @@ export class FakeServer {
 	sendsReports = false;
 	reports: unknown[] = [];
 	oidc = false;
+	/** Whether anybody can register, and why nobody can right now: no room, or enough for today. */
+	registrationOpen = false;
+	noRoom: 'full' | 'today' | null = null;
+	/** The invitations of the account that is logged in, the newest first. */
+	invites: FakeInvite[] = [];
+	/** For how many accounts a reader who is no admin may invite in all, and how long a link is good. */
+	inviteQuota = 0;
+	inviteDays = 7;
 	/** Wrong tries are refused for this many seconds. */
 	lockedFor = 0;
 
@@ -314,7 +333,33 @@ export class FakeServer {
 		type: string | null
 	): Response {
 		const data = (body ?? {}) as Record<string, unknown>;
-		if (method === 'GET' && path === '/login/ways') return json({ oidc: this.oidc });
+		if (method === 'GET' && path === '/login/ways') {
+			return json({ oidc: this.oidc, registration: this.registrationOpen && !this.noRoom });
+		}
+		if (method === 'GET' && path === '/register') {
+			const token = query.get('invite');
+			const open = this.registrationOpen && !this.noRoom;
+			return json(token === null ? { open } : { open, invite: !!this.usable(token) });
+		}
+		if (method === 'POST' && path === '/register') {
+			const invite = typeof data.invite === 'string' ? this.usable(data.invite) : undefined;
+			if (typeof data.invite === 'string' && !invite) return refused(403, 'invite');
+			if (!invite && !this.registrationOpen) return refused(403, 'closed');
+			if (this.noRoom) return refused(403, this.noRoom);
+			const name = String(data.username).trim();
+			if (!name) return refused(400, 'the name is empty');
+			if (String(data.password).length < 8) {
+				return refused(400, 'the password is shorter than 8 characters');
+			}
+			if (this.accounts.has(name.toLowerCase())) {
+				return refused(409, 'there is an account with this name already');
+			}
+			this.accounts.set(name.toLowerCase(), String(data.password));
+			if (invite) invite.uses++;
+			this.signedIn = name.toLowerCase();
+			this.admin = false;
+			return json(this.me(), 201);
+		}
 		if (method === 'POST' && path === '/login') {
 			if (this.lockedFor > 0)
 				return refused(429, 'too many', { 'Retry-After': `${this.lockedFor}` });
@@ -328,6 +373,8 @@ export class FakeServer {
 			return empty();
 		}
 		if (!this.signedIn) return refused(401);
+		const invites = this.answerInvites(method, path, data);
+		if (invites) return invites;
 		if (method === 'GET' && path === '/me') return json(this.me());
 		if (method === 'GET' && path === '/tree') return json(this.tree());
 		if (path === '/reports/consent') {
@@ -482,6 +529,68 @@ export class FakeServer {
 			}
 		}
 		return refused(404);
+	}
+
+	/** The invitation of this token, if it is good for one more account. */
+	private usable(token: string) {
+		return this.invites.find(
+			(invite) =>
+				invite.token === token &&
+				!invite.revoked &&
+				invite.uses < invite.max_uses &&
+				Date.parse(invite.expires_at) > Date.now()
+		);
+	}
+
+	/** For how many more accounts a reader can invite; an admin has no quota. */
+	private invitesLeft() {
+		const taken = this.invites.reduce(
+			(sum, invite) =>
+				sum +
+				(invite.revoked || Date.parse(invite.expires_at) <= Date.now()
+					? invite.uses
+					: invite.max_uses),
+			0
+		);
+		return Math.max(0, this.inviteQuota - taken);
+	}
+
+	private answerInvites(method: string, path: string, data: Record<string, unknown>) {
+		if (method === 'GET' && path === '/invites') {
+			return json({
+				invites: this.invites.map(({ token: _token, ...invite }) => ({
+					...invite,
+					usable: !!this.usable(_token)
+				})),
+				...(this.admin ? {} : { left: this.invitesLeft() }),
+				days: this.inviteDays
+			});
+		}
+		if (method === 'POST' && path === '/invites') {
+			const uses = typeof data.uses === 'number' ? data.uses : 1;
+			if (uses < 1 || uses > 1000) return refused(400, 'a link is for 1 to 1000 accounts');
+			if (!this.admin && this.invitesLeft() < uses) return refused(403, 'no invitations left');
+			const id = this.nextId++;
+			const made = {
+				id,
+				token: `token-${id}`,
+				max_uses: uses,
+				uses: 0,
+				created_at: new Date().toISOString(),
+				expires_at: new Date(Date.now() + this.inviteDays * 86_400_000).toISOString(),
+				revoked: false
+			};
+			this.invites.unshift(made);
+			return json({ id, token: made.token, expires_at: made.expires_at }, 201);
+		}
+		const one = /^\/invites\/(\d+)$/.exec(path);
+		const invite = this.invites.find((invite) => invite.id === Number(one?.[1]));
+		if (method === 'DELETE' && one) {
+			if (!invite) return refused(404);
+			invite.revoked = true;
+			return empty();
+		}
+		return null;
 	}
 
 	private me() {

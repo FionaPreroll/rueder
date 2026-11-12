@@ -128,4 +128,113 @@ describe('Login', () => {
 		await userEvent.type(screen.getByLabelText('Passwort'), 'falsch{Enter}');
 		expect(await screen.findByRole('alert')).toHaveTextContent('Name oder Passwort stimmt nicht.');
 	});
+
+	it('says that there is no sign-up where there is none', async () => {
+		await loginPage();
+		expect(screen.getByText(/There is no sign-up\./)).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Make an account' })).toBeNull();
+	});
+});
+
+describe('registering', () => {
+	const invited = () => {
+		server.invites = [
+			{
+				id: 1,
+				token: 'a-token',
+				max_uses: 1,
+				uses: 0,
+				created_at: new Date().toISOString(),
+				expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+				revoked: false
+			}
+		];
+		history.replaceState(null, '', '/?invite=a-token');
+	};
+	const fillNew = async (name: string, password: string, again = password) => {
+		await userEvent.type(screen.getByLabelText('Name'), name);
+		await userEvent.type(screen.getByLabelText(/^Password/), password);
+		await userEvent.type(screen.getByLabelText('The password once more'), again);
+	};
+	const make = () => screen.getByRole('button', { name: 'Make the account' });
+
+	it('is a step from the login where the server lets anybody register', async () => {
+		server.registrationOpen = true;
+		const session = await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Make an account' }));
+		expect(screen.getByRole('heading', { name: 'Make an account' })).toBeInTheDocument();
+		// Password managers know these as a new password.
+		expect(screen.getByLabelText(/^Password/)).toHaveAttribute('autocomplete', 'new-password');
+		expect(screen.getByText('At least 8 characters.')).toBeInTheDocument();
+		expect(make()).toBeDisabled();
+
+		await fillNew('grace', 'a long password', 'another password');
+		expect(screen.getByText('The two passwords differ.')).toBeInTheDocument();
+		expect(make()).toBeDisabled();
+		await userEvent.clear(screen.getByLabelText('The password once more'));
+		await userEvent.type(screen.getByLabelText('The password once more'), 'a long password');
+		await userEvent.click(make());
+		await vi.waitFor(() => expect(session.state).toBe('in'));
+		expect(server.accounts.get('grace')).toBe('a long password');
+	});
+
+	it('goes back to the login', async () => {
+		server.registrationOpen = true;
+		await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Make an account' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Log in to an account you have' }));
+		expect(screen.getByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+		expect(screen.queryByLabelText('The password once more')).toBeNull();
+	});
+
+	it('opens for whoever comes with an invitation, though registration is closed', async () => {
+		invited();
+		const session = await loginPage();
+		expect(await screen.findByText(/You were invited to this rueder\./)).toBeInTheDocument();
+		await fillNew('grace', 'a long password');
+		await userEvent.click(make());
+		await vi.waitFor(() => expect(session.state).toBe('in'));
+		expect(server.invites[0].uses).toBe(1);
+		// The address no longer carries the invitation.
+		expect(location.search).toBe('');
+	});
+
+	it('says when the invitation cannot be used any more', async () => {
+		invited();
+		server.invites[0].uses = 1;
+		await loginPage();
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'This invitation cannot be used any more. Ask for a new one.'
+		);
+		// What is left is the login.
+		expect(screen.getByRole('button', { name: 'Log in' })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Make an account' })).toBeNull();
+	});
+
+	it.each([
+		['full', 'There is no room for another account here.'],
+		['today', 'Enough accounts were made here for one day. Try again tomorrow.']
+	] as const)('says when there is no room: %s', async (why, text) => {
+		invited();
+		await loginPage();
+		await screen.findByText(/You were invited/);
+		server.noRoom = why;
+		await fillNew('grace', 'a long password');
+		await userEvent.click(make());
+		expect(await screen.findByRole('alert')).toHaveTextContent(text);
+	});
+
+	it('says when the name is taken, in German too', async () => {
+		useLanguage('de');
+		server.registrationOpen = true;
+		await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Konto anlegen' }));
+		await userEvent.type(screen.getByLabelText('Name'), 'fiona');
+		await userEvent.type(screen.getByLabelText(/^Passwort/), 'ein langes Passwort');
+		await userEvent.type(screen.getByLabelText('Das Passwort noch einmal'), 'ein langes Passwort');
+		await userEvent.click(screen.getByRole('button', { name: 'Konto anlegen' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'Ein Konto mit diesem Namen gibt es schon.'
+		);
+	});
 });

@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The login: name and password, and where the server has it, the way through an
-	// OpenID Connect provider. There is no sign-up; accounts are made by whoever runs
-	// the server.
-	import type { LoginFailure, Session } from '#lib/api/session.svelte.ts';
+	// OpenID Connect provider. Where the server lets anybody register, or the page
+	// was opened with an invitation, it is also where an account is made.
+	import type { LoginFailure, RegisterFailure, Session } from '#lib/api/session.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import Icon from './Icon.svelte';
 
@@ -12,6 +12,48 @@
 	let password = $state('');
 	let busy = $state(false);
 	let failure: LoginFailure | null = $state(null);
+
+	/** Making an account instead of logging in to one. */
+	let registering = $state(false);
+	let again = $state('');
+	let refusal: RegisterFailure | null = $state(null);
+
+	const invitation = $derived(session.invitation);
+	const mayRegister = $derived(session.ways.registration || invitation?.valid === true);
+	// Whoever comes with an invitation that can be used is here to make an account.
+	let greeted = false;
+	$effect(() => {
+		if (invitation?.valid && !greeted) {
+			greeted = true;
+			registering = true;
+		}
+	});
+
+	/** The shortest password the server takes. */
+	const MIN_PASSWORD = 8;
+	const mismatch = $derived(again !== '' && again !== password);
+	const ready = $derived(
+		name.trim() !== '' && password.length >= MIN_PASSWORD && again === password
+	);
+
+	function refused(refusal: RegisterFailure) {
+		switch (refusal.kind) {
+			case 'closed':
+				return m.register.closed;
+			case 'invite':
+				return m.register.inviteGone;
+			case 'full':
+				return m.register.full;
+			case 'today':
+				return m.register.today;
+			case 'taken':
+				return m.register.taken;
+			case 'invalid':
+				return m.register.invalid(refusal.reason);
+			case 'unreachable':
+				return m.login.unreachable;
+		}
+	}
 
 	/** How the way through the provider ended, which the server says in the address. */
 	const outcomes = {
@@ -26,6 +68,9 @@
 
 	const problem = $derived.by(() => {
 		if (session.state === 'unreachable') return m.login.unreachable;
+		if (registering) return refusal ? refused(refusal) : null;
+		// An invitation that cannot be used is said once, where the login is.
+		if (invitation && !invitation.valid && !failure) return m.register.inviteGone;
 		switch (failure?.kind) {
 			case 'wrong':
 				return m.login.wrong;
@@ -51,6 +96,28 @@
 		}
 	}
 
+	async function register(event: SubmitEvent) {
+		event.preventDefault();
+		if (busy || !ready) return;
+		busy = true;
+		refusal = null;
+		try {
+			refusal = await session.register(name, password);
+			// The invitation did its work; the address no longer needs to carry it.
+			if (!refusal) history.replaceState(history.state, '', location.pathname);
+		} finally {
+			busy = false;
+		}
+	}
+
+	function turn(to: boolean) {
+		registering = to;
+		failure = null;
+		refusal = null;
+		password = '';
+		again = '';
+	}
+
 	const focus = (field: HTMLInputElement) => field.focus();
 </script>
 
@@ -69,7 +136,7 @@
 				</g>
 				<circle cx="7.6" cy="16.6" r="1.6" fill="var(--color-on-accent)" />
 			</svg>
-			{m.login.title}
+			{registering ? m.register.title : m.login.title}
 		</h1>
 
 		{#if problem}
@@ -83,6 +150,74 @@
 			<button type="button" class="tool mt-4" onclick={() => session.check()}>
 				{m.login.retry}
 			</button>
+		{:else if registering}
+			{#if invitation?.valid}
+				<p class="mt-3 text-sm text-soft">{m.register.invited}</p>
+			{/if}
+			<form class="mt-4 space-y-3" onsubmit={register}>
+				<label class="block text-sm">
+					<span class="font-medium">{m.login.name}</span>
+					<input
+						class="mt-1.5 block w-full rounded py-1.5 text-sm"
+						name="username"
+						autocomplete="username"
+						autocapitalize="none"
+						spellcheck="false"
+						maxlength="64"
+						required
+						bind:value={name}
+						use:focus
+					/>
+				</label>
+				<label class="block text-sm">
+					<span class="font-medium">{m.login.password}</span>
+					<input
+						class="mt-1.5 block w-full rounded py-1.5 text-sm"
+						type="password"
+						name="new-password"
+						autocomplete="new-password"
+						minlength={MIN_PASSWORD}
+						required
+						aria-describedby="password-rule"
+						bind:value={password}
+					/>
+				</label>
+				<p id="password-rule" class="-mt-2 text-xs text-soft">
+					{m.register.passwordRule(MIN_PASSWORD)}
+				</p>
+				<label class="block text-sm">
+					<span class="font-medium">{m.register.again}</span>
+					<input
+						class="mt-1.5 block w-full rounded py-1.5 text-sm"
+						type="password"
+						name="new-password-again"
+						autocomplete="new-password"
+						required
+						aria-invalid={mismatch}
+						aria-describedby={mismatch ? 'password-mismatch' : undefined}
+						bind:value={again}
+					/>
+				</label>
+				{#if mismatch}
+					<p id="password-mismatch" class="-mt-2 text-xs text-warn">{m.register.mismatch}</p>
+				{/if}
+				<button
+					type="submit"
+					class="w-full cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
+					disabled={busy || !ready}
+				>
+					{m.register.submit}
+				</button>
+			</form>
+			<p class="mt-4 text-sm">
+				<button
+					type="button"
+					class="cursor-pointer text-link hover:underline"
+					onclick={() => turn(false)}
+				>
+					{m.register.toLogin}
+				</button>
+			</p>
 		{:else}
 			<form class="mt-4 space-y-3" onsubmit={submit}>
 				<label class="block text-sm">
@@ -126,7 +261,19 @@
 				</a>
 			{/if}
 
-			<p class="mt-4 text-xs text-soft">{m.login.note}</p>
+			{#if mayRegister}
+				<p class="mt-4 text-sm">
+					<button
+						type="button"
+						class="cursor-pointer text-link hover:underline"
+						onclick={() => turn(true)}
+					>
+						{m.register.toRegister}
+					</button>
+				</p>
+			{:else}
+				<p class="mt-4 text-xs text-soft">{m.login.note}</p>
+			{/if}
 		{/if}
 	</div>
 </main>

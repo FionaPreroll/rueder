@@ -134,6 +134,50 @@ const de: Messages = {
 		note: 'Registrieren kann man sich nicht. Konten legt an, wer diesen rueder betreibt.'
 	},
 
+	register: {
+		title: 'Konto anlegen',
+		invited: 'Du wurdest zu diesem rueder eingeladen. Such dir einen Namen und ein Passwort aus.',
+		again: 'Das Passwort noch einmal',
+		passwordRule: (characters) => `Mindestens ${n(characters)} Zeichen.`,
+		mismatch: 'Die beiden Passwörter sind verschieden.',
+		submit: 'Konto anlegen',
+		toRegister: 'Konto anlegen',
+		toLogin: 'Bei einem vorhandenen Konto anmelden',
+		closed: 'Ohne Einladung kann sich hier niemand registrieren.',
+		inviteGone: 'Diese Einladung gilt nicht mehr. Bitte um eine neue.',
+		full: 'Hier ist kein Platz für ein weiteres Konto.',
+		today: 'Für heute wurden hier genug Konten angelegt. Versuch es morgen wieder.',
+		taken: 'Ein Konto mit diesem Namen gibt es schon.',
+		invalid: (reason) => `Das kann kein Konto werden. Der Server sagt: ${reason}`
+	},
+
+	invites: {
+		intro:
+			'Mit einem Link kann jemand ein Konto auf diesem rueder anlegen. Er wird einmal gezeigt, hier, wenn du ihn erzeugst.',
+		left: (count) =>
+			count === 0
+				? 'Du hast keine Einladungen zu vergeben.'
+				: `Du kannst noch ${n(count)} ${plural(count, { one: 'Person', other: 'Personen' })} einladen.`,
+		admin: 'Als Admin kannst du immer einladen.',
+		uses: 'Für wie viele Konten',
+		make: 'Link erzeugen',
+		noneLeft: 'Für so viele hast du keine Einladungen mehr.',
+		failed: 'Das hat nicht geklappt. Versuch es gleich noch einmal.',
+		link: 'Der Link, zum Weitergeben jetzt',
+		copy: 'Kopieren',
+		copied: 'Kopiert',
+		goodFor: (days) => `Ein Link gilt ${n(days)} ${plural(days, { one: 'Tag', other: 'Tage' })}.`,
+		yours: 'Deine Links',
+		none: 'Du hast noch keine Links erzeugt.',
+		used: (uses, of) => `${n(uses)} von ${n(of)} benutzt`,
+		until: (when) => `gilt bis ${when}`,
+		ran: (when) => `abgelaufen ${when}`,
+		usedUp: 'aufgebraucht',
+		revoked: 'zurückgezogen',
+		revoke: 'Zurückziehen',
+		revokeLink: (made) => `Den Link zurückziehen, der ${made} erzeugt wurde`
+	},
+
 	home: {
 		newIn: 'Neu in meinen Abonnements',
 		allRead: 'Du hast alles gelesen. Neue Artikel erscheinen hier, sobald sie ankommen.',
@@ -166,6 +210,7 @@ const de: Messages = {
 			reading: 'Lesen',
 			rules: 'Filterregeln',
 			keys: 'Tastatur',
+			invites: 'Einladungen',
 			privacy: 'Datenschutz'
 		},
 		theme: 'Farbschema',
