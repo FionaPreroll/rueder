@@ -25,4 +25,4 @@ export function database() {
 
 /** The accounts the tests log in as; each spec has its own, so one spec's reading does not show in another. */
 export const PASSWORD = 'correct horse battery';
-export const ACCOUNTS = ['login', 'reading', 'tree', 'rules', 'live', 'other', 'inviter'];
+export const ACCOUNTS = ['login', 'reading', 'tree', 'rules', 'live', 'other', 'inviter', 'search'];
