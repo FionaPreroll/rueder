@@ -44,6 +44,16 @@ final class Release {
         return build > installed;
     }
 
+    /**
+     * Whether a downloaded APK is this release of this app: the package that is
+     * installed, and the build version.json names. Android checks the signature
+     * only when an APK updates the app that is installed; an APK of another
+     * package would be installed as an app of its own.
+     */
+    boolean describes(String archivePackage, long archiveBuild, String ownPackage) {
+        return archivePackage != null && archivePackage.equals(ownPackage) && archiveBuild == build;
+    }
+
     /** Its size in megabytes, with one decimal, for the dialog. */
     String megabytes() {
         return String.format(java.util.Locale.ROOT, "%.1f", size / (1024.0 * 1024.0));

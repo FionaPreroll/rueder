@@ -31,4 +31,18 @@ public class ReleaseTest {
         };
         for (String json : wrong) assertNull(json, Release.parse(json));
     }
+
+    @Test
+    public void installsOnlyThisReleaseOfThisApp() {
+        Release release = Release.parse("{\"build\":42,\"size\":1}");
+        assertNotNull(release);
+        String own = "io.github.fionapreroll.rueder";
+        assertTrue(release.describes(own, 42, own));
+        // Another app, which Android would install next to this one.
+        assertFalse(release.describes("io.github.fionapreroll.rueder.other", 42, own));
+        assertFalse(release.describes(null, 42, own));
+        // Another build than the release names.
+        assertFalse(release.describes(own, 41, own));
+        assertFalse(release.describes(own, 43, own));
+    }
 }

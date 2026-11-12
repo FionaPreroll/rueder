@@ -22,7 +22,9 @@ and its Content-Security-Policy stay as they are.
   [`android-latest`](https://github.com/FionaPreroll/rueder/releases/tag/android-latest)
   at every start (`Updates.java` in `src/github/`). A newer build is offered in a
   dialog that says its size and whether the network may cost money; _Download_
-  hands it to Android's download manager and then to Android's installer, which asks
+  hands it to Android's download manager. The app copies the download into its
+  own cache, where no other app can change it, and hands it to Android's installer
+  only if it is this app in the build `version.json` names; the installer asks
   you. Android installs it only if it is signed with the same key as the app you
   have. Nothing else is sent anywhere.
 - **Two builds** (product flavors in `android/app/build.gradle`): `github`, released
@@ -52,7 +54,8 @@ request. On `main`, once the checks have passed, `app-release` replaces the rele
 run number, also the APK's `versionCode`), the commit and the size.
 
 The release is signed with a key that is never in the repository. CI takes it from
-the repository's secrets: `ANDROID_KEYSTORE_BASE64` (the keystore, base64-encoded),
+the repository's secrets, on a push to `main` only; a pull request runs its own
+build scripts before anybody merged them, so it always builds a debug APK: `ANDROID_KEYSTORE_BASE64` (the keystore, base64-encoded),
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without
 them CI builds a debug APK and releases nothing. To make a key once:
 
