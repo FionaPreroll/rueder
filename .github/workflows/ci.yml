@@ -10,8 +10,8 @@ on:
     - cron: "17 5 * * 1"
 
 jobs:
-  # The new server in server/ and the new frontend in web/. The workflows of the Go
-  # backend and the old frontend stay until the switch.
+  # The new server in server/ and the new frontend in web/. The old Go backend
+  # and the old frontend are no longer built or checked.
   server:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
@@ -106,11 +106,125 @@ jobs:
           path: web/build/index.html
           if-no-files-found: error
 
+  # The built page in a real browser against the real server: logging in,
+  # subscribing, reading, folders, filter rules and live updates (web/e2e).
+  e2e:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SQLX_OFFLINE: "true"
+      # Where the run makes its own database, rueder_e2e.
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - run: cargo build
+        working-directory: server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+        working-directory: web
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm run build
+        working-directory: web
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - run: pnpm run e2e
+        working-directory: web
+      # What the browser saw when a test failed: screenshots and traces.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            web/playwright-report
+            web/test-results
+
   # The container image as deploy/compose.yaml runs it: built, started next to
-  # PostgreSQL and asked whether it works. Nothing is published.
+  # PostgreSQL and asked whether it works. Published only by the job below.
   image:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # The layers go to the cache of GitHub Actions, so that an unchanged
+      # stage is not built again and the job publish finds this build there.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: rueder:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # With RUEDER_IMAGE the test starts the image built above instead of
+      # building one of its own.
       - run: deploy/smoke-test.sh
+        env:
+          RUEDER_IMAGE: rueder:ci
+
+  # Every push to main that passed the jobs above becomes
+  # ghcr.io/fionapreroll/rueder:latest and :sha-<commit>.
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [server, dependencies, web, e2e, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # One publish at a time, so that the check below sees what main is when
+    # the push happens.
+    concurrency:
+      group: publish-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      # :latest only for the commit main points at now. When two merges land
+      # close together, the checks of the older one can finish last; it still
+      # gets its :sha-<commit> tag but leaves :latest to the newer one.
+      - id: head
+        run: |
+          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          echo "latest=$([ "$head" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/fionapreroll/rueder
+          tags: |
+            type=raw,value=latest,enable=${{ steps.head.outputs.latest }}
+            type=sha
+      # Same Dockerfile and commit as the job image, so the layers come from
+      # its cache and what is published is what the smoke test started. For
+      # amd64 only: building the server for arm64 under emulation would take
+      # far longer than all other jobs together.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

@@ -2,14 +2,14 @@
 #
 #   cp .env.example .env    # and set POSTGRES_PASSWORD
 #   docker compose up --detach --build
-#
-# The compose files in the root of the repository are the old rueder's.
 
 name: rueder
 
 services:
   rueder:
-    image: rueder
+    # Built from this repository, or the image CI publishes when .env names
+    # it (RUEDER_IMAGE=ghcr.io/fionapreroll/rueder:latest).
+    image: ${RUEDER_IMAGE:-rueder}
     build:
       context: ..
     restart: unless-stopped

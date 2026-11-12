@@ -597,6 +597,17 @@ Abweichungen vom Entwurf:
 
 Was noch fehlt und Schritt 3 ergänzt: eine virtualisierte Liste für sehr lange Feeds, Vorladen des nächsten Artikels.
 
+### Prüfung im Browser
+
+Gebaut in Paket 3.7 (`web/e2e/`, `web/playwright.config.ts`). Die Tests in `web/src/` prüfen die Oberfläche gegen einen nachgebauten Server; ob Oberfläche und echter Server zusammenpassen, zeigen erst diese.
+
+- **Was läuft.** Playwright steuert Chromium gegen den gebauten Server mit dem gebauten Frontend, so wie beides in Betrieb geht. Der Server bekommt je Lauf eine eigene, neu angelegte Datenbank und für jede Spec ein eigenes Konto, damit das Lesen der einen nicht in der anderen auftaucht.
+- **Fixtures.** Eine erfundene Website (`harness/site.js`) liefert drei Feeds, eine Seite je Feed, die ihren Feed nennt, und ein Bild. Die Artikel enthalten, was die Bereinigung entfernen muss: ein Skript, ein Zählpixel, einen Tracking-Parameter. Der Server ruft sie über den gehärteten HTTP-Client ab, mit `FETCH_ALLOW_NETS=127.0.0.0/8`; das ist die Ausnahme für den Betreiber, sonst ist nichts abgeschaltet oder ersetzt. Über `/_control` lassen die Tests einen Artikel eintreffen oder sich ändern.
+- **Wege.** Login mit falschem und richtigem Passwort, Attribute des Sitzungs-Cookies, Abmelden. Abonnieren über die Adresse einer Webseite, Lesen, Stern, wieder ungelesen, nur ungelesene, alle als gelesen, jeweils auch nach einem Neuladen. Ordner anlegen, mit Tastatur und Drag & Drop einsortieren, umbenennen, auflösen. Eine Filterregel mit Vorschau, der Liste der ausgeblendeten und dem Löschen. Live-Updates: ein neuer Artikel, eine neue Version mit Vergleich, Lesestand im zweiten Tab. Zwei Konten, von denen das eine nichts vom anderen sieht.
+- **Was sie an Security mitprüfen.** Ohne Sitzung antworten API und Bild-Proxy mit 401. Der Cookie ist `HttpOnly`, `Secure` und `SameSite=Lax` und für Skripte unsichtbar. Der Browser fragt beim Lesen nichts außer rueder selbst. Das Bild kommt vom Proxy, das Skript des Artikels läuft nicht. Ein fremdes Konto bekommt für Feed, Artikel und Ordner 404.
+- **Abruf auf Wunsch gibt es nicht.** Ein Test, der auf einen Abruf wartet, setzt in der Datenbank alle Feeds auf fällig und wartet die nächste Runde des Servers ab, höchstens 30 Sekunden.
+- **Nicht abgedeckt:** OpenID Connect (braucht einen Anbieter), OPML, Labels, Einstellungen, die Statusseite und die Ansicht fürs Handy. Geprüft wird nur in Chromium.
+
 ## Betrieb
 
 - Ein Container mit dem Rust-Programm und dem gebauten Frontend, daneben PostgreSQL, davor ein Reverse-Proxy für TLS.
@@ -615,8 +626,8 @@ Gebaut in Paket 2.10 (`Dockerfile`, `deploy/`). Die Anleitung zur Installation i
 
 Abweichungen vom Entwurf, und was offen ist:
 
-- Die Compose-Datei liegt in `deploy/` und nicht im Wurzelverzeichnis. Dort liegen bis zum Abbau (Paket 4.7) die Dateien des alten Systems, und `docker compose` würde eine neue `compose.yaml` daneben der alten `docker-compose.yaml` vorziehen.
-- Das Image wird nirgends veröffentlicht. Wer rueder installiert, baut es aus dem Repository. Ob und wo es veröffentlicht wird, ist nicht entschieden.
+- Die Compose-Datei liegt in `deploy/` und nicht im Wurzelverzeichnis. Dort lagen die Compose-Dateien des alten Systems, als sie entstand; sie sind seit dem 2026-11-11 weg, `deploy/` bleibt trotzdem, weil `.env.example`, Anleitung und Smoke-Test dazugehören.
+- **Veröffentlicht** wird das Image seit dem 2026-11-11 von der CI, auf Fionas Wunsch: Jeder Push auf `main`, dessen Jobs grün sind, wird `ghcr.io/fionapreroll/rueder:sha-<commit>` und, solange `main` noch darauf zeigt, `:latest`. Gebaut wird es einmal im Job `image` und vom Smoke-Test gestartet; der Job `publish` baut es aus deren Cache noch einmal und schiebt es. Wer installiert, kann es nehmen (`RUEDER_IMAGE` in `deploy/.env`) oder weiter selbst bauen. Es gibt das Image nur für amd64: Den Server unter Emulation für arm64 zu bauen, dauerte länger als alle anderen Jobs zusammen. Versionsnummern gibt es noch keine.
 - PostgreSQL läuft mit seinen Standardwerten; nur `shared_buffers` lässt sich über `POSTGRES_SHARED_BUFFERS` setzen. Die [Messung](implementation.md#messung) lief mit 2 GB.
 
 ## Status für Admins

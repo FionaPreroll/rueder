@@ -56,6 +56,7 @@ pnpm lint            # prettier --check
 pnpm check           # svelte-check and TypeScript
 pnpm test            # Vitest, tests sit next to the code as *.test.ts
 pnpm test:coverage
+pnpm e2e             # end-to-end tests in a browser against the real server
 pnpm build           # the app for the server to serve, in build/
 pnpm build:single    # the whole app as one build/index.html
 ```
@@ -69,6 +70,23 @@ session cookie for HTTPS and for localhost only.
 `pnpm build:single` packs the reader with made-up data into one HTML file that runs
 from any address or straight from the file system, for handing the interface around.
 CI attaches it to every run as the artifact `rueder-ui-draft`.
+
+## End-to-end tests
+
+`pnpm e2e` runs the built page in Chromium against the real server (`e2e/`, with
+Playwright): logging in, subscribing and reading, folders, filter rules, live
+updates, and that one account sees nothing of another. It needs
+
+- the server's binary: `cargo build` in `../server`, or `RUEDER_BIN` names it,
+- the built page: `pnpm build`,
+- a PostgreSQL that `DATABASE_URL` names, with an account that may create
+  databases, and `psql`,
+- the browser, once: `pnpm exec playwright install chromium`.
+
+Every run makes the database `rueder_e2e` anew, starts the server on
+`localhost:3210` and a made-up website with a few feeds on `127.0.0.1:3211`
+(`e2e/harness/`). Each spec logs in as an account of its own. `pnpm e2e reading`
+runs one spec, `pnpm e2e --ui` shows the browser.
 
 ## Conventions
 
