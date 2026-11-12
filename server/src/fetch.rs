@@ -148,6 +148,8 @@ pub async fn fetch_feed(
     if let Some(first) = stored.first_new {
         filters::apply_new(&mut tx, feed_id, first).await?;
     }
+    // What a reader who moved here had read elsewhere is read here too.
+    crate::reading::settle_read_before(&mut tx, feed_id).await?;
     let state = sqlx::query!(
         "SELECT last_seq, created_at, fetch_interval_s FROM feeds WHERE id = $1",
         feed_id

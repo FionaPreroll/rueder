@@ -49,7 +49,7 @@ struct Label {
 }
 
 /// A color as `#rrggbb`, which is all the interface makes.
-fn color(color: &str) -> Result<&str, AppError> {
+pub(crate) fn color(color: &str) -> Result<&str, AppError> {
     let digits = color.strip_prefix('#').unwrap_or_default();
     if digits.len() == 6 && digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         Ok(color)

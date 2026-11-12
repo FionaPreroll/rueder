@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT folder_id, feed_id, field, match AS matching, pattern, action\n         FROM filter_rules WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "folder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "field",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "field"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "matching",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "match"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "pattern",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "pattern"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "action"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "595db821ef866f87a09d3e2c1b6d3e9cb0387bef24b16a350f8f13ea93b48bcd"
+}

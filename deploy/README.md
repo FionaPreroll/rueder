@@ -156,6 +156,8 @@ docker compose exec rueder rueder admin add fiona          # sees the server sta
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
 docker compose exec rueder rueder reclean                  # after the cleaning's rules changed
+docker compose exec -T rueder rueder account export fiona > fiona.json            # move an account away
+docker compose exec -T rueder rueder account import fiona /dev/stdin < fiona.json  # and in, here or elsewhere
 docker compose logs --follow rueder
 ```
 

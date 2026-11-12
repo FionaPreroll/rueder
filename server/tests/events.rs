@@ -190,6 +190,7 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/feeds/7/agent", area(Area::Tree)),
         ("/api/feeds", area(Area::Tree)),
         ("/api/opml", area(Area::Tree)),
+        ("/api/import", Some(Changed::Everything)),
         // What nobody has thought of yet makes browsers load the tree anew.
         ("/api/something/new", area(Area::Tree)),
         // Questions that are sent like changes, and what only admins see.

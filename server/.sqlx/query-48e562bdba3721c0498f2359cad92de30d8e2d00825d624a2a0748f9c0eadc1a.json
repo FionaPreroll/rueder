@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, folder_id, feed_id, field, match AS matching, pattern, action\n         FROM filter_rules WHERE account_id = $1 ORDER BY position, id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "folder_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "folder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "field",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "field"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "matching",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "match"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "pattern",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "pattern"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "filter_rules",
+            "name": "action"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "48e562bdba3721c0498f2359cad92de30d8e2d00825d624a2a0748f9c0eadc1a"
+}

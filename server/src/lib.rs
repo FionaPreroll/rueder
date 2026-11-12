@@ -24,6 +24,7 @@ pub mod reports;
 pub mod sessions;
 pub mod status;
 pub mod subscribe;
+pub mod transfer;
 pub mod tree;
 pub mod typescript;
 
@@ -211,6 +212,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(profile::routes())
         .merge(status::routes())
         .merge(reports::routes())
+        .merge(transfer::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
         // Around all of the API: whatever a request changes is announced to
         // the account's other tabs.
@@ -218,8 +220,8 @@ fn api(state: &AppState) -> Router<AppState> {
             state.clone(),
             events::announce,
         ))
-        // What the API is sent is small. Only an OPML file may be larger,
-        // and says so at its own endpoint.
+        // What the API is sent is small. Only an OPML file and the file of an
+        // account may be larger, and say so at their own endpoints.
         .layer(DefaultBodyLimit::max(MAX_BODY))
 }
 

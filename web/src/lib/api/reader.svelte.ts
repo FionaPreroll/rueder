@@ -25,12 +25,14 @@ import type {
 import type { FilterRule } from '#lib/filters.ts';
 import { settings as shown, understood, type Settings } from '#lib/settings.svelte.ts';
 import {
+	MAX_ACCOUNT_FILE,
 	MAX_OPML,
 	type Abilities,
 	type Account,
 	type Found,
 	type Fresh,
 	type Imported,
+	type Moved,
 	type Notice,
 	type Reader,
 	type Refusal,
@@ -345,6 +347,7 @@ export class ServerReader implements Reader {
 			markOlder: true,
 			subscribe: true,
 			opml: true,
+			move: true,
 			status: account.admin,
 			reports: true
 		};
@@ -1554,6 +1557,36 @@ export class ServerReader implements Reader {
 		} catch (error) {
 			this.refusal(error);
 			return null;
+		}
+	}
+
+	async exportAccount() {
+		try {
+			return await this.after(() => this.api.exportAccount());
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
+
+	/**
+	 * Everything the account has may have changed, so everything is loaded anew.
+	 * The other tabs hear of it from the server; this one does not hear its own.
+	 */
+	async importAccount(file: Blob): Promise<Moved> {
+		if (file.size > MAX_ACCOUNT_FILE) return { problem: 'tooLarge' };
+		try {
+			const moved = await this.after(() => this.api.importAccount(file));
+			await Promise.all([
+				this.loadTree(),
+				this.loadSettings(),
+				this.loadLabels(),
+				this.loadRules()
+			]);
+			this.relist();
+			return moved;
+		} catch (error) {
+			return this.refusal(error);
 		}
 	}
 

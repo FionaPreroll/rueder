@@ -589,6 +589,18 @@ pub async fn announce(State(state): State<AppState>, mut request: Request, next:
         && let Some(what) = changed(&path)
     {
         let change = match what {
+            Changed::Everything => {
+                for area in [Area::Labels, Area::Settings, Area::Rules] {
+                    let by = by.clone();
+                    state
+                        .events
+                        .publish(vec![session.account_id], Change::Area { area, by });
+                }
+                Change::Area {
+                    area: Area::Tree,
+                    by,
+                }
+            }
             Changed::Area(area) => Change::Area { area, by },
             Changed::Reading { feed_id, seq } => {
                 let feed = match feed_id {
@@ -610,6 +622,9 @@ pub async fn announce(State(state): State<AppState>, mut request: Request, next:
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Changed {
     Area(Area),
+    /// Everything an account has: a move from another rueder brings folders,
+    /// feeds, what was read, labels, rules and settings at once.
+    Everything,
     Reading {
         feed_id: Option<i32>,
         seq: Option<i32>,
@@ -644,6 +659,7 @@ pub fn changed(path: &str) -> Option<Changed> {
         ["reports", "consent"] => Changed::Area(Area::Settings),
         ["reports", ..] => return None,
         ["rules", ..] => Changed::Area(Area::Rules),
+        ["import"] => Changed::Everything,
         ["labels", ..] | ["feeds", _, "articles", _, "labels", ..] => Changed::Area(Area::Labels),
         ["read"] | ["folders", _, "read"] => Changed::Reading {
             feed_id: None,

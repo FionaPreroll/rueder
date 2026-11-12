@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.last_seq, f.last_success_at IS NULL AS \"never!\", s.read_upto\n         FROM feeds f JOIN subscriptions s ON s.feed_id = f.id AND s.account_id = $2\n         WHERE f.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "never!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "read_upto",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "read_upto"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "cfeb988ef651af7ef9eaf4fdf762537870b26c91ed6e9a4eba78b2ab841f1d43"
+}

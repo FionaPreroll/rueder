@@ -192,7 +192,7 @@ enum Change {
 /// so the exceptions stay few however long somebody reads article by article.
 /// A hidden article the mark passes without it being read is kept unread, so it
 /// is unread again should its rule go.
-async fn compact(
+pub(crate) async fn compact(
     conn: &mut PgConnection,
     account_id: i32,
     feed_id: i32,
@@ -317,7 +317,19 @@ pub async fn mark_all_read(
     upto: i32,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let done = mark_all_read_on(&mut tx, account_id, feed_id, upto).await?;
+    tx.commit().await?;
+    Ok(done)
+}
+
+/// [`mark_all_read`] inside a transaction the caller has open.
+pub async fn mark_all_read_on(
+    tx: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    upto: i32,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(&mut *tx, account_id, feed_id).await? else {
         return Ok(false);
     };
     let upto = upto.min(last);
@@ -356,8 +368,7 @@ pub async fn mark_all_read(
     )
     .execute(&mut *tx)
     .await?;
-    compact(&mut tx, account_id, feed_id, new_mark).await?;
-    tx.commit().await?;
+    compact(&mut *tx, account_id, feed_id, new_mark).await?;
     Ok(true)
 }
 
@@ -376,7 +387,20 @@ pub async fn mark_older_read(
     cutoff: OffsetDateTime,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((mark, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let done = mark_older_read_on(&mut tx, account_id, feed_id, upto, cutoff).await?;
+    tx.commit().await?;
+    Ok(done)
+}
+
+/// [`mark_older_read`] inside a transaction the caller has open.
+pub async fn mark_older_read_on(
+    tx: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    upto: i32,
+    cutoff: OffsetDateTime,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(&mut *tx, account_id, feed_id).await? else {
         return Ok(false);
     };
     let upto = upto.min(last);
@@ -458,9 +482,41 @@ pub async fn mark_older_read(
     )
     .execute(&mut *tx)
     .await?;
-    compact(&mut tx, account_id, feed_id, new_mark).await?;
-    tx.commit().await?;
+    compact(&mut *tx, account_id, feed_id, new_mark).await?;
     Ok(true)
+}
+
+/// After the first fetch of a feed that came with a move from another rueder
+/// (see `transfer`): what was published before the time the subscription
+/// keeps in `read_before` counts as read, as it did there. The time is used
+/// once and then forgotten. Runs in the transaction that stored the articles.
+pub async fn settle_read_before(conn: &mut PgConnection, feed_id: i32) -> anyhow::Result<()> {
+    let waiting = sqlx::query!(
+        r#"SELECT s.account_id, s.read_before AS "read_before!", f.last_seq
+           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+           WHERE s.feed_id = $1 AND s.read_before IS NOT NULL"#,
+        feed_id
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    for sub in waiting {
+        mark_older_read_on(
+            &mut *conn,
+            sub.account_id,
+            feed_id,
+            sub.last_seq,
+            sub.read_before,
+        )
+        .await?;
+        sqlx::query!(
+            "UPDATE subscriptions SET read_before = NULL WHERE account_id = $1 AND feed_id = $2",
+            sub.account_id,
+            feed_id,
+        )
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Sets or takes away an article's star. Returns false if there is no such

@@ -12,6 +12,7 @@ import type {
 	Found,
 	Fresh,
 	Imported,
+	Moved,
 	Reader,
 	RulePreview,
 	ServerStatus,
@@ -140,6 +141,7 @@ export class DemoReader implements Reader {
 		markOlder: true,
 		subscribe: true,
 		opml: false,
+		move: false,
 		status: true,
 		reports: false
 	};
@@ -568,6 +570,15 @@ export class DemoReader implements Reader {
 
 	async exportOpml() {
 		return null;
+	}
+
+	/** Nor can the draft move; `can.move` keeps the page from asking. */
+	async exportAccount() {
+		return null;
+	}
+
+	async importAccount(): Promise<Moved> {
+		return { problem: 'unreachable' };
 	}
 
 	setReportsConsent() {}

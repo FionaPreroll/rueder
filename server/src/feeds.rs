@@ -265,7 +265,7 @@ pub(crate) fn add_inline(
     }
 }
 
-fn teaser(html: &str) -> String {
+pub(crate) fn teaser(html: &str) -> String {
     let text = text(html);
     match text.char_indices().nth(TEASER) {
         None => text,

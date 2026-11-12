@@ -1,6 +1,6 @@
 # rueder: Architektur des neuen Systems
 
-Stand 2026-11-11. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
+Stand 2026-11-12. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
 
 Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand und der Import, aus Schritt 2 der gehärtete HTTP-Client, der Abruf, die Bereinigung, der Bild-Proxy und die Live-Updates. Alles andere hier ist der Entwurf, nach dem gebaut wird. Sobald ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für Filterregeln und Ordnerbaum die Modelle in `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
 
@@ -16,6 +16,7 @@ Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand 
 - [Bild-Proxy](#bild-proxy)
 - [Live-Updates](#live-updates)
 - [Login und Sitzungen](#login-und-sitzungen)
+- [Umzug eines Kontos](#umzug-eines-kontos)
 - [Security](#security)
 - [API](#api)
 - [Frontend](#frontend)
@@ -308,6 +309,7 @@ Ereignisse sind Hinweise, nicht die Daten selbst. Sie sagen, was sich geändert 
 | `feed` | Abruffehler beginnt oder endet | `feed_id`, `error` (Grund oder leer) | Warnzeichen setzen oder entfernen. |
 | `reading` | Gelesen, wieder ungelesen, Stern, „alle als gelesen“ | `feed` (Nummern des Feeds nach der Änderung: `last_seq`, `read_upto`, `unread`; leer, wenn es um mehrere Feeds ging), `seq` (der Artikel, wenn es um einen ging), `by` | Zahlen des Feeds übernehmen oder, ohne `feed`, den Baum neu laden; die sichtbare Liste neu laden, wenn sie betroffen ist. |
 | `tree` | Ordner oder Abo angelegt, umbenannt, verschoben, gelöscht | `by` | Baum neu laden. |
+| `tree`, `labels`, `settings`, `rules` zugleich | Umzug eines Kontos (`POST /api/import`) | `by` | Was jedes einzelne sagt. |
 | `labels` | Label angelegt, geändert, gelöscht, zugeordnet | `by` | Labels und die sichtbare Liste neu laden. |
 | `settings` | Einstellungen geändert | `by` | Einstellungen neu laden. |
 | `rules` | Filterregel geändert | `by` | Regeln und Baum neu laden, denn Regeln blenden Artikel aus. |
@@ -356,6 +358,27 @@ Abweichungen vom Entwurf, und was offen ist:
 - Die Prüfung des `Origin`-Headers gibt es seit Paket 2.9, siehe [Header, Herkunft und Limits](#header-herkunft-und-limits). Seither hat ein Konto auch höchstens 100 Sitzungen; mit der nächsten endet die, die am längsten nicht genutzt wurde.
 
 Wie die bestehenden Konten umziehen, steht bei den [Detailfragen](plan.md#detailfragen): Der Import führt sie mit den Konten zusammen, die es im neuen rueder schon gibt, und legt nur die übrigen ohne Passwort an.
+
+## Umzug eines Kontos
+
+Gebaut in Paket 3.10 (`server/src/transfer.rs`, Migration `0003_moving.sql`). Ein Konto zieht als eine JSON-Datei von einem rueder zum anderen: `GET /api/export` gibt sie aus, `POST /api/import` nimmt sie in das eingeloggte Konto, auf demselben rueder oder einem anderen. Für Admins tun `rueder account export <name>` und `rueder account import <name> <datei>` dasselbe auf der Kommandozeile, etwa um mehrere Konten auf einmal umzuziehen.
+
+**Was in der Datei steht.** Die Einstellungen, der Baum von oben nach unten in seiner Reihenfolge (Ordner mit ihrem Pfad aus Namen, Abos mit Feed-Adresse, Website, Titel des Feeds, eigenem Namen, Ordnerpfad und User-Agent), die Labels mit Farbe, die Filterregeln mit ihrem Bereich als Ordnerpfad oder Feed-Adresse, und je Abo der Lesestand: der Artikel, an dem die Lesemarke steht, und die Artikel, die davon abweichen (gelesen über der Marke, ungelesen behalten darunter), die einen Stern oder Labels haben. Jeder Artikel steht mit Nummer im Feed, Kennung (GUID), Adresse seiner Seite, Zeit und Titel darin, jeder Feed mit seiner Nummer. Artikel mit Stern oder Label bringen dazu ihren Text mit, ihre Anhänge und ihr Aufmacherbild, damit sie nicht verloren gehen, wo der andere rueder sie nie hatte. Kopf: `format` (`rueder-account`), `version` (1) und `exported_at`.
+
+**Was nicht darin steht.** Passwort, Sitzungen, die Identitäten bei einem Anbieter von OpenID Connect, das Recht als Admin, die Zustimmung zu Fehlerberichten (sie gilt dem Server, dem sie gegeben wurde), alte Versionen der Artikel und „ausgeblendet“, das die Regeln am Ziel neu entscheiden.
+
+**Nummern zählen nicht.** Die Nummern von Feeds und Artikeln sind die des Servers, von dem die Datei kommt; ein anderer rueder hat andere. Sie stehen nur zur Orientierung darin. Beim Import gilt:
+
+- Ein **Feed** wird an seiner Adresse erkannt, wie beim Abonnieren. Gibt es ihn nicht, legt der Import ihn an, mit dem User-Agent aus der Datei, und die nächste Runde des [Abrufs](#abruf) holt ihn, wie beim OPML-Import. Ordner werden wie dort an ihrem Namen an ihrer Stelle wiedererkannt oder angelegt (dafür ist der OPML-Import in `subscribe::take` herausgelöst).
+- Ein **Artikel** wird im Feed an seiner Kennung erkannt, sonst an der Adresse seiner Seite, aber nur, wenn kein anderer Artikel des Feeds dieselbe hat.
+- Die **Lesemarke** steht am Artikel, an dem sie in der Datei stand. Ist er nicht zu finden, gilt seine Zeit: Die Marke rückt so weit, wie alles darunter nicht jünger ist (wie „älter als“ bei „alle als gelesen“). Hat ein Feed am Ziel noch nie einen Abruf hinter sich, merkt sich das Abo die Zeit in `subscriptions.read_before`, und der erste Abruf markiert, was davor erschien, als gelesen (`reading::settle_read_before`). Ohne das wären nach einem Umzug alle Feeds, die am Ziel neu sind, voller Ungelesener.
+- **Ausnahmen, Sterne und Labels** werden an den gefundenen Artikeln gesetzt. Ein Artikel mit Text, der fehlt, wird mit diesem Text angelegt; er wird dafür neu bereinigt, denn er kommt von einem anderen Server. Er bekommt die nächste Nummer des Feeds und steht deshalb in einem Feed, der schon Artikel hat, oben in der vollen Liste. Für alle anderen, die den Feed lesen, gilt er als gelesen, damit alte Artikel nicht als neue erscheinen. Was weder zu finden ist noch Text hat, geht verloren; die Antwort zählt es.
+
+**Zusammenführen.** Ein Import fügt hinzu und nimmt nichts weg: Ein Abo, das das Konto schon hat, bleibt an seinem Platz, seine Lesemarke rückt nur vor, Sterne und Labels kommen dazu. Labels werden am Namen erkannt, Regeln, die es genau so schon gibt, nicht doppelt angelegt. Nur die Einstellungen werden ersetzt, wenn die Datei welche hat. Alles geschieht in einer Transaktion, am Ende bewerten die Regeln alles neu (`filters::reapply`). Ein zweiter Import derselben Datei ändert nichts mehr. Die Antwort zählt neue und bekannte Feeds, neue Ordner, gefundene, mitgebrachte und verlorene Artikel, neue Labels und Regeln, was ausgelassen wurde und ob die Einstellungen kamen. Andere Tabs des Kontos laden alles neu: `["import"]` ist in `events::changed` alles zugleich (`Changed::Everything`), die Schicht der API meldet `tree`, `labels`, `settings` und `rules`.
+
+**Grenzen.** Die Datei darf 32 MB groß sein (`transfer::MAX_FILE`) und höchstens 2.000 Feeds, 100 Ordner, 100 Labels, 200 Regeln und 50.000 Artikel nennen (`transfer::MAX_ARTICLES`); was darüber liegt, lehnt der Import als Ganzes ab, ebenso eine fremde `format` oder `version`. Was nur falsch ist (ein Feed ohne abrufbare Adresse, ein Artikel ohne Kennung, ein Label mit falscher Farbe, eine Regel mit kaputtem Muster oder ohne ihren Ordner), wird ausgelassen und gezählt. Ordnerpfade werden nach fünf Ebenen abgeschnitten. Weil ein Import Artikel anlegen kann, darf ein Konto drei auf einmal und danach einen alle zwei Stunden (`rate::IMPORTS`). Die Datei muss als `application/json` kommen, was ein Formular einer fremden Seite nicht kann.
+
+**Bilder.** Die Datei nennt die Adressen von Bildern in Texten, Vorschaubildern und Aufmacherbildern, wie sie gespeichert sind, nicht über den Bild-Proxy: Dessen Signatur gilt nur auf dem Server, der sie gemacht hat, und die Datei ist für einen anderen rueder, nicht zum Anzeigen. Sie kommt als Download (`Content-Disposition: attachment`) mit der Policy `default-src 'none'` der API, so dass ein Browser, der sie öffnet, nichts davon lädt.
 
 ## Security
 
@@ -426,6 +449,7 @@ Der Server braucht dafür keine Einstellung mit seiner eigenen Adresse. Der Reve
 |---|---|---|
 | Jede Anfrage, auch an Frontend und Bild-Proxy | 1200 auf einmal, danach 50 je Sekunde | Adresse (bei IPv6 das /64) |
 | Abrufe fremder Adressen: Feed-Suche und das Abonnieren eines Feeds, den noch niemand liest | 30 auf einmal, danach einer alle zwei Sekunden | Konto |
+| Umzüge in ein Konto (`POST /api/import`) | 3 auf einmal, danach einer alle zwei Stunden | Konto |
 | Falsche Passwörter | 10 je Name und 30 je Adresse in 15 Minuten, siehe [Login und Sitzungen](#login-und-sitzungen) | Name und Adresse |
 | Offene Live-Verbindungen | 20, siehe [Live-Updates](#live-updates) | Konto |
 
@@ -441,7 +465,7 @@ Die Grenze je Adresse liegt weit über dem, was Lesen braucht: Eine Liste lädt 
 | Labels | 100 | `labels::MAX_LABELS` |
 | Sitzungen | 100, die am längsten ungenutzte endet | `sessions::MAX_PER_ACCOUNT` |
 | Einstellungen | 16 KB | `tree::MAX_SETTINGS` |
-| Eine Anfrage an die API | 256 KB, eine OPML-Datei 1 MB mit höchstens 2000 Feeds | `MAX_BODY`, `subscribe::MAX_OPML` |
+| Eine Anfrage an die API | 256 KB, eine OPML-Datei 1 MB mit höchstens 2000 Feeds, die Datei eines Kontos 32 MB mit höchstens 50.000 Artikeln | `MAX_BODY`, `subscribe::MAX_OPML`, `transfer::MAX_FILE` |
 
 Die Grenze für Feeds ist mit diesem Paket dazugekommen: Jeder abonnierte Feed wird abgerufen, solange ihn jemand liest, und ohne sie hätte ein Konto den Server über wiederholte OPML-Importe beliebig viele Feeds abrufen lassen können. Ein Import, der sie überschreiten würde, wird als Ganzes abgelehnt.
 
@@ -510,6 +534,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 | Regeln | `GET` und `POST /api/rules`, `PUT` und `DELETE /api/rules/{id}`, `POST /api/rules/order`, `POST /api/rules/preview`, `GET /api/rules/hits` |
 | Labels | `GET` und `POST /api/labels`, `PATCH` und `DELETE /api/labels/{id}`, `POST /api/labels/order`, `PUT` und `DELETE /api/feeds/{id}/articles/{seq}/labels/{label}` |
 | Einstellungen | `GET` und `PUT /api/settings` |
+| Umzug | `GET /api/export`, `POST /api/import`, siehe [Umzug eines Kontos](#umzug-eines-kontos) |
 | Live | `GET /api/events` (SSE), siehe [Live-Updates](#live-updates) |
 | Bilder | `GET /img/<signatur>/<größe>/<adresse>` |
 
@@ -517,7 +542,7 @@ Was für alle gilt:
 
 - **Ohne Sitzung 401.** Jeder Handler nimmt den Extraktor `Session` und bindet seine Abfragen an dessen Kontonummer. Was einem anderen Konto gehört oder was es nicht gibt, ist beides 404; die Antwort verrät nicht, welches von beiden. Zu jedem Endpunkt gibt es einen Test, in dem ein zweites Konto nichts davon sieht und nichts daran ändert.
 - **Listen blättern mit einem Anker** statt mit einem Offset: `before` ist die ID des letzten gezeigten Artikels, `limit` höchstens 200 (Standard 50). Mit `after` statt `before` läuft die Liste vom ältesten Artikel an, `after=0` beginnt ganz vorn; beides zugleich ist 400. Die aufsteigende Liste ist dieselbe Zusammenführung der Feeds, nur in die andere Richtung, und kostet dasselbe. Jeder Eintrag trägt Lesestand, Stern und Labels.
-- **Bilder zeigen immer auf den Bild-Proxy.** Der Text eines Artikels geht durch `Signer::in_html`, Vorschaubild, Aufmacherbild und Icon durch `Signer::address`. Ein Server ohne Bild-Proxy liefert Texte ohne Bilder aus.
+- **Bilder zeigen immer auf den Bild-Proxy.** Der Text eines Artikels geht durch `Signer::in_html`, Vorschaubild, Aufmacherbild und Icon durch `Signer::address`. Ein Server ohne Bild-Proxy liefert Texte ohne Bilder aus. Die einzige Ausnahme ist die Datei eines Kontos für einen anderen rueder, siehe [Umzug eines Kontos](#umzug-eines-kontos).
 - **Fehler** sind 400 mit einem Satz als Text (eine Eingabe, die gegen eine Regel verstößt), 422 (eine Anfrage, die sich nicht lesen lässt), 403 (nur für Admins, falsches bisheriges Passwort, eine ändernde Anfrage von einer fremden Seite), 413 (eine Anfrage über 256 KB), 429 mit `Retry-After` (zu viele Fehlversuche, zu viele Anfragen) und 500 ohne Einzelheiten. Was für jede Anfrage und jede Antwort gilt, steht unter [Header, Herkunft und Limits](#header-herkunft-und-limits).
 - **Alle als gelesen** nennt, bis wohin: `upto` (Nummer im Feed) oder `upto_id` (ID des neuesten Artikels, den die Liste zeigte). Was danach eintrifft, bleibt ungelesen. Mit `older_than` (Sekunden, höchstens hundert Jahre) gilt es nur für das, was länger her veröffentlicht wurde; der Server rechnet die Grenze mit seiner eigenen Uhr. Die Lesemarke rückt so weit vor, wie alles darunter alt genug ist; ein alter Artikel, der zwischen jüngeren eintraf, wird eine Ausnahme über der Marke.
 - **Welche Regel ausblendet,** nennt ein geöffneter Artikel in `hidden_by`: die erste eingeschaltete Regel in der Reihenfolge der Liste, die für den Feed gilt, ausblendet und trifft. Gespeichert wird das nicht, es wird beim Öffnen nachgerechnet; nur wenn der Artikel ausgeblendet ist.
@@ -586,6 +611,7 @@ Gebaut in Paket 3.1 (`web/src/lib/api/`):
 - **Ein neuer Ordner aus zwei Feeds:** Wird ein Feed auf die mittlere Zone eines anderen gezogen, entsteht an dessen Stelle ein Ordner „Neuer Ordner“ mit beiden darin. Der `ServerReader` legt ihn mit `POST /api/folders` im Ordner des Ziels an und zieht ihn und die beiden Feeds mit `POST /api/tree/move` an ihren Platz; der Ordner erscheint, wenn der Server ihn hat, wie jeder neue Ordner.
 - **Umbenennen und Abbestellen** eines Feeds stehen im Menü seiner Zeile im Baum und wirken sofort. Ein leerer Name gibt dem Feed seinen eigenen zurück, den nur der Server kennt; deshalb wird der Baum danach neu geholt. Abbestellen fragt nach, weil mit dem Abo der Lesestand des Feeds geht; eine Regel, die für den Feed gilt, bleibt wie auf dem Server und greift wieder, wenn er erneut abonniert wird.
 - **OPML** steht im selben Dialog. Eine Datei geht, wie sie ist, als `text/x-opml` an `POST /api/opml`; eine über 1 MB lehnt schon der Browser ab. Der Dialog nennt, wie viele Feeds und Ordner neu sind, welche schon abonniert waren und was ausgelassen wurde. Der Export holt `GET /api/opml` und bietet die Datei als `rueder-<Datum>.opml` zum Speichern an. Der `DemoReader` hat kein OPML (`Reader.can.opml`): Er bräuchte einen eigenen Parser im Browser, der nur dem Entwurf diente.
+- **Umzug** (Paket 3.10) ist ein Reiter der Einstellungen. „Konto exportieren“ holt `GET /api/export` und bietet die Datei als `rueder-<Datum>.json` zum Speichern an; „Kontodatei importieren“ schickt eine gewählte Datei, wie sie ist, als `application/json` an `POST /api/import`, eine über 32 MB lehnt schon der Browser ab. Danach lädt der `ServerReader` Baum, Einstellungen, Labels, Regeln und die gezeigte Liste neu, denn die Ereignisse des Servers überhört er als eigene. Der Reiter nennt, was kam, was verloren ging und was ausgelassen wurde, und bei 429 die Minuten bis zum nächsten Versuch. Der `DemoReader` kann es nicht (`Reader.can.move`), der Reiter fehlt dort.
 
 Abweichungen vom Entwurf:
 
@@ -605,7 +631,8 @@ Gebaut in Paket 3.7 (`web/e2e/`, `web/playwright.config.ts`). Die Tests in `web/
 - **Wege.** Login mit falschem und richtigem Passwort, Attribute des Sitzungs-Cookies, Abmelden. Abonnieren über die Adresse einer Webseite, Lesen, Stern, wieder ungelesen, nur ungelesene, alle als gelesen, jeweils auch nach einem Neuladen. Ordner anlegen, mit Tastatur und Drag & Drop einsortieren, umbenennen, auflösen. Eine Filterregel mit Vorschau, der Liste der ausgeblendeten und dem Löschen. Live-Updates: ein neuer Artikel, eine neue Version mit Vergleich, Lesestand im zweiten Tab. Zwei Konten, von denen das eine nichts vom anderen sieht.
 - **Was sie an Security mitprüfen.** Ohne Sitzung antworten API und Bild-Proxy mit 401. Der Cookie ist `HttpOnly`, `Secure` und `SameSite=Lax` und für Skripte unsichtbar. Der Browser fragt beim Lesen nichts außer rueder selbst. Das Bild kommt vom Proxy, das Skript des Artikels läuft nicht. Ein fremdes Konto bekommt für Feed, Artikel und Ordner 404.
 - **Abruf auf Wunsch gibt es nicht.** Ein Test, der auf einen Abruf wartet, setzt in der Datenbank alle Feeds auf fällig und wartet die nächste Runde des Servers ab, höchstens 30 Sekunden.
-- **Nicht abgedeckt:** OpenID Connect (braucht einen Anbieter), OPML, Labels, Einstellungen, die Statusseite und die Ansicht fürs Handy. Geprüft wird nur in Chromium.
+- **Umzug** (`move.spec.ts`, Paket 3.10): Ein Konto liest und markiert einen Artikel, exportiert sich, ein zweites importiert die Datei und findet Feed, Lesestand und Stern wieder, auch nach einem Neuladen.
+- **Nicht abgedeckt:** OpenID Connect (braucht einen Anbieter), OPML, Labels, Einstellungen außer dem Umzug, die Statusseite und die Ansicht fürs Handy. Geprüft wird nur in Chromium.
 
 ## Betrieb
 
