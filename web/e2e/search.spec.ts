@@ -12,8 +12,8 @@ const searchBar = (page: import('@playwright/test').Page) =>
 
 test('finds the words of the text in a feed and in all articles', async ({ page }) => {
 	await logIn(page, 'search');
-	await subscribe(page, 'harbour', 'Harbour Herald');
-	await subscribe(page, 'market', 'Market Courier');
+	await subscribe(page, 'harbour-search', 'Harbour Herald');
+	await subscribe(page, 'market-search', 'Market Courier');
 
 	// In a feed: a word of the text, not of the title, and a beginning of one.
 	await node(page, 'Harbour Herald').click();

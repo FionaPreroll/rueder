@@ -10,8 +10,9 @@ on:
     - cron: "17 5 * * 1"
 
 jobs:
-  # The new server in server/ and the new frontend in web/. The old Go backend
-  # and the old frontend are no longer built or checked.
+  # The new server in server/, the new frontend in web/ and the Android app in
+  # app/. The old Go backend and the old frontend are no longer built or
+  # checked.
   server:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

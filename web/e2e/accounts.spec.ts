@@ -6,7 +6,7 @@ import { articles, logIn, node, sidebar, subscribe } from './harness/helpers.ts'
 test('what one account subscribes to, reads and sorts is its own', async ({ browser }) => {
 	const mine = await (await browser.newContext()).newPage();
 	await logIn(mine, 'other');
-	await subscribe(mine, 'harbour', 'Harbour Herald');
+	await subscribe(mine, 'harbour-accounts', 'Harbour Herald');
 	await mine.getByRole('button', { name: 'New folder' }).click();
 	await mine.getByLabel('Name of the folder').fill('Mine alone');
 	await mine.keyboard.press('Enter');
@@ -28,4 +28,10 @@ test('what one account subscribes to, reads and sorts is its own', async ({ brow
 		404
 	);
 	expect((await (await theirs.request.get('/api/articles')).json()).articles).toEqual([]);
+
+	// The first reader of a feed finds all of it unread; who comes later, the ten newest.
+	await expect(node(mine, 'Harbour Herald')).toContainText('(12)');
+	await subscribe(theirs, 'harbour-accounts', 'Harbour Herald');
+	await expect(node(theirs, 'Harbour Herald')).toContainText('(10)');
+	await expect(node(mine, 'Harbour Herald')).toContainText('(12)');
 });

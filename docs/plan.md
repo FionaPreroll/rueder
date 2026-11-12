@@ -74,7 +74,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Frage | Entscheidung | Wofür es zählt |
 |---|---|---|
 | Größe der Produktion, Dump zum Messen? | Kein Dump. Ausgelegt und gemessen wird für 10 User, 300 Feeds und 10 Millionen Artikel, an erzeugten Daten. | Schritt 1 misst daran. |
-| Gleiches Repository oder ein neues? | Gleiches Repository, neue Verzeichnisse `server/` und `web/`. Der alte Code bleibt bis zum Umstieg als Vorlage liegen. Seine Paketdateien (`backend/go.mod`, `go.sum`, `frontend/package.json`, `pnpm-lock.yaml`), seine Compose-Dateien in `/` und `backend/` und seine Workflows hat Fiona am 2026-11-11 vorzeitig entfernen lassen, damit Dependabot und die Security Advisories nicht mehr die Abhängigkeiten eines Systems melden, das nicht mehr läuft. Seitdem ist der alte Code nicht mehr lauffähig; wer ihn starten will, nimmt den Commit `0b36a96` davor. | Arbeitsweise ab Schritt 1. |
+| Gleiches Repository oder ein neues? | Gleiches Repository, neue Verzeichnisse `server/` und `web/`, seit Paket 3.11 dazu `app/` für die Android-App. Der alte Code bleibt bis zum Umstieg als Vorlage liegen. Seine Paketdateien (`backend/go.mod`, `go.sum`, `frontend/package.json`, `pnpm-lock.yaml`), seine Compose-Dateien in `/` und `backend/` und seine Workflows hat Fiona am 2026-11-11 vorzeitig entfernen lassen, damit Dependabot und die Security Advisories nicht mehr die Abhängigkeiten eines Systems melden, das nicht mehr läuft. Seitdem ist der alte Code nicht mehr lauffähig; wer ihn starten will, nimmt den Commit `0b36a96` davor. | Arbeitsweise ab Schritt 1. |
 | Login | Heute loginsrv mit htpasswd. Künftig lokale Konten mit Argon2id, OpenID Connect muss möglich sein. | Bestimmt, wie bestehende Konten umziehen. |
 | Ordner | Verschachtelt, höchstens 5 Ebenen. | Datenmodell und Drag & Drop. |
 | Versionen | Höchstens 20 Versionen je Artikel. Ein aktualisierter Artikel bleibt gelesen und bekommt den Hinweis „aktualisiert“. | Speicherbedarf und Ungelesen-Zahlen. |
@@ -92,7 +92,7 @@ Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](imp
 
 ## Plan in vier Schritten
 
-Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht im selben Repository in `server/` und `web/`, der alte bleibt bis zum Umstieg als Vorlage liegen. Den Stand je Schritt führt [implementation.md](implementation.md#stand).
+Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht im selben Repository in `server/` und `web/` (dazu `app/` für die Android-App und `deploy/` für den Betrieb), der alte bleibt bis zum Umstieg als Vorlage liegen. Den Stand je Schritt führt [implementation.md](implementation.md#stand).
 
 **Vorarbeit: klickbarer Entwurf der Oberfläche** (fertig). Die Oberfläche wurde vor dem Server entworfen, damit Aussehen und Bedienung früh feststehen. Der Entwurf liegt in `web/`, läuft mit erfundenen Feeds ganz im Browser und ist abgenommen.
 
@@ -104,7 +104,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übernommenen Cleaner-Tests sind grün.
 
-3. **Frontend.** Der Entwurf wird an die API angeschlossen und ausgebaut: Listen- und Volltextansicht, Tastatur, Ordnerbaum mit Drag & Drop, Live-Updates, Einstellungen, Filterregeln, Versionsvergleich, Labels, OPML.
+3. **Frontend.** Der Entwurf wird an die API angeschlossen und ausgebaut: Listen- und Volltextansicht, Tastatur, Ordnerbaum mit Drag & Drop, Live-Updates, Einstellungen, Filterregeln, Versionsvergleich, Labels, OPML. Dazugekommen sind die Statusseite für Admins mit Fehlerberichten aus den Browsern (A13), PWA und Android-App (A14) und der Umzug eines Kontos (A15).
 
    Ergebnis: rueder ist täglich benutzbar.
 

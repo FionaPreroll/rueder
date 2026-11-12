@@ -16,7 +16,7 @@ test('writes a rule with the server saying what it would catch, and the articles
 	page
 }) => {
 	await logIn(page, 'rules');
-	await subscribe(page, 'market', 'Market Courier');
+	await subscribe(page, 'market-rules', 'Market Courier');
 	await expect(node(page, 'Market Courier')).toContainText('(4)');
 
 	const dialog = await openRules(page);

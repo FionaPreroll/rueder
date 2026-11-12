@@ -330,15 +330,19 @@ async fn subscribing_fetches_a_new_feed_and_shares_one_that_is_there(db: PgPool)
         (&Value::Null, &json!(3))
     );
 
-    // Of a feed with a history, the newest articles are unread.
+    // Of a feed with a history, the ten newest articles are unread, as
+    // decided in docs/plan.md.
     common::add(&db, id as i32, 30).await;
     let heidi = common::account(&db, "heidi").await;
     let heidi_cookie = common::session(&db, heidi).await;
     let (status, _) = post(&state, "/api/feeds", &heidi_cookie, json!({ "url": url })).await;
     assert_eq!(status, StatusCode::CREATED);
     let feed = &tree(&state, &heidi_cookie).await["feeds"][0];
-    assert_eq!(feed["unread"], subscribe::NEWEST_UNREAD);
-    assert_eq!(feed["read_upto"], 33 - subscribe::NEWEST_UNREAD);
+    assert_eq!(subscribe::NEWEST_UNREAD, 10);
+    assert_eq!(
+        (&feed["unread"], &feed["read_upto"]),
+        (&json!(10), &json!(23))
+    );
 }
 
 #[sqlx::test]

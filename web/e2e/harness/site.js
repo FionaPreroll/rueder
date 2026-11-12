@@ -59,7 +59,11 @@ const extras = (n) =>
 
 const article = (feed, n, text) => ({ n, title: `${feed} news ${n}`, text });
 
-/** The feeds by their path, each with the word its titles begin with and its articles, oldest first. */
+/**
+ * The feeds by their path, each with the word its titles begin with and its articles, oldest first.
+ * A path with a dash serves a copy under an address of its own (`/harbour-tree/` is the feed
+ * `harbour`), so that each spec reads a feed nobody else does, whatever ran before it.
+ */
 function freshFeeds() {
 	return {
 		// Twelve articles: more than the ten a new subscription starts with as unread.
@@ -153,8 +157,8 @@ const server = createServer((request, response) => {
 		return send(204, 'text/plain', '');
 	}
 	if (url.pathname === '/pic.png') return send(200, 'image/png', picture);
-	const [, path, rest] = /^\/(\w+)(?:\/(.*))?$/.exec(url.pathname) ?? [];
-	const feed = feeds[path];
+	const [, path, rest] = /^\/([\w-]+)(?:\/(.*))?$/.exec(url.pathname) ?? [];
+	const feed = path && feeds[path.split('-')[0]];
 	if (!feed) return send(404, 'text/plain', 'not here');
 	if (rest === 'feed.xml') return send(200, 'application/rss+xml', rss(path, feed));
 	// The site's page names its feed, for rueder's search for feeds.

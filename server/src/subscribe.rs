@@ -46,7 +46,7 @@ pub const MAX_URL: usize = 2000;
 pub const MAX_OPML_FEEDS: usize = 2000;
 /// Who subscribes to a feed that others read already finds this many of its
 /// newest articles unread, and the rest read.
-pub const NEWEST_UNREAD: i32 = 20;
+pub const NEWEST_UNREAD: i32 = 10;
 /// How much of a web page the search for feeds reads, in bytes. The links to
 /// feeds are in the head of a page.
 pub const MAX_PAGE: usize = 512 * 1024;
