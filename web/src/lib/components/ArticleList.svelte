@@ -9,6 +9,7 @@
 	import { settings } from '#lib/settings.svelte.ts';
 	import ArticleBody from './ArticleBody.svelte';
 	import ArticleRow from './ArticleRow.svelte';
+	import Icon from './Icon.svelte';
 	import { offsets, rowsInSight } from '#lib/virtual.ts';
 
 	/** Up to this many rows, or this many cards with their whole text, all are drawn. */
@@ -111,6 +112,32 @@
 		});
 	});
 
+	// In the list, an article that opens or closes starts in sight. Without this,
+	// closing a long article, or opening the next one, which closes it, leaves the
+	// view far below the row that was clicked, as the text above it is gone.
+	let lastOpen: string | null = null;
+	$effect(() => {
+		const opened = reader.open;
+		const id = opened ?? lastOpen;
+		lastOpen = opened;
+		if (!id || expanded) return;
+		untrack(async () => {
+			await tick();
+			const row = rowOf(id);
+			if (!row || !scroller) return;
+			if (row.getBoundingClientRect().top < scroller.getBoundingClientRect().top) {
+				row.scrollIntoView({ block: 'start' });
+			}
+		});
+	});
+
+	/** Once the reader is a screen down the list, a button leads back to its top. */
+	const farDown = $derived(viewport > 0 && scrollTop > viewport);
+
+	function toTop() {
+		scroller?.scrollTo?.({ top: 0, behavior: 'smooth' });
+	}
+
 	// Another stream starts at its top, and another view measures its rows anew.
 	let first = true;
 	$effect(() => {
@@ -165,89 +192,103 @@
 	}
 </script>
 
-<div
-	class="relative min-h-0 flex-1 overflow-y-auto"
-	bind:this={scroller}
-	bind:clientHeight={viewport}
-	onscroll={scrolled}
->
-	<!-- New arrivals wait here, so the list does not jump under the reader. -->
-	{#if reader.pending > 0}
-		<div class="sticky top-2 z-10 flex h-0 justify-center">
-			<button
-				type="button"
-				class="h-7 cursor-pointer rounded-full bg-accent px-4 text-sm font-semibold text-on-accent shadow-md hover:brightness-110"
-				onclick={showNew}
-			>
-				{m.toolbar.newArticles(reader.pending)}
-			</button>
-		</div>
-	{/if}
-
-	{#if reader.visible.length === 0}
-		<div class="p-10 text-center text-soft">
-			{#if reader.loading}
-				<p role="status">{m.list.loadingList}</p>
-			{:else if reader.query.trim()}
-				<p>{m.list.emptySearch}</p>
-			{:else if feedIsEmpty && shownFeed?.waiting}
-				<p role="status">{m.list.waitingFeed}</p>
-			{:else if feedIsEmpty}
-				<p>{m.list.emptyFeed}</p>
-			{:else if reader.unreadOnly && reader.stream.kind !== 'starred' && reader.stream.kind !== 'hidden'}
-				<p>{m.list.emptyUnread}</p>
-				<button type="button" class="tool mt-3" onclick={() => (reader.unreadOnly = false)}>
-					{m.list.showAll}
+<div class="relative flex min-h-0 flex-1 flex-col">
+	<div
+		class="relative min-h-0 flex-1 overflow-y-auto"
+		bind:this={scroller}
+		bind:clientHeight={viewport}
+		onscroll={scrolled}
+	>
+		<!-- New arrivals wait here, so the list does not jump under the reader. -->
+		{#if reader.pending > 0}
+			<div class="sticky top-2 z-10 flex h-0 justify-center">
+				<button
+					type="button"
+					class="h-7 cursor-pointer rounded-full bg-accent px-4 text-sm font-semibold text-on-accent shadow-md hover:brightness-110"
+					onclick={showNew}
+				>
+					{m.toolbar.newArticles(reader.pending)}
 				</button>
-			{:else}
-				<p>{m.list.empty}</p>
-			{/if}
-		</div>
-	{:else if expanded}
-		<div class="mx-auto max-w-4xl px-3 pb-3" bind:this={list}>
-			<div style:height="{above}px"></div>
-			{#each shown as article (article.id)}
-				<div class="pt-3" use:measure={article.id}>
-					<!-- A click picks the card, as j and k do from the keyboard. -->
-					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-					<article
-						data-article={article.id}
-						class={[
-							'scroll-mt-3 rounded-md border bg-paper',
-							reader.cursor === article.id ? 'border-accent shadow-sm' : 'border-line'
-						]}
-						onclick={() => reader.select(article)}
-					>
-						<ArticleBody {reader} {article} {now} {onversions} />
-					</article>
-				</div>
-			{/each}
-			<div style:height="{below}px"></div>
-		</div>
-	{:else}
-		<div bind:this={list}>
-			<div style:height="{above}px"></div>
-			<ul class="divide-y divide-line border-b border-line">
-				{#each shown as article (article.id)}
-					<li data-article={article.id} use:measure={article.id}>
-						<ArticleRow {reader} {article} {now} {showFeed} />
-						{#if reader.open === article.id}
-							<div class="border-t border-l-3 border-line border-l-accent bg-paper">
-								<ArticleBody {reader} {article} {now} {onversions} />
-							</div>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-			<div style:height="{below}px"></div>
-		</div>
-	{/if}
+			</div>
+		{/if}
 
-	{#if reader.hasMore}
-		<div class="flex justify-center p-4">
-			<button type="button" class="tool" use:whenSeen onclick={() => reader.showMore()}>
-				{m.list.more}
-			</button>
-		</div>
+		{#if reader.visible.length === 0}
+			<div class="p-10 text-center text-soft">
+				{#if reader.loading}
+					<p role="status">{m.list.loadingList}</p>
+				{:else if reader.query.trim()}
+					<p>{m.list.emptySearch}</p>
+				{:else if feedIsEmpty && shownFeed?.waiting}
+					<p role="status">{m.list.waitingFeed}</p>
+				{:else if feedIsEmpty}
+					<p>{m.list.emptyFeed}</p>
+				{:else if reader.unreadOnly && reader.stream.kind !== 'starred' && reader.stream.kind !== 'hidden'}
+					<p>{m.list.emptyUnread}</p>
+					<button type="button" class="tool mt-3" onclick={() => (reader.unreadOnly = false)}>
+						{m.list.showAll}
+					</button>
+				{:else}
+					<p>{m.list.empty}</p>
+				{/if}
+			</div>
+		{:else if expanded}
+			<div class="mx-auto max-w-4xl px-3 pb-3" bind:this={list}>
+				<div style:height="{above}px"></div>
+				{#each shown as article (article.id)}
+					<div class="pt-3" use:measure={article.id}>
+						<!-- A click picks the card, as j and k do from the keyboard. -->
+						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+						<article
+							data-article={article.id}
+							class={[
+								'scroll-mt-3 rounded-md border bg-paper',
+								reader.cursor === article.id ? 'border-accent shadow-sm' : 'border-line'
+							]}
+							onclick={() => reader.select(article)}
+						>
+							<ArticleBody {reader} {article} {now} {onversions} />
+						</article>
+					</div>
+				{/each}
+				<div style:height="{below}px"></div>
+			</div>
+		{:else}
+			<div bind:this={list}>
+				<div style:height="{above}px"></div>
+				<ul class="divide-y divide-line border-b border-line">
+					{#each shown as article (article.id)}
+						<li data-article={article.id} use:measure={article.id}>
+							<ArticleRow {reader} {article} {now} {showFeed} />
+							{#if reader.open === article.id}
+								<div class="border-t border-l-3 border-line border-l-accent bg-paper">
+									<ArticleBody {reader} {article} {now} {onversions} />
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+				<div style:height="{below}px"></div>
+			</div>
+		{/if}
+
+		{#if reader.hasMore}
+			<div class="flex justify-center p-4">
+				<button type="button" class="tool" use:whenSeen onclick={() => reader.showMore()}>
+					{m.list.more}
+				</button>
+			</div>
+		{/if}
+	</div>
+
+	{#if farDown}
+		<button
+			type="button"
+			class="absolute right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex size-12 cursor-pointer items-center justify-center rounded-full bg-accent text-on-accent shadow-lg hover:brightness-110"
+			aria-label={m.list.toTop}
+			title={m.list.toTop}
+			onclick={toTop}
+		>
+			<Icon name="up" class="size-6" />
+		</button>
 	{/if}
 </div>

@@ -15,6 +15,7 @@
 		themes,
 		views
 	} from '#lib/settings.svelte.ts';
+	import { canKeepAwake } from '#lib/wakelock.ts';
 	import Choice from './Choice.svelte';
 	import Dialog from './Dialog.svelte';
 	import Invitations from './Invitations.svelte';
@@ -152,6 +153,19 @@
 						bind:checked={settings.teasers}
 					/>
 					{m.settings.teasers}
+				</label>
+				<label class="flex cursor-pointer items-start gap-2 text-sm">
+					<input
+						type="checkbox"
+						class="mt-0.5 rounded text-accent"
+						bind:checked={settings.wakeLock}
+					/>
+					<span>
+						{m.settings.wakeLock}
+						{#if !canKeepAwake()}
+							<span class="block text-xs text-soft">{m.settings.wakeLockMissing}</span>
+						{/if}
+					</span>
 				</label>
 			</div>
 		{:else if tab === 'rules'}

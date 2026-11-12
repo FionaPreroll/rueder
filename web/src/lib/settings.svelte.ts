@@ -25,6 +25,8 @@ export interface Settings {
 	view: (typeof views)[number];
 	markOnScroll: boolean;
 	teasers: boolean;
+	/** Keep the screen on while the page is in sight (see wakelock.ts). */
+	wakeLock: boolean;
 	/** The keyboard shortcuts the reader gave keys of their own. */
 	keys: KeyChoices;
 }
@@ -40,6 +42,7 @@ export const defaults: Settings = {
 	view: 'list',
 	markOnScroll: true,
 	teasers: true,
+	wakeLock: false,
 	keys: {}
 };
 
@@ -98,10 +101,41 @@ export const settings = $state<Settings>(load());
 const systemDark = () =>
 	typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
 
+/**
+ * The color of the bars around an installed app, and of the browser's own bar
+ * where it takes one: the top bar's `panel` of each theme. src/app.html sets the
+ * same before the first paint.
+ */
+export const barColors = { light: '#f4f5f7', dark: '#1c1f25' } as const;
+
+/**
+ * The app's manifest for each theme. A manifest cannot follow the theme by itself,
+ * and some browsers, Firefox on Android among them, color the bars of an installed
+ * app only from it.
+ */
+export const manifests = {
+	light: '/manifest.webmanifest',
+	dark: '/manifest-dark.webmanifest'
+} as const;
+
+/** Gives the browser the colors of the theme for its bars. */
+function colorBars(theme: 'light' | 'dark') {
+	for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+		meta.removeAttribute('media');
+		meta.content = barColors[theme];
+	}
+	const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+	if (manifest && manifest.getAttribute('href') !== manifests[theme]) {
+		manifest.setAttribute('href', manifests[theme]);
+	}
+}
+
 /** Puts the settings on the page and remembers them. Call it again whenever they change. */
 export function applySettings(now: Settings = settings) {
 	const root = document.documentElement;
-	root.dataset.theme = now.theme === 'system' ? (systemDark() ? 'dark' : 'light') : now.theme;
+	const theme = now.theme === 'system' ? (systemDark() ? 'dark' : 'light') : now.theme;
+	root.dataset.theme = theme;
+	colorBars(theme);
 	root.dataset.accent = now.accent;
 	root.dataset.density = now.density;
 	root.dataset.textSize = now.textSize;

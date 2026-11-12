@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SHELL, filesToKeep, way } from './offline.ts';
+import { barColors, manifests } from './settings.svelte.ts';
 
 const origin = 'https://rueder.example';
 const get = (path: string, mode = 'cors') => ({ method: 'GET', url: `${origin}${path}`, mode });
@@ -58,5 +59,21 @@ describe('the manifest', () => {
 			true
 		);
 		expect(icons.some((icon) => icon.sizes === '192x192')).toBe(true);
+	});
+
+	it('is the same app in the dark theme, in its colors', () => {
+		const light = JSON.parse(readFileSync('static/manifest.webmanifest', 'utf8'));
+		const dark = JSON.parse(readFileSync('static/manifest-dark.webmanifest', 'utf8'));
+		expect({ ...dark, theme_color: '', background_color: '' }).toEqual({
+			...light,
+			theme_color: '',
+			background_color: ''
+		});
+		expect(light.theme_color).toBe(barColors.light);
+		expect(dark.theme_color).toBe(barColors.dark);
+		expect(manifests).toEqual({
+			light: '/manifest.webmanifest',
+			dark: '/manifest-dark.webmanifest'
+		});
 	});
 });

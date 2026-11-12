@@ -105,6 +105,43 @@ describe('Menu', () => {
 		expect(screen.queryByRole('menu')).toBeNull();
 	});
 
+	it('stays within the window, sideways and at the bottom', async () => {
+		vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(360);
+		vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(640);
+		vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(360);
+		// Where the menu would be drawn, as a narrow phone would lay it out.
+		let drawn = { left: -150, right: 58, top: 100, bottom: 200 };
+		let under = { left: 10, right: 50, top: 60, bottom: 92 };
+		vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+			this: HTMLElement
+		) {
+			if (this.getAttribute('role') === 'menu') return drawn as DOMRect;
+			return under as DOMRect;
+		});
+		render(MenuHarness, { onpick: () => {} });
+		const button = screen.getByRole('button', { name: 'More' });
+
+		await userEvent.click(button);
+		let menu = screen.getByRole('menu');
+		expect(menu.style.translate).toBe('158px 0');
+		expect(menu).toHaveClass('mt-1');
+
+		await userEvent.click(button);
+		under = { left: 300, right: 340, top: 460, bottom: 492 };
+		drawn = { left: 300, right: 508, top: 500, bottom: 700 };
+		await userEvent.click(button);
+		menu = screen.getByRole('menu');
+		expect(menu.style.translate).toBe('-156px 0');
+		// No room below, more above: it opens upward.
+		expect(menu).toHaveClass('bottom-full');
+
+		await userEvent.click(button);
+		drawn = { left: 10, right: 218, top: 100, bottom: 200 };
+		await userEvent.click(button);
+		expect(screen.getByRole('menu').style.translate).toBe('');
+		vi.restoreAllMocks();
+	});
+
 	it('is a component', () => {
 		expect(Menu).toBeTypeOf('function');
 	});
