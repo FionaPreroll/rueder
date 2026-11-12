@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only the folder the update is downloaded to. -->
+<!-- Only the folder in the app's own cache that a checked update is copied to
+     (Updates.java). The download itself is not handed on. -->
 <paths>
-    <external-files-path name="updates" path="Download/" />
+    <cache-path name="updates" path="updates/" />
 </paths>

@@ -7,16 +7,21 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Environment;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.content.pm.PackageInfoCompat;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +34,13 @@ import java.util.function.Consumer;
  * offered in a dialog, downloaded by Android's download manager and handed to
  * Android's installer, which asks the reader and installs it only if it is
  * signed with the same key as the app that is installed.
+ *
+ * The download manager writes to the app's folder on the shared storage, where
+ * other apps with the permission for storage can write too, up to Android 9.
+ * So the APK is copied into the app's own cache first and handed on only if it
+ * is this app in the build that version.json names: an APK of another package
+ * would not be checked against the app's key, but installed as an app of its
+ * own.
  */
 final class Updates {
     static final boolean AVAILABLE = true;
@@ -115,7 +127,11 @@ final class Updates {
             public void onReceive(Context received, Intent intent) {
                 if (intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) != id) return;
                 context.unregisterReceiver(this);
-                if (succeeded(downloads, id) && file.length() == release.size) install(context, file);
+                if (!succeeded(downloads, id) || file.length() != release.size) return;
+                new Thread(() -> {
+                    File kept = takeIn(context, file, release);
+                    if (kept != null) install(context, kept);
+                }, "rueder-updates").start();
             }
         };
         ContextCompat.registerReceiver(
@@ -131,6 +147,47 @@ final class Updates {
             if (cursor == null || !cursor.moveToFirst()) return false;
             int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
             return status == DownloadManager.STATUS_SUCCESSFUL;
+        }
+    }
+
+    /**
+     * The downloaded APK in the app's own cache, where no other app can change
+     * it, or null if it is not this release of this app. The download goes.
+     */
+    private static File takeIn(Context context, File downloaded, Release release) {
+        File folder = new File(context.getCacheDir(), "updates");
+        File kept = new File(folder, APK);
+        boolean copied = (folder.isDirectory() || folder.mkdirs()) && copy(downloaded, kept, release.size);
+        downloaded.delete();
+        if (!copied) {
+            kept.delete();
+            return null;
+        }
+        PackageInfo archive = context.getPackageManager().getPackageArchiveInfo(kept.getPath(), 0);
+        if (
+            archive == null ||
+            !release.describes(archive.packageName, PackageInfoCompat.getLongVersionCode(archive), context.getPackageName())
+        ) {
+            kept.delete();
+            return null;
+        }
+        return kept;
+    }
+
+    /** Copies exactly `size` bytes, or nothing. */
+    private static boolean copy(File from, File to, long size) {
+        try (InputStream in = new FileInputStream(from); OutputStream out = new FileOutputStream(to)) {
+            byte[] buffer = new byte[64 * 1024];
+            long total = 0;
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                total += n;
+                if (total > size) return false;
+                out.write(buffer, 0, n);
+            }
+            return total == size;
+        } catch (IOException e) {
+            return false;
         }
     }
 

@@ -10,6 +10,10 @@ jobs:
   scan:
     name: gitleaks
     runs-on: ubuntu-latest
+    # It reads the commits, of a pull request too, and changes nothing.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v3
         with:
