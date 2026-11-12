@@ -220,6 +220,23 @@ fn the_encoding_is_taken_from_the_declaration_wherever_it_ends() {
 }
 
 #[test]
+fn a_byte_that_is_not_utf_8_makes_up_no_declaration() {
+    // The library leaves out a byte it cannot decode and reads on, so
+    // `enc\xC0oding` became `encoding` once it had read past the start: it
+    // used to panic on that. Such a byte is a replacement character now.
+    let broken = b"<?xml version=\"1.0\" enc\xC0oding=\"ISO-8859-1\"?>\n\
+        <rss version=\"2.0\"><channel><title>K\xe4se</title><item><guid>1</guid>\
+        <title>x</title></item></channel></rss>";
+    assert_eq!(parse(broken).title.as_deref(), Some("K\u{fffd}se"));
+
+    // A text in UTF-8 with one broken byte is read all the same.
+    let feed = b"<?xml version=\"1.0\"?><rss version=\"2.0\"><channel>\
+        <title>K\xc3\xa4se \xff</title><item><guid>1</guid><title>x</title></item>\
+        </channel></rss>";
+    assert_eq!(parse(feed).title.as_deref(), Some("K\u{e4}se \u{fffd}"));
+}
+
+#[test]
 fn only_whole_web_addresses_are_kept_as_links() {
     let feed = "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>x</title>\
         <link>https://ex\u{8}ample.org/</link>\
