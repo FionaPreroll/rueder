@@ -34,7 +34,7 @@ use image::{
     DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder,
 };
 use sha2::{Digest, Sha256};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
 
 use crate::{
@@ -50,6 +50,9 @@ const MAX_ADDRESS: usize = 2000;
 /// How many sources are asked at a time, and how many images are decoded.
 const FETCHES_AT_ONCE: usize = 8;
 const DECODES_AT_ONCE: usize = 2;
+/// How many of those go to one host at a time: a source that answers slowly,
+/// or a feed full of images from one place, leaves room for the others.
+const FETCHES_PER_HOST: usize = 4;
 /// How long a source that failed is left alone.
 const FAILED_FOR: Duration = Duration::from_secs(5 * 60);
 /// How many failed sources are remembered.
@@ -466,6 +469,7 @@ pub struct ImageProxy {
     cache: Arc<Cache>,
     max_source: usize,
     fetches: Semaphore,
+    hosts: Hosts,
     decodes: Arc<Semaphore>,
     /// Sources that failed, and until when they are left alone.
     failed: Mutex<HashMap<String, Instant>>,
@@ -486,6 +490,7 @@ impl ImageProxy {
             cache: Arc::new(cache),
             max_source: config.max_source,
             fetches: Semaphore::new(FETCHES_AT_ONCE),
+            hosts: Hosts::default(),
             decodes: Arc::new(Semaphore::new(DECODES_AT_ONCE)),
             failed: Mutex::default(),
             served: Mutex::default(),
@@ -577,6 +582,13 @@ impl ImageProxy {
 
     async fn fetch(&self, size: Size, url: &str) -> Result<Picture, Refused> {
         let bytes = {
+            // The host's turn first: who waits for a busy host holds up no
+            // other.
+            let host = Url::parse(url)
+                .ok()
+                .and_then(|url| url.host_str().map(str::to_owned))
+                .unwrap_or_default();
+            let _turn = self.hosts.enter(host).await;
             let _permit = self.fetches.acquire().await;
             // No cookies, no referrer, and always the same user agent: the
             // source cannot tell one reader from another.
@@ -632,6 +644,65 @@ impl ImageProxy {
     }
 }
 
+/// How many fetches go to each host right now. A host is forgotten as soon as
+/// nobody fetches from it or waits for it.
+#[derive(Default)]
+struct Hosts {
+    busy: Mutex<HashMap<String, Arc<Semaphore>>>,
+}
+
+impl Hosts {
+    /// Waits until a fetch from `host` may start.
+    async fn enter(&self, host: String) -> HostTurn<'_> {
+        let semaphore = match self.busy.lock() {
+            Ok(mut busy) => busy
+                .entry(host.clone())
+                .or_insert_with(|| Arc::new(Semaphore::new(FETCHES_PER_HOST)))
+                .clone(),
+            // Only a panic while the lock was held poisons it; then every
+            // fetch gets a turn of its own rather than none.
+            Err(_) => Arc::new(Semaphore::new(FETCHES_PER_HOST)),
+        };
+        let permit = semaphore.clone().acquire_owned().await.ok();
+        HostTurn {
+            hosts: self,
+            host,
+            semaphore,
+            permit,
+        }
+    }
+
+    #[cfg(test)]
+    fn known(&self) -> usize {
+        self.busy.lock().map_or(0, |busy| busy.len())
+    }
+}
+
+struct HostTurn<'a> {
+    hosts: &'a Hosts,
+    host: String,
+    semaphore: Arc<Semaphore>,
+    permit: Option<OwnedSemaphorePermit>,
+}
+
+impl Drop for HostTurn<'_> {
+    fn drop(&mut self) {
+        drop(self.permit.take());
+        let Ok(mut busy) = self.hosts.busy.lock() else {
+            return;
+        };
+        // The map and this turn hold the only references: nobody else fetches
+        // from the host or waits for it. Others only take one under the lock.
+        if Arc::strong_count(&self.semaphore) == 2
+            && busy
+                .get(&self.host)
+                .is_some_and(|known| Arc::ptr_eq(known, &self.semaphore))
+        {
+            busy.remove(&self.host);
+        }
+    }
+}
+
 /// The key the proxy keeps for itself: read from `path`, or made and written
 /// there on first start. It stays the same across restarts, so addresses that
 /// browsers remember keep working.
@@ -652,4 +723,35 @@ fn own_key(path: &Path) -> anyhow::Result<Vec<u8>> {
         .and_then(|mut file| file.write_all(&key))
         .with_context(|| format!("writing {}", path.display()))?;
     Ok(key.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn one_host_gets_only_some_of_the_fetches() {
+        let hosts = Hosts::default();
+        let mut turns = Vec::new();
+        for _ in 0..FETCHES_PER_HOST {
+            turns.push(hosts.enter("a.example".into()).await);
+        }
+        let waiting =
+            tokio::time::timeout(Duration::from_millis(50), hosts.enter("a.example".into())).await;
+        assert!(waiting.is_err(), "one more fetch from a busy host waits");
+
+        let other =
+            tokio::time::timeout(Duration::from_millis(50), hosts.enter("b.example".into())).await;
+        assert!(other.is_ok(), "another host is not held up");
+        drop(other);
+        assert_eq!(hosts.known(), 1);
+
+        turns.pop();
+        let next =
+            tokio::time::timeout(Duration::from_millis(50), hosts.enter("a.example".into())).await;
+        assert!(next.is_ok(), "a turn that ends lets the next one in");
+        drop(next);
+        drop(turns);
+        assert_eq!(hosts.known(), 0, "a host nobody fetches from is forgotten");
+    }
 }

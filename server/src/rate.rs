@@ -7,6 +7,9 @@
 //! - per account, what makes the server reach out to an address the reader
 //!   names ([`LOOKUPS`]): looking for the feeds of a page and subscribing. It
 //!   keeps an account from using rueder to knock on other servers' doors;
+//! - per account, the feeds nobody read before that it brings in
+//!   ([`NEW_FEEDS`]), alone or many at once with an OPML file or a move: each
+//!   is fetched from then on, for as long as somebody reads it;
 //! - per account, the reports of errors from its browsers ([`REPORTS`]) and
 //!   the moves from another rueder ([`IMPORTS`]), which add to what is stored;
 //! - what costs the server more than a moment, such as looking at all of an
@@ -47,6 +50,13 @@ pub const REQUESTS: Rate = Rate::new(1200, Duration::from_millis(20));
 /// How many addresses an account may have the server look at: 30 at once, and
 /// one more every two seconds.
 pub const LOOKUPS: Rate = Rate::new(30, Duration::from_secs(2));
+/// How many feeds nobody read before an account may bring in: as many as one
+/// OPML file can hold at once, and one more every 30 seconds, close to 3000 a
+/// day.
+pub const NEW_FEEDS: Rate = Rate::new(
+    crate::subscribe::MAX_OPML_FEEDS as u32,
+    Duration::from_secs(30),
+);
 /// How many reports of errors in its browsers an account may send: 100 at
 /// once, and about 100 more a day.
 pub const REPORTS: Rate = Rate::new(100, Duration::from_secs(864));
@@ -104,9 +114,18 @@ impl<K: Hash + Eq + Clone> Limiter<K> {
     /// Takes one from what the key has left, or says how long it has to wait
     /// for the next.
     pub fn take(&self, key: &K, now: Instant) -> Result<(), Duration> {
+        self.take_many(key, 1, now)
+    }
+
+    /// Takes `n` at once from what the key has left, or none of them and says
+    /// how long it has to wait for all of them. More than a burst never fits.
+    pub fn take_many(&self, key: &K, n: u32, now: Instant) -> Result<(), Duration> {
+        if n == 0 {
+            return Ok(());
+        }
         let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
         let back = used.get(key).map_or(now, |back| (*back).max(now));
-        let ahead = back.saturating_duration_since(now) + self.rate.every;
+        let ahead = back.saturating_duration_since(now) + self.rate.every.saturating_mul(n);
         if let Some(wait) = ahead.checked_sub(self.rate.full())
             && !wait.is_zero()
         {
@@ -169,6 +188,7 @@ impl Drop for Turn<'_> {
 pub struct Rates {
     requests: Limiter<IpAddr>,
     lookups: Limiter<i32>,
+    new_feeds: Limiter<i32>,
     reports: Limiter<i32>,
     imports: Limiter<i32>,
     heavy: Heavy,
@@ -179,6 +199,7 @@ impl Rates {
         Self {
             requests: Limiter::new(requests),
             lookups: Limiter::new(lookups),
+            new_feeds: Limiter::new(NEW_FEEDS),
             reports: Limiter::new(REPORTS),
             imports: Limiter::new(IMPORTS),
             heavy: Heavy {
@@ -228,6 +249,23 @@ impl Rates {
         self.imports
             .take(&account_id, now)
             .map_err(|wait| AppError::TooMany(wait, "too many imports, try again later"))
+    }
+
+    /// Other limits for the feeds nobody read before than [`NEW_FEEDS`].
+    pub fn with_new_feeds(self, new_feeds: Rate) -> Self {
+        Self {
+            new_feeds: Limiter::new(new_feeds),
+            ..self
+        }
+    }
+
+    /// Counts `n` feeds nobody read before that the account brings in, all of
+    /// them or none.
+    pub fn new_feeds(&self, account_id: i32, n: usize, now: Instant) -> Result<(), AppError> {
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        self.new_feeds
+            .take_many(&account_id, n, now)
+            .map_err(|wait| AppError::TooMany(wait, "too many new feeds at once, try again later"))
     }
 
     /// Other limits for the reports of errors than [`REPORTS`].
@@ -318,6 +356,32 @@ mod tests {
             assert_eq!(limiter.take(&"ada", later), Ok(()));
         }
         assert_eq!(limiter.take(&"ada", later), Err(SECOND));
+    }
+
+    #[test]
+    fn many_are_taken_at_once_or_not_at_all() {
+        let limiter = Limiter::new(Rate::new(10, SECOND));
+        let start = Instant::now();
+        assert_eq!(limiter.take_many(&"ada", 0, start), Ok(()));
+        assert_eq!(limiter.len(), 0, "nothing taken, nothing remembered");
+        assert_eq!(limiter.take_many(&"ada", 7, start), Ok(()));
+        // Four do not fit into the three that are left, and cost nothing.
+        assert_eq!(limiter.take_many(&"ada", 4, start), Err(SECOND));
+        assert_eq!(limiter.take_many(&"ada", 3, start), Ok(()));
+        assert_eq!(limiter.take(&"ada", start), Err(SECOND));
+        assert_eq!(
+            limiter.take_many(&"ada", 5, start + 2 * SECOND),
+            Err(3 * SECOND)
+        );
+        assert_eq!(limiter.take_many(&"ada", 5, start + 5 * SECOND), Ok(()));
+        // More than a burst never fits, however long one waits.
+        let later = start + Duration::from_secs(3600);
+        assert!(limiter.take_many(&"grace", 11, later).is_err());
+        assert_eq!(limiter.take_many(&"grace", 10, later), Ok(()));
+        assert_eq!(
+            limiter.take_many(&"ada", u32::MAX, later).map_err(|_| ()),
+            Err(())
+        );
     }
 
     #[test]

@@ -631,6 +631,54 @@ async fn an_account_can_have_the_server_look_at_only_so_many_addresses(db: PgPoo
 }
 
 #[sqlx::test]
+async fn an_opml_file_counts_its_new_feeds_against_the_limit(db: PgPool) {
+    let ada = common::account(&db, "ada").await;
+    let grace = common::account(&db, "grace").await;
+    let hour = Duration::from_secs(3600);
+    let state =
+        AppState::new(db.clone()).with_rates(Rates::default().with_new_feeds(Rate::new(4, hour)));
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let more = r#"<?xml version="1.0"?><opml version="2.0"><body>
+      <outline text="More">
+        <outline type="rss" text="One" xmlUrl="https://one.example/feed"/>
+        <outline type="rss" text="Two" xmlUrl="https://two.example/feed"/>
+      </outline>
+    </body></opml>"#;
+
+    // Three new feeds of four.
+    let (status, did) = import(&state, &cookie, OPML).await;
+    assert_eq!((status, &did["feeds"]), (StatusCode::OK, &json!(3)));
+    // Two more do not fit into the one that is left: none of them is taken,
+    // and neither is their folder.
+    let (status, headers, _) = raw(
+        &state,
+        Method::POST,
+        "/api/opml",
+        Some(&cookie),
+        Some(("text/x-opml", more.into())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(headers.contains_key(header::RETRY_AFTER));
+    assert_eq!(feed_rows(&db).await, 3);
+    let folders: i64 = sqlx::query_scalar("SELECT count(*) FROM folders WHERE title = 'More'")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(folders, 0);
+    // Feeds that are there already are no new ones.
+    let (status, did) = import(&state, &cookie, OPML).await;
+    assert_eq!((status, &did["known"]), (StatusCode::OK, &json!(3)));
+    // Another account has its own.
+    let (status, did) = import(&state, &grace_cookie, more).await;
+    assert_eq!((status, &did["feeds"]), (StatusCode::OK, &json!(2)));
+    assert_eq!(feed_rows(&db).await, 5);
+}
+
+#[sqlx::test]
 async fn an_account_can_subscribe_to_only_so_many_feeds(db: PgPool) {
     let ada = common::account(&db, "ada").await;
     let grace = common::account(&db, "grace").await;

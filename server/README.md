@@ -146,10 +146,11 @@ Without a terminal the password is read as one line from the input, for
 scripts. The session cookie is `Secure`, so logging in needs HTTPS in front of
 the server; `http://localhost:3000` works for development.
 
-Wrong passwords are counted per name and per address. Behind a reverse proxy
-set `CLIENT_IP_HEADER` to the header the proxy puts the sender's address in
-(e.g. `X-Forwarded-For`), or all readers count as one address. Do not set it if
-no proxy sets that header: senders could then name any address.
+Wrong passwords are counted per name, per address and per network (an IPv6
+/48 or an IPv4 /24). Behind a reverse proxy set `CLIENT_IP_HEADER` to the
+header the proxy puts the sender's address in (e.g. `X-Forwarded-For`), or all
+readers count as one address. Do not set it if no proxy sets that header:
+senders could then name any address.
 
 For the login through an OpenID Connect provider set `OIDC_ISSUER`,
 `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_REDIRECT_URL` (the address of

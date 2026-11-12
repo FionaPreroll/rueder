@@ -789,6 +789,49 @@ async fn an_account_cannot_import_without_end(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_move_counts_its_new_feeds_against_the_limit(db: PgPool) {
+    // Three feeds nobody on this rueder reads.
+    let file = first_rueder(&db).await;
+    forget(&db).await;
+    let hour = std::time::Duration::from_secs(3600);
+    let state = AppState {
+        rates: Rates::default().with_new_feeds(Rate::new(4, hour)).into(),
+        ..AppState::new(db.clone())
+    };
+    let grace = common::account(&db, "grace").await;
+    let cookie = session(&db, grace).await;
+    let feeds = async || -> i64 {
+        sqlx::query_scalar("SELECT count(*) FROM feeds")
+            .fetch_one(&db)
+            .await
+            .unwrap()
+    };
+    // Two of the four are used up already, by subscriptions of their own.
+    let used = state.rates.new_feeds(grace, 2, std::time::Instant::now());
+    assert!(used.is_ok());
+    let (status, _) = import(&state, &cookie, &file).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    // Nothing of the file was taken.
+    assert_eq!(feeds().await, 0);
+    let folders: i64 = sqlx::query_scalar("SELECT count(*) FROM folders")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(folders, 0);
+
+    // Another account has its own, and three fit into four.
+    let bob = common::account(&db, "bob").await;
+    let bob_cookie = session(&db, bob).await;
+    let (status, report) = import(&state, &bob_cookie, &file).await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["feeds"], 3);
+    // Now the feeds are there: Grace brings in none that is new.
+    let (status, report) = import(&state, &cookie, &file).await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!((report["feeds"].as_i64(), feeds().await), (Some(3), 3));
+}
+
+#[sqlx::test]
 async fn the_command_line_moves_an_account_too(db: PgPool) {
     let file = first_rueder(&db).await;
     let ada: i32 = sqlx::query_scalar("SELECT id FROM accounts WHERE username = 'ada'")
@@ -807,7 +850,7 @@ async fn the_command_line_moves_an_account_too(db: PgPool) {
     let grace = common::account(&db, "grace").await;
     let rules = rueder::cleaning::Rules::built_in().unwrap();
     let file: transfer::Export = serde_json::from_value(exported).unwrap();
-    let Ok(imported) = transfer::import(&db, &rules, grace, file).await else {
+    let Ok(imported) = transfer::import(&db, &rules, grace, file, None).await else {
         panic!("the import failed");
     };
     assert_eq!(imported.feeds, 3);
