@@ -1,6 +1,0 @@
-# from svelte-dnd-action:
-# Ignore everything in the root
-/*
-# Un-ignore all of subtree
-!/src/
-!.gitignore

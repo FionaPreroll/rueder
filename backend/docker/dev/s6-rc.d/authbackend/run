@@ -1,3 +1,0 @@
-#!/command/execlineb -P
-cd /app
-gow run -race ./cmd/authbackend --dev --log debug --bind :8079

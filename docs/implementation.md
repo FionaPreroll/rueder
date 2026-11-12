@@ -43,9 +43,9 @@ Was es heute gibt:
 - `Dockerfile` und `deploy/`: das Container-Image mit Server und Frontend, die Compose-Datei mit PostgreSQL und die [Anleitung zur Installation](../deploy/README.md), CI-Job `image`.
 - `docs/`: Plan, Architektur und dieses Dokument, mit den [Messwerten](#messung) aus Schritt 1 und für die Suche.
 - `CLAUDE.md`: die Regeln des Projekts in Kürze, für Sitzungen mit Claude.
-- Das alte System in `backend/`, `frontend/` und `config/`, nur noch als Vorlage zum Lesen; ohne seine Paket- und Compose-Dateien ist es seit dem 2026-11-11 nicht mehr lauffähig.
+- Das alte System (`backend/`, `frontend/`, `config/`) ist seit dem 2026-11-12 aus dem Repository entfernt (4.7). Zum Lesen liegt es im Commit `0b36a96`, dem letzten, in dem es noch lief; wo darin was steht, sagt [Wissen über das Altsystem](#wissen-über-das-altsystem).
 
-Vom Umstieg (Schritt 4) läuft der neue rueder seit dem 2026-11-12 in der Produktion, mit neuen Konten und Feeds (4.2), und der Import führt die alten Daten mit diesem Bestand zusammen (4.3). Es fehlen der Probelauf an einer Kopie der Produktion (4.4), der Import in der Produktion (4.5), Lesestand und Labels aus dem Browser (4.6) und der Abbau des alten Systems (4.7).
+Vom Umstieg (Schritt 4) läuft der neue rueder seit dem 2026-11-12 in der Produktion, mit neuen Konten und Feeds (4.2), und der Import führt die alten Daten mit diesem Bestand zusammen (4.3). Der alte Code ist entfernt (4.7, auf Fionas Wunsch vor 4.4 bis 4.6). Es fehlen der Probelauf an einer Kopie der Produktion (4.4), der Import in der Produktion (4.5) und Lesestand und Labels aus dem Browser (4.6).
 
 
 ## Repository
@@ -58,7 +58,7 @@ Vom Umstieg (Schritt 4) läuft der neue rueder seit dem 2026-11-12 in der Produk
 | `server/migrations/` | SQL-Migrationen, laufen beim Start von selbst. |
 | `server/deny.toml`, `server/.cargo/audit.toml` | Was `cargo deny` den Abhängigkeiten erlaubt (Lizenzen, Quellen, gesperrte Crates), und die Ausnahmen von `cargo audit` mit Begründung. |
 | `server/.sqlx/` | Cache der geprüften Abfragen, damit das Programm ohne Datenbank baut (`cargo sqlx prepare`). |
-| `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/`. `fuzz_corpus.rs` spielt den Korpus der Fuzz-Targets ab, `soak.rs` ist der Soak-Test. |
+| `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/` im Commit `0b36a96`. `tests/data/` hält Feeds, wie die Tests des alten rueder sie aufgezeichnet haben. `fuzz_corpus.rs` spielt den Korpus der Fuzz-Targets ab, `soak.rs` ist der Soak-Test. |
 | `server/fuzz/` | Fuzz-Targets für Bereinigung, Feed-Verarbeitung und Bild-Proxy (`fuzz_targets/`), was sie prüfen (`checks.rs`) und ihr Korpus (`corpus/`). Eine eigene Crate, weil `cargo-fuzz` Nightly-Rust braucht. |
 | `web/` | Neu. SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
 | `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`). `reader.ts` ist die Naht: was die Seite von ihrer Datenquelle braucht. `api/` erfüllt sie mit dem Server (`types.ts` die Typen der API, erzeugt und nicht von Hand zu ändern, `client.ts` die Endpunkte, `reader.svelte.ts` der Reader, `session.svelte.ts` Login und Sitzung), `demo/` mit erfundenen Daten. |
@@ -66,15 +66,12 @@ Vom Umstieg (Schritt 4) läuft der neue rueder seit dem 2026-11-12 in der Produk
 | `app/` | Neu. Die Android-App mit Capacitor: Startseite in `www/`, das Android-Projekt in `android/` mit den Builds `github` und `play`, beschrieben in [app/README.md](../app/README.md). |
 | `Dockerfile`, `.dockerignore` | Neu. Das Container-Image mit Server und gebautem Frontend. |
 | `deploy/` | Neu. Betrieb: `compose.yaml` startet rueder und PostgreSQL, `.env.example` nennt die Einstellungen, `README.md` ist die Anleitung zur Installation, `smoke-test.sh` baut und startet alles zur Probe. |
-| `docs/` | Diese Dokumente. `user_data.md` beschreibt die Daten des alten Frontends im Browser. |
+| `docs/` | Diese Dokumente. `user_data.md` beschreibt die Daten des alten Frontends im Browser, die Vorlage für Paket 4.6. |
 | `SECURITY.md` | Neu. Wie man eine Lücke meldet: privat über „Report a vulnerability“ auf GitHub, was dazugehört und dass nur der neueste Stand von `main` Korrekturen bekommt. Die Meldungen kommen nur an, wenn in den Einstellungen des Repositorys unter Security „Private vulnerability reporting“ eingeschaltet ist. |
 | `.github/workflows/ci.yml` | CI für den neuen Code, veröffentlicht das Image. |
 | `.github/dependabot.yml` | Updates der Abhängigkeiten von `server/`, `server/fuzz/`, `web/`, `app/` (npm und Gradle), der Basis-Images und der Actions, einmal im Monat. |
-| `backend/` | Alt. Fünf Go-Dienste (`cmd/api`, `authbackend`, `events`, `feedfinder`, `worker`), Migrationen in `backend/migrations/`, Testdaten in `backend/test/data/` (die Tests des Servers lesen sie). Bleibt bis zum Umstieg als Vorlage, ohne `go.mod` und `go.sum` aber nicht mehr baubar. |
-| `frontend/` | Alt. Svelte-Frontend. Bleibt bis zum Umstieg als Vorlage, ohne `package.json` und `pnpm-lock.yaml` aber nicht mehr baubar. |
-| `config/` | Alt. Einstellungen des alten Betriebs mit loginsrv, imgproxy und nginx. Seine Compose-Dateien sind seit dem 2026-11-11 entfernt, siehe [plan.md](plan.md#entscheidungen). |
 
-Der alte Code wird nicht mehr weiterentwickelt, nur noch gelesen: als Vorlage für den Import, die Bereinigung und das Verhalten des Abrufs.
+Das alte System ist am 2026-11-12 entfernt worden (Paket 4.7): fünf Go-Dienste in `backend/` (`cmd/api`, `authbackend`, `events`, `feedfinder`, `worker`, Migrationen in `backend/migrations/`), das Svelte-Frontend in `frontend/` und die Einstellungen des alten Betriebs mit loginsrv, imgproxy und nginx in `config/`, dazu `.golangci.yaml`, `.pre-commit-config.yaml` und `.mdlrc`, die nur dem alten Code dienten. Wer es lesen will, etwa als Vorlage für den Import oder für Paket 4.6, nimmt den Commit `0b36a96`, den letzten, in dem es noch lief (`git show 0b36a96:frontend/src/rueder/stores/labels.ts`).
 
 ## Stack und Konventionen
 
@@ -200,9 +197,9 @@ Das alte System ist nicht mehr lauffähig: Seine Paket- und Compose-Dateien sind
 | `ci.yml`, Job `image` | Das Container-Image: gebaut mit Buildx und dem Cache von GitHub Actions, dann startet `deploy/smoke-test.sh` es mit PostgreSQL nach `deploy/compose.yaml` und prüft Health, Frontend, Konto und Login, Neustart mit erhaltenen Daten sowie Betrieb ohne Root und mit schreibgeschütztem Dateisystem. |
 | `ci.yml`, Job `publish` | Nur bei einem Push auf `main` und erst, wenn `server`, `dependencies`, `web`, `e2e` und `image` grün sind: baut das Image aus dem Cache des Jobs `image` und schiebt es nach `ghcr.io/fionapreroll/rueder`, als `:sha-<commit>` und als `:latest`, solange `main` noch auf diesen Commit zeigt. Nur für amd64. |
 | `gitleaks.yml` | Geheimnisse im Repository. |
-| `codeql-analysis.yml` | Statische Analyse von Rust, JavaScript und TypeScript, Python (die alten Skripte in `backend/utils/`) und den Workflows, ohne Build. Go fiel mit `backend/go.mod` weg. |
+| `codeql-analysis.yml` | Statische Analyse von Rust, JavaScript und TypeScript und den Workflows, ohne Build. Go fiel mit `backend/go.mod` weg, Python mit den alten Skripten in `backend/utils/`. |
 
-Die Workflows des alten Systems (`backend-lint.yml`, `backend-test.yml`, `frontend-lint.yml`, `frontend-test.yml`) sind am 2026-11-11 entfernt worden. Falls einer ihrer Jobs in den Einstellungen des Repositorys als Pflicht-Check steht, muss er dort raus.
+Die Workflows des alten Systems (`backend-lint.yml`, `backend-test.yml`, `frontend-lint.yml`, `frontend-test.yml`) sind am 2026-11-11 entfernt worden. Falls einer ihrer Jobs in den Einstellungen des Repositorys als Pflicht-Check steht, muss er dort raus; seit dem 2026-11-12 gilt das auch für `Analyze (python)` von CodeQL.
 
 Die Abdeckung geht an Codecov, getrennt nach den Flags `web` und `server` (`codecov.yml`). Der Upload braucht das Repository-Secret `CODECOV_TOKEN`. Die Status von Codecov sind informativ und blockieren keinen Merge.
 
@@ -306,7 +303,7 @@ Es gibt keinen Parallelbetrieb: Die alte Produktion ist abgeschaltet, ihre Daten
 - [ ] **4.4 Probelauf.** Das Backup der alten Produktion in ein PostgreSQL einspielen und in eine Kopie der neuen Produktion importieren. Dieselben Messungen wie in Schritt 1, Dauer des Imports notieren.
 - [ ] **4.5 Einmaliger Import in der Produktion.** Server anhalten, Backup, Import, Start. Weg zurück festhalten (das Backup von davor).
 - [ ] **4.6 Lesestand und Labels aus dem Browser.** Das neue Frontend liest nach dem Import die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte und der Browser den Speicher noch hat. Weil der Import nach der Inbetriebnahme kommt, bietet das Frontend die Übernahme an, sobald das Konto importierte Daten hat, nicht beim ersten Login.
-- [ ] **4.7 Abbau.** `backend/`, `frontend/` und `config/` entfernen, README neu schreiben. Vorgezogen am 2026-11-11: die alten Workflows, die Paketdateien in `backend/` und `frontend/` und die Compose-Dateien in `/` und `backend/` sind schon weg. `server/tests/feeds.rs` liest Testdaten aus `backend/test/data/`; die ziehen vor dem Abbau nach `server/tests/`.
+- [x] **4.7 Abbau.** `backend/`, `frontend/` und `config/` entfernen, README neu schreiben. Vorgezogen am 2026-11-11: die alten Workflows, die Paketdateien in `backend/` und `frontend/` und die Compose-Dateien in `/` und `backend/` sind schon weg. `server/tests/feeds.rs` liest Testdaten aus `backend/test/data/`; die ziehen vor dem Abbau nach `server/tests/`. Fertig am 2026-11-12, auf Fionas Wunsch vor 4.4 bis 4.6: Die aufgezeichneten Feeds liegen in `server/tests/data/`, `backend/`, `frontend/` und `config/` sind weg, mit ihnen `.golangci.yaml`, `.pre-commit-config.yaml`, `.mdlrc`, die Go-Einträge in `.vscode/`, die Python-Analyse von CodeQL und auf Fionas Wunsch das Gopher-Logo in `docs/images/`. Die README im Hauptverzeichnis beschreibt den neuen rueder. Was 4.4 bis 4.6 vom alten Code brauchen, steht im Commit `0b36a96`: der Import liest nur die alte Datenbank selbst, das Format des `localStorage` für 4.6 beschreibt [user_data.md](user_data.md).
 
 ### Für später
 
@@ -317,7 +314,7 @@ Von Fiona am 2026-11-12 für später notiert, noch keinem Schritt zugeordnet:
 
 ## Import der alten Daten
 
-Die alte Datenbank ist PostgreSQL, das Schema steht in `backend/migrations/` (Fizz), die Modelle in `backend/pkg/repository/pop/models/`. Der Import (`rueder import-legacy --from <Adresse der alten Datenbank>`, Code in `server/src/import.rs`) liest sie über eine zweite Verbindung in einer einzigen Nur-Lese-Transaktion und ändert sie nicht. Seit Paket 4.3 führt er die alten Daten mit dem zusammen, was der neue rueder schon hat, siehe [unten](#einmaliger-import-in-den-laufenden-bestand); die Tabelle sagt, wie ein Feed, Artikel oder User aussieht, der neu dazukommt.
+Die alte Datenbank ist PostgreSQL, das Schema stand in `backend/migrations/` (Fizz), die Modelle in `backend/pkg/repository/pop/models/` (beides im Commit `0b36a96`, nachgebaut in `server/tests/fixtures/legacy_schema.sql`). Der Import (`rueder import-legacy --from <Adresse der alten Datenbank>`, Code in `server/src/import.rs`) liest sie über eine zweite Verbindung in einer einzigen Nur-Lese-Transaktion und ändert sie nicht. Seit Paket 4.3 führt er die alten Daten mit dem zusammen, was der neue rueder schon hat, siehe [unten](#einmaliger-import-in-den-laufenden-bestand); die Tabelle sagt, wie ein Feed, Artikel oder User aussieht, der neu dazukommt.
 
 | Alt | Neu | Hinweise |
 |---|---|---|
@@ -513,7 +510,7 @@ Langsamer als 2026-11-10 (4.300 je Sekunde), weil seither jeder Text bereinigt w
 
 ## Wissen über das Altsystem
 
-Wo im alten Code steht, was der neue nachbauen oder übernehmen muss:
+Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist seit Paket 4.7 nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.
 
 | Thema | Wo |
 |---|---|
@@ -530,4 +527,4 @@ Wo im alten Code steht, was der neue nachbauen oder übernehmen muss:
 | Lesestand im Browser | `frontend/src/rueder/stores/articlestate.ts`, beschrieben in [user_data.md](user_data.md) |
 | Labels im Browser | `frontend/src/rueder/stores/labels.ts` |
 | Login mit loginsrv und JWT | `backend/cmd/authbackend`, `backend/pkg/fibertools/`, `config/rueder.example.env` |
-| Betrieb heute | `docker-compose.yaml`, `config/` |
+| Betrieb des alten rueder | `docker-compose.yaml`, `config/` |

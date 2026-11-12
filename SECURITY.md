@@ -25,8 +25,8 @@ The new rueder, which replaces the old one:
   [`android-latest`](https://github.com/FionaPreroll/rueder/releases/tag/android-latest);
 - the container setup in `deploy/` and the `Dockerfile`.
 
-Only the newest state of `main` gets fixes. The old system in `backend/`,
-`frontend/` and `config/` is no longer built or run and gets none.
+Only the newest state of `main` gets fixes. The old rueder (Go backend and
+Svelte frontend), which was removed from the repository, gets none.
 
 ## How rueder is meant to be safe
 

@@ -1,8 +1,8 @@
 # rueder server
 
 The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQL.
-It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
-and work packages are in [docs/](../docs/implementation.md) (German).
+It replaced the old Go backend. Plan, architecture and work packages are in
+[docs/](../docs/implementation.md) (German).
 
 ## State: foundation, data, fetching, cleaning, images, login, the API, its hardening and the search
 

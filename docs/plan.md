@@ -43,7 +43,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 
 ## Ausgangslage
 
-Der bestehende rueder hat rund 6.300 Zeilen Go (`backend/`) und 7.400 Zeilen Svelte und TypeScript (`frontend/`). Vieles Gewünschte ist im Ansatz da, aber der Aufwand der Artikelliste wächst mit der Größe des Feeds. Das ist aus dem Code abgeleitet und nicht an Produktionsdaten gemessen; gemessen wurde in Schritt 1 das neue Schema an erzeugten Daten.
+Der alte rueder hatte (Stand Commit `0b36a96`) rund 6.300 Zeilen Go (`backend/`) und 7.400 Zeilen Svelte und TypeScript (`frontend/`). Vieles Gewünschte ist im Ansatz da, aber der Aufwand der Artikelliste wächst mit der Größe des Feeds. Das ist aus dem Code abgeleitet und nicht an Produktionsdaten gemessen; gemessen wurde in Schritt 1 das neue Schema an erzeugten Daten.
 
 | Bereich | Stand heute | Folge |
 |---|---|---|
@@ -74,7 +74,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Frage | Entscheidung | Wofür es zählt |
 |---|---|---|
 | Größe der Produktion, Dump zum Messen? | Kein Dump. Ausgelegt und gemessen wird für 10 User, 300 Feeds und 10 Millionen Artikel, an erzeugten Daten. | Schritt 1 misst daran. |
-| Gleiches Repository oder ein neues? | Gleiches Repository, neue Verzeichnisse `server/` und `web/`, seit Paket 3.11 dazu `app/` für die Android-App. Der alte Code bleibt bis zum Umstieg als Vorlage liegen. Seine Paketdateien (`backend/go.mod`, `go.sum`, `frontend/package.json`, `pnpm-lock.yaml`), seine Compose-Dateien in `/` und `backend/` und seine Workflows hat Fiona am 2026-11-11 vorzeitig entfernen lassen, damit Dependabot und die Security Advisories nicht mehr die Abhängigkeiten eines Systems melden, das nicht mehr läuft. Seitdem ist der alte Code nicht mehr lauffähig; wer ihn starten will, nimmt den Commit `0b36a96` davor. | Arbeitsweise ab Schritt 1. |
+| Gleiches Repository oder ein neues? | Gleiches Repository, neue Verzeichnisse `server/` und `web/`, seit Paket 3.11 dazu `app/` für die Android-App. Der alte Code bleibt bis zum Umstieg als Vorlage liegen. Seine Paketdateien (`backend/go.mod`, `go.sum`, `frontend/package.json`, `pnpm-lock.yaml`), seine Compose-Dateien in `/` und `backend/` und seine Workflows hat Fiona am 2026-11-11 vorzeitig entfernen lassen, damit Dependabot und die Security Advisories nicht mehr die Abhängigkeiten eines Systems melden, das nicht mehr läuft. Seitdem ist der alte Code nicht mehr lauffähig; wer ihn starten will, nimmt den Commit `0b36a96` davor. Am 2026-11-12 hat Fiona den Rest des alten Codes entfernen lassen (Paket 4.7), noch vor Probelauf, Import und Übernahme aus dem Browser (4.4 bis 4.6): Der neue rueder läuft in der Produktion, der Import liest nur die alte Datenbank, und was 4.6 vom alten Frontend wissen muss, steht in [user_data.md](user_data.md) und im Commit `0b36a96`. | Arbeitsweise ab Schritt 1. |
 | Login | Heute loginsrv mit htpasswd. Künftig lokale Konten mit Argon2id, OpenID Connect muss möglich sein. | Bestimmt, wie bestehende Konten umziehen. |
 | Ordner | Verschachtelt, höchstens 5 Ebenen. | Datenmodell und Drag & Drop. |
 | Versionen | Höchstens 20 Versionen je Artikel. Ein aktualisierter Artikel bleibt gelesen und bekommt den Hinweis „aktualisiert“. | Speicherbedarf und Ungelesen-Zahlen. |
@@ -93,7 +93,7 @@ Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](imp
 
 ## Plan in vier Schritten
 
-Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht im selben Repository in `server/` und `web/` (dazu `app/` für die Android-App und `deploy/` für den Betrieb), der alte bleibt bis zum Umstieg als Vorlage liegen. Den Stand je Schritt führt [implementation.md](implementation.md#stand).
+Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht im selben Repository in `server/` und `web/` (dazu `app/` für die Android-App und `deploy/` für den Betrieb), der alte lag bis zum Umstieg als Vorlage daneben und ist seit dem 2026-11-12 entfernt. Den Stand je Schritt führt [implementation.md](implementation.md#stand).
 
 **Vorarbeit: klickbarer Entwurf der Oberfläche** (fertig). Die Oberfläche wurde vor dem Server entworfen, damit Aussehen und Bedienung früh feststehen. Der Entwurf liegt in `web/`, läuft mit erfundenen Feeds ganz im Browser und ist abgenommen.
 
@@ -109,7 +109,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: rueder ist täglich benutzbar.
 
-4. **Umstieg.** Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach, am Ende wird das alte System abgebaut.
+4. **Umstieg.** Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach. Das alte System sollte am Ende abgebaut werden; auf Fionas Wunsch geschah das schon am 2026-11-12, nach der Inbetriebnahme und vor dem Import (siehe [Entscheidungen](#entscheidungen)).
 
    Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
 

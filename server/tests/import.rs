@@ -1,6 +1,7 @@
-//! The import, against the old rueder's schema rebuilt from `backend/migrations/`
-//! (`fixtures/legacy_schema.sql`). The old database lives in a schema of its
-//! own inside the test's database, so no second server is needed.
+//! The import, against the old rueder's schema rebuilt from its
+//! `backend/migrations/` at commit `0b36a96` (`fixtures/legacy_schema.sql`).
+//! The old database lives in a schema of its own inside the test's database,
+//! so no second server is needed.
 
 mod common;
 
