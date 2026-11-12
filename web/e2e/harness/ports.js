@@ -35,5 +35,6 @@ export const ACCOUNTS = [
 	'inviter',
 	'moving',
 	'moved',
-	'search'
+	'search',
+	'darkbars'
 ];

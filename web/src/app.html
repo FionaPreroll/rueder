@@ -11,7 +11,8 @@
 			rel="icon"
 			href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23c8402e'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M7 11a6 6 0 0 1 6 6'/%3E%3Cpath d='M7 6a11 11 0 0 1 11 11'/%3E%3C/g%3E%3Ccircle cx='7.6' cy='16.6' r='1.6' fill='%23fff'/%3E%3C/svg%3E"
 		/>
-		<!-- To install it as an app: name, icons and colors (static/manifest.webmanifest). -->
+		<!-- To install it as an app: name, icons and colors (static/manifest.webmanifest, and
+		     static/manifest-dark.webmanifest for the dark theme, chosen by the script below). -->
 		<link rel="manifest" href="/manifest.webmanifest" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)" />
@@ -31,6 +32,19 @@
 					: matchMedia('(prefers-color-scheme: dark)').matches
 						? 'dark'
 						: 'light';
+			// The bars of the browser and of the installed app in the colors of the theme
+			// (barColors and manifests in settings.svelte.ts).
+			var dark = root.dataset.theme === 'dark';
+			var bars = document.querySelectorAll('meta[name="theme-color"]');
+			for (var i = 0; i < bars.length; i++) {
+				bars[i].removeAttribute('media');
+				bars[i].content = dark ? '#1c1f25' : '#f4f5f7';
+			}
+			if (dark) {
+				document
+					.querySelector('link[rel="manifest"]')
+					.setAttribute('href', '/manifest-dark.webmanifest');
+			}
 			if (look.accent) root.dataset.accent = look.accent;
 			if (look.density) root.dataset.density = look.density;
 			if (look.textSize) root.dataset.textSize = look.textSize;

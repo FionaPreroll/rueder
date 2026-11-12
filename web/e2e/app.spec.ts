@@ -38,3 +38,36 @@ test('installs as an app, keeps its own files and nothing of the reader’s', as
 	});
 	expect(after).toEqual([]);
 });
+
+test('colors the bars of the app as the dark theme, within the page’s policy', async ({
+	browser
+}) => {
+	const context = await browser.newContext({ colorScheme: 'dark' });
+	const page = await context.newPage();
+	// The script in app.html sets the colors before the first paint; the policy allows
+	// it by its hash, so a changed script must not be refused.
+	await page.addInitScript(() => {
+		const seen: string[] = [];
+		(window as unknown as { refused: string[] }).refused = seen;
+		document.addEventListener('securitypolicyviolation', (event) =>
+			seen.push(event.violatedDirective)
+		);
+	});
+	await logIn(page, 'darkbars');
+	const look = await page.evaluate(() => ({
+		bars: [...document.querySelectorAll('meta[name="theme-color"]')].map(
+			(meta) => (meta as HTMLMetaElement).content
+		),
+		manifest: document.querySelector('link[rel="manifest"]')?.getAttribute('href'),
+		refused: (window as unknown as { refused: string[] }).refused
+	}));
+	expect(look).toEqual({
+		bars: ['#1c1f25', '#1c1f25'],
+		manifest: '/manifest-dark.webmanifest',
+		refused: []
+	});
+	const manifest = await page.request.get('/manifest-dark.webmanifest');
+	expect(manifest.headers()['content-type']).toContain('application/manifest+json');
+	expect(await manifest.json()).toMatchObject({ name: 'rueder', theme_color: '#1c1f25' });
+	await context.close();
+});

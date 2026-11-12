@@ -101,7 +101,8 @@ const de: Messages = {
 		compare: 'Versionen vergleichen',
 		hiddenBy: (rule) => `Ausgeblendet von der Regel: ${rule}`,
 		loading: 'Der Text wird geladen …',
-		loadingList: 'Wird geladen …'
+		loadingList: 'Wird geladen …',
+		toTop: 'Zurück nach oben'
 	},
 
 	media: {
@@ -240,6 +241,8 @@ const de: Messages = {
 		views: { list: 'Liste', expanded: 'Erweitert' },
 		markOnScroll: 'Artikel in der erweiterten Ansicht beim Vorbeiscrollen als gelesen markieren',
 		teasers: 'In der Liste nach dem Titel die ersten Worte des Textes zeigen',
+		wakeLock: 'Bildschirm anlassen, solange rueder offen ist',
+		wakeLockMissing: 'Dieser Browser kann den Bildschirm nicht anlassen.',
 		note: 'Änderungen gelten sofort, liegen bei deinem Konto und gelten auf jedem Gerät.',
 		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.',
 		reports: {

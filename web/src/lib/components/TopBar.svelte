@@ -41,15 +41,16 @@
 </script>
 
 <header class="flex h-12 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2 sm:gap-2">
+	<!-- On a touch screen the sidebar's switch is the size of a fingertip. -->
 	<button
 		type="button"
-		class="plain size-9"
+		class="plain size-11 shrink-0 pointer-fine:size-9"
 		aria-pressed={sidebarOpen}
 		aria-label={sidebarOpen ? m.nav.closeSidebar : m.nav.openSidebar}
 		title={sidebarOpen ? m.nav.closeSidebar : m.nav.openSidebar}
 		onclick={ontogglesidebar}
 	>
-		<Icon name="list" class="size-5" />
+		<Icon name="list" class="size-6 pointer-fine:size-5" />
 	</button>
 
 	<button

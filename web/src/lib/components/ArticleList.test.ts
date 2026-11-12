@@ -14,7 +14,8 @@ function setup(stream: Stream = { kind: 'feed', id: 'feed-tagesbote' }) {
 	const onversions = vi.fn();
 	const { container } = render(ArticleList, { reader, now, onversions });
 	const row = (id: string) => container.querySelector<HTMLElement>(`[data-article="${id}"]`)!;
-	return { reader, onversions, row, container };
+	const scroller = container.querySelector<HTMLElement>('.overflow-y-auto')!;
+	return { reader, onversions, row, container, scroller };
 }
 
 afterEach(() => Object.assign(settings, defaults));
@@ -162,6 +163,44 @@ describe('the expanded view', () => {
 		expect(row(second.id)).toHaveClass('border-accent');
 	});
 
+	it('brings a row that opens or closes above the view back into it', async () => {
+		const { reader, row } = setup();
+		const [long, next] = reader.list;
+		// The row that matters is above the view, as after reading a long article.
+		let above = '';
+		vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+			this: HTMLElement
+		) {
+			return { top: this.dataset.article === above ? -800 : 0 } as DOMRect;
+		});
+		const scrolled: (string | undefined)[] = [];
+		const into = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (
+			this: HTMLElement
+		) {
+			scrolled.push(this.dataset.article);
+		});
+		const open = (id: string) =>
+			userEvent.click(within(row(id)).getByRole('button', { expanded: reader.open === id }));
+
+		await open(long.id);
+		expect(scrolled).toEqual([]);
+
+		// Opening the next one closes the long one, which takes the next row up out of sight.
+		above = next.id;
+		await open(next.id);
+		await new Promise((done) => setTimeout(done, 0));
+		expect(reader.open).toBe(next.id);
+		expect(scrolled).toEqual([next.id]);
+		expect(into).toHaveBeenLastCalledWith({ block: 'start' });
+
+		// Closing an article whose row scrolled out at the top goes back to that row.
+		await open(next.id);
+		await new Promise((done) => setTimeout(done, 0));
+		expect(reader.open).toBeNull();
+		expect(scrolled).toEqual([next.id, next.id]);
+		vi.restoreAllMocks();
+	});
+
 	it('goes to the feed of an article', async () => {
 		settings.view = 'expanded';
 		const { reader, row } = setup({ kind: 'all' });
@@ -211,8 +250,7 @@ describe('a long list', () => {
 	});
 
 	it('scrolls to an article the keyboard steps to, though it was not drawn', async () => {
-		const { reader, container, row } = await longList();
-		const scroller = container.firstElementChild as HTMLElement;
+		const { reader, row, scroller } = await longList();
 		const target = reader.visible[120];
 		reader.select(reader.visible[119], false);
 		reader.step(1);
@@ -221,5 +259,24 @@ describe('a long list', () => {
 		await new Promise((done) => requestAnimationFrame(done));
 		expect(row(target.id)).not.toBeNull();
 		expect(row(reader.visible[0].id)).toBeNull();
+	});
+
+	it('offers a way back to the top once the reader is a screen down', async () => {
+		const { scroller } = await longList();
+		const toTop = () => screen.queryByRole('button', { name: 'Back to the top' });
+		expect(toTop()).toBeNull();
+
+		scroller.scrollTop = 1500;
+		scroller.dispatchEvent(new Event('scroll'));
+		await new Promise((done) => requestAnimationFrame(done));
+		const scrollTo = vi.fn();
+		scroller.scrollTo = scrollTo;
+		await userEvent.click(toTop()!);
+		expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+
+		scroller.scrollTop = 0;
+		scroller.dispatchEvent(new Event('scroll'));
+		await new Promise((done) => requestAnimationFrame(done));
+		expect(toTop()).toBeNull();
 	});
 });

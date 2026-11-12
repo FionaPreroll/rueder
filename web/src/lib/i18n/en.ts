@@ -104,7 +104,8 @@ const en = {
 		compare: 'Compare versions',
 		hiddenBy: (rule: string) => `Hidden by the rule: ${rule}`,
 		loading: 'Loading the text …',
-		loadingList: 'Loading …'
+		loadingList: 'Loading …',
+		toTop: 'Back to the top'
 	},
 
 	media: {
@@ -242,6 +243,8 @@ const en = {
 		views: { list: 'List', expanded: 'Expanded' },
 		markOnScroll: 'Mark articles as read while scrolling past them in the expanded view',
 		teasers: 'Show the first words of the text after the title in the list',
+		wakeLock: 'Keep the screen on while rueder is open',
+		wakeLockMissing: 'This browser cannot keep the screen on.',
 		note: 'Changes apply at once and are saved with your account, so they follow you to every device.',
 		noteDemo: 'Changes apply at once and stay in this browser.',
 		reports: {
