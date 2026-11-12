@@ -21,25 +21,8 @@ android {
     buildFeatures {
         buildConfig = true
     }
-    // Two builds: "github" for the release on GitHub, which looks for new
-    // versions of itself if the reader agrees; "play" for the Play Store, which
-    // brings updates itself, without the update check and without the
-    // permission to install apps (src/github/ and src/play/).
-    flavorDimensions = ["store"]
-    productFlavors {
-        github {
-            dimension "store"
-            // Where the release keeps version.json and rueder.apk. A fork
-            // names its own with RUEDER_UPDATES_URL.
-            buildConfigField "String", "UPDATES_URL", "\"" + (System.getenv("RUEDER_UPDATES_URL")
-                ?: "https://github.com/FionaPreroll/rueder/releases/download/android-latest/") + "\""
-        }
-        play {
-            dimension "store"
-        }
-    }
     // The key is never in the repository: CI takes it from its secrets
-    // (android.yml). Without one, a release build stays unsigned.
+    // (ci.yml). Without one, a release build stays unsigned.
     signingConfigs {
         release {
             def keystore = System.getenv("RUEDER_KEYSTORE")
@@ -51,11 +34,30 @@ android {
             }
         }
     }
-    buildTypes {
-        release {
+    // Two builds: "github" for the release on GitHub, which looks for new
+    // versions of itself if the reader agrees; "play" for the Play Store, which
+    // brings updates itself, without the update check and without the
+    // permission to install apps (src/github/ and src/play/).
+    flavorDimensions = ["store"]
+    productFlavors {
+        github {
+            dimension "store"
+            // Signed with the key from CI's secrets (see signingConfigs). The
+            // Play Store's build stays unsigned: its upload key is another.
             if (System.getenv("RUEDER_KEYSTORE")) {
                 signingConfig signingConfigs.release
             }
+            // Where the release keeps version.json and rueder.apk. A fork
+            // names its own with RUEDER_UPDATES_URL.
+            buildConfigField "String", "UPDATES_URL", "\"" + (System.getenv("RUEDER_UPDATES_URL")
+                ?: "https://github.com/FionaPreroll/rueder/releases/download/android-latest/") + "\""
+        }
+        play {
+            dimension "store"
+        }
+    }
+    buildTypes {
+        release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
