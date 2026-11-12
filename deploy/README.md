@@ -223,6 +223,32 @@ docker compose exec -T db pg_restore -U rueder --dbname=rueder --clean --if-exis
 docker compose start rueder
 ```
 
+## Bringing over the old rueder
+
+The data of the old rueder comes once from a backup of its database and is
+merged with the accounts and feeds that are here
+([server/README.md](../server/README.md#importing-the-old-database) says how).
+Put the backup into a second database next to rueder's, stop the server, take
+a backup of rueder's own database, and run the import from a container of its
+own:
+
+```sh
+docker compose exec -T db createdb -U rueder rueder_old
+docker compose exec -T db pg_restore -U rueder --dbname=rueder_old --no-owner < old.dump
+# (a backup in plain SQL goes in with: docker compose exec -T db psql -U rueder rueder_old < old.sql)
+docker compose stop rueder
+docker compose exec -T db pg_dump -U rueder --format=custom rueder > before-import.dump
+export LEGACY_DATABASE_URL="postgres://rueder:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@db:5432/rueder_old"
+docker compose run --rm -e LEGACY_DATABASE_URL rueder import-legacy --dry-run
+docker compose run --rm -e LEGACY_DATABASE_URL rueder import-legacy --account oldname=newname
+docker compose start rueder
+```
+
+The dry run says which feeds and accounts would be merged and which added. If
+the import stops halfway, run it again. The way back is `before-import.dump`,
+put in as under [Backup](#backup). Afterwards `rueder_old` can go:
+`docker compose exec db dropdb -U rueder rueder_old`.
+
 ## What the container may do
 
 - It holds the program, the frontend and the C library, with no shell and no

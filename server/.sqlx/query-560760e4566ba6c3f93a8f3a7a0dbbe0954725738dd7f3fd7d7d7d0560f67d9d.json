@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO legacy_articles (legacy_id, feed_id, seq, legacy_seq, matched)\n             SELECT n.legacy_id, $1, n.seq, n.legacy_seq, n.matched\n             FROM unnest($2::uuid[], $3::integer[], $4::integer[], $5::boolean[])\n                  AS n (legacy_id, seq, legacy_seq, matched)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "UuidArray",
+        "Int4Array",
+        "Int4Array",
+        "BoolArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "560760e4566ba6c3f93a8f3a7a0dbbe0954725738dd7f3fd7d7d7d0560f67d9d"
+}

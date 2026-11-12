@@ -7,7 +7,7 @@ mod common;
 use rueder::{
     articles::{self, Page},
     cleaning::Rules,
-    import::{self, Report},
+    import::{self, Options, Report},
     reading,
 };
 use serde_json::{Value, json};
@@ -252,7 +252,9 @@ async fn brings_over_feeds_articles_accounts_folders_and_subscriptions(db: PgPoo
     let (a, b, c) = old_rueder(&mut old).await;
     let before = OffsetDateTime::now_utc();
 
-    let report = import::run(&db, &mut old, &rules()).await.unwrap();
+    let report = import::run(&db, &mut old, &rules(), &Options::default())
+        .await
+        .unwrap();
     assert_eq!(
         report,
         Report {
@@ -534,212 +536,574 @@ async fn brings_over_feeds_articles_accounts_folders_and_subscriptions(db: PgPoo
     );
 }
 
-#[sqlx::test]
-async fn a_second_run_adds_only_what_is_new(db: PgPool) {
-    let mut old = legacy(&db).await;
-    let (old_a, old_b, _) = old_rueder(&mut old).await;
-    import::run(&db, &mut old, &rules()).await.unwrap();
-    let (a, b) = (new_feed(&db, old_a).await, new_feed(&db, old_b).await);
-    let alice = new_account(&db, "alice").await;
+/// A subscription: feed, folder, place, own title and read mark.
+type Placed = (i32, Option<String>, f64, Option<String>, i32);
 
-    // Right away, a second run finds nothing to do.
-    let again = import::run(&db, &mut old, &rules()).await.unwrap();
+/// The new rueder in use before the import: what it has, by id.
+struct InUse {
+    /// Feed A under the old feed's address, with three articles it fetched
+    /// itself: `a-4`, which the old rueder has too, `a-new1` and `a-new2`.
+    a: i32,
+    /// Feed B under an address that only looks different from the old one.
+    b: i32,
+    /// A feed the old rueder never had.
+    x: i32,
+    /// The old alice, with her name in capitals.
+    alice: i32,
+    /// Has the old bob's name, but bob goes to fiona.
+    bob: i32,
+    fiona: i32,
+    /// Has no old user.
+    carol: i32,
+}
+
+async fn in_use(db: &PgPool) -> InUse {
+    let alice = common::account(db, "Alice").await;
+    let bob = common::account(db, "bob").await;
+    let fiona = common::account(db, "fiona").await;
+    let carol = common::account(db, "carol").await;
+    let feed = |url: &'static str, title: &'static str| {
+        sqlx::query_scalar::<_, i32>(
+            "INSERT INTO feeds (feed_url, title) VALUES ($1, $2) RETURNING id",
+        )
+        .bind(url)
+        .bind(title)
+        .fetch_one(db)
+    };
+    let a = feed("https://a.example/feed", "A here").await.unwrap();
+    let b = feed("http://B.example/feed/", "Bee").await.unwrap();
+    let x = common::feed(db, "x").await;
+    let fetched = |guid: &str| {
+        let mut article = common::article(7);
+        article.guid = guid.to_owned();
+        article.original.title = format!("Own {guid}");
+        article
+    };
+    let mut tx = db.begin().await.unwrap();
+    let own = [fetched("a-4"), fetched("a-new1"), fetched("a-new2")];
+    articles::insert(&mut tx, a, &own).await.unwrap();
+    articles::insert(&mut tx, x, &[fetched("x-1")])
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    // Alice has a folder "news" with X in it, and A on the top level under a
+    // name of her own. She read a-4, starred a-new2 and put a label on a-new1.
+    let news: i32 = sqlx::query_scalar(
+        "INSERT INTO folders (account_id, title, position) VALUES ($1, 'news', 1) RETURNING id",
+    )
+    .bind(alice)
+    .fetch_one(db)
+    .await
+    .unwrap();
+    for (account_id, feed_id, folder_id, position, title, read_upto) in [
+        (alice, x, Some(news), 1.0, None, 0),
+        (alice, a, None, 2.0, Some("Mine"), 1),
+        (carol, a, None, 1.0, None, 0),
+    ] {
+        sqlx::query(
+            "INSERT INTO subscriptions (account_id, feed_id, folder_id, position, title, read_upto)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(account_id)
+        .bind(feed_id)
+        .bind(folder_id)
+        .bind(position)
+        .bind(title)
+        .bind(read_upto)
+        .execute(db)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO article_states (account_id, feed_id, seq, starred) VALUES ($1, $2, 3, true)",
+    )
+    .bind(alice)
+    .bind(a)
+    .execute(db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "WITH label AS (
+             INSERT INTO labels (account_id, title, color, position)
+             VALUES ($1, 'Later', '#ff0000', 1) RETURNING id
+         )
+         INSERT INTO article_labels (label_id, feed_id, seq) SELECT id, $2, 2 FROM label",
+    )
+    .bind(alice)
+    .bind(a)
+    .execute(db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO filter_rules (account_id, position, field, match, pattern, action)
+         VALUES ($1, 1, 'title', 'contains', 'new1', 'hide')",
+    )
+    .bind(fiona)
+    .execute(db)
+    .await
+    .unwrap();
+    InUse {
+        a,
+        b,
+        x,
+        alice,
+        bob,
+        fiona,
+        carol,
+    }
+}
+
+fn bob_to_fiona() -> Options {
+    Options {
+        accounts: vec![("bob".into(), "fiona".into())],
+        dry_run: false,
+    }
+}
+
+/// The lines that say what went together, for the data of `old_rueder` and `in_use`.
+fn merged_lines(new: &InUse) -> Vec<String> {
+    vec![
+        format!(
+            "feed https://a.example/feed with 4 articles: into feed {} \"A here\"",
+            new.a
+        ),
+        format!(
+            "feed https://b.example/feed with 2 articles: into feed {} \"Bee\", \
+             which is at http://B.example/feed/",
+            new.b
+        ),
+        "user alice: into account Alice of the same name".into(),
+        "user bob: into account fiona, as the call says".into(),
+    ]
+}
+
+/// What the import of `old_rueder` into `in_use` comes to, whether in one run
+/// or in several.
+async fn check_merged_articles(db: &PgPool, new: &InUse, c: i32) {
+    let InUse { a, b, x, .. } = *new;
+    // The old articles come first, in their old order and with their old
+    // places; what the new rueder fetched follows, a-4 only once.
+    let guid = |name: &str| name.to_owned();
+    assert_eq!(
+        new_articles(db).await,
+        [
+            (a, 1, 1, guid("a-1")),
+            (b, 1, 2, guid("b-1")),
+            (a, 2, 3, guid("a-2")),
+            (a, 3, 5, guid("a-3")),
+            (b, 2, 6, guid("b-2")),
+            (a, 4, 10, guid("a-4")),
+            (a, 5, 11, guid("a-new1")),
+            (a, 6, 12, guid("a-new2")),
+            (x, 1, 13, guid("x-1")),
+        ]
+    );
+    let feeds: Vec<(i32, i32, String, String, Option<Uuid>)> =
+        sqlx::query_as("SELECT id, last_seq, feed_url, title, legacy_id FROM feeds ORDER BY id")
+            .fetch_all(db)
+            .await
+            .unwrap();
+    let url = |text: &str| text.to_owned();
+    assert_eq!(
+        feeds,
+        [
+            (
+                a,
+                6,
+                url("https://a.example/feed"),
+                url("A here"),
+                Some(feed_id(1))
+            ),
+            (
+                b,
+                2,
+                url("http://B.example/feed/"),
+                url("Bee"),
+                Some(feed_id(2))
+            ),
+            (x, 1, url("https://x.example/feed.xml"), url("x"), None),
+            (
+                c,
+                0,
+                url("https://c.example/feed"),
+                url("Feed C"),
+                Some(feed_id(3))
+            ),
+        ]
+    );
+    // Each old article knows where it went and which number the old rueder
+    // gave it; a-4 is the one the new rueder had.
+    let mapped: Vec<(Uuid, i32, i32, i32, bool)> = sqlx::query_as(
+        "SELECT legacy_id, feed_id, seq, legacy_seq, matched FROM legacy_articles
+         ORDER BY legacy_id",
+    )
+    .fetch_all(db)
+    .await
+    .unwrap();
+    assert_eq!(
+        mapped,
+        [
+            (article_id(1), a, 1, 1, false),
+            (article_id(2), b, 1, 1, false),
+            (article_id(3), a, 2, 2, false),
+            (article_id(5), a, 3, 3, false),
+            (article_id(6), b, 2, 2, false),
+            (article_id(9), a, 4, 4, true),
+        ]
+    );
+    // Text, versions and the copy for the search moved with their articles.
+    let off: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM articles a FULL JOIN article_content c USING (feed_id, seq)
+                 WHERE a.id IS DISTINCT FROM c.id OR a.title IS DISTINCT FROM c.title)
+              + (SELECT count(*) FROM articles a FULL JOIN article_versions v USING (feed_id, seq)
+                 WHERE a.id IS NULL OR v.raw IS NULL)",
+    )
+    .fetch_one(db)
+    .await
+    .unwrap();
+    assert_eq!(off, 0);
+}
+
+#[sqlx::test]
+async fn merges_into_a_rueder_that_is_in_use(db: PgPool) {
+    let new = in_use(&db).await;
+    let InUse {
+        a,
+        b,
+        x,
+        alice,
+        bob,
+        fiona,
+        carol,
+    } = new;
+    let mut old = legacy(&db).await;
+    let (_, _, old_c) = old_rueder(&mut old).await;
+
+    let report = import::run(&db, &mut old, &rules(), &bob_to_fiona())
+        .await
+        .unwrap();
+    assert_eq!(
+        report,
+        Report {
+            feeds_added: 1,
+            feeds_merged: 2,
+            articles_added: 5,
+            articles_matched: 1,
+            accounts_merged: 2,
+            subscriptions_added: 3,
+            merged: merged_lines(&new),
+            notes: vec!["1 subscriptions to feeds that do not exist were left out".into()],
+            ..Report::default()
+        }
+    );
+    let printed = report.to_string();
+    assert!(printed.contains("Feeds:         1 added, 2 merged, 0 already there\n"));
+    assert!(printed.contains("\nMerged with what the new rueder has:\n- feed https://a.example"));
+    let c = new_feed(&db, old_c).await;
+    check_merged_articles(&db, &new, c).await;
+
+    // Accounts: the old users went into the accounts that were there; the
+    // account with the name of the one that went elsewhere stays as it was.
+    let accounts: Vec<(i32, Option<Uuid>)> =
+        sqlx::query_as("SELECT id, legacy_id FROM accounts ORDER BY id")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert_eq!(
+        accounts,
+        [
+            (alice, Some(user_id(1))),
+            (bob, None),
+            (fiona, Some(user_id(2))),
+            (carol, None)
+        ]
+    );
+    let identities: Vec<(String, i32)> =
+        sqlx::query_as("SELECT subject, account_id FROM account_identities ORDER BY subject")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert_eq!(
+        identities,
+        [("alice".to_owned(), alice), ("bob".to_owned(), fiona)]
+    );
+
+    // Alice's tree: what she set up stays. Of her old feeds, B went into her
+    // folder of the same title, with her old name for it; C, which was in no
+    // folder, to the end of the top level. Her old second folder only held A,
+    // which she has, so it did not come.
+    let tree: Vec<Placed> = sqlx::query_as(
+        "SELECT s.feed_id, f.title, s.position, s.title, s.read_upto
+         FROM subscriptions s LEFT JOIN folders f ON f.id = s.folder_id
+         WHERE s.account_id = $1 ORDER BY f.position NULLS LAST, s.position",
+    )
+    .bind(alice)
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    let news = Some("news".to_owned());
+    assert_eq!(
+        tree,
+        [
+            (x, news.clone(), 1.0, None, 0),
+            (b, news, 2.0, Some("My B".to_owned()), 2),
+            (a, None, 2.0, Some("Mine".to_owned()), 4),
+            (c, None, 3.0, None, 0),
+        ]
+    );
+    let folders: i64 = sqlx::query_scalar("SELECT count(*) FROM folders")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(folders, 1);
+
+    // What accounts noted on articles of A moved with them: the read mark past
+    // the old articles, alice's star on a-new2 and her label on a-new1.
+    let starred: Vec<(i32, i32, i32)> =
+        sqlx::query_as("SELECT account_id, feed_id, seq FROM article_states WHERE starred")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert_eq!(starred, [(alice, a, 6)]);
+    let labelled: Vec<(i32, i32)> = sqlx::query_as("SELECT feed_id, seq FROM article_labels")
+        .fetch_all(&db)
+        .await
+        .unwrap();
+    assert_eq!(labelled, [(a, 5)]);
+    let opened = articles::open(&db, alice, a, 5).await.unwrap().unwrap();
+    assert_eq!(opened.title, "Own a-new1");
+    let opened = articles::open(&db, alice, a, 1).await.unwrap().unwrap();
+    assert_eq!(opened.title, "Title of a-1");
+
+    // Unread is what the new rueder fetched and the account had not read; the
+    // old articles count as read. For fiona, who is new to A, a-4 was in the old
+    // rueder too, and her rule hides a-new1.
+    let pool = &db;
+    let unread = |account_id| async move {
+        let mut counts: Vec<_> = reading::unread_counts(pool, account_id)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|feed| (feed.feed_id, feed.unread))
+            .collect();
+        counts.sort_unstable();
+        counts
+    };
+    assert_eq!(unread(alice).await, [(a, 2), (b, 0), (x, 1), (c, 0)]);
+    assert_eq!(unread(carol).await, [(a, 3)]);
+    assert_eq!(unread(fiona).await, [(a, 1)]);
+    assert!(unread(bob).await.is_empty());
+    let list = articles::page(&db, fiona, &[a], ALL).await.unwrap();
+    let listed: Vec<_> = list.iter().map(|item| (item.seq, item.read)).collect();
+    assert_eq!(
+        listed,
+        [(6, false), (4, true), (3, true), (2, true), (1, true)]
+    );
+
+    // What is fetched from now on comes behind everything.
+    assert_eq!(common::add(&db, a, 1).await, 7);
+    let newest = &articles::page(&db, carol, &[a], ALL).await.unwrap()[0];
+    assert_eq!((newest.seq, newest.read), (7, false));
+    assert!(newest.id > 13);
+}
+
+#[sqlx::test]
+async fn a_dry_run_and_a_wrong_call_write_nothing(db: PgPool) {
+    let new = in_use(&db).await;
+    let mut old = legacy(&db).await;
+    old_rueder(&mut old).await;
+    let state = async || {
+        let feeds: Vec<(i32, i32, Option<Uuid>)> =
+            sqlx::query_as("SELECT id, last_seq, legacy_id FROM feeds ORDER BY id")
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        let accounts: Vec<(i32, Option<Uuid>)> =
+            sqlx::query_as("SELECT id, legacy_id FROM accounts ORDER BY id")
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        (feeds, accounts, new_articles(&db).await)
+    };
+    let before = state().await;
+
+    let dry = Options {
+        dry_run: true,
+        ..bob_to_fiona()
+    };
+    let report = import::run(&db, &mut old, &rules(), &dry).await.unwrap();
+    assert_eq!(
+        report,
+        Report {
+            dry_run: true,
+            feeds_added: 1,
+            feeds_merged: 2,
+            articles_added: 6,
+            accounts_merged: 2,
+            merged: merged_lines(&new),
+            ..Report::default()
+        }
+    );
+    let printed = report.to_string();
+    assert!(printed.starts_with("Dry run: this is what the import would do."));
+    assert!(printed.contains("Articles:      6 to bring, 0 already there\n"));
+    assert!(!printed.contains("Subscriptions:"));
+    assert_eq!(state().await, before);
+
+    for (accounts, wrong) in [
+        (
+            vec![("nobody", "fiona")],
+            "there is not exactly one old user nobody",
+        ),
+        (vec![("bob", "nobody")], "there is no account nobody"),
+        (
+            vec![("alice", "fiona"), ("bob", "fiona")],
+            "fiona is named twice",
+        ),
+        (
+            vec![("bob", "fiona"), ("bob", "carol")],
+            "bob is named twice",
+        ),
+    ] {
+        let options = Options {
+            accounts: accounts
+                .into_iter()
+                .map(|(old, new)| (old.to_owned(), new.to_owned()))
+                .collect(),
+            dry_run: false,
+        };
+        let failed = import::run(&db, &mut old, &rules(), &options)
+            .await
+            .unwrap_err();
+        assert!(failed.to_string().contains(wrong), "{failed}");
+        assert_eq!(state().await, before);
+    }
+}
+
+#[sqlx::test]
+async fn a_run_that_stopped_halfway_carries_on(db: PgPool) {
+    let new = in_use(&db).await;
+    let mut old = legacy(&db).await;
+    let (_, _, old_c) = old_rueder(&mut old).await;
+
+    // The disk fills up in the middle of feed A, the first one.
+    sqlx::raw_sql(
+        "CREATE FUNCTION fail_on_a3() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+             IF NEW.guid = 'a-3' THEN RAISE EXCEPTION 'disk full'; END IF;
+             RETURN NEW;
+         END $$;
+         CREATE TRIGGER fail_on_a3 BEFORE INSERT ON article_content
+             FOR EACH ROW EXECUTE FUNCTION fail_on_a3()",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    let failed = import::run(&db, &mut old, &rules(), &bob_to_fiona())
+        .await
+        .unwrap_err();
+    assert!(format!("{failed:#}").contains("disk full"));
+    // Feed A is as it was, but for the places of its articles, which made room.
+    let of_a: Vec<(i32, i64)> =
+        sqlx::query_as("SELECT seq, id FROM articles WHERE feed_id = $1 ORDER BY seq")
+            .bind(new.a)
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert_eq!(of_a, [(1, 10), (2, 11), (3, 12)]);
+    let brought: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM legacy_articles)
+              + (SELECT count(*) FROM feeds WHERE legacy_id IS NOT NULL)
+              + (SELECT count(*) FROM accounts WHERE legacy_id IS NOT NULL)",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(brought, 0);
+
+    // Run again, and it comes out as if it had gone through at once.
+    sqlx::query("DROP TRIGGER fail_on_a3 ON article_content")
+        .execute(&db)
+        .await
+        .unwrap();
+    let report = import::run(&db, &mut old, &rules(), &bob_to_fiona())
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            report.feeds_merged,
+            report.articles_added,
+            report.accounts_merged
+        ),
+        (2, 5, 2)
+    );
+    let c = new_feed(&db, old_c).await;
+    check_merged_articles(&db, &new, c).await;
+
+    // A run that stops later, after feed A: the rest follows, and feed A keeps
+    // what it got the first time.
+    sqlx::query("UPDATE feeds SET legacy_id = NULL, last_seq = 0 WHERE id = $1")
+        .bind(c)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM feeds WHERE id = $1")
+        .bind(c)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE accounts SET legacy_id = NULL WHERE id = $1")
+        .bind(new.fiona)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM subscriptions WHERE account_id = $1")
+        .bind(new.fiona)
+        .execute(&db)
+        .await
+        .unwrap();
+    let report = import::run(&db, &mut old, &rules(), &bob_to_fiona())
+        .await
+        .unwrap();
+    assert_eq!(
+        report,
+        Report {
+            feeds_added: 1,
+            feeds_known: 2,
+            articles_known: 6,
+            accounts_merged: 1,
+            accounts_known: 1,
+            subscriptions_added: 1,
+            merged: vec![merged_lines(&new)[3].clone()],
+            ..Report::default()
+        }
+    );
+    let c = new_feed(&db, old_c).await;
+    // She has A again, and a-4 counts as read for her: it was in the old
+    // rueder. Her rule hides a-new1 again.
+    let unread: Vec<_> = reading::unread_counts(&db, new.fiona)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|feed| (feed.feed_id, feed.unread))
+        .collect();
+    assert_eq!(unread, [(new.a, 1)]);
+    assert!(c > new.x);
+
+    // And once more: nothing left to bring.
+    let again = import::run(&db, &mut old, &rules(), &bob_to_fiona())
+        .await
+        .unwrap();
     assert_eq!(
         again,
         Report {
             feeds_known: 3,
             articles_known: 6,
             accounts_known: 2,
-            notes: vec!["1 subscriptions to feeds that do not exist were left out".into()],
             ..Report::default()
         }
     );
-
-    // The new rueder is used: a feed gets another name, a subscription moves to
-    // the top level, an article is set back to unread.
-    sqlx::query("UPDATE feeds SET title = 'Renamed', etag = 'new' WHERE id = $1")
-        .bind(a)
-        .execute(&db)
-        .await
-        .unwrap();
-    sqlx::query(
-        "UPDATE subscriptions SET folder_id = NULL, position = 2.5
-         WHERE account_id = $1 AND feed_id = $2",
-    )
-    .bind(alice)
-    .bind(b)
-    .execute(&db)
-    .await
-    .unwrap();
-    assert!(reading::set_read(&db, alice, a, 2, false).await.unwrap());
-
-    // Meanwhile the old one goes on: articles for a known feed, a new feed with
-    // an article, a new user, and alice subscribes to the new feed.
-    old_article(&mut old, 10, old_a, "a-5", text("a-5")).await;
-    let old_d = old_feed(&mut old, 4, "d", json!({ "working": true })).await;
-    old_article(&mut old, 11, old_d, "d-1", text("d-1")).await;
-    old_article(&mut old, 12, old_a, "a-6", text("a-6")).await;
-    old_user(&mut old, 3, "htpasswd", "carol", json!([])).await;
-    old_subscription(&mut old, 3, old_d).await;
-    old_subscription(&mut old, 1, old_d).await;
-
-    let report = import::run(&db, &mut old, &rules()).await.unwrap();
-    assert_eq!(
-        report,
-        Report {
-            feeds_added: 1,
-            feeds_known: 3,
-            articles_added: 3,
-            articles_known: 6,
-            accounts_added: 1,
-            accounts_known: 2,
-            subscriptions_added: 2,
-            notes: vec!["1 subscriptions to feeds that do not exist were left out".into()],
-            ..Report::default()
-        }
-    );
-    let d = new_feed(&db, old_d).await;
-
-    // The new articles follow the old ones, numbered as the old rueder counts.
-    let tail: Vec<_> = new_articles(&db).await.split_off(6);
-    assert_eq!(
-        tail,
-        [
-            (a, 5, 10, "a-5".to_owned()),
-            (d, 1, 11, "d-1".to_owned()),
-            (a, 6, 12, "a-6".to_owned()),
-        ]
-    );
-    assert!(numbers_match(&db).await);
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM legacy_articles")
-            .fetch_one(&db)
-            .await
-            .unwrap(),
-        9
-    );
-
-    // What changed in the new rueder stays.
-    let (title, etag): (String, String) =
-        sqlx::query_as("SELECT title, etag FROM feeds WHERE id = $1")
-            .bind(a)
-            .fetch_one(&db)
-            .await
-            .unwrap();
-    assert_eq!((title.as_str(), etag.as_str()), ("Renamed", "new"));
-    let tree: Vec<(i32, Option<i32>, f64)> = sqlx::query_as(
-        "SELECT feed_id, folder_id, position FROM subscriptions WHERE account_id = $1
-         AND folder_id IS NULL ORDER BY position",
-    )
-    .bind(alice)
-    .fetch_all(&db)
-    .await
-    .unwrap();
-    // The new subscription went to the end of the top level.
-    assert_eq!(tree.len(), 3);
-    assert_eq!((tree[0].0, tree[0].2), (b, 2.5));
-    assert_eq!(tree[2].0, d);
-    assert!(tree[2].2 > 3.0);
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM folders WHERE account_id = $1")
-            .bind(alice)
-            .fetch_one(&db)
-            .await
-            .unwrap(),
-        2
-    );
-
-    // What alice read stays, the articles that came for her feeds are unread,
-    // and the feed she is new to starts read.
-    let unread: Vec<_> = reading::unread_counts(&db, alice)
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|feed| (feed.feed_id, feed.unread))
-        .filter(|&(_, unread)| unread > 0)
-        .collect();
-    assert_eq!(unread, [(a, 3)]);
-
-    // The new account has its feed.
-    let carol = new_account(&db, "carol").await;
-    let list = articles::page(&db, carol, &[a, b, d], ALL).await.unwrap();
-    assert_eq!(list.len(), 1);
-    assert_eq!((list[0].feed_id, list[0].seq, list[0].read), (d, 1, true));
-}
-
-#[sqlx::test]
-async fn articles_the_new_rueder_fetched_itself_come_only_once(db: PgPool) {
-    let mut old = legacy(&db).await;
-    let (old_a, old_b, _) = old_rueder(&mut old).await;
-    import::run(&db, &mut old, &rules()).await.unwrap();
-    let (a, b) = (new_feed(&db, old_a).await, new_feed(&db, old_b).await);
-
-    // Both run side by side for a while. The new one fetches two articles of
-    // feed A; the old one has one of them and another one, and one for feed B.
-    let fetched = |guid: &str| {
-        let mut article = common::article(7);
-        article.guid = guid.to_owned();
-        article
-    };
-    let mut tx = db.begin().await.unwrap();
-    articles::insert(&mut tx, a, &[fetched("a-5"), fetched("a-new")])
-        .await
-        .unwrap();
-    tx.commit().await.unwrap();
-    old_article(&mut old, 10, old_a, "a-5", text("a-5")).await;
-    old_article(&mut old, 11, old_a, "a-6", text("a-6")).await;
-    old_article(&mut old, 12, old_b, "b-3", text("b-3")).await;
-
-    let report = import::run(&db, &mut old, &rules()).await.unwrap();
-    assert_eq!(
-        (
-            report.articles_added,
-            report.articles_known,
-            report.articles_matched
-        ),
-        (2, 6, 1)
-    );
-    // The old rueder counts a-6 as the feed's sixth article, here it is the seventh.
-    assert_eq!(report.renumbered_feeds, ["Feed A"]);
-    assert!(report.to_string().contains("- Feed A\n"));
-
-    let all = new_articles(&db).await;
-    let of_a: Vec<_> = all.iter().filter(|article| article.0 == a).collect();
-    let guids: Vec<_> = of_a.iter().map(|article| article.3.as_str()).collect();
-    assert_eq!(guids, ["a-1", "a-2", "a-3", "a-4", "a-5", "a-new", "a-6"]);
-    let seqs: Vec<_> = of_a.iter().map(|article| article.1).collect();
-    assert_eq!(seqs, [1, 2, 3, 4, 5, 6, 7]);
-    // No two articles share a place in the order of arrival.
-    let mut places: Vec<_> = all.iter().map(|article| article.2).collect();
-    places.dedup();
-    assert_eq!(places.len(), all.len());
-    assert_eq!(
-        all.iter().filter(|article| article.0 == b).count(),
-        3,
-        "feed B still got its article"
-    );
-
-    // The old article that was already there is known by its old id now, for
-    // the labels of the browsers.
-    let mapped: (i32, i32) =
-        sqlx::query_as("SELECT feed_id, seq FROM legacy_articles WHERE legacy_id = $1")
-            .bind(article_id(10))
-            .fetch_one(&db)
-            .await
-            .unwrap();
-    assert_eq!(mapped, (a, 5));
-
-    // And once more: nothing left to bring.
-    let again = import::run(&db, &mut old, &rules()).await.unwrap();
-    assert_eq!(
-        (
-            again.articles_added,
-            again.articles_known,
-            again.articles_matched
-        ),
-        (0, 9, 0)
-    );
-    assert_eq!(again.renumbered_feeds, ["Feed A"]);
 }
 
 #[sqlx::test]
@@ -780,7 +1144,9 @@ async fn odd_data_does_not_stop_the_import(db: PgPool) {
     .await
     .unwrap();
 
-    let report = import::run(&db, &mut old, &rules()).await.unwrap();
+    let report = import::run(&db, &mut old, &rules(), &Options::default())
+        .await
+        .unwrap();
     assert_eq!(
         (
             report.feeds_added,
@@ -795,11 +1161,11 @@ async fn odd_data_does_not_stop_the_import(db: PgPool) {
         [
             "1 feeds without an address were left out, with their articles",
             "1 articles of feeds that were left out were left out",
+            "login names that were taken or empty got another one: alice is now alice-2,  is \
+             now user",
             "2 articles had content the import could not read; they came without text",
             "the folders of alice could not be read; the feeds came without folders",
             "1 subscriptions to feeds that do not exist were left out",
-            "login names that were taken or empty got another one: alice is now alice-2,  is \
-             now user",
             "the old table user_states has 1 rows; the old rueder never read them, and they were \
              not imported",
             "the old table labels has 2 rows; the old rueder never read them, and they were not \
@@ -807,7 +1173,7 @@ async fn odd_data_does_not_stop_the_import(db: PgPool) {
         ]
     );
     let printed = report.to_string();
-    assert!(printed.contains("Feeds:         2 added, 0 already there\n"));
+    assert!(printed.contains("Feeds:         2 added, 0 merged, 0 already there\n"));
     assert!(printed.contains("\nNotes:\n- 1 feeds without an address"));
 
     let names: Vec<String> = sqlx::query_scalar("SELECT username FROM accounts ORDER BY id")
@@ -845,7 +1211,9 @@ async fn texts_are_cleaned_on_the_way_in(db: PgPool) {
     .unwrap();
     old_user(&mut old, 1, "htpasswd", "alice", json!([])).await;
     old_subscription(&mut old, 1, feed).await;
-    import::run(&db, &mut old, &rules()).await.unwrap();
+    import::run(&db, &mut old, &rules(), &Options::default())
+        .await
+        .unwrap();
 
     let (feed, alice) = (new_feed(&db, feed).await, new_account(&db, "alice").await);
     let opened = articles::open(&db, alice, feed, 1).await.unwrap().unwrap();
@@ -886,7 +1254,9 @@ async fn texts_are_cleaned_on_the_way_in(db: PgPool) {
 async fn an_empty_old_database_brings_nothing(db: PgPool) {
     let mut old = legacy(&db).await;
     assert_eq!(
-        import::run(&db, &mut old, &rules()).await.unwrap(),
+        import::run(&db, &mut old, &rules(), &Options::default())
+            .await
+            .unwrap(),
         Report::default()
     );
     // Without the old rueder's tables there is nothing to import from.
@@ -894,7 +1264,9 @@ async fn an_empty_old_database_brings_nothing(db: PgPool) {
         .execute(&mut old)
         .await
         .unwrap();
-    let failed = import::run(&db, &mut old, &rules()).await.unwrap_err();
+    let failed = import::run(&db, &mut old, &rules(), &Options::default())
+        .await
+        .unwrap_err();
     assert!(format!("{failed:#}").contains("reading the old articles"));
     // Tables the old rueder got late may be missing.
     let mut older = {
@@ -909,7 +1281,160 @@ async fn an_empty_old_database_brings_nothing(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        import::run(&db, &mut older, &rules()).await.unwrap(),
+        import::run(&db, &mut older, &rules(), &Options::default())
+            .await
+            .unwrap(),
         Report::default()
     );
+}
+
+/// Random feeds on both sides, compared with the obvious model of a merge: the
+/// old articles that only the old rueder has come first in their order, then
+/// all the new rueder has in its order; what an account of the new rueder read
+/// or starred there stays with the article, and old articles count as read.
+#[sqlx::test]
+async fn merging_matches_the_obvious_model(db: PgPool) {
+    use common::Random;
+    for seed in 1..=30 {
+        let mut random = Random::new(seed);
+        let name = |what: &str| format!("{what}-{seed}");
+        let url = format!("https://feed-{seed}.example/feed");
+        // Every round imports once into a rueder of its own.
+        sqlx::query("TRUNCATE feeds, accounts RESTART IDENTITY CASCADE")
+            .execute(&db)
+            .await
+            .unwrap();
+
+        // The new rueder: a feed with some articles, one reader who read and
+        // starred some of them.
+        let feed: i32 = sqlx::query_scalar("INSERT INTO feeds (feed_url) VALUES ($1) RETURNING id")
+            .bind(&url)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let reader = common::account(&db, &name("reader")).await;
+        common::subscribe(&db, reader, feed).await;
+        let own: Vec<String> = (0..random.below(6))
+            .map(|n| {
+                // Some of them the old rueder has too.
+                if random.below(3) == 0 {
+                    format!("old-{}", random.below(8))
+                } else {
+                    format!("own-{n}")
+                }
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let mut tx = db.begin().await.unwrap();
+        let fetched: Vec<_> = own
+            .iter()
+            .map(|guid| {
+                let mut article = common::article(1);
+                article.guid = guid.clone();
+                article
+            })
+            .collect();
+        articles::insert(&mut tx, feed, &fetched).await.unwrap();
+        tx.commit().await.unwrap();
+        // (read, starred) of what the reader has.
+        let mut model: Vec<(String, bool, bool)> = Vec::new();
+        for (n, guid) in own.iter().enumerate() {
+            let seq = n as i32 + 1;
+            let (read, starred) = (random.below(2) == 0, random.below(3) == 0);
+            reading::set_read(&db, reader, feed, seq, read)
+                .await
+                .unwrap();
+            reading::set_starred(&db, reader, feed, seq, starred)
+                .await
+                .unwrap();
+            model.push((guid.clone(), read, starred));
+        }
+
+        // The old rueder: the same feed with articles of its own, numbered with
+        // holes, read by the reader and by somebody new.
+        sqlx::query("DROP SCHEMA IF EXISTS legacy CASCADE")
+            .execute(&db)
+            .await
+            .unwrap();
+        let mut old = legacy(&db).await;
+        // The ids of the old rueder are its own in each round, as the new
+        // rueder remembers them.
+        let old_feed_id = old_feed(&mut old, seed.into(), &format!("feed-{seed}"), json!({})).await;
+        let mut old_guids = Vec::new();
+        let mut seq = seed as i64 * 100;
+        for n in 0..random.below(9) {
+            seq += 1 + random.below(3) as i64;
+            let guid = format!("old-{n}");
+            old_article(&mut old, seq, old_feed_id, &guid, text(&guid)).await;
+            old_guids.push(guid);
+        }
+        for (n, user) in [name("reader"), name("newbie")].iter().enumerate() {
+            let id = u128::from(seed) * 2 + n as u128;
+            old_user(&mut old, id, "htpasswd", user, json!([])).await;
+            old_subscription(&mut old, id, old_feed_id).await;
+        }
+
+        let report = import::run(&db, &mut old, &rules(), &Options::default())
+            .await
+            .unwrap();
+        let log = format!("seed {seed}: own {own:?}, old {old_guids:?}");
+        assert_eq!(report.feeds_merged, 1, "{log}");
+        assert_eq!(report.accounts_merged, 1, "{log}");
+
+        let only_old: Vec<_> = old_guids.iter().filter(|g| !own.contains(g)).collect();
+        let mut wanted: Vec<(String, bool, bool)> = only_old
+            .iter()
+            .map(|guid| (guid.to_string(), true, false))
+            .collect();
+        wanted.extend(model);
+        let listed = |account_id| {
+            let (db, log) = (&db, &log);
+            async move {
+                let page = Page { limit: 100, ..ALL };
+                let mut list = articles::page(db, account_id, &[feed], page).await.unwrap();
+                list.reverse();
+                let mut seen = Vec::new();
+                for (n, item) in list.iter().enumerate() {
+                    assert_eq!(item.seq, n as i32 + 1, "{log}");
+                    let guid: String = sqlx::query_scalar(
+                        "SELECT guid FROM article_content WHERE feed_id = $1 AND seq = $2",
+                    )
+                    .bind(feed)
+                    .bind(item.seq)
+                    .fetch_one(db)
+                    .await
+                    .unwrap();
+                    seen.push((guid, item.read, item.starred));
+                }
+                assert!(list.windows(2).all(|pair| pair[0].id < pair[1].id), "{log}");
+                seen
+            }
+        };
+        assert_eq!(listed(reader).await, wanted, "{log}");
+        let unread = |account_id| {
+            let db = &db;
+            async move {
+                reading::unread_counts(db, account_id)
+                    .await
+                    .unwrap()
+                    .iter()
+                    .map(|feed| feed.unread)
+                    .sum::<i64>()
+            }
+        };
+        let reader_unread = wanted.iter().filter(|w| !w.1).count() as i64;
+        assert_eq!(unread(reader).await, reader_unread, "{log}");
+
+        // Somebody new to the feed has read what the old rueder had, and
+        // nothing of what only the new one fetched.
+        let newbie = new_account(&db, &name("newbie")).await;
+        let newbie_wanted: Vec<_> = wanted
+            .iter()
+            .map(|(guid, _, _)| (guid.clone(), old_guids.contains(guid), false))
+            .collect();
+        assert_eq!(listed(newbie).await, newbie_wanted, "{log}");
+        let newbie_unread = newbie_wanted.iter().filter(|w| !w.1).count() as i64;
+        assert_eq!(unread(newbie).await, newbie_unread, "{log}");
+    }
 }

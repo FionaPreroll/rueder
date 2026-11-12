@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(max(position), 0) AS \"end!\" FROM (\n                           SELECT position FROM folders WHERE parent_id = $1\n                           UNION ALL\n                           SELECT position FROM subscriptions WHERE folder_id = $1\n                       ) inside",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "end!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "afabd5dceaf2140e4b9e6ea5479d23e1714747ba1735994eb5458f9ce1346d8a"
+}

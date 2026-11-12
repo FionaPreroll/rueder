@@ -73,12 +73,23 @@ enum Command {
     #[command(subcommand)]
     Registration(RegistrationCommand),
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
-    /// old rueder. Adds what is not there yet, so it can run more than once.
+    /// old rueder and merge them with the feeds and accounts that are here.
+    /// Stop the server first and take a backup. Adds only what is not there yet,
+    /// so a run that stopped halfway carries on when it is started again.
     ImportLegacy {
         /// The old rueder's database, e.g. postgres://user:password@host/rueder.
         /// It is only read.
         #[arg(long, env = "LEGACY_DATABASE_URL", hide_env_values = true)]
         from: String,
+        /// An old user that goes into an account of another name, as
+        /// <old name>=<new name>. May be given more than once. Old users without
+        /// one go into the account of the same name, or get a new account.
+        #[arg(long = "account", value_name = "OLD=NEW", value_parser = import::account_pair)]
+        accounts: Vec<(String, String)>,
+        /// Only say which feeds and accounts would be merged and which added,
+        /// and write nothing.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -270,11 +281,16 @@ async fn main() -> anyhow::Result<()> {
             println!("{report}");
             Ok(())
         }
-        Command::ImportLegacy { from } => {
+        Command::ImportLegacy {
+            from,
+            accounts,
+            dry_run,
+        } => {
             let mut legacy = PgConnection::connect(&from)
                 .await
                 .context("connecting to the old database")?;
-            let report = import::run(&db, &mut legacy, &Rules::from_env()?).await?;
+            let options = import::Options { accounts, dry_run };
+            let report = import::run(&db, &mut legacy, &Rules::from_env()?, &options).await?;
             println!("{report}");
             Ok(())
         }

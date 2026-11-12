@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT legacy_id, seq FROM legacy_articles WHERE legacy_id = ANY($1)",
+  "query": "SELECT feed_id, seq FROM legacy_articles WHERE matched AND feed_id = ANY($1)",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "legacy_id",
-        "type_info": "Uuid",
+        "name": "feed_id",
+        "type_info": "Int4",
         "origin": {
           "Table": {
             "table": "legacy_articles",
-            "name": "legacy_id"
+            "name": "feed_id"
           }
         }
       },
@@ -28,7 +28,7 @@
     ],
     "parameters": {
       "Left": [
-        "UuidArray"
+        "Int4Array"
       ]
     },
     "nullable": [
@@ -36,5 +36,5 @@
       false
     ]
   },
-  "hash": "b8f64f9a126ff8fb645247f661460fecf98941208f056340e8f096e96d195601"
+  "hash": "a43e1ec5a0bb1b61be6c6cd8c537d85723aab2722908976f022b423fbe54e1d5"
 }
