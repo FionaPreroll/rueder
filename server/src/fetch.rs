@@ -9,6 +9,7 @@
 
 use std::{
     collections::HashMap,
+    ops::RangeInclusive,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -31,10 +32,84 @@ use crate::{
 /// The shortest and the longest time between two fetches of a feed, in seconds.
 pub const MIN_INTERVAL: i32 = 15 * 60;
 pub const MAX_INTERVAL: i32 = 12 * 60 * 60;
-/// How many feeds are fetched at the same time.
-const AT_ONCE: usize = 8;
-/// How many feeds one round takes.
-const ROUND: i64 = 100;
+/// How fast feeds are fetched: how many one round takes, how many are fetched
+/// at the same time, and how often a round starts. Together they cap how many
+/// fetches an hour has, [`Pace::per_hour`]: 12,000 as rueder comes. A large
+/// instance sets them with `FETCH_ROUND`, `FETCH_AT_ONCE` and `FETCH_EVERY`
+/// (seconds); the server checks them against [`ROUNDS`], [`AT_ONCE`] and
+/// [`EVERY`] when it starts. Feeds of one host are fetched one after the other
+/// whatever the pace says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pace {
+    pub round: i64,
+    pub at_once: usize,
+    pub every: Duration,
+}
+
+/// The sizes of a round a server may be given.
+pub const ROUNDS: RangeInclusive<i64> = 1..=10_000;
+/// How many fetches at once a server may be given.
+pub const AT_ONCE: RangeInclusive<usize> = 1..=256;
+/// How many seconds between two rounds a server may be given.
+pub const EVERY: RangeInclusive<u64> = 5..=3600;
+
+impl Default for Pace {
+    fn default() -> Self {
+        Self {
+            round: 100,
+            at_once: 8,
+            every: Duration::from_secs(30),
+        }
+    }
+}
+
+impl Pace {
+    /// The pace the environment sets, with the default for what it leaves out.
+    pub fn from_env() -> anyhow::Result<Self> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    /// The pace `var` gives, with the default for what it leaves out. A value
+    /// that is no number or out of bounds is an error, not quietly the default.
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> anyhow::Result<Self> {
+        fn within<T: std::str::FromStr + PartialOrd + std::fmt::Display>(
+            name: &str,
+            value: Option<String>,
+            bounds: &RangeInclusive<T>,
+        ) -> anyhow::Result<Option<T>> {
+            let Some(value) = value else {
+                return Ok(None);
+            };
+            let number: T = value
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("{name} is no number: {value:?}"))?;
+            if !bounds.contains(&number) {
+                anyhow::bail!(
+                    "{name} must be from {} to {}, not {number}",
+                    bounds.start(),
+                    bounds.end()
+                );
+            }
+            Ok(Some(number))
+        }
+        let pace = Self::default();
+        Ok(Self {
+            round: within("FETCH_ROUND", var("FETCH_ROUND"), &ROUNDS)?.unwrap_or(pace.round),
+            at_once: within("FETCH_AT_ONCE", var("FETCH_AT_ONCE"), &AT_ONCE)?
+                .unwrap_or(pace.at_once),
+            every: within("FETCH_EVERY", var("FETCH_EVERY"), &EVERY)?
+                .map_or(pace.every, Duration::from_secs),
+        })
+    }
+
+    /// How many fetches an hour can have at most at this pace, if every round
+    /// is over before the next one starts.
+    pub fn per_hour(&self) -> u64 {
+        let rounds = 3600.0 / self.every.as_secs_f64();
+        (self.round as f64 * rounds).round() as u64
+    }
+}
 /// How long a round's feeds are kept from other rounds, in case this one dies.
 const LEASE_S: f64 = 600.0;
 /// What rueder would like to get.
@@ -203,14 +278,16 @@ async fn failed(db: &PgPool, feed_id: i32, message: String) -> anyhow::Result<Ou
 }
 
 /// Fetches the feeds that are due and have somebody reading them, and returns
-/// how many that were. At most [`AT_ONCE`] at a time, and never two from the
-/// same host at once. Each fetch and the round count for the status page.
+/// how many that were: at most a round's worth of the pace, so many at a time
+/// as it says, and never two from the same host at once. Each fetch and the
+/// round count for the status page.
 pub async fn fetch_due(
     db: &PgPool,
     client: &HttpClient,
     rules: &Arc<Rules>,
     events: &Events,
     monitor: &Arc<Monitor>,
+    pace: &Pace,
 ) -> anyhow::Result<usize> {
     let (started, began) = (Instant::now(), OffsetDateTime::now_utc());
     // Taking a feed moves its next fetch away, so a second server or a round
@@ -226,7 +303,7 @@ pub async fn fetch_due(
              FOR UPDATE SKIP LOCKED
          )
          RETURNING id, feed_url, error_message IS NOT NULL AS "failing!""#,
-        ROUND,
+        pace.round,
         LEASE_S,
     )
     .fetch_all(db)
@@ -243,7 +320,7 @@ pub async fn fetch_due(
             .or_default()
             .push((feed.id, feed.failing));
     }
-    let at_once = Arc::new(Semaphore::new(AT_ONCE));
+    let at_once = Arc::new(Semaphore::new(pace.at_once));
     let mut fetches = JoinSet::new();
     for feeds in hosts.into_values() {
         let (db, client, at_once) = (db.clone(), client.clone(), at_once.clone());
@@ -343,12 +420,16 @@ pub async fn run(
     rules: Arc<Rules>,
     events: Events,
     monitor: Arc<Monitor>,
+    pace: Pace,
 ) {
-    monitor.fetching_runs();
-    let mut every = tokio::time::interval(Duration::from_secs(30));
+    monitor.fetching_runs(pace);
+    let mut every = tokio::time::interval(pace.every);
+    // A round that takes longer than the pace allows makes the next one wait,
+    // instead of starting several at once to catch up.
+    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         every.tick().await;
-        if let Err(err) = fetch_due(&db, &client, &rules, &events, &monitor).await {
+        if let Err(err) = fetch_due(&db, &client, &rules, &events, &monitor, &pace).await {
             tracing::error!("fetching feeds: {err:#}");
         }
     }

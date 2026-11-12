@@ -76,6 +76,9 @@ export function demoStatus(now: number): ServerStatus {
 		},
 		fetcher: {
 			running: true,
+			pace: { round: 100, at_once: 8, every_s: 30, per_hour: 12_000 },
+			per_hour: 84,
+			behind_s: 0,
 			last_round_at: ago(14),
 			last_round_feeds: 3,
 			last_round_s: 1.8,

@@ -234,8 +234,20 @@ cargo run --release -- bench measure    # times the queries, prints a table
 `bench generate` wants an empty database and takes `--accounts`, `--feeds` and
 `--articles`; 10 million articles take about 50 minutes, 30 of them for the
 search index, and 21 GB. `bench measure`
-puts back what its writing queries changed, so it can run again. Results and how
-they were measured are in
+puts back what its writing queries changed, so it can run again.
+
+```sh
+FETCH_ROUND=1000 FETCH_AT_ONCE=64 FETCH_EVERY=10 \
+  cargo run --release -- bench fetch --feeds 5000 --hosts 250 --seconds 300
+```
+
+`bench fetch` measures how many feeds the server fetches in an hour at the pace
+the three settings give. It serves made-up feeds itself, under `--hosts` names
+out of 127.0.0.0/8 (one fetch runs per name), on `--port` (39871), and fetches
+them round after round, every feed due again before each round. It wants a
+database of its own, where nobody reads other feeds.
+
+Results and how they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).
 
 ## Fuzzing

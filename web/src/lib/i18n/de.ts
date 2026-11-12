@@ -444,6 +444,8 @@ const de: Messages = {
 			feedsFailing: (failing, subscribed) =>
 				`${n(failing)} von ${n(subscribed)} Feeds schlagen fehl.`,
 			notFetching: 'Der Server ruft keine Feeds ab. Steht FETCH auf off?',
+			fetchPaceFull: (most) =>
+				`Jede Runde nimmt so viele Feeds, wie sie darf, und trotzdem warten Feeds: Der Takt erlaubt ${n(most)} Abrufe je Stunde. FETCH_ROUND, FETCH_AT_ONCE und FETCH_EVERY stellen ihn ein.`,
 			cacheMisses: (share) =>
 				`Die Datenbank findet nur ${share} dessen, was sie liest, im Speicher; mehr shared_buffers würden helfen.`,
 			longQuery: (took) => `Eine Abfrage läuft seit ${took}.`,
@@ -494,6 +496,13 @@ const de: Messages = {
 			overdue: 'Zu spät abgerufen',
 			overdueValue: (count, late) => `${n(count)}, der späteste um ${late}`,
 			waiting: 'Noch nie abgerufen',
+			pace: 'Takt',
+			paceValue: (round, every, atOnce, most) =>
+				`${n(round)} Feeds alle ${every}, ${n(atOnce)} gleichzeitig: höchstens ${n(most)} je Stunde`,
+			perHour: 'Abrufe in der letzten Stunde',
+			behind: 'Rückstand',
+			behindValue: (late) => `der Feed, der am längsten wartet, ist ${late} über seiner Zeit`,
+			notBehind: 'Nichts wartet',
 			failing: 'Fehlschlagende Feeds, nach Grund',
 			noneFailing: 'Kein Feed schlägt fehl.',
 			feeds: (count) => `${n(count)} ${plural(count, { one: 'Feed', other: 'Feeds' })}`,

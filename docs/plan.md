@@ -40,6 +40,11 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A13 | Den Betrieb überblicken | Eine Statusseite für Admins: Tempo und Engpässe, Fehler des Servers, Zustand von Abruf, Feed-Suche und Bild-Proxy. Admins werden auf der Kommandozeile bestimmt. Dazu, von Usern, die zustimmen, Fehler aus ihren Browsern. |
 | A14 | Als App nutzbar | rueder lässt sich als App installieren (PWA) und startet ohne Netz aus dem Cache; eine neue Version bietet sich zum Neuladen an. Dazu eine Android-App mit Capacitor, die nach Zustimmung nach Updates sucht. |
 | A15 | Umzug zwischen rueder-Instanzen (2026-11-12) | Ein Konto geht als eine Datei hinaus und in einen anderen rueder hinein: Einstellungen, Ordner und Feeds, Lesestand, Sterne, Labels und Filterregeln. Feeds werden an ihrer Adresse und Artikel an ihrer Kennung wiedererkannt, nicht an ihren Nummern, denn die sind auf jeder Instanz andere. |
+| A16 | Öffentliche Instanz neben selbst gehosteten (2026-11-12) | Alles, was eine öffentliche Instanz braucht, ist eine Einstellung und aus als Standard. Eine selbst gehostete Instanz bleibt, wie sie ist. |
+| A20 | Rechtliches und Meldeweg (2026-11-12) | Impressum, Datenschutz und Nutzungsbedingungen mit Zustimmung; Meldungen von Inhalten; Sperre von Feeds. |
+| A22 | Zweiter Faktor (2026-11-12) | TOTP mit Wiederherstellungscodes, Pflicht für Admins der öffentlichen Instanz. |
+
+Die Nummern ab A16 und die Kennungen E12 und 5.x stammen aus Fionas eigener Planung für eine öffentliche Instanz; was hier fehlt, steht dort und gehört nicht zu diesem Repository. Die Lücken sind Absicht.
 
 ## Ausgangslage
 
@@ -88,6 +93,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Registrierung (entschieden am 2026-11-12) | User können sich selbst registrieren, wenn der Betreiber es einschaltet; ohne sein Zutun bleibt alles zu. Er begrenzt die Gesamtzahl der Konten und die Registrierungen je Tag. Bei geschlossener Registrierung laden User mit einem Kontingent ein, das die Kommandozeile setzt; ihre Einladungen halten dieselben Grenzen ein. Admins können immer Einladungslinks erzeugen, deren Konten gegen ein eigenes Kontingent zählen. Links gelten eine einstellbare Zeit und für ein oder mehrere Konten. Alle Grenzen stehen in der Datenbank und werden per Kommandozeile gesetzt. Das ersetzt „Konten legt nur der Betreiber an“. | Login-Seite, Einstellungen, Kommandozeile; neue Angriffsfläche für das Security-Review. |
 | Weitere Ansichten (2026-11-12) | Neben Liste und erweiterter Ansicht drei Bereiche (Baum, Liste, Artikel) und ein Magazin mit großem Aufmacherbild und Kachelraster, vorgezogen aus „Nach dem Umstieg“. Je ein eigener Pull Request. | Pakete 3.13 und 3.14. |
 | Umzug eines Kontos (2026-11-12) | Import und Export der Daten eines Users mit Einstellungen und Lesestand, mit Feed- und Artikel-ID und -Adresse; weil die IDs auf einer anderen rueder-Instanz andere sind, erkennt der Import Feeds an der Adresse und Artikel an Kennung und Adresse. Der Plan dazu (ein Import, der nur hinzufügt; der Lesestand eines Feeds, den das Ziel noch nie abgerufen hat, wartet auf den ersten Abruf) ist freigegeben. Geändert am 2026-11-12 nach dem Security-Review: Texte von Artikeln kommen nicht mehr mit. Vorher kamen die mit Stern oder Label mit und standen dann im geteilten Feed, so dass jede selbst geschriebene Datei erfundene Artikel in Feeds anderer stellen konnte; Fiona hat das Weglassen den Kopien nur für das eigene Konto vorgezogen. Was ein Artikel, den das Ziel nicht hat, an Lesestand, Stern und Labels trug, geht verloren. | Paket 3.12, [Umzug eines Kontos](architecture.md#umzug-eines-kontos). |
+| E12 Meldungen (2026-11-12) | Admins sehen bei gemeldeten Feeds die Adresse, nie, wer gemeldet hat. Das ist eine Ausnahme davon, dass die Statusseite keine Feeds nennt. | Paket 5.9. |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
 
@@ -112,6 +118,10 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 4. **Umstieg.** Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach. Das alte System sollte am Ende abgebaut werden; auf Fionas Wunsch geschah das schon am 2026-11-12, nach der Inbetriebnahme und vor dem Import (siehe [Entscheidungen](#entscheidungen)).
 
    Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
+
+5. **Öffentliche Instanz** (dazugekommen am 2026-11-12). Was ein rueder braucht, der für alle offen ist (A16): ein einstellbarer Abruf für viele Feeds, ein zweiter Faktor, die Rechtstexte mit Zustimmung und ein Meldeweg mit Sperre von Feeds. Jedes davon ist eine Einstellung und aus als Standard; eine selbst gehostete Instanz merkt nichts davon.
+
+   Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass sich für eine selbst gehostete etwas ändert.
 
 Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) steht am Ende von Schritt 2 und noch einmal vor der Inbetriebnahme. Vor beiden wird [gefuzzt](architecture.md#fuzzing).
 

@@ -1029,6 +1029,19 @@ export type StatusFailing = {
 };
 
 /**
+ * How fast feeds are fetched (`FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`).
+ */
+export type StatusFetchPace = {
+	round: number,
+	at_once: number,
+	every_s: number,
+	/**
+	 * The most fetches an hour can have at this pace.
+	 */
+	per_hour: number,
+};
+
+/**
  * Fetching feeds.
  */
 export type StatusFetcher = {
@@ -1036,6 +1049,19 @@ export type StatusFetcher = {
 	 * Whether the server fetches feeds at all.
 	 */
 	running: boolean,
+	/**
+	 * The pace it fetches at, where it does.
+	 */
+	pace: StatusFetchPace | null,
+	/**
+	 * How many fetches the last hour had, of all kinds.
+	 */
+	per_hour: number,
+	/**
+	 * How long the feed that has waited longest past its time has waited, in
+	 * seconds; 0 when none is due.
+	 */
+	behind_s: number,
 	last_round_at: string | null,
 	last_round_feeds: number | null,
 	last_round_s: number | null,
@@ -1103,6 +1129,10 @@ export type StatusHint =
 		"kind": "fetch_backlog",
 		overdue: number,
 		most_overdue_s: number,
+	}
+	| {
+		"kind": "fetch_pace_full",
+		per_hour: number,
 	}
 	| {
 		"kind": "feeds_failing",

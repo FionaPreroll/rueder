@@ -166,12 +166,41 @@ a change, `docker compose up --detach` starts the containers anew.
 | `POSTGRES_SHARED_BUFFERS` | Memory for PostgreSQL's cache, `128MB` if not set. |
 | `IMAGE_CACHE_MB`, `IMAGE_PROXY_KEY` | Size of the image proxy's cache, and its secret if you want to set it yourself. |
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
+| `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | Login through an OpenID Connect provider. |
 
 Changing `POSTGRES_PASSWORD` later does not change the password of a database
 that already exists. Change it there first
 (`docker compose exec db psql -U rueder -c '\password'`), then in `.env`.
+
+### A large instance
+
+rueder fetches in rounds: every `FETCH_EVERY` seconds (30) it takes up to
+`FETCH_ROUND` feeds that are due (100) and fetches `FETCH_AT_ONCE` of them at
+the same time (8), never two of one host at once. That is at most 12,000
+fetches an hour, enough for a few thousand feeds: a feed is fetched every 15
+minutes to 12 hours, by how much it publishes. The server refuses to start
+with a value out of bounds (round 1 to 10,000, at once 1 to 256, every 5 to
+3,600 seconds).
+
+The status page says the pace, the fetches of the last hour and how far
+fetching is behind. When every round takes all it may and feeds still wait,
+it says so; then raise the pace. For an instance with tens of thousands of
+feeds:
+
+```sh
+FETCH_ROUND=1000
+FETCH_AT_ONCE=64
+FETCH_EVERY=10
+```
+
+That is up to 360,000 fetches an hour. On a machine with 4 cores and 15 GB
+the rounds took about a second each, against made-up feeds on the same
+machine (`rueder bench fetch`; the numbers are in `docs/implementation.md`
+under "Messung"). Real sites answer slower than a source on the same
+machine, so `FETCH_AT_ONCE` is what keeps rounds short: 64 fetches at once of
+sites that take half a second each make about 130 a second.
 
 ## Commands
 

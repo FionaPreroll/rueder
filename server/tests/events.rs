@@ -812,9 +812,16 @@ async fn the_readers_of_a_feed_hear_what_a_round_of_fetching_finds(db: PgPool) {
             .execute(&db)
             .await
             .unwrap();
-        fetch::fetch_due(&db, &client, &rules, &state.events, &state.monitor)
-            .await
-            .unwrap()
+        fetch::fetch_due(
+            &db,
+            &client,
+            &rules,
+            &state.events,
+            &state.monitor,
+            &fetch::Pace::default(),
+        )
+        .await
+        .unwrap()
     };
 
     // New articles: everybody who reads the feed hears of them.

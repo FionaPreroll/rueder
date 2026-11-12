@@ -347,9 +347,16 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
     let client = client();
     let monitor = Arc::new(Monitor::default());
     assert_eq!(
-        fetch::fetch_due(&db, &client, &rules(), &Events::new(), &monitor)
-            .await
-            .unwrap(),
+        fetch::fetch_due(
+            &db,
+            &client,
+            &rules(),
+            &Events::new(),
+            &monitor,
+            &fetch::Pace::default()
+        )
+        .await
+        .unwrap(),
         2
     );
     assert_eq!(site.lock().unwrap().requests, 2);
@@ -367,12 +374,110 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
     }
     // Fetched feeds are not due any more.
     assert_eq!(
-        fetch::fetch_due(&db, &client, &rules(), &Events::new(), &monitor)
-            .await
-            .unwrap(),
+        fetch::fetch_due(
+            &db,
+            &client,
+            &rules(),
+            &Events::new(),
+            &monitor,
+            &fetch::Pace::default()
+        )
+        .await
+        .unwrap(),
         0
     );
     assert_eq!(site.lock().unwrap().requests, 2);
+}
+
+#[sqlx::test]
+async fn a_round_takes_no_more_than_the_pace_says(db: PgPool) {
+    let (url, site) = site(&[("a", "First", "one")]).await;
+    for name in ["ada", "grace", "linus"] {
+        feed_at(&db, name, &url).await;
+    }
+    let pace = fetch::Pace {
+        round: 2,
+        at_once: 1,
+        ..fetch::Pace::default()
+    };
+    let (client, rules, events) = (client(), rules(), Events::new());
+    let monitor = Arc::new(Monitor::default());
+    for taken in [2, 1, 0] {
+        let round = fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace);
+        assert_eq!(round.await.unwrap(), taken);
+    }
+    assert_eq!(site.lock().unwrap().requests, 3);
+}
+
+#[test]
+fn the_pace_comes_from_the_environment_within_bounds() {
+    let vars = |pairs: &[(&str, &str)]| {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
+        fetch::Pace::from_vars(move |name| {
+            pairs
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+        })
+    };
+    // As rueder comes: 100 feeds every 30 seconds, 8 at once, 12,000 an hour.
+    let pace = vars(&[]).unwrap();
+    assert_eq!(pace, fetch::Pace::default());
+    assert_eq!(
+        (
+            pace.round,
+            pace.at_once,
+            pace.every.as_secs(),
+            pace.per_hour()
+        ),
+        (100, 8, 30, 12_000)
+    );
+    let large = vars(&[
+        ("FETCH_ROUND", "1000"),
+        ("FETCH_AT_ONCE", " 64 "),
+        ("FETCH_EVERY", "10"),
+    ])
+    .unwrap();
+    assert_eq!(
+        (
+            large.round,
+            large.at_once,
+            large.every.as_secs(),
+            large.per_hour()
+        ),
+        (1000, 64, 10, 360_000)
+    );
+    // Only what is set changes.
+    assert_eq!(vars(&[("FETCH_AT_ONCE", "16")]).unwrap().round, 100);
+    // At the bounds, and beyond them.
+    for fine in [
+        ("FETCH_ROUND", "1"),
+        ("FETCH_ROUND", "10000"),
+        ("FETCH_AT_ONCE", "1"),
+        ("FETCH_AT_ONCE", "256"),
+        ("FETCH_EVERY", "5"),
+        ("FETCH_EVERY", "3600"),
+    ] {
+        assert!(vars(&[fine]).is_ok(), "{fine:?}");
+    }
+    for wrong in [
+        ("FETCH_ROUND", "0"),
+        ("FETCH_ROUND", "10001"),
+        ("FETCH_ROUND", "-5"),
+        ("FETCH_AT_ONCE", "0"),
+        ("FETCH_AT_ONCE", "257"),
+        ("FETCH_EVERY", "4"),
+        ("FETCH_EVERY", "3601"),
+        ("FETCH_EVERY", "30s"),
+        ("FETCH_ROUND", ""),
+        ("FETCH_AT_ONCE", "99999999999999999999999"),
+    ] {
+        let error = vars(&[wrong]).unwrap_err().to_string();
+        assert!(error.contains(wrong.0), "{wrong:?}: {error}");
+    }
 }
 
 #[test]
