@@ -74,11 +74,20 @@ say "The frontend's scripts may run, and no others"
 # app would not start in a browser, which curl would never notice.
 policy=$(curl --fail --silent --show-error --head "$at/" | tr -d '\r' |
 	sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p')
+# One directive of the policy, without its name.
+directive() { printf '%s' "$policy" | tr ';' '\n' | sed -n "s/^ *$1 //p"; }
+script_src=$(directive script-src)
 scripts=$(curl --fail --silent --show-error "$at/" | grep -c '<script>')
-hashes=$(printf '%s' "$policy" | grep -o "'sha256-" | wc -l)
+hashes=$(printf '%s' "$script_src" | grep -o "'sha256-" | wc -l)
 [ "$scripts" -gt 0 ] && [ "$hashes" -eq "$scripts" ] ||
 	fail "the policy allows $hashes scripts inside the page, which has $scripts"
-case "$policy" in *unsafe*) fail "the policy allows more than the page's own scripts" ;; esac
+case "$script_src" in *unsafe*) fail "the policy allows more than the page's own scripts" ;; esac
+# The one style attribute it allows is the one SvelteKit hides its announcer
+# for screen readers with, by its hash and nothing else.
+style_attrs=$(printf '%s' "$(directive style-src-attr)" | grep -o "'sha256-" | wc -l)
+[ "$style_attrs" -eq 1 ] ||
+	fail "the policy allows $style_attrs style attributes, not just the announcer's"
+case "$policy" in *unsafe-inline* | *unsafe-eval*) fail "the policy allows inline code" ;; esac
 
 say "A change that another site asks for is refused"
 code=$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
