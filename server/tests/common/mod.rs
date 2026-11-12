@@ -102,7 +102,9 @@ impl Random {
 
 /// What a logged-in browser of this account sends as its `Cookie` header.
 pub async fn session(db: &PgPool, account_id: i32) -> String {
-    let token = rueder::sessions::start(db, account_id).await.unwrap();
+    let token = rueder::sessions::start(db, account_id, false)
+        .await
+        .unwrap();
     format!("{}={token}", rueder::sessions::COOKIE)
 }
 

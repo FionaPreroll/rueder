@@ -16,6 +16,7 @@ import type {
 	Reader,
 	Resumed,
 	RulePreview,
+	SecondFactorRefusal,
 	ServerStatus,
 	Subscribed
 } from '#lib/reader.ts';
@@ -147,7 +148,8 @@ export class DemoReader implements Reader {
 		move: false,
 		status: true,
 		invites: false,
-		reports: false
+		reports: false,
+		secondFactor: false
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -156,6 +158,19 @@ export class DemoReader implements Reader {
 	readonly demo = this;
 	dismissNotice() {}
 	signOut() {}
+	/** The draft has no accounts, so nothing to secure. */
+	async secondFactor() {
+		return null;
+	}
+	async setUpSecondFactor(): Promise<SecondFactorRefusal> {
+		return 'unreachable';
+	}
+	async confirmSecondFactor(): Promise<SecondFactorRefusal> {
+		return 'unreachable';
+	}
+	async switchOffSecondFactor(): Promise<SecondFactorRefusal> {
+		return 'unreachable';
+	}
 	/** The draft keeps the settings in the browser only. */
 	saveSettings() {}
 	/** Every made-up article has its text with it. */

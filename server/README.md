@@ -129,6 +129,7 @@ cargo run -- registration set --open true --max-accounts 50 --per-day 5
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20
 cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
+cargo run -- account second-factor-off ada   # ada lost the app and the recovery codes
 ```
 
 Admins see the status of the server in the account menu of the page

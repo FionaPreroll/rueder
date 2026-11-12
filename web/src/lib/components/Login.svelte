@@ -12,6 +12,9 @@
 	let password = $state('');
 	let busy = $state(false);
 	let failure: LoginFailure | null = $state(null);
+	/** The account has a second factor: the login takes its code too. */
+	let needsCode = $state(false);
+	let code = $state('');
 
 	/** Making an account instead of logging in to one. */
 	let registering = $state(false);
@@ -74,6 +77,10 @@
 		switch (failure?.kind) {
 			case 'wrong':
 				return m.login.wrong;
+			case 'codeNeeded':
+				return m.login.codeNeeded;
+			case 'wrongCode':
+				return m.login.wrongCode;
 			case 'tooMany':
 				return m.login.tooMany(failure.minutes);
 			case 'unreachable':
@@ -89,8 +96,13 @@
 		busy = true;
 		failure = null;
 		try {
-			failure = await session.login(name, password);
-			if (failure) password = '';
+			failure = await session.login(name, password, needsCode ? code : undefined);
+			if (failure?.kind === 'codeNeeded' || failure?.kind === 'wrongCode') {
+				needsCode = true;
+				code = '';
+			} else if (failure) {
+				password = '';
+			}
 		} finally {
 			busy = false;
 		}
@@ -116,6 +128,8 @@
 		refusal = null;
 		password = '';
 		again = '';
+		needsCode = false;
+		code = '';
 	}
 
 	const focus = (field: HTMLInputElement) => field.focus();
@@ -244,10 +258,28 @@
 						bind:value={password}
 					/>
 				</label>
+				{#if needsCode}
+					<label class="block text-sm">
+						<span class="font-medium">{m.login.code}</span>
+						<input
+							class="mt-1.5 block w-full rounded py-1.5 text-sm tracking-widest"
+							name="code"
+							autocomplete="one-time-code"
+							autocapitalize="characters"
+							spellcheck="false"
+							maxlength="32"
+							required
+							aria-describedby="code-note"
+							bind:value={code}
+							use:focus
+						/>
+					</label>
+					<p id="code-note" class="-mt-2 text-xs text-soft">{m.login.codeNote}</p>
+				{/if}
 				<button
 					type="submit"
 					class="w-full cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
-					disabled={busy || !name.trim() || !password}
+					disabled={busy || !name.trim() || !password || (needsCode && !code.trim())}
 				>
 					{m.login.submit}
 				</button>

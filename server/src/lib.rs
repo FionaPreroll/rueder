@@ -23,6 +23,7 @@ pub mod reclean;
 pub mod registration;
 pub mod reports;
 pub mod search;
+pub mod second_factor;
 pub mod sessions;
 pub mod status;
 pub mod subscribe;
@@ -91,6 +92,9 @@ pub struct AppState {
     /// Whether the server takes reports of errors from the browsers of
     /// readers who agreed to send them.
     pub reports: bool,
+    /// Whether the right of an admin counts only in a session that began with
+    /// a second factor (`ADMIN_SECOND_FACTOR=required`).
+    pub admin_second_factor: bool,
 }
 
 impl AppState {
@@ -107,6 +111,7 @@ impl AppState {
             rates: Arc::default(),
             monitor: Arc::default(),
             reports: true,
+            admin_second_factor: false,
         }
     }
 
@@ -114,6 +119,15 @@ impl AppState {
     pub fn without_reports(self) -> Self {
         Self {
             reports: false,
+            ..self
+        }
+    }
+
+    /// Lets admins be admins only in a session with a second factor, as with
+    /// `ADMIN_SECOND_FACTOR=required`.
+    pub fn with_admin_second_factor(self) -> Self {
+        Self {
+            admin_second_factor: true,
             ..self
         }
     }
@@ -212,6 +226,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(filters::routes())
         .merge(subscribe::routes())
         .merge(profile::routes())
+        .merge(second_factor::routes())
         .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())

@@ -153,7 +153,8 @@ async fn change_password(
         Err(invalid) => Err(AppError::BadRequest(invalid.to_string())),
         Ok(false) => Err(AppError::NotFound),
         Ok(true) => {
-            let token = sessions::start(&state.db, session.account_id).await?;
+            let token =
+                sessions::start(&state.db, session.account_id, session.second_factor).await?;
             let cookie = [(header::SET_COOKIE, sessions::cookie(&token))];
             Ok((StatusCode::NO_CONTENT, cookie).into_response())
         }

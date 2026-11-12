@@ -385,7 +385,7 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
             format!(
                 "{}={}",
                 sessions::COOKIE,
-                sessions::start(&db, id).await.unwrap()
+                sessions::start(&db, id, false).await.unwrap()
             )
         }
     };

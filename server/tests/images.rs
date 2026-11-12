@@ -374,7 +374,7 @@ async fn get_path(state: AppState, path: &str) -> (StatusCode, HeaderMap, Vec<u8
     .fetch_one(&state.db)
     .await
     .unwrap();
-    let token = sessions::start(&state.db, reader).await.unwrap();
+    let token = sessions::start(&state.db, reader, false).await.unwrap();
     let cookie = format!("{}={token}", sessions::COOKIE);
     get_path_as(state, path, Some(&cookie)).await
 }
@@ -762,7 +762,7 @@ async fn only_logged_in_readers_get_images(db: PgPool) {
         .fetch_one(&db)
         .await
         .unwrap();
-    let token = sessions::start(&db, reader).await.unwrap();
+    let token = sessions::start(&db, reader, false).await.unwrap();
     let cookie = format!("{}={token}", sessions::COOKIE);
     let forged = format!("{}={}", sessions::COOKIE, "A".repeat(43));
     for cookie in [None, Some(forged.as_str()), Some("other=1")] {

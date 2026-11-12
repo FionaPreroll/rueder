@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM recovery_codes WHERE account_id = $1 AND code_hash = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "43f220ee9a4764536997e6585dcf0d0f54d939c8bd4cb4a0ba6c84d23ef828aa"
+}

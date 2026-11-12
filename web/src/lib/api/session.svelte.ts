@@ -9,6 +9,9 @@ import { forgetView } from '#lib/view.ts';
 /** Why a login did not work. */
 export type LoginFailure =
 	| { kind: 'wrong' }
+	/** Name and password were right; the account wants a code of its second factor. */
+	| { kind: 'codeNeeded' }
+	| { kind: 'wrongCode' }
 	/** Too many wrong tries; the server says how long to wait. */
 	| { kind: 'tooMany'; minutes: number }
 	| { kind: 'unreachable' };
@@ -71,7 +74,11 @@ export class Session {
 
 	private enter(account: ApiAccount) {
 		this.reader = new ServerReader(
-			{ name: account.username, admin: account.is_admin },
+			{
+				name: account.username,
+				admin: account.is_admin,
+				adminNeedsSecondFactor: account.admin_needs_second_factor
+			},
 			{ signOut: () => void this.signOut(), expired: () => this.leave() },
 			this.api
 		);
@@ -121,14 +128,20 @@ export class Session {
 	}
 
 	/** Logs in; null if it worked, else why it did not. */
-	async login(name: string, password: string): Promise<LoginFailure | null> {
+	async login(name: string, password: string, code?: string): Promise<LoginFailure | null> {
 		try {
-			this.enter(await this.api.login(name, password));
+			this.enter(await this.api.login(name, password, code?.trim() || undefined));
 			return null;
 		} catch (error) {
 			if (!(error instanceof ApiError)) throw error;
 			if (error.status === 429) {
 				return { kind: 'tooMany', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
+			}
+			if (error.status === 401 && error.message.trim() === 'second factor needed') {
+				return { kind: code ? 'wrongCode' : 'codeNeeded' };
+			}
+			if (error.status === 401 && error.message.trim() === 'wrong code') {
+				return { kind: 'wrongCode' };
 			}
 			// A name or a password the server cannot even read is a wrong one too.
 			if (error.status >= 400 && error.status < 500) return { kind: 'wrong' };
