@@ -645,6 +645,36 @@ async fn logging_out_ends_the_connections_of_that_session(db: PgPool) {
     assert_eq!(state.events.streams(ada), 1);
 }
 
+#[sqlx::test]
+async fn a_session_that_ends_outside_a_request_closes_its_connections(db: PgPool) {
+    let ada = common::account(&db, "ada").await;
+    let state = AppState {
+        events: Events::checking_sessions_every(Duration::from_millis(100)),
+        ..AppState::new(db.clone())
+    };
+    let laptop = common::session(&db, ada).await;
+    let phone = common::session(&db, ada).await;
+    let mut laptop_tab = listening(&state, &laptop).await;
+    let mut phone_tab = listening(&state, &phone).await;
+
+    // As the command line ends a session, or as one runs out: no request, so
+    // no event.
+    let token = laptop.split_once('=').unwrap().1;
+    rueder::sessions::end(&db, token).await.unwrap();
+    assert!(laptop_tab.has_ended().await);
+    // The other session's connection stays and hears what comes.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    state.events.publish(
+        vec![ada],
+        Change::Area {
+            area: Area::Tree,
+            by: None,
+        },
+    );
+    assert_eq!(phone_tab.next().await.unwrap().kind, "tree");
+    assert_eq!(state.events.streams(ada), 1);
+}
+
 #[test]
 fn a_fetch_tells_what_it_found() {
     let stored = |new, updated, first_new| {

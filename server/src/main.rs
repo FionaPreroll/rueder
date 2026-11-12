@@ -334,7 +334,7 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                 std::fs::read(&file).with_context(|| format!("reading {}", file.display()))?;
             let file: transfer::Export =
                 serde_json::from_slice(&text).context("this is not a file of a rueder account")?;
-            let imported = match transfer::import(db, &Rules::from_env()?, id, file).await {
+            let imported = match transfer::import(db, &Rules::from_env()?, id, file, None).await {
                 Ok(imported) => imported,
                 Err(rueder::AppError::BadRequest(reason)) => anyhow::bail!("{reason}"),
                 Err(rueder::AppError::Internal(err)) => return Err(err),

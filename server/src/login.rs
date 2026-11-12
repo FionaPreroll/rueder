@@ -2,12 +2,12 @@
 //!
 //! `POST /api/login` takes a name and a password and answers with the session
 //! cookie; `POST /api/logout` ends the session; `GET /api/me` says who is
-//! logged in. Wrong tries are counted per name and per address, so neither one
-//! account nor one sender can be tried without end.
+//! logged in. Wrong tries are counted per name, per address and per network
+//! around it, so neither one account nor one sender can be tried without end.
 
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{Mutex, PoisonError},
     time::{Duration, Instant},
 };
@@ -32,6 +32,10 @@ pub const WINDOW: Duration = Duration::from_secs(15 * 60);
 /// address has more: several readers may share one.
 pub const PER_NAME: u32 = 10;
 pub const PER_ADDRESS: u32 = 30;
+/// How many wrong tries a whole network has within [`WINDOW`], whichever of its
+/// addresses they come from: an IPv4 /24, or an IPv6 /48, which is what one
+/// site gets and holds 65,536 networks of a /64 each.
+pub const PER_NETWORK: u32 = 100;
 /// How many names and addresses are remembered at most.
 const MAX_KEYS: usize = 10_000;
 
@@ -40,6 +44,7 @@ const MAX_KEYS: usize = 10_000;
 pub enum Key {
     Name(String),
     Address(IpAddr),
+    Network(IpAddr),
 }
 
 impl Key {
@@ -55,10 +60,25 @@ impl Key {
         Self::Address(network(ip))
     }
 
+    /// The wider network around a sender: who has a whole IPv6 /48 or many
+    /// addresses of one IPv4 /24 counts there once more.
+    pub fn network(ip: IpAddr) -> Self {
+        Self::Network(match ip.to_canonical() {
+            IpAddr::V6(v6) => IpAddr::V6(Ipv6Addr::from(u128::from(v6) & !(u128::MAX >> 48))),
+            IpAddr::V4(v4) => IpAddr::V4(Ipv4Addr::from(u32::from(v4) & 0xffff_ff00)),
+        })
+    }
+
+    /// What a try from this sender for this name counts for.
+    pub fn of(name: &str, ip: IpAddr) -> [Self; 3] {
+        [Self::name(name), Self::address(ip), Self::network(ip)]
+    }
+
     fn limit(&self) -> u32 {
         match self {
             Self::Name(_) => PER_NAME,
             Self::Address(_) => PER_ADDRESS,
+            Self::Network(_) => PER_NETWORK,
         }
     }
 }
@@ -117,7 +137,8 @@ impl Limiter {
     }
 
     /// After a try of [`Limiter::attempt`] that was right: the name's wrong
-    /// tries are forgotten, and the address gets back the one it was charged.
+    /// tries are forgotten, and the address and its network get back the one
+    /// they were charged.
     pub fn succeeded(&self, keys: &[Key]) {
         let mut tries = self.tries.lock().unwrap_or_else(PoisonError::into_inner);
         for key in keys {
@@ -125,7 +146,7 @@ impl Limiter {
                 Key::Name(_) => {
                     tries.remove(key);
                 }
-                Key::Address(_) => {
+                Key::Address(_) | Key::Network(_) => {
                     if let Some(entry) = tries.get_mut(key) {
                         entry.wrong = entry.wrong.saturating_sub(1);
                     }
@@ -266,7 +287,7 @@ pub async fn login(
     headers: HeaderMap,
     Json(credentials): Json<Credentials>,
 ) -> Result<Response, AppError> {
-    let keys = [Key::name(&credentials.username), Key::address(ip)];
+    let keys = Key::of(&credentials.username, ip);
     // Every try counts as wrong until it turns out right.
     if let Err(wait) = state.logins.attempt(&keys, Instant::now()) {
         let message = "too many wrong tries, try again later";
@@ -409,6 +430,34 @@ mod tests {
         }
         assert!(limiter.blocked(&key("2001:db8::abcd"), now).is_some());
         assert_eq!(limiter.blocked(&key("2001:db8:0:1::"), now), None);
+    }
+
+    #[test]
+    fn a_network_counts_all_its_addresses() {
+        let network = |ip: &str| Key::network(ip.parse().unwrap());
+        assert_eq!(network("2001:db8:1:2::1"), network("2001:db8:1:ffff::1"));
+        assert_ne!(network("2001:db8:1::1"), network("2001:db8:2::1"));
+        assert_eq!(network("192.0.2.7"), network("192.0.2.200"));
+        assert_eq!(network("::ffff:192.0.2.7"), network("192.0.2.1"));
+        assert_ne!(network("192.0.2.7"), network("192.0.3.7"));
+
+        // Every try from another /64 of the same /48, for another name: no
+        // name and no address is used up, the network is.
+        let limiter = Limiter::default();
+        let now = Instant::now();
+        let from = |n: u32| -> IpAddr { format!("2001:db8:7:{n:x}::1").parse().unwrap() };
+        for n in 0..PER_NETWORK {
+            let keys = Key::of(&format!("n{n}"), from(n));
+            assert_eq!(limiter.attempt(&keys, now), Ok(()), "try {n}");
+        }
+        let keys = Key::of("ada", from(PER_NETWORK));
+        assert!(limiter.attempt(&keys, now).is_err());
+        // Another network is not held back.
+        let elsewhere: IpAddr = "2001:db8:8::1".parse().unwrap();
+        assert_eq!(limiter.attempt(&Key::of("ada", elsewhere), now), Ok(()));
+        // A right password gives the network its try back.
+        limiter.succeeded(&Key::of("ada", elsewhere));
+        assert_eq!(limiter.blocked(&Key::network(elsewhere), now), None);
     }
 
     #[test]

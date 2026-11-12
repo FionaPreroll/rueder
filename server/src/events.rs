@@ -59,6 +59,11 @@ const WAITING: usize = 256;
 /// itself and gets what it missed; the server sees again whether the session
 /// still holds.
 const STREAM_LASTS: Duration = Duration::from_secs(30 * 60);
+/// How often a connection sees whether its session still holds. A session
+/// that ends through a request closes its connections at once (see
+/// [`Area::Session`]); one that runs out or is ended on the command line
+/// closes them within this time.
+pub const SESSION_CHECK: Duration = Duration::from_secs(60);
 /// A line that says nothing, so that proxies on the way keep the connection.
 const KEEP_ALIVE: Duration = Duration::from_secs(20);
 /// The header a tab names itself in, so it can tell its own changes from those
@@ -265,6 +270,8 @@ struct Inner {
     run: String,
     kept: Mutex<Kept>,
     sender: broadcast::Sender<Arc<Event>>,
+    /// See [`SESSION_CHECK`].
+    session_check: Duration,
 }
 
 /// Takes events and hands them to the connections. Cheap to clone; all clones
@@ -312,6 +319,12 @@ impl Drop for Closing {
 
 impl Events {
     pub fn new() -> Self {
+        Self::checking_sessions_every(SESSION_CHECK)
+    }
+
+    /// Events whose connections see this often whether their session still
+    /// holds, in place of [`SESSION_CHECK`].
+    pub fn checking_sessions_every(session_check: Duration) -> Self {
         let mut run = [0_u8; 6];
         // Without random numbers the time will do: it only has to differ from
         // the run before.
@@ -331,6 +344,7 @@ impl Events {
                     streams: HashMap::new(),
                 }),
                 sender,
+                session_check,
             }),
         }
     }
@@ -462,6 +476,8 @@ struct Serving {
     seen: u64,
     receiver: broadcast::Receiver<Arc<Event>>,
     ends: Instant,
+    /// When it sees next whether its session still holds.
+    check: Instant,
     _closing: Closing,
 }
 
@@ -472,10 +488,18 @@ impl Serving {
             return Some(event);
         }
         loop {
-            let received = tokio::time::timeout_at(self.ends, self.receiver.recv()).await;
+            let until = self.ends.min(self.check);
+            let received = tokio::time::timeout_at(until, self.receiver.recv()).await;
             let event = match received {
                 // Time is up.
-                Err(_) => return None,
+                Err(_) if Instant::now() >= self.ends => return None,
+                // Time to see whether the session still holds.
+                Err(_) => {
+                    if !self.session_holds().await {
+                        return None;
+                    }
+                    continue;
+                }
                 Ok(Err(broadcast::error::RecvError::Closed)) => return None,
                 // More came than this connection took: it cannot know what it
                 // missed.
@@ -498,12 +522,19 @@ impl Serving {
                     ..
                 }
             );
-            if session_ended && !matches!(sessions::find(&self.db, &self.token).await, Ok(Some(_)))
-            {
+            if session_ended && !self.session_holds().await {
                 return None;
             }
             return Some(self.events.sse(event.number, &Sent::from(&event.change)));
         }
+    }
+
+    /// Whether the connection's session is still there, and when to look
+    /// again. One that cannot be found, or not now, ends the connection; the
+    /// browser opens the next one by itself if it may.
+    async fn session_holds(&mut self) -> bool {
+        self.check = Instant::now() + self.events.inner.session_check;
+        matches!(sessions::find(&self.db, &self.token).await, Ok(Some(_)))
     }
 }
 
@@ -529,6 +560,7 @@ pub async fn stream(
         seen: opened.seen,
         receiver: opened.receiver,
         ends: Instant::now() + STREAM_LASTS,
+        check: Instant::now() + state.events.inner.session_check,
         _closing: opened.closing,
     };
     let events = stream::unfold(serving, |mut serving| async move {

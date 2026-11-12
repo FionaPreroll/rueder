@@ -441,7 +441,9 @@ async fn subscribe(
         Some(id) => (id, false),
         None => {
             // Only a feed nobody reads yet is fetched here.
-            state.rates.lookup(account_id, Instant::now())?;
+            let now = Instant::now();
+            state.rates.lookup(account_id, now)?;
+            state.rates.new_feeds(account_id, 1, now)?;
             (create(&state, &url).await?, true)
         }
     };
@@ -727,6 +729,10 @@ async fn import(
     let outline = read.await?.map_err(bad)?;
     let mut tx = state.db.begin().await?;
     let taken = take(&mut tx, account_id, &outline).await?;
+    // Over the limit, nothing of the file is taken.
+    state
+        .rates
+        .new_feeds(account_id, taken.created(), Instant::now())?;
     tx.commit().await?;
     let added = taken.feeds.iter().filter(|feed| feed.added).count();
     Ok(Json(Imported {
@@ -745,6 +751,13 @@ pub(crate) struct Taken {
     pub folders_made: usize,
     /// The feeds of the outline, in its order.
     pub feeds: Vec<TakenFeed>,
+}
+
+impl Taken {
+    /// How many feeds nobody had before were made.
+    pub fn created(&self) -> usize {
+        self.feeds.iter().filter(|feed| feed.created).count()
+    }
 }
 
 /// A feed of an outline as [`take`] found or made it.

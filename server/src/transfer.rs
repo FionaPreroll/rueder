@@ -44,7 +44,9 @@ use crate::{
     articles::guid_hash,
     cleaning::Rules,
     filters::{self, Action, Field, Match},
-    labels, reading,
+    labels,
+    rate::Rates,
+    reading,
     sessions::Session,
     subscribe::{self, Outline, Step},
     tree::{self, bad},
@@ -706,17 +708,27 @@ async fn import_file(
         Some(rules) => rules.clone(),
         None => std::sync::Arc::new(Rules::built_in()?),
     };
-    let imported = import(&state.db, &rules, session.account_id, file).await?;
+    let imported = import(
+        &state.db,
+        &rules,
+        session.account_id,
+        file,
+        Some(&state.rates),
+    )
+    .await?;
     Ok(Json(imported))
 }
 
 /// Takes a file into an account. See the head of this module for what that
-/// means.
+/// means. With the server's `rates`, the feeds nobody read before count
+/// against the account's limit, and a file over it is not taken at all; the
+/// command line has none.
 pub async fn import(
     db: &PgPool,
     rules: &Rules,
     account_id: i32,
     file: Export,
+    rates: Option<&Rates>,
 ) -> Result<Imported, AppError> {
     let plan = plan(file, rules)?;
     let mut imported = Imported {
@@ -725,6 +737,9 @@ pub async fn import(
     };
     let mut tx = db.begin().await?;
     let taken = subscribe::take(&mut tx, account_id, &plan.outline).await?;
+    if let Some(rates) = rates {
+        rates.new_feeds(account_id, taken.created(), std::time::Instant::now())?;
+    }
     imported.folders = taken.folders_made;
 
     if let Some(settings) = &plan.settings {
