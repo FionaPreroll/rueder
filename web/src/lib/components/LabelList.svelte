@@ -2,7 +2,7 @@
 	// The labels in the sidebar: each a list of its articles, with a menu to rename
 	// it, give it another color or delete it, and a field to make a new one.
 	import { m } from '#lib/i18n/index.ts';
-	import { labelColors, sameStream, type Label } from '#lib/model.ts';
+	import { labelColors, nextLabelColor, sameStream, type Label } from '#lib/model.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
@@ -18,9 +18,7 @@
 	function create(event: SubmitEvent) {
 		event.preventDefault();
 		const title = name.trim();
-		// A new label takes the next color in turn.
-		const color = labelColors[reader.labels.length % labelColors.length];
-		if (title) reader.addLabel(title, color);
+		if (title) reader.addLabel(title, nextLabelColor(reader.labels.length));
 		naming = false;
 		name = '';
 	}

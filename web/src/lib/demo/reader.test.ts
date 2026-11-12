@@ -570,6 +570,10 @@ describe('the tree', () => {
 		reader.setLabel(article, added.id, true);
 		reader.setLabel(article, 'label-later', true);
 		expect(reader.labelsOf(article)).toEqual(['label-later', added.id]);
+		reader.addLabel('Gleich dran', '#d93025', article);
+		const onArticle = reader.labels.at(-1)!;
+		expect(reader.labelsOf(article)).toEqual(['label-later', added.id, onArticle.id]);
+		reader.removeLabel(onArticle.id);
 		reader.changeLabel(added.id, { title: 'Anders' });
 		expect(reader.labels.at(-1)?.title).toBe('Anders');
 		reader.removeLabel('label-later');

@@ -280,7 +280,8 @@ export interface Reader {
 	/** The labels an article has, by their ids, in the order of the labels. */
 	labelsOf(article: Article): string[];
 	setLabel(article: Article, labelId: string, on: boolean): void;
-	addLabel(title: string, color: string): void;
+	/** Makes a label, and with `article` puts it on that article too. */
+	addLabel(title: string, color: string, article?: Article): void;
 	changeLabel(id: string, change: { title?: string; color?: string }): void;
 	/** Takes a label off every article and deletes it. */
 	removeLabel(id: string): void;

@@ -296,6 +296,18 @@ describe('the keyboard', () => {
 		);
 		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' }));
 		expect(within(body).queryAllByLabelText('Label: Arbeit')).toHaveLength(0);
+
+		// A new label is made from the same menu and goes on the article at once.
+		await userEvent.click(menu());
+		await userEvent.click(screen.getByRole('menuitem', { name: 'New label' }));
+		await userEvent.type(within(body).getByLabelText('Name of the label'), 'Urlaub{Enter}');
+		expect(within(body).queryByLabelText('Name of the label')).toBeNull();
+		expect(within(body).getAllByLabelText('Label: Urlaub')).toHaveLength(2);
+		await userEvent.click(menu());
+		expect(screen.getByRole('menuitemcheckbox', { name: 'Urlaub' })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
 	});
 
 	it('opens the first article with k from the start page too', async () => {

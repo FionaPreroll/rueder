@@ -619,8 +619,10 @@ export class DemoReader implements Reader {
 		this.articleLabels = { ...this.articleLabels, [article.id]: after };
 	}
 
-	addLabel(title: string, color: string) {
-		this.labels = [...this.labels, { id: `label-new-${++this.labelCount}`, title, color }];
+	addLabel(title: string, color: string, article?: Article) {
+		const id = `label-new-${++this.labelCount}`;
+		this.labels = [...this.labels, { id, title, color }];
+		if (article) this.setLabel(article, id, true);
 	}
 
 	changeLabel(id: string, change: { title?: string; color?: string }) {
