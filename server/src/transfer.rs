@@ -7,8 +7,10 @@
 //! article by its id in its feed (GUID), or by its page where that is the only
 //! article with it. What the reader has read is written as the article the
 //! mark stands at and the exceptions from it, so that it can be set again on
-//! numbers that differ. Starred and labelled articles carry their text, so
-//! that they are not lost where the other server never had them.
+//! numbers that differ. Articles carry no text: one the other server does not
+//! have is not made there, as it would stand in a feed others read too, and
+//! whoever writes the file could make it say anything. What was read, starred
+//! or labelled of such an article is counted as missing.
 //!
 //! An import adds to what the account has and takes nothing away: feeds it
 //! reads already keep their place, their mark only moves up, stars and labels
@@ -17,8 +19,9 @@
 //!
 //! Not in the file: the password, sessions, the identities of an OpenID
 //! Connect provider, being an admin, the consent to sending reports of errors
-//! (it is given to a server, not taken along), old versions of articles, and
-//! what is hidden, which the rules decide again.
+//! (it is given to a server, not taken along), the texts of articles and their
+//! old versions, and what is hidden, which the rules decide again. A file
+//! of an older rueder that still carries texts is read; they are left out.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -38,9 +41,8 @@ use url::Url;
 
 use crate::{
     AppError, AppState,
-    articles::{self, NewArticle, Original, guid_hash},
-    cleaning::{self, Base, Rules},
-    feeds,
+    articles::guid_hash,
+    cleaning::Rules,
     filters::{self, Action, Field, Match},
     labels, reading,
     sessions::Session,
@@ -59,13 +61,6 @@ pub const MAX_FILE: usize = 32 * 1024 * 1024;
 pub const MAX_ARTICLES: usize = 50_000;
 /// The longest id of an article in its feed, in bytes.
 const MAX_GUID: usize = 2000;
-/// The longest title and author of an article that is brought along, in
-/// characters.
-const MAX_TITLE: usize = 1000;
-const MAX_AUTHOR: usize = 300;
-/// How many tags and files an article brings along at most.
-const MAX_TAGS: usize = 20;
-const MAX_ENCLOSURES: usize = 20;
 
 /// The types this module sends and reads, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
@@ -197,34 +192,6 @@ pub struct ExportedArticle {
     /// The names of its labels.
     #[serde(default)]
     pub labels: Vec<String>,
-    /// Its text, if it is starred or labelled.
-    pub content: Option<Content>,
-}
-
-/// The text of an article and what goes with it, as it is shown.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(rename = "ExportedContent")]
-pub struct Content {
-    #[serde(default)]
-    pub author: String,
-    #[serde(default)]
-    pub html: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    #[serde(default)]
-    pub enclosures: Vec<ExportedEnclosure>,
-    pub image_url: Option<String>,
-    pub image_title: Option<String>,
-    pub thumbnail_url: Option<String>,
-}
-
-/// A file of an article, as the feed lists it.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct ExportedEnclosure {
-    pub url: String,
-    #[serde(rename = "type")]
-    pub kind: Option<String>,
-    pub length: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -265,11 +232,8 @@ pub struct Imported {
     pub folders: usize,
     /// Articles of the file that were found here.
     pub articles: usize,
-    /// Starred and labelled articles that were not here and came with their
-    /// text.
-    pub carried: usize,
-    /// Articles that were not found and had no text with them: what was read
-    /// of them is lost.
+    /// Articles that were not found: what was read, starred or labelled of
+    /// them is lost.
     pub missing: usize,
     /// Labels that were made.
     pub labels: usize,
@@ -289,8 +253,8 @@ impl std::fmt::Display for Imported {
         writeln!(f, "folders:    {} new", self.folders)?;
         writeln!(
             f,
-            "articles:   {} found, {} brought along, {} not found",
-            self.articles, self.carried, self.missing
+            "articles:   {} found, {} not found",
+            self.articles, self.missing
         )?;
         writeln!(f, "labels:     {} new", self.labels)?;
         writeln!(f, "rules:      {} new", self.rules)?;
@@ -345,20 +309,13 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
                JOIN labels l ON l.id = al.label_id WHERE l.account_id = $1
            )
            SELECT o.feed_id AS "feed_id!", o.seq AS "seq!", a.title, a.url, a.published_at,
-                  a.author, a.thumbnail_url, c.guid, c.tags, c.enclosures, c.image_url,
-                  c.image_title,
+                  c.guid,
                   CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
                        ELSE coalesce(st.read, false) END AS "read!",
                   coalesce(st.starred, false) AS "starred!",
                   ARRAY(SELECT l.title FROM article_labels al JOIN labels l ON l.id = al.label_id
                         WHERE l.account_id = $1 AND al.feed_id = o.feed_id AND al.seq = o.seq
-                        ORDER BY l.position, l.id) AS "labels!",
-                  CASE WHEN coalesce(st.starred, false)
-                         OR EXISTS (SELECT 1 FROM article_labels al
-                                    JOIN labels l ON l.id = al.label_id
-                                    WHERE l.account_id = $1 AND al.feed_id = o.feed_id
-                                      AND al.seq = o.seq)
-                       THEN c.html END AS html
+                        ORDER BY l.position, l.id) AS "labels!"
            FROM own o
            JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = o.feed_id
            JOIN articles a ON a.feed_id = o.feed_id AND a.seq = o.seq
@@ -388,15 +345,6 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
 
     let mut articles: HashMap<i32, Vec<ExportedArticle>> = HashMap::new();
     for row in marked {
-        let content = row.html.map(|html| Content {
-            author: row.author,
-            html,
-            tags: row.tags,
-            enclosures: enclosures_of(&row.enclosures),
-            image_url: row.image_url,
-            image_title: row.image_title,
-            thumbnail_url: row.thumbnail_url,
-        });
         articles
             .entry(row.feed_id)
             .or_default()
@@ -409,7 +357,6 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
                 read: row.read,
                 starred: row.starred,
                 labels: row.labels,
-                content,
             });
     }
 
@@ -535,33 +482,13 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
     })
 }
 
-/// The files of an article as they are stored, without the ones that stood
-/// in its text: those come again when the text is cleaned.
-fn enclosures_of(stored: &serde_json::Value) -> Vec<ExportedEnclosure> {
-    let stored = stored.as_array().map(Vec::as_slice).unwrap_or_default();
-    stored
-        .iter()
-        .filter(|item| item.get("inline").and_then(|i| i.as_bool()) != Some(true))
-        .filter_map(|item| {
-            let url = item.get("url")?.as_str()?.to_owned();
-            let kind = item
-                .get("type")
-                .and_then(|kind| kind.as_str())
-                .map(str::to_owned);
-            let length = item.get("length").and_then(|length| match length {
-                serde_json::Value::String(text) => text.trim().parse().ok(),
-                number => number.as_u64(),
-            });
-            Some(ExportedEnclosure { url, kind, length })
-        })
-        .collect()
-}
-
 /// `GET /api/export`: the account as a file to save.
 async fn export_file(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<Response, AppError> {
+    // Reads all of the account: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let file = export(&state.db, session.account_id).await?;
     let day = file.exported_at.date();
     let body = serde_json::to_vec_pretty(&file)?;
@@ -579,12 +506,9 @@ async fn export_file(
 struct Wanted {
     guid: String,
     url: Option<String>,
-    published_at: OffsetDateTime,
-    title: String,
     read: bool,
     starred: bool,
     labels: Vec<String>,
-    content: Option<Content>,
 }
 
 /// A feed of the file, checked; the n-th feed of the outline.
@@ -642,11 +566,6 @@ fn web(url: Option<String>, rules: &Rules) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
     let fits = matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some();
     fits.then(|| rules.clean_url(url))
-}
-
-fn cut(text: &str, at: usize) -> String {
-    let text: String = text.chars().filter(|c| !c.is_control()).collect();
-    text.trim().chars().take(at).collect()
 }
 
 /// Checks a file before anything is written: what breaks the limits refuses
@@ -712,18 +631,12 @@ fn plan(file: Export, rules: &Rules) -> Result<Plan, AppError> {
                         skipped += 1;
                         continue;
                     }
-                    let content = article
-                        .content
-                        .filter(|content| content.html.len() <= feeds::MAX_CONTENT);
                     articles.push(Wanted {
                         guid: article.guid,
                         url: web(article.url, rules),
-                        published_at: article.published_at,
-                        title: cut(&article.title, MAX_TITLE),
                         read: article.read,
                         starred: article.starred,
                         labels: article.labels,
-                        content,
                     });
                 }
                 let mark = feed
@@ -780,6 +693,8 @@ async fn import_file(
             message.into(),
         ));
     }
+    // Writes all of the account: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     state
         .rates
         .import(session.account_id, std::time::Instant::now())?;
@@ -862,16 +777,7 @@ pub async fn import(
             imported.known += 1;
         }
         feed_ids.insert(feed.url.clone(), found.feed_id);
-        take_feed(
-            &mut tx,
-            rules,
-            account_id,
-            found,
-            feed,
-            &label_ids,
-            &mut imported,
-        )
-        .await?;
+        take_feed(&mut tx, account_id, found, feed, &label_ids, &mut imported).await?;
     }
 
     take_rules(
@@ -941,64 +847,9 @@ async fn find(
         .collect())
 }
 
-/// An article of the file as one to store, for one that is not here.
-fn carried(wanted: &Wanted, content: &Content, feed_url: &str, rules: &Rules) -> NewArticle {
-    let base = Base {
-        article: wanted.url.as_deref(),
-        feed: Some(feed_url),
-    };
-    // The text was cleaned where it comes from, but that was another server.
-    let cleaned = cleaning::clean(&content.html, base, rules);
-    let mut enclosures: Vec<serde_json::Value> = content
-        .enclosures
-        .iter()
-        .take(MAX_ENCLOSURES)
-        .filter_map(|file| {
-            let url = web(Some(file.url.clone()), rules)?;
-            let kind = file.kind.as_deref().map(|kind| cut(kind, 100));
-            Some(serde_json::json!({ "url": url, "type": kind, "length": file.length }))
-        })
-        .collect();
-    feeds::add_inline(&mut enclosures, cleaned.enclosures);
-    let author = cut(&content.author, MAX_AUTHOR);
-    let mut tags: Vec<String> = Vec::new();
-    for tag in &content.tags {
-        let tag = cut(tag, 100);
-        if !tag.is_empty() && !tags.contains(&tag) && tags.len() < MAX_TAGS {
-            tags.push(tag);
-        }
-    }
-    NewArticle {
-        guid: wanted.guid.clone(),
-        published_at: wanted.published_at,
-        fetched_at: OffsetDateTime::now_utc(),
-        teaser: feeds::teaser(&cleaned.html),
-        thumbnail_url: web(content.thumbnail_url.clone(), rules),
-        html: cleaned.html,
-        enclosures: enclosures.into(),
-        image_url: web(content.image_url.clone(), rules),
-        image_title: content
-            .image_title
-            .as_deref()
-            .map(|title| cut(title, MAX_TITLE)),
-        original: Original {
-            title: wanted.title.clone(),
-            content: content.html.clone(),
-            authors: if author.is_empty() {
-                Vec::new()
-            } else {
-                vec![author]
-            },
-            tags,
-            url: wanted.url.clone(),
-        },
-    }
-}
-
 /// What the account did in one feed of the file.
 async fn take_feed(
     tx: &mut PgConnection,
-    rules: &Rules,
     account_id: i32,
     found: &subscribe::TakenFeed,
     feed: WantedFeed,
@@ -1031,57 +882,19 @@ async fn take_feed(
         .await?;
     }
 
-    // Where the articles are here, and the ones that are not but bring
-    // their text along.
+    // Where the articles are here. One that is not stays away: see the head
+    // of this module.
     let keys: Vec<(&str, Option<&str>)> = feed
         .articles
         .iter()
         .map(|article| (article.guid.as_str(), article.url.as_deref()))
         .collect();
-    let mut seqs = find(&mut *tx, feed_id, &keys).await?;
-    let mut new: Vec<(usize, NewArticle)> = Vec::new();
-    for (at, article) in feed.articles.iter().enumerate() {
-        match (&seqs[at], &article.content) {
-            (Some(_), _) => imported.articles += 1,
-            (None, Some(content)) => new.push((at, carried(article, content, &feed.url, rules))),
-            (None, None) => imported.missing += 1,
+    let seqs = find(&mut *tx, feed_id, &keys).await?;
+    for seq in &seqs {
+        match seq {
+            Some(_) => imported.articles += 1,
+            None => imported.missing += 1,
         }
-    }
-    if !new.is_empty() {
-        new.sort_by_key(|(_, article)| article.published_at);
-        let articles: Vec<NewArticle> = new.iter().map(|(_, article)| article.clone()).collect();
-        let first = articles::insert(&mut *tx, feed_id, &articles).await?;
-        for (n, (at, _)) in new.iter().enumerate() {
-            seqs[*at] = Some(first + n as i32);
-        }
-        imported.carried += new.len();
-        let last = first + new.len() as i32 - 1;
-        // To the others who read the feed they are old news, not new.
-        let others = sqlx::query!(
-            "SELECT account_id, read_upto FROM subscriptions
-             WHERE feed_id = $1 AND account_id <> $2",
-            feed_id,
-            account_id,
-        )
-        .fetch_all(&mut *tx)
-        .await?;
-        for other in others {
-            sqlx::query!(
-                "INSERT INTO article_states (account_id, feed_id, seq, read)
-                 SELECT $1, $2, g.seq, true FROM generate_series($3::int4, $4::int4) AS g(seq)
-                 WHERE g.seq > $5
-                 ON CONFLICT DO NOTHING",
-                other.account_id,
-                feed_id,
-                first,
-                last,
-                other.read_upto,
-            )
-            .execute(&mut *tx)
-            .await?;
-            reading::compact(&mut *tx, other.account_id, feed_id, other.read_upto).await?;
-        }
-        filters::apply_new(&mut *tx, feed_id, first).await?;
     }
 
     // The mark: at the article it stood at, or else by its time.

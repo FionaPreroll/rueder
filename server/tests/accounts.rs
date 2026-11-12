@@ -509,6 +509,37 @@ async fn wrong_passwords_are_counted_for_the_name(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn wrong_passwords_sent_at_once_are_counted_all_the_same(db: PgPool) {
+    accounts::create(&db, "ada", Some(PASSWORD), false)
+        .await
+        .unwrap()
+        .unwrap();
+    let state = AppState::new(db);
+    // All of them are under way before the first password is checked.
+    let tries = (0..PER_NAME * 3).map(|n| {
+        let state = state.clone();
+        tokio::spawn(async move { log_in(&state, "ada", &format!("wrong-{n}")).await.0 })
+    });
+    let mut answers = Vec::new();
+    for answer in futures_util::future::join_all(tries).await {
+        answers.push(answer.unwrap());
+    }
+    let checked = answers
+        .iter()
+        .filter(|status| **status == StatusCode::UNAUTHORIZED)
+        .count();
+    let held = answers
+        .iter()
+        .filter(|status| **status == StatusCode::TOO_MANY_REQUESTS)
+        .count();
+    assert_eq!((checked, held), (PER_NAME as usize, 2 * PER_NAME as usize));
+    assert_eq!(
+        log_in(&state, "ada", PASSWORD).await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[sqlx::test]
 async fn wrong_passwords_are_counted_for_the_address(db: PgPool) {
     accounts::create(&db, "ada", Some(PASSWORD), false)
         .await

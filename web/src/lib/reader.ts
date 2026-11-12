@@ -123,9 +123,7 @@ export type Moved =
 			folders: number;
 			/** Articles of the file that were found on this server. */
 			articles: number;
-			/** Starred and labelled articles this server did not have, brought along with their text. */
-			carried: number;
-			/** Articles that were not found, so what was read of them is lost. */
+			/** Articles that were not found, so what was read, starred or labelled of them is lost. */
 			missing: number;
 			/** Labels that were made. */
 			labels: number;

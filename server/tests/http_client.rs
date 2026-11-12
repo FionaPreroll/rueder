@@ -375,14 +375,15 @@ async fn a_redirect_into_the_own_network_is_refused_and_not_followed() {
     }
     assert_eq!(world.inside_hits.load(Ordering::SeqCst), 0);
 
-    // The refusal says which host and why, for the person looking at the feed.
+    // The refusal says which host and why, for the person looking at the feed,
+    // but not where in the network it is.
     let err = world
         .get(&format!("http://inside.test:{inside}/"))
         .await
         .unwrap_err();
     assert_eq!(
         err.to_string(),
-        "inside.test is at 127.0.0.2, which is not on the public internet (loopback)"
+        "inside.test is not on the public internet (loopback)"
     );
 }
 

@@ -748,7 +748,7 @@ export class FakeServer {
 			if (file.format !== 'rueder-account')
 				return refused(400, 'this is not a file of a rueder account');
 			const moved = {
-				...{ feeds: 0, known: 0, folders: 0, articles: 0, carried: 0, missing: 0 },
+				...{ feeds: 0, known: 0, folders: 0, articles: 0, missing: 0 },
 				...{ labels: 0, rules: 0, skipped: 0, settings: false }
 			};
 			for (const { url = '', title = '' } of file.tree ?? []) {

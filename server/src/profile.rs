@@ -132,8 +132,9 @@ async fn change_password(
     Json(change): Json<NewPassword>,
 ) -> Result<Response, AppError> {
     // A stolen session must not be a way to try passwords without end.
-    let (key, now) = (Key::name(&session.username), Instant::now());
-    if let Some(wait) = state.logins.blocked(&key, now) {
+    let keys = [Key::name(&session.username)];
+    // Counted as wrong until it turns out right, as at login.
+    if let Err(wait) = state.logins.attempt(&keys, Instant::now()) {
         let message = "too many wrong tries, try again later";
         return Err(AppError::TooMany(wait, message));
     }
@@ -144,10 +145,10 @@ async fn change_password(
     .fetch_one(&state.db)
     .await?;
     if hash.is_some() && !accounts::verify(&change.current, hash).await? {
-        state.logins.failed(key, now);
         let message = "the current password is wrong";
         return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
     }
+    state.logins.succeeded(&keys);
     match accounts::set_password(&state.db, &session.username, &change.new).await? {
         Err(invalid) => Err(AppError::BadRequest(invalid.to_string())),
         Ok(false) => Err(AppError::NotFound),

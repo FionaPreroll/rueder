@@ -626,7 +626,7 @@ fn failure(message: &str) -> (Failure, Option<u16>) {
     }
     let failure = if message == "took too long" {
         Failure::Timeout
-    } else if message.contains("which is not on the public internet")
+    } else if message.contains("is not on the public internet")
         || message.starts_with("not an address rueder can fetch")
     {
         Failure::Blocked

@@ -634,6 +634,8 @@ async fn versions(
     session: Session,
     Path((feed_id, seq)): Path<(i32, i32)>,
 ) -> Result<Json<Versions>, AppError> {
+    // Cleans up to all its versions: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let kept = articles::versions(&state.db, session.account_id, feed_id, seq).await?;
     if kept.is_empty() {
         return Err(AppError::NotFound);

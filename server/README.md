@@ -81,8 +81,8 @@ What is here:
   (`fuzz/`), whose corpus runs as an ordinary test, and a soak test of the
   whole program under the load of readers and fetching (`tests/soak.rs`).
 
-This is step 1 of the plan and work packages 2.1 to 2.11 and 2.13 of step 2.
-The security review (2.12) follows.
+This is step 1 of the plan and all of step 2, the security review (2.12)
+included; its findings are in `docs/architecture.md`.
 
 ## Commands
 
@@ -157,7 +157,8 @@ For the login through an OpenID Connect provider set `OIDC_ISSUER`,
 `/api/oidc/start`. The provider must be reached over https. Logging in there
 makes no account: tie an identity to an account with
 `cargo run -- account link ada <subject>`, or log in with the password and open
-`/api/oidc/start?link`. A provider inside your own network needs
+`/api/oidc/start?link` from a page of rueder or by typing it (a link on another
+site is refused). A provider inside your own network needs
 `FETCH_ALLOW_NETS`.
 
 ## Cleaning

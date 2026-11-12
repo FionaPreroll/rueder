@@ -381,10 +381,12 @@ fn kind(media: Option<&str>, mode: Option<&str>) -> Kind {
 /// The library switches its decoding when it meets a declaration that names
 /// another encoding, and panics if that comes later than the first 64 bytes:
 /// a long declaration does it, and so does a second one further down. So it
-/// gets a text in UTF-8 without them.
+/// gets a text in UTF-8 without them. Bytes that are not of the encoding become
+/// replacement characters: where the library meets such a byte, it leaves it
+/// out and reads on, and the letters around it may make up a declaration.
 ///
-/// `None` where nothing needs to change: a feed in UTF-8 whose declarations
-/// name no other encoding, and a JSON Feed.
+/// `None` where nothing needs to change: a feed in valid UTF-8 whose
+/// declarations name no other encoding, and a JSON Feed.
 fn utf_8(body: &[u8]) -> Option<Vec<u8>> {
     let detected = quick_xml::encoding::detect_encoding(body);
     let bom = detected.as_ref().map_or(0, |detected| detected.bom_len());
@@ -409,7 +411,7 @@ fn utf_8(body: &[u8]) -> Option<Vec<u8>> {
             _ => found,
         }
     };
-    let (text, _) = encoding.decode_without_bom_handling(rest);
+    let (text, broken) = encoding.decode_without_bom_handling(rest);
 
     // Where a declaration names another encoding than UTF-8, as the library
     // would meet it: also after markup it would read past.
@@ -435,7 +437,7 @@ fn utf_8(body: &[u8]) -> Option<Vec<u8>> {
             Err(_) => break,
         }
     }
-    if bom == 0 && encoding == encoding_rs::UTF_8 && declarations.is_empty() {
+    if bom == 0 && encoding == encoding_rs::UTF_8 && !broken && declarations.is_empty() {
         return None;
     }
     let mut written = Vec::with_capacity(text.len());

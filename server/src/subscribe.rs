@@ -706,6 +706,8 @@ async fn import(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Imported>, AppError> {
+    // Can bring many feeds and folders: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let account_id = session.account_id;
     // Said to be XML: a form on somebody else's page cannot say that.
     let kind = headers.get(header::CONTENT_TYPE);

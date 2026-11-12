@@ -89,7 +89,7 @@
 		<div role="status">
 			<p>{m.move.feeds(moved.feeds, moved.known)}</p>
 			{#if moved.folders > 0}<p>{m.move.folders(moved.folders)}</p>{/if}
-			<p>{m.move.articles(moved.articles, moved.carried)}</p>
+			<p>{m.move.articles(moved.articles)}</p>
 			{#if moved.missing > 0}<p>{m.move.missing(moved.missing)}</p>{/if}
 			{#if moved.labels > 0 || moved.rules > 0}<p>{m.move.marks(moved.labels, moved.rules)}</p>{/if}
 			{#if moved.skipped > 0}<p>{m.move.skipped(moved.skipped)}</p>{/if}

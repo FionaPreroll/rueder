@@ -111,10 +111,11 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Address(why) => write!(f, "not an address rueder can fetch: {why}"),
-            Self::Internal { host, addr, why } => write!(
-                f,
-                "{host} is at {addr}, which is not on the public internet ({why})"
-            ),
+            // Not the address itself: a reader who typed the name learns
+            // nothing about the network the server is in.
+            Self::Internal { host, why, .. } => {
+                write!(f, "{host} is not on the public internet ({why})")
+            }
             Self::TooManyRedirects(limit) => write!(f, "more than {limit} redirects"),
             Self::BadRedirect => write!(f, "a redirect without a usable target"),
             Self::TooLarge(limit) => write!(f, "larger than {limit} bytes"),

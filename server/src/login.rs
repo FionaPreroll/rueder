@@ -90,37 +90,48 @@ impl Limiter {
     /// How long the key has to wait, if it has used up its tries.
     pub fn blocked(&self, key: &Key, now: Instant) -> Option<Duration> {
         let tries = self.tries.lock().unwrap_or_else(PoisonError::into_inner);
-        let tries = tries.get(key)?;
-        let left = WINDOW.checked_sub(now.saturating_duration_since(tries.since))?;
-        (tries.wrong >= key.limit() && !left.is_zero()).then_some(left)
+        wait(&tries, key, now)
     }
 
     /// Counts a wrong try.
     pub fn failed(&self, key: Key, now: Instant) {
         let mut tries = self.tries.lock().unwrap_or_else(PoisonError::into_inner);
-        if tries.len() >= MAX_KEYS && !tries.contains_key(&key) {
-            tries.retain(|_, tries| now.saturating_duration_since(tries.since) < WINDOW);
-            // Still full: the one that has waited longest makes room.
-            if tries.len() >= MAX_KEYS
-                && let Some(oldest) = tries
-                    .iter()
-                    .min_by_key(|(_, tries)| tries.since)
-                    .map(|(key, _)| key.clone())
-            {
-                tries.remove(&oldest);
+        count(&mut tries, key, now);
+    }
+
+    /// Counts a try before its password is checked, for all its keys at once,
+    /// or says how long the longest-waiting of them has to wait. Counted
+    /// beforehand, tries sent all at once cannot pass the check together while
+    /// none of them is counted yet; [`Limiter::succeeded`] takes the count back
+    /// for a try that was right.
+    pub fn attempt(&self, keys: &[Key], now: Instant) -> Result<(), Duration> {
+        let mut tries = self.tries.lock().unwrap_or_else(PoisonError::into_inner);
+        let wait = keys.iter().filter_map(|key| wait(&tries, key, now)).max();
+        if let Some(wait) = wait {
+            return Err(wait);
+        }
+        for key in keys {
+            count(&mut tries, key.clone(), now);
+        }
+        Ok(())
+    }
+
+    /// After a try of [`Limiter::attempt`] that was right: the name's wrong
+    /// tries are forgotten, and the address gets back the one it was charged.
+    pub fn succeeded(&self, keys: &[Key]) {
+        let mut tries = self.tries.lock().unwrap_or_else(PoisonError::into_inner);
+        for key in keys {
+            match key {
+                Key::Name(_) => {
+                    tries.remove(key);
+                }
+                Key::Address(_) => {
+                    if let Some(entry) = tries.get_mut(key) {
+                        entry.wrong = entry.wrong.saturating_sub(1);
+                    }
+                }
             }
         }
-        let entry = tries.entry(key).or_insert(Tries {
-            since: now,
-            wrong: 0,
-        });
-        if now.saturating_duration_since(entry.since) >= WINDOW {
-            *entry = Tries {
-                since: now,
-                wrong: 0,
-            };
-        }
-        entry.wrong += 1;
     }
 
     /// Forgets the wrong tries of a key, after a login that worked.
@@ -130,6 +141,42 @@ impl Limiter {
             .unwrap_or_else(PoisonError::into_inner)
             .remove(key);
     }
+}
+
+/// How long the key has to wait, if it has used up its tries.
+fn wait(tries: &HashMap<Key, Tries>, key: &Key, now: Instant) -> Option<Duration> {
+    let tries = tries.get(key)?;
+    let left = WINDOW.checked_sub(now.saturating_duration_since(tries.since))?;
+    (tries.wrong >= key.limit() && !left.is_zero()).then_some(left)
+}
+
+/// Counts a try for the key.
+fn count(tries: &mut HashMap<Key, Tries>, key: Key, now: Instant) {
+    if tries.len() >= MAX_KEYS && !tries.contains_key(&key) {
+        tries.retain(|_, tries| now.saturating_duration_since(tries.since) < WINDOW);
+        // Still full: the one with the fewest tries makes room, of those the
+        // one that has waited longest. A key that is held back stays held
+        // back, so that a flood of other names cannot set it free.
+        if tries.len() >= MAX_KEYS
+            && let Some(least) = tries
+                .iter()
+                .min_by_key(|(key, tries)| (tries.wrong >= key.limit(), tries.wrong, tries.since))
+                .map(|(key, _)| key.clone())
+        {
+            tries.remove(&least);
+        }
+    }
+    let entry = tries.entry(key).or_insert(Tries {
+        since: now,
+        wrong: 0,
+    });
+    if now.saturating_duration_since(entry.since) >= WINDOW {
+        *entry = Tries {
+            since: now,
+            wrong: 0,
+        };
+    }
+    entry.wrong += 1;
 }
 
 /// The address a request comes from: the one the connection has, or, behind a
@@ -219,29 +266,22 @@ pub async fn login(
     headers: HeaderMap,
     Json(credentials): Json<Credentials>,
 ) -> Result<Response, AppError> {
-    let now = Instant::now();
     let keys = [Key::name(&credentials.username), Key::address(ip)];
-    let wait = keys
-        .iter()
-        .filter_map(|key| state.logins.blocked(key, now))
-        .max();
-    if let Some(wait) = wait {
+    // Every try counts as wrong until it turns out right.
+    if let Err(wait) = state.logins.attempt(&keys, Instant::now()) {
         let message = "too many wrong tries, try again later";
         return Err(AppError::TooMany(wait, message));
     }
 
     let account = accounts::login(&state.db, &credentials.username, &credentials.password).await?;
     let Some(account) = account else {
-        for key in keys {
-            state.logins.failed(key, now);
-        }
         // The same answer whether the name or the password was wrong.
         return Err(AppError::Status(
             StatusCode::UNAUTHORIZED,
             "wrong name or password".into(),
         ));
     };
-    state.logins.clear(&keys[0]);
+    state.logins.succeeded(&keys);
 
     // A session the browser still had ends here, so a login always starts a
     // fresh one.
@@ -315,6 +355,43 @@ mod tests {
     }
 
     #[test]
+    fn tries_count_before_they_are_checked() {
+        let limiter = Limiter::default();
+        let now = Instant::now();
+        let ip = Key::address("192.0.2.7".parse().unwrap());
+        let keys = [Key::name("ada"), ip.clone()];
+        // Tries that are all under way at once: only as many pass as the
+        // name has, however many are sent.
+        let passed = (0..PER_NAME * 3)
+            .filter(|_| limiter.attempt(&keys, now).is_ok())
+            .count();
+        assert_eq!(passed, PER_NAME as usize);
+        assert_eq!(limiter.attempt(&keys, now), Err(WINDOW));
+        // Another name from the same address still has tries.
+        let grace = [Key::name("grace"), ip.clone()];
+        assert_eq!(limiter.attempt(&grace, now), Ok(()));
+        // One that was right forgets the name's and gives the address its
+        // own back, and no more.
+        limiter.succeeded(&grace);
+        assert_eq!(limiter.blocked(&Key::name("grace"), now), None);
+        assert_eq!(
+            limiter.tries.lock().unwrap()[&ip].wrong,
+            PER_NAME,
+            "the address keeps the wrong ones"
+        );
+        limiter.succeeded(&keys);
+        assert_eq!(limiter.attempt(&keys, now), Ok(()));
+        // The address runs out as well, whichever names it tries.
+        let tried = (0..PER_ADDRESS * 2)
+            .filter(|n| {
+                let keys = [Key::name(&format!("n{n}")), ip.clone()];
+                limiter.attempt(&keys, now).is_ok()
+            })
+            .count();
+        assert_eq!(tried, (PER_ADDRESS - PER_NAME) as usize);
+    }
+
+    #[test]
     fn an_address_is_its_network() {
         let key = |ip: &str| Key::address(ip.parse().unwrap());
         assert_eq!(
@@ -345,12 +422,16 @@ mod tests {
             limiter.failed(name(n), start + Duration::from_secs(1));
         }
         let count = || limiter.tries.lock().unwrap().len();
+        let has = |key: &Key| limiter.tries.lock().unwrap().contains_key(key);
         assert_eq!(count(), MAX_KEYS);
         assert!(limiter.blocked(&name(0), start).is_some());
-        // One more: the oldest goes.
+        // One more: of those with the fewest tries the oldest goes, and the
+        // name that is held back stays held back.
         limiter.failed(name(MAX_KEYS), start + Duration::from_secs(2));
         assert_eq!(count(), MAX_KEYS);
-        assert_eq!(limiter.blocked(&name(0), start), None);
+        assert!(limiter.blocked(&name(0), start).is_some());
+        assert!(has(&name(MAX_KEYS)));
+        assert_eq!((1..MAX_KEYS).filter(|n| !has(&name(*n))).count(), 1);
         // Once their time is over, all of them go.
         limiter.failed(name(MAX_KEYS + 1), start + WINDOW + Duration::from_secs(2));
         assert_eq!(count(), 1);

@@ -316,6 +316,11 @@ pub async fn make(
     if let Err(invalid) = accounts::check_password(password) {
         return Ok(Outcome::Invalid(invalid));
     }
+    // Nor for a name that is taken: that says nothing the answer would not.
+    // Taken meanwhile, it is refused below all the same.
+    if accounts::id_of(db, name).await?.is_some() {
+        return Ok(Outcome::Invalid(accounts::Invalid::NameTaken));
+    }
     let hash = accounts::hash(password).await?;
 
     // One registration at a time: counting and adding belong together.

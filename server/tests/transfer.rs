@@ -70,7 +70,7 @@ async fn new_folder(state: &AppState, cookie: &str, title: &str, parent: Option<
 
 /// What an account has of a feed, by the GUIDs of the articles: what is read,
 /// what is starred, and the labels.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 struct Seen {
     read: BTreeSet<String>,
     starred: BTreeSet<String>,
@@ -349,14 +349,14 @@ async fn an_account_moves_to_a_rueder_where_numbers_differ(db: PgPool) {
     assert_eq!(exported_a["url"], A);
     assert_eq!(exported_a["folder"], json!(["News", "Tech"]));
     assert_eq!(exported_a["read_upto"]["guid"], "guid-6");
-    // Only the starred and labelled articles bring their text.
+    // No article brings its text.
     let a_articles = exported_a["articles"].as_array().unwrap();
-    let with_text: Vec<&str> = a_articles
-        .iter()
-        .filter(|article| !article["content"].is_null())
-        .map(|article| article["guid"].as_str().unwrap())
-        .collect();
-    assert_eq!(with_text, ["guid-2", "guid-5", "guid-9"]);
+    assert_eq!(a_articles.len(), 5);
+    assert!(
+        a_articles
+            .iter()
+            .all(|article| article.get("content").is_none())
+    );
 
     forget(&db).await;
     // The second rueder: other numbers for everything. A has three older
@@ -394,15 +394,29 @@ async fn an_account_moves_to_a_rueder_where_numbers_differ(db: PgPool) {
 
     let grace = common::account(&db, "grace").await;
     let cookie = session(&db, grace).await;
+    // A file as an older rueder wrote it, with texts, and one made up to put
+    // an article of its own into the feed Bob reads.
+    let mut file = file;
+    file["tree"][2]["articles"][4]["content"] = json!({ "html": "<p>Text of article 9.</p>" });
+    let planted = json!({
+        "seq": 99, "guid": "planted", "url": "https://a.example/planted",
+        "published_at": "2026-11-12T00:00:00Z", "title": "Your password ran out",
+        "starred": true,
+        "content": { "html": "<p><a href=\"https://evil.example/\">Log in again</a></p>" }
+    });
+    file["tree"][2]["articles"]
+        .as_array_mut()
+        .unwrap()
+        .push(planted);
     let (status, report) = import(&state, &cookie, &file).await;
     assert_eq!(status, StatusCode::OK, "{report}");
     assert_eq!(
         report,
         json!({
             "feeds": 3, "known": 0, "folders": 2,
-            // A: 2, 3, 5, 8 found, 9 brought along; B: 4 brought along;
-            // C has nothing to say but its mark.
-            "articles": 4, "carried": 2, "missing": 0,
+            // A: 2, 3, 5, 8 found, 9 and the made-up one missing; B: 4
+            // missing; C has nothing to say but its mark.
+            "articles": 4, "missing": 3,
             "labels": 1, "rules": 3, "skipped": 0, "settings": true
         })
     );
@@ -451,7 +465,7 @@ async fn an_account_moves_to_a_rueder_where_numbers_differ(db: PgPool) {
         Seen {
             // 101 to 103 came before the mark here; they are as good as read.
             read: guids(&[101, 102, 103, 1, 2, 4, 5, 6, 8]),
-            starred: guids(&[2, 9]),
+            starred: guids(&[2]),
             labelled: labelled(&[("Keep", 5)]),
         }
     );
@@ -465,24 +479,21 @@ async fn an_account_moves_to_a_rueder_where_numbers_differ(db: PgPool) {
             labelled: BTreeSet::new(),
         }
     );
-    // B was never fetched here: only the starred article is there, and the
-    // time of the mark waits for the first fetch.
-    assert_eq!(
-        seen(&db, grace, b).await,
-        Seen {
-            read: BTreeSet::new(),
-            starred: guids(&[4]),
-            labelled: labelled(&[("Keep", 4)]),
-        }
-    );
-    let text: String = sqlx::query_scalar(
-        "SELECT c.html FROM article_content c WHERE c.feed_id = $1 AND c.guid = 'guid-4'",
+    // Nothing of the file was written into a feed: not the article that
+    // was missing here, nor the made-up one.
+    let made: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM article_content
+         WHERE (feed_id = $1 AND guid IN ('guid-9', 'planted')) OR feed_id = $2",
     )
+    .bind(a)
     .bind(b)
     .fetch_one(&db)
     .await
     .unwrap();
-    assert_eq!(text, "<p>Text of article 4.</p>");
+    assert_eq!(made, 0);
+    // B was never fetched here: nothing of it is there, and the time of the
+    // mark waits for the first fetch.
+    assert_eq!(seen(&db, grace, b).await, Seen::default());
     let mut tx = db.begin().await.unwrap();
     let all: Vec<_> = (1..=5).map(article).collect();
     rueder::feeds::store(&mut tx, b, &all).await.unwrap();
@@ -499,7 +510,7 @@ async fn an_account_moves_to_a_rueder_where_numbers_differ(db: PgPool) {
     .unwrap();
     assert_eq!(waiting, None);
 
-    // Bob still has nothing unread: what was brought along is old news.
+    // Bob still has nothing unread.
     let counts = reading::unread_counts(&db, bob).await.unwrap();
     assert_eq!(counts.iter().map(|feed| feed.unread).sum::<i64>(), 0);
     // And Bob's file has nothing of Grace's.
@@ -580,7 +591,7 @@ async fn an_import_only_adds_and_a_second_one_changes_nothing(db: PgPool) {
         report,
         json!({
             "feeds": 0, "known": 3, "folders": 0,
-            "articles": 6, "carried": 0, "missing": 0,
+            "articles": 6, "missing": 0,
             "labels": 0, "rules": 0, "skipped": 0, "settings": true
         })
     );
@@ -615,12 +626,10 @@ async fn an_article_that_cannot_be_found_loses_what_was_read_of_it(db: PgPool) {
     let cookie = session(&db, grace).await;
     let (status, report) = import(&state, &cookie, &file).await;
     assert_eq!(status, StatusCode::OK, "{report}");
-    // Of A, 3 (kept unread) and 8 (read) are lost; 2, 5 and 9 come along.
-    assert_eq!(report["missing"], 2);
-    assert_eq!(report["carried"], 4);
-    let a_seen = seen(&db, grace, a).await;
-    assert_eq!(a_seen.read, guids(&[2, 5]));
-    assert_eq!(a_seen.starred, guids(&[2, 9]));
+    // Of A, 2, 3, 5, 8 and 9 are lost, and B's 4.
+    assert_eq!(report["missing"], 6);
+    assert!(report.get("carried").is_none());
+    assert_eq!(seen(&db, grace, a).await, Seen::default());
 }
 
 #[sqlx::test]
@@ -802,7 +811,7 @@ async fn the_command_line_moves_an_account_too(db: PgPool) {
         panic!("the import failed");
     };
     assert_eq!(imported.feeds, 3);
-    // Not a single article was here, so the starred and labelled ones came.
-    assert_eq!(imported.carried, 4);
+    // Not a single article was here, and none came along.
+    assert_eq!(imported.missing, 6);
     assert!(imported.to_string().contains("3 new, 0 known"));
 }
