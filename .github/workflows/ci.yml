@@ -167,6 +167,9 @@ jobs:
   app:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    # It only reads the repository; releasing is the job app-release's.
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: app
