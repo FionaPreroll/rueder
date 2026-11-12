@@ -549,7 +549,9 @@ async fn arrive(
     if let Some(old) = old {
         sessions::end(&state.db, old).await?;
     }
-    let token = sessions::start(&state.db, account_id).await?;
+    // The provider vouches for the person; a second factor of rueder's own
+    // is not asked for here.
+    let token = sessions::start(&state.db, account_id, false).await?;
     let mut response = back(None);
     response
         .headers_mut()

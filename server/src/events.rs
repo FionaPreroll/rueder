@@ -688,6 +688,10 @@ pub fn changed(path: &str) -> Option<Changed> {
         // A session ended: by logging out, by ending it from another device,
         // or with a new password, which ends them all.
         ["logout"] | ["sessions", ..] | ["password"] => Changed::Area(Area::Session),
+        // A secret that waits for its code changes nothing yet; switching the
+        // second factor on or off changes what the sessions may.
+        ["second-factor", "setup"] => return None,
+        ["second-factor", ..] => Changed::Area(Area::Session),
         ["settings", ..] => Changed::Area(Area::Settings),
         // Whether the account sends reports of errors is one of its settings;
         // the reports themselves are nothing its tabs show.

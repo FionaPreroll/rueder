@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO recovery_codes (account_id, code_hash) SELECT $1, unnest($2::bytea[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c100d30ac22216e48613976b8bbc9c1077f0933d3ae7531213ca1202d96bdbb8"
+}

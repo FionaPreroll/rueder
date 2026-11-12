@@ -17,11 +17,13 @@ export type Health = {
 
 /**
  * What `POST /api/login` reads. It answers with `Me` and sets the session's
- * cookie.
+ * cookie. An account with a second factor needs `code` too, from the app or
+ * a recovery code; without it, the answer is 401 with `second factor needed`.
  */
 export type Credentials = {
 	username: string,
 	password: string,
+	code?: string,
 };
 
 /**
@@ -33,6 +35,11 @@ export type Me = {
 	id: number,
 	username: string,
 	is_admin: boolean,
+	/**
+	 * An admin whose right waits for a login with a second factor, where the
+	 * server wants one of admins.
+	 */
+	admin_needs_second_factor: boolean,
 };
 
 /**
@@ -111,6 +118,67 @@ export type NewAccount = {
  */
 export type Created = {
 	id: number,
+};
+
+/**
+ * Whether an account has the second factor, and how many recovery codes it
+ * has left.
+ *
+ * `GET /api/second-factor` answers with it.
+ */
+export type SecondFactor = {
+	on: boolean,
+	recovery_codes_left: number,
+	/**
+	 * Whether this server lets admins be admins only with it.
+	 */
+	required_for_admins: boolean,
+};
+
+/**
+ * What setting up and switching off read: the password of the account. An
+ * account that has none needs none.
+ */
+export type SecondFactorPassword = {
+	password?: string,
+};
+
+/**
+ * A new secret for the app, waiting for a code to confirm it.
+ *
+ * `POST /api/second-factor/setup` answers with it.
+ */
+export type SecondFactorSetup = {
+	/**
+	 * The secret in base32, to type into an app by hand.
+	 */
+	secret: string,
+	/**
+	 * The `otpauth://` address apps read from the QR code.
+	 */
+	uri: string,
+	/**
+	 * The QR code of `uri`, as SVG.
+	 */
+	qr_svg: string,
+};
+
+/**
+ * A code from the app.
+ *
+ * `POST /api/second-factor/confirm` reads it.
+ */
+export type SecondFactorCode = {
+	code: string,
+};
+
+/**
+ * The recovery codes, shown once.
+ *
+ * `POST /api/second-factor/confirm` answers with them.
+ */
+export type RecoveryCodes = {
+	codes: Array<string>,
 };
 
 /**

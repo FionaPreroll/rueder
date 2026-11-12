@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts\n         SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = $2\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d54c12cd6638bbad3d04b295e651f5d82aad67e951b2e1e8c789e21316dfc73b"
+}

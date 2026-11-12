@@ -52,6 +52,29 @@ describe('Login', () => {
 		await vi.waitFor(() => expect(session.state).toBe('in'));
 	});
 
+	it('asks for the code of the second factor, and takes a recovery code too', async () => {
+		server.secondFactor = { code: '246810', recovery: ['AAAAA-BBBBB'] };
+		const session = await loginPage();
+		expect(screen.queryByLabelText('Code')).toBeNull();
+		await fill('fiona', 'correct horse{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('This account has a second factor.');
+		// The password stays, the code is asked for.
+		expect(screen.getByLabelText('Password')).toHaveValue('correct horse');
+		const code = screen.getByLabelText('Code');
+		expect(code).toHaveFocus();
+		expect(code).toHaveAttribute('autocomplete', 'one-time-code');
+		expect(submit()).toBeDisabled();
+
+		await userEvent.type(code, '135791{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('That code is not right.');
+		expect(screen.getByLabelText('Code')).toHaveValue('');
+		expect(session.state).toBe('out');
+
+		await userEvent.type(screen.getByLabelText('Code'), 'aaaaa-bbbbb{Enter}');
+		await vi.waitFor(() => expect(session.state).toBe('in'));
+		expect(server.secondFactor.recovery).toEqual([]);
+	});
+
 	it('says when name or password is wrong, and empties the password', async () => {
 		const session = await loginPage();
 		await fill('fiona', 'wrong{Enter}');

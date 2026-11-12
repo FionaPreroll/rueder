@@ -38,6 +38,9 @@ import {
 	type Refusal,
 	type Resumed,
 	type RulePreview,
+	type SecondFactorRefusal,
+	type SecondFactorSetup,
+	type SecondFactorState,
 	type Subscribed
 } from '#lib/reader.ts';
 import {
@@ -376,7 +379,8 @@ export class ServerReader implements Reader {
 			move: true,
 			status: account.admin,
 			invites: true,
-			reports: true
+			reports: true,
+			secondFactor: true
 		};
 		this.session = session;
 		this.api = api;
@@ -408,6 +412,57 @@ export class ServerReader implements Reader {
 
 	signOut() {
 		this.session.signOut();
+	}
+
+	// The second factor
+
+	/** What a refusal of a change to the second factor means here. */
+	private refusalOf(error: unknown, wrong: 'wrongPassword' | 'wrongCode'): SecondFactorRefusal {
+		if (!(error instanceof ApiError)) return 'unreachable';
+		if (error.signedOut) this.session.expired();
+		if (error.status === 429) return 'tooMany';
+		if (error.status === 403) return wrong;
+		return 'unreachable';
+	}
+
+	async secondFactor(): Promise<SecondFactorState | null> {
+		try {
+			const state = await this.api.secondFactor();
+			return {
+				on: state.on,
+				recoveryCodesLeft: state.recovery_codes_left,
+				requiredForAdmins: state.required_for_admins
+			};
+		} catch (error) {
+			this.refusalOf(error, 'wrongPassword');
+			return null;
+		}
+	}
+
+	async setUpSecondFactor(password: string): Promise<SecondFactorSetup | SecondFactorRefusal> {
+		try {
+			const setup = await this.api.setUpSecondFactor(password);
+			return { secret: setup.secret, qrSvg: setup.qr_svg };
+		} catch (error) {
+			return this.refusalOf(error, 'wrongPassword');
+		}
+	}
+
+	async confirmSecondFactor(code: string): Promise<string[] | SecondFactorRefusal> {
+		try {
+			return (await this.api.confirmSecondFactor(code.trim())).codes;
+		} catch (error) {
+			return this.refusalOf(error, 'wrongCode');
+		}
+	}
+
+	async switchOffSecondFactor(password: string): Promise<SecondFactorRefusal | null> {
+		try {
+			await this.api.switchOffSecondFactor(password);
+			return null;
+		} catch (error) {
+			return this.refusalOf(error, 'wrongPassword');
+		}
 	}
 
 	dismissNotice() {

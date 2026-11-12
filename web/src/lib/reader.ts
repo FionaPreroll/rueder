@@ -25,7 +25,28 @@ export interface Fresh {
 export interface Account {
 	name: string;
 	admin: boolean;
+	/** An admin whose right waits for a login with a second factor, as the server wants. */
+	adminNeedsSecondFactor?: boolean;
 }
+
+/** Whether the account has a second factor, and what the server wants of it. */
+export interface SecondFactorState {
+	on: boolean;
+	recoveryCodesLeft: number;
+	/** Admins are admins only in a session that began with it. */
+	requiredForAdmins: boolean;
+}
+
+/** A new secret for an authenticator app, waiting for a code to confirm it. */
+export interface SecondFactorSetup {
+	/** In base32, to type in by hand. */
+	secret: string;
+	/** The QR code of the `otpauth://` address, as SVG. */
+	qrSvg: string;
+}
+
+/** Why a change to the second factor did not work. The page has the words. */
+export type SecondFactorRefusal = 'wrongPassword' | 'wrongCode' | 'tooMany' | 'unreachable';
 
 /** What went wrong, for a line the reader can close. The page has the words. */
 export type Notice =
@@ -55,6 +76,8 @@ export interface Abilities {
 	invites: boolean;
 	/** Errors of the browser can be reported to the server, if the reader agrees. */
 	reports: boolean;
+	/** The account can have a second factor: codes of an authenticator app. */
+	secondFactor: boolean;
 }
 
 /** A feed found at an address. */
@@ -228,6 +251,15 @@ export interface Reader {
 	/** Who is logged in; null where there is nobody to log in. */
 	readonly account: Account | null;
 	signOut(): void;
+
+	/** The account's second factor, where the reader has one (`can.secondFactor`). */
+	secondFactor(): Promise<SecondFactorState | null>;
+	/** Starts setting it up, with the account's password. */
+	setUpSecondFactor(password: string): Promise<SecondFactorSetup | SecondFactorRefusal>;
+	/** Confirms it with a code of the app: the recovery codes, shown this once. */
+	confirmSecondFactor(code: string): Promise<string[] | SecondFactorRefusal>;
+	/** Switches it off, with the account's password; null when it worked. */
+	switchOffSecondFactor(password: string): Promise<SecondFactorRefusal | null>;
 	/** The filter rules. */
 	readonly filters: RuleBook;
 	/** Only the reader with made-up data has these. */

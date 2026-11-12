@@ -20,7 +20,7 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    reclean, registration, reports, router, sessions, transfer,
+    reclean, registration, reports, router, second_factor, sessions, transfer,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -120,6 +120,10 @@ enum AccountCommand {
     /// Say how many accounts this one may invite in all: a number, or
     /// `default` for what `rueder registration set --invites` gives everybody.
     Invites { name: String, quota: Quota },
+    /// Switch off the second factor of an account and delete its recovery
+    /// codes, for somebody who lost the app and the codes. The account logs in
+    /// with its password alone after that, until it sets one up again.
+    SecondFactorOff { name: String },
 }
 
 /// A limit on the command line: a number, or `none` for no limit.
@@ -388,6 +392,15 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
             };
             println!("{imported}");
         }
+        AccountCommand::SecondFactorOff { name } => {
+            if !second_factor::switch_off_named(db, &name).await? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            println!(
+                "Account {} has no second factor any more; it can set one up again.",
+                name.trim()
+            );
+        }
         AccountCommand::Invites { name, quota } => {
             if !registration::set_quota(db, &name, quota.0).await? {
                 anyhow::bail!("there is no account {}", name.trim());
@@ -648,6 +661,16 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     if env::var("CLIENT_REPORTS").is_ok_and(|value| value == "off") {
         tracing::info!("taking no reports of errors from browsers (CLIENT_REPORTS=off)");
         state = state.without_reports();
+    }
+    // ADMIN_SECOND_FACTOR=required lets admins be admins only in a session
+    // that began with a second factor. Anything else is a mistake, not "off".
+    match env::var("ADMIN_SECOND_FACTOR").as_deref() {
+        Err(_) | Ok("" | "off") => {}
+        Ok("required") => {
+            tracing::info!("admins need a second factor (ADMIN_SECOND_FACTOR=required)");
+            state = state.with_admin_second_factor();
+        }
+        Ok(other) => anyhow::bail!("ADMIN_SECOND_FACTOR must be required or off, not {other:?}"),
     }
     let app = router(state, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;

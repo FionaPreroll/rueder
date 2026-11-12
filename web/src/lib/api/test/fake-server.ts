@@ -116,6 +116,17 @@ export class FakeServer {
 	signedIn: string | null = 'fiona';
 	/** Whether the account that is logged in is an admin, who sees the status. */
 	admin = true;
+	/** An admin whose right waits for a login with a second factor. */
+	adminNeedsSecondFactor = false;
+	/**
+	 * The second factor of the account: the code its app shows now, and the
+	 * recovery codes left. A secret that waits for its code is `pending`.
+	 */
+	secondFactor: { code: string; recovery: string[] } | null = null;
+	pendingSecondFactor = false;
+	/** The code the made-up app shows, and the recovery codes a confirmation gives. */
+	readonly appCode = '246810';
+	readonly recoveryCodes = ['AAAAA-BBBBB', 'CCCCC-DDDDD'];
 	/** Whether the server takes reports of errors, whether the account sends them, and what it sent. */
 	reportsAvailable = true;
 	sendsReports = false;
@@ -372,6 +383,13 @@ export class FakeServer {
 				return refused(429, 'too many', { 'Retry-After': `${this.lockedFor}` });
 			const name = String(data.username).trim().toLowerCase();
 			if (this.accounts.get(name) !== data.password) return refused(401, 'wrong name or password');
+			if (this.secondFactor) {
+				const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : '';
+				if (!code) return refused(401, 'second factor needed');
+				const recovery = this.secondFactor.recovery.indexOf(code);
+				if (recovery !== -1) this.secondFactor.recovery.splice(recovery, 1);
+				else if (code !== this.secondFactor.code) return refused(401, 'wrong code');
+			}
 			this.signedIn = name;
 			return json(this.me());
 		}
@@ -383,6 +401,8 @@ export class FakeServer {
 		const invites = this.answerInvites(method, path, data);
 		if (invites) return invites;
 		if (method === 'GET' && path === '/me') return json(this.me());
+		const secondFactor = this.answerSecondFactor(method, path, data);
+		if (secondFactor) return secondFactor;
 		if (method === 'GET' && path === '/tree') return json(this.tree());
 		if (path === '/reports/consent') {
 			if (method === 'GET')
@@ -603,7 +623,47 @@ export class FakeServer {
 	}
 
 	private me() {
-		return { id: 1, username: this.signedIn, is_admin: this.admin };
+		return {
+			id: 1,
+			username: this.signedIn,
+			is_admin: this.admin,
+			admin_needs_second_factor: this.adminNeedsSecondFactor
+		};
+	}
+
+	private answerSecondFactor(method: string, path: string, data: Record<string, unknown>) {
+		if (!path.startsWith('/second-factor')) return null;
+		const passwordRight = () => this.accounts.get(this.signedIn ?? '') === (data.password ?? '');
+		if (method === 'GET' && path === '/second-factor') {
+			return json({
+				on: this.secondFactor !== null,
+				recovery_codes_left: this.secondFactor?.recovery.length ?? 0,
+				required_for_admins: this.adminNeedsSecondFactor
+			});
+		}
+		if (method === 'POST' && path === '/second-factor/setup') {
+			if (!passwordRight()) return refused(403, 'the password is wrong');
+			this.pendingSecondFactor = true;
+			return json({
+				secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+				uri: 'otpauth://totp/rueder%3Afiona?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+				qr_svg: '<svg xmlns="http://www.w3.org/2000/svg"/>'
+			});
+		}
+		if (method === 'POST' && path === '/second-factor/confirm') {
+			if (!this.pendingSecondFactor) return refused(409, 'set it up first');
+			if (data.code !== this.appCode) return refused(403, 'the code is wrong');
+			this.pendingSecondFactor = false;
+			this.secondFactor = { code: this.appCode, recovery: [...this.recoveryCodes] };
+			this.adminNeedsSecondFactor = false;
+			return json({ codes: [...this.recoveryCodes] });
+		}
+		if (method === 'DELETE' && path === '/second-factor') {
+			if (!passwordRight()) return refused(403, 'the password is wrong');
+			this.secondFactor = null;
+			return empty();
+		}
+		return null;
 	}
 
 	private tree(): { folders: ApiFolder[]; feeds: ApiFeed[]; hidden: number } {

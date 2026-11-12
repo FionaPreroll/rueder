@@ -932,7 +932,8 @@ describe('reading', () => {
 			move: true,
 			status: true,
 			invites: true,
-			reports: true
+			reports: true,
+			secondFactor: true
 		});
 	});
 });
