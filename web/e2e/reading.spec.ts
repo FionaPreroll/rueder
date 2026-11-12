@@ -126,10 +126,10 @@ test('shows only what is unread, and marks all as read', async ({ page }) => {
 	await expect.poll(() => unreadInTitle(page)).toBe(0);
 
 	await expect.poll(() => unreadOnServer(page, 'Harbour Herald')).toBe(0);
+	// After a reload the list still shows only what is unread.
 	await page.reload();
 	await expect(node(page, 'Harbour Herald')).not.toContainText('(');
-	await node(page, 'Harbour Herald').click();
-	await expect(articles(page)).toHaveCount(12);
-	await page.keyboard.press('U');
 	await expect(page.getByText('Nothing unread here.')).toBeVisible();
+	await page.keyboard.press('U');
+	await expect(articles(page)).toHaveCount(12);
 });
