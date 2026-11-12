@@ -2,10 +2,10 @@
 <!-- The app's own texts, in English; values-de/ has them in German. The page of
      rueder has its own, in web/src/lib/i18n/, and the start page in www/texts.js. -->
 <resources>
-    <string name="app_name">rueder</string>
-    <string name="title_activity_main">rueder</string>
-    <string name="package_name">io.github.fionapreroll.rueder</string>
-    <string name="custom_url_scheme">io.github.fionapreroll.rueder</string>
+    <string name="app_name" translatable="false">rueder</string>
+    <string name="title_activity_main" translatable="false">rueder</string>
+    <string name="package_name" translatable="false">io.github.fionapreroll.rueder</string>
+    <string name="custom_url_scheme" translatable="false">io.github.fionapreroll.rueder</string>
     <string name="shortcut_setup_short">Server and updates</string>
     <string name="shortcut_setup_long">Server and app updates</string>
     <string name="update_title">A new version of rueder</string>
