@@ -10,7 +10,7 @@ and its Content-Security-Policy stay as they are.
 - **Start page** (`www/`): at the first start it asks for the address of your
   rueder (https only, as rueder logs in only over a secure connection) and whether
   the app may look for new versions of itself. Later starts open the server at once.
-  A long press on the app's icon (*Server and updates*), or *Server and app updates*
+  A long press on the app's icon (_Server and updates_), or _Server and app updates_
   in the account menu of rueder's page, comes back here. If the server does not
   answer, the start page says so.
 - **Native side** (`android/app/src/main/java/…`): `MainActivity` with the WebView,
@@ -21,7 +21,7 @@ and its Content-Security-Policy stay as they are.
   `version.json` from the release
   [`android-latest`](https://github.com/FionaPreroll/rueder/releases/tag/android-latest)
   at every start (`Updates.java` in `src/github/`). A newer build is offered in a
-  dialog that says its size and whether the network may cost money; *Download*
+  dialog that says its size and whether the network may cost money; _Download_
   hands it to Android's download manager and then to Android's installer, which asks
   you. Android installs it only if it is signed with the same key as the app you
   have. Nothing else is sent anywhere.
