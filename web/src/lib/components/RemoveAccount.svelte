@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Deleting the own account, for good: what goes and what stays, and the
-	// password, or the name of an account without one, to show it is meant.
+	// password, or the name of an account without one, to show it is meant. Where
+	// the account has a second factor, the server asks for its code as well.
 	import type { Reader, RemoveRefusal } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 
@@ -10,6 +11,9 @@
 	const byName = $derived(reader.account?.password === false);
 
 	let proof = $state('');
+	let code = $state('');
+	/** The server asked for the code of the second factor. */
+	let asksCode = $state(false);
 	let busy = $state(false);
 	let refusal = $state<RemoveRefusal | null>(null);
 
@@ -17,6 +21,8 @@
 		switch (refusal.problem) {
 			case 'wrong':
 				return m.removeAccount.wrong;
+			case 'code':
+				return m.removeAccount.codeNeeded;
 			case 'busy':
 				return m.removeAccount.busy(refusal.minutes);
 			case 'unreachable':
@@ -26,13 +32,15 @@
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !proof) return;
+		if (busy || !proof || (asksCode && !code.trim())) return;
 		busy = true;
 		refusal = null;
 		try {
 			// Gone, the page is logged out and this is no longer there.
-			refusal = await reader.removeAccount(proof);
-			proof = '';
+			refusal = await reader.removeAccount(proof, asksCode ? code : undefined);
+			if (refusal?.problem === 'code') asksCode = true;
+			else proof = '';
+			code = '';
 		} finally {
 			busy = false;
 		}
@@ -66,13 +74,26 @@
 			/>
 		{/if}
 	</label>
+	{#if asksCode}
+		<label class="block">
+			<span class="font-medium">{m.removeAccount.code}</span>
+			<input
+				class="mt-1.5 block w-full max-w-xs rounded py-1.5 text-sm"
+				name="one-time-code"
+				autocomplete="one-time-code"
+				autocapitalize="none"
+				spellcheck="false"
+				bind:value={code}
+			/>
+		</label>
+	{/if}
 	{#if refusal}
 		<p class="text-warn" role="alert">{say(refusal)}</p>
 	{/if}
 	<button
 		type="submit"
 		class="tool font-semibold text-warn disabled:cursor-default disabled:opacity-50"
-		disabled={busy || !proof}
+		disabled={busy || !proof || (asksCode && !code.trim())}
 	>
 		{m.removeAccount.submit}
 	</button>

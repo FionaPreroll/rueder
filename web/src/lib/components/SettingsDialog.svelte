@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
 	// rules, the keyboard shortcuts, where the server takes them whether this browser
-	// sends reports of its errors, moving the account to another rueder and
-	// deleting it.
+	// sends reports of its errors, the second factor, moving the account to
+	// another rueder and deleting it.
 	// Everything applies as it is changed.
 	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
@@ -23,6 +23,7 @@
 	import MoveAccount from './MoveAccount.svelte';
 	import RemoveAccount from './RemoveAccount.svelte';
 	import RulesEditor from './RulesEditor.svelte';
+	import SecondFactor from './SecondFactor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
 	const allTabs = [
@@ -32,6 +33,7 @@
 		'keys',
 		'invites',
 		'privacy',
+		'security',
 		'move',
 		'account'
 	] as const;
@@ -51,6 +53,7 @@
 			if (name === 'privacy') return reader.can.reports && reader.reportsConsent?.available;
 			if (name === 'move') return reader.can.move;
 			if (name === 'account') return reader.can.remove && reader.account !== null;
+			if (name === 'security') return reader.can.secondFactor;
 			return name !== 'invites' || reader.can.invites;
 		})
 	);
@@ -207,6 +210,8 @@
 				<p class="text-soft">{m.settings.reports.never}</p>
 				<p class="text-xs text-soft">{m.settings.reports.off}</p>
 			</div>
+		{:else if tab === 'security'}
+			<SecondFactor {reader} />
 		{:else if tab === 'move'}
 			<MoveAccount {reader} />
 		{:else if tab === 'account'}

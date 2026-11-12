@@ -37,6 +37,7 @@ export const ACCOUNTS = [
 	'moved',
 	'search',
 	'darkbars',
+	'guarded',
 	'leaving',
 	'barred'
 ];

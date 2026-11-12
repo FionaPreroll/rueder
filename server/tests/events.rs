@@ -184,6 +184,8 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/sessions/3", area(Area::Session)),
         ("/api/password", area(Area::Session)),
         ("/api/account", area(Area::Session)),
+        ("/api/second-factor", area(Area::Session)),
+        ("/api/second-factor/confirm", area(Area::Session)),
         ("/api/tree/move", area(Area::Tree)),
         ("/api/folders", area(Area::Tree)),
         ("/api/folders/2", area(Area::Tree)),
@@ -196,6 +198,7 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/something/new", area(Area::Tree)),
         // Questions that are sent like changes, and what only admins see.
         ("/api/rules/preview", None),
+        ("/api/second-factor/setup", None),
         ("/api/feeds/find", None),
         ("/api/accounts", None),
         ("/api/register", None),

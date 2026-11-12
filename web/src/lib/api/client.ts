@@ -45,7 +45,12 @@ import type {
 	RulePreview,
 	RuleScope,
 	RulesHits,
+	RecoveryCodes,
 	SearchHits,
+	SecondFactor,
+	SecondFactorCode,
+	SecondFactorPassword,
+	SecondFactorSetup,
 	ServerStatus,
 	StateChange,
 	Subscribed,
@@ -249,8 +254,8 @@ export const api = {
 
 	me: () => call<ApiAccount>('GET', '/me'),
 	loginWays: () => call<ApiLoginWays>('GET', '/login/ways'),
-	login: (username: string, password: string) =>
-		call<ApiAccount>('POST', '/login', { username, password } satisfies Credentials),
+	login: (username: string, password: string, code?: string) =>
+		call<ApiAccount>('POST', '/login', { username, password, code } satisfies Credentials),
 	logout: () => call<void>('POST', '/logout'),
 	/** Deletes the account that is logged in, for good; the password, or the name of one without. */
 	removeAccount: (proof: Farewell) => call<void>('DELETE', '/account', proof),
@@ -366,6 +371,16 @@ export const api = {
 
 	/** For admins only. */
 	status: () => call<ServerStatus>('GET', '/status'),
+
+	secondFactor: () => call<SecondFactor>('GET', '/second-factor'),
+	setUpSecondFactor: (password: string) =>
+		call<SecondFactorSetup>('POST', '/second-factor/setup', {
+			password
+		} satisfies SecondFactorPassword),
+	confirmSecondFactor: (code: string) =>
+		call<RecoveryCodes>('POST', '/second-factor/confirm', { code } satisfies SecondFactorCode),
+	switchOffSecondFactor: (password: string) =>
+		call<void>('DELETE', '/second-factor', { password } satisfies SecondFactorPassword),
 
 	reportsConsent: () => call<ReportsConsent>('GET', '/reports/consent'),
 	setReportsConsent: (on: boolean) =>

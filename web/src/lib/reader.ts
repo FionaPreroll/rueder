@@ -30,15 +30,38 @@ export interface Account {
 	 * sign-on has none. Left out, it has one.
 	 */
 	password?: boolean;
+	/** An admin whose right waits for a login with a second factor, as the server wants. */
+	adminNeedsSecondFactor?: boolean;
 }
 
 /** Why the account was not deleted. The page has the words. */
 export type RemoveRefusal =
-	/** The password, or the name for an account without one, was not right. */
+	/** The password, or the name for an account without one, or the code was not right. */
 	| { problem: 'wrong' }
+	/** The password was right; the account has a second factor, whose code is missing. */
+	| { problem: 'code' }
 	/** Too many wrong tries; wait so many minutes. */
 	| { problem: 'busy'; minutes: number }
 	| { problem: 'unreachable' };
+
+/** Whether the account has a second factor, and what the server wants of it. */
+export interface SecondFactorState {
+	on: boolean;
+	recoveryCodesLeft: number;
+	/** Admins are admins only in a session that began with it. */
+	requiredForAdmins: boolean;
+}
+
+/** A new secret for an authenticator app, waiting for a code to confirm it. */
+export interface SecondFactorSetup {
+	/** In base32, to type in by hand. */
+	secret: string;
+	/** The QR code of the `otpauth://` address, as SVG. */
+	qrSvg: string;
+}
+
+/** Why a change to the second factor did not work. The page has the words. */
+export type SecondFactorRefusal = 'wrongPassword' | 'wrongCode' | 'tooMany' | 'unreachable';
 
 /** What went wrong, for a line the reader can close. The page has the words. */
 export type Notice =
@@ -68,6 +91,8 @@ export interface Abilities {
 	invites: boolean;
 	/** Errors of the browser can be reported to the server, if the reader agrees. */
 	reports: boolean;
+	/** The account can have a second factor: codes of an authenticator app. */
+	secondFactor: boolean;
 	/** The account can delete itself, with everything that is its own. */
 	remove: boolean;
 }
@@ -243,6 +268,15 @@ export interface Reader {
 	/** Who is logged in; null where there is nobody to log in. */
 	readonly account: Account | null;
 	signOut(): void;
+
+	/** The account's second factor, where the reader has one (`can.secondFactor`). */
+	secondFactor(): Promise<SecondFactorState | null>;
+	/** Starts setting it up, with the account's password. */
+	setUpSecondFactor(password: string): Promise<SecondFactorSetup | SecondFactorRefusal>;
+	/** Confirms it with a code of the app: the recovery codes, shown this once. */
+	confirmSecondFactor(code: string): Promise<string[] | SecondFactorRefusal>;
+	/** Switches it off, with the account's password; null when it worked. */
+	switchOffSecondFactor(password: string): Promise<SecondFactorRefusal | null>;
 	/** The filter rules. */
 	readonly filters: RuleBook;
 	/** Only the reader with made-up data has these. */
@@ -356,10 +390,10 @@ export interface Reader {
 
 	/**
 	 * Deletes the account for good (`can.remove`), with the password, or the
-	 * account's name where it has none. Null when it is gone: then the page is
-	 * logged out.
+	 * account's name where it has none, and the code of its second factor where
+	 * it has one. Null when it is gone: then the page is logged out.
 	 */
-	removeAccount(proof: string): Promise<RemoveRefusal | null>;
+	removeAccount(proof: string, code?: string): Promise<RemoveRefusal | null>;
 
 	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
 	status(): Promise<ServerStatus | null>;

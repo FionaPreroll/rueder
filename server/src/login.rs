@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AppError, AppState, accounts, registration,
+    AppError, AppState, accounts, registration, second_factor,
     sessions::{self, Session},
 };
 
@@ -233,12 +233,19 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
 }
 
 /// What `POST /api/login` reads. It answers with `Me` and sets the session's
-/// cookie.
+/// cookie. An account with a second factor needs `code` too, from the app or
+/// a recovery code; without it, the answer is 401 with `second factor needed`.
 #[derive(Deserialize, TS)]
 pub struct Credentials {
     username: String,
     password: String,
+    #[serde(default)]
+    #[ts(optional)]
+    code: Option<String>,
 }
+
+/// What the answer to a login says when the account needs a code.
+pub const CODE_NEEDED: &str = "second factor needed";
 
 /// Who is logged in, as the API says it.
 ///
@@ -251,6 +258,9 @@ pub struct Me {
     /// Whether the account has a password, which deleting it asks for. One
     /// that logs in only through OpenID Connect has none.
     has_password: bool,
+    /// An admin whose right waits for a login with a second factor, where the
+    /// server wants one of admins.
+    admin_needs_second_factor: bool,
 }
 
 impl Me {
@@ -260,6 +270,18 @@ impl Me {
             username,
             is_admin,
             has_password,
+            admin_needs_second_factor: false,
+        }
+    }
+
+    /// Who the session is, and whether its account has a password.
+    pub(crate) fn of(session: Session, has_password: bool) -> Self {
+        Self {
+            id: session.account_id,
+            username: session.username,
+            is_admin: session.is_admin,
+            has_password,
+            admin_needs_second_factor: session.admin_needs_second_factor,
         }
     }
 }
@@ -306,20 +328,48 @@ pub async fn login(
             "wrong name or password".into(),
         ));
     };
-    state.logins.succeeded(&keys);
     // Said only to whoever knows the password, so it tells nobody else which
-    // names exist.
+    // names exist. No code is asked for: the account cannot log in anyway.
     if account.disabled {
+        state.logins.succeeded(&keys);
         return Err(AppError::Status(StatusCode::FORBIDDEN, "disabled".into()));
     }
+    let second_factor = second_factor::is_on(&state.db, account.id).await?;
+    if second_factor {
+        let Some(code) = credentials
+            .code
+            .as_deref()
+            .filter(|code| !code.trim().is_empty())
+        else {
+            // The password was right; the code is what is missing.
+            state.logins.succeeded(&keys);
+            return Err(AppError::Status(
+                StatusCode::UNAUTHORIZED,
+                CODE_NEEDED.into(),
+            ));
+        };
+        // A wrong code stays counted, like a wrong password.
+        if !second_factor::take(&state.db, account.id, code).await? {
+            let message = "wrong code";
+            return Err(AppError::Status(StatusCode::UNAUTHORIZED, message.into()));
+        }
+    }
+    state.logins.succeeded(&keys);
 
     // A session the browser still had ends here, so a login always starts a
     // fresh one.
     if let Some(old) = sessions::token(&headers) {
         sessions::end(&state.db, old).await?;
     }
-    let token = sessions::start(&state.db, account.id).await?;
-    let me = Me::new(account.id, account.username, account.is_admin, true);
+    let token = sessions::start(&state.db, account.id, second_factor).await?;
+    let session = Session {
+        account_id: account.id,
+        username: account.username,
+        is_admin: account.is_admin,
+        second_factor,
+        admin_needs_second_factor: false,
+    };
+    let me = Me::of(session.for_admins(state.admin_second_factor), true);
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -345,12 +395,7 @@ pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<
     .fetch_optional(&state.db)
     .await?
     .unwrap_or(false);
-    Ok(Json(Me::new(
-        session.account_id,
-        session.username,
-        session.is_admin,
-        has_password,
-    )))
+    Ok(Json(Me::of(session, has_password)))
 }
 
 #[cfg(test)]

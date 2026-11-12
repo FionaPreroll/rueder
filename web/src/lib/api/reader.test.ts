@@ -933,6 +933,7 @@ describe('reading', () => {
 			status: true,
 			invites: true,
 			reports: true,
+			secondFactor: true,
 			remove: true
 		});
 	});

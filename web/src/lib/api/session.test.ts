@@ -23,7 +23,12 @@ describe('Session', () => {
 		expect(session.state).toBe('checking');
 		await session.check();
 		expect(session.state).toBe('in');
-		expect(session.reader?.account).toEqual({ name: 'fiona', admin: true, password: true });
+		expect(session.reader?.account).toEqual({
+			name: 'fiona',
+			admin: true,
+			password: true,
+			adminNeedsSecondFactor: false
+		});
 	});
 
 	it('finds none, and asks how one can log in', async () => {
@@ -195,7 +200,12 @@ describe('registering', () => {
 
 		expect(await session.register(' Grace ', 'a long password')).toBeNull();
 		expect(session.state).toBe('in');
-		expect(session.reader?.account).toEqual({ name: 'grace', admin: false, password: true });
+		expect(session.reader?.account).toEqual({
+			name: 'grace',
+			admin: false,
+			password: true,
+			adminNeedsSecondFactor: false
+		});
 		expect(server.requests.at(-1)).toMatchObject({
 			method: 'POST',
 			path: '/register',

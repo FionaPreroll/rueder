@@ -221,7 +221,13 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
     let body: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         body,
-        json!({ "id": id, "username": "ada", "is_admin": false, "has_password": true })
+        json!({
+            "id": id,
+            "username": "ada",
+            "is_admin": false,
+            "has_password": true,
+            "admin_needs_second_factor": false
+        })
     );
 
     // Scripts cannot read the cookie, it travels over HTTPS only, belongs to
@@ -248,7 +254,13 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
     let body: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         body,
-        json!({ "id": id, "username": "ada", "is_admin": false, "has_password": true })
+        json!({
+            "id": id,
+            "username": "ada",
+            "is_admin": false,
+            "has_password": true,
+            "admin_needs_second_factor": false
+        })
     );
     // Among other cookies too.
     let among = format!("theme=dark; {pair}; other=1");
@@ -398,8 +410,8 @@ async fn logging_out_ends_this_session_and_no_other(db: PgPool) {
 #[sqlx::test]
 async fn a_session_runs_out_when_it_is_not_used(db: PgPool) {
     let id = common::account(&db, "ada").await;
-    let used = sessions::start(&db, id).await.unwrap();
-    let unused = sessions::start(&db, id).await.unwrap();
+    let used = sessions::start(&db, id, false).await.unwrap();
+    let unused = sessions::start(&db, id, false).await.unwrap();
     let left = async |token: &str| -> f64 {
         sqlx::query_scalar(
             "SELECT extract(epoch FROM expires_at - now())::float8 FROM sessions

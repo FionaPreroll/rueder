@@ -129,6 +129,10 @@ const en = {
 		submit: 'Log in',
 		checking: 'One moment …',
 		wrong: 'Wrong name or password.',
+		codeNeeded: 'This account has a second factor. Enter the code your app shows.',
+		wrongCode: 'That code is not right. Codes change every 30 seconds.',
+		code: 'Code',
+		codeNote: 'The six digits from your authenticator app, or one of your recovery codes.',
 		tooMany: (minutes: number) =>
 			`Too many wrong tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
 		unreachable: 'The server does not answer. Try again in a moment.',
@@ -222,6 +226,7 @@ const en = {
 			keys: 'Keyboard',
 			invites: 'Invitations',
 			privacy: 'Privacy',
+			security: 'Security',
 			move: 'Move',
 			account: 'Account'
 		},
@@ -254,6 +259,37 @@ const en = {
 		wakeLockMissing: 'This browser cannot keep the screen on.',
 		note: 'Changes apply at once and are saved with your account, so they follow you to every device.',
 		noteDemo: 'Changes apply at once and stay in this browser.',
+		secondFactor: {
+			title: 'Second factor',
+			intro:
+				'With a second factor, logging in takes a code from an authenticator app on your phone besides the password, so a password that got out is not enough.',
+			on: 'On.',
+			left: (count: number) =>
+				`${n(count)} ${plural(count, { one: 'recovery code', other: 'recovery codes' })} left.`,
+			off: 'Off.',
+			adminNeeds:
+				'This server makes admins admins only with a second factor. Set it up, or log in again with its code, to see the server status.',
+			password: 'Your password',
+			start: 'Set up',
+			scan: 'Scan this code with your authenticator app, or type in the key below.',
+			qr: 'QR code for the authenticator app',
+			key: 'Key',
+			code: 'The code the app shows now',
+			confirm: 'Confirm',
+			cancel: 'Cancel',
+			codesTitle: 'Your recovery codes',
+			codesIntro:
+				'Each of them logs you in once when you do not have your phone. Keep them somewhere safe: they are shown only now.',
+			codesDone: 'I have kept them',
+			switchOff: 'Switch off',
+			switchOffNote: 'Logging in then takes the password alone again.',
+			refusals: {
+				wrongPassword: 'The password is not right.',
+				wrongCode: 'That code is not right. Codes change every 30 seconds.',
+				tooMany: 'Too many wrong tries. Try again in a few minutes.',
+				unreachable: 'The server does not answer. Try again in a moment.'
+			}
+		},
 		reports: {
 			send: 'Send reports of errors in this browser to this server',
 			intro:
@@ -402,8 +438,10 @@ const en = {
 			'Feeds stay for the others who read them. To take your account elsewhere first, use “Move”.',
 		password: 'Your password',
 		name: (name: string) => `Type your name, ${name}, to confirm`,
+		code: 'Code from your app, or a recovery code',
 		submit: 'Delete my account for good',
 		wrong: 'That is not right. Nothing was deleted.',
+		codeNeeded: 'Your account has a second factor. Type a code from your app as well.',
 		busy: (minutes: number) =>
 			`Too many wrong tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
 		unreachable: 'The server does not answer. Nothing was deleted.'

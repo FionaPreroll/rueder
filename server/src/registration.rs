@@ -443,7 +443,7 @@ async fn register(
     if let Some(old) = sessions::token(&headers) {
         sessions::end(&state.db, old).await?;
     }
-    let token = sessions::start(&state.db, id).await?;
+    let token = sessions::start(&state.db, id, false).await?;
     let me = Me::new(id, new.username.trim().to_owned(), false, true);
     let cookie = [(header::SET_COOKIE, sessions::cookie(&token))];
     Ok((StatusCode::CREATED, cookie, Json(me)).into_response())

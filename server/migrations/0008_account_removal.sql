@@ -2,9 +2,10 @@
 --
 -- Geloescht wird ein Konto mit DELETE FROM accounts: Alles, was ihm gehoert,
 -- haengt mit ON DELETE CASCADE daran (Sitzungen, Identitaeten bei OpenID
--- Connect, Ordner, Abos und mit ihnen der Lesestand und die Sterne, Labels,
--- Regeln, Fehlerberichte, Einladungen). Die Einstellungen stehen in der Zeile
--- selbst. Feeds und Artikel gehoeren niemandem und bleiben fuer ihre anderen
+-- Connect, Wiederherstellungscodes des zweiten Faktors, Ordner, Abos und mit
+-- ihnen der Lesestand und die Sterne, Labels, Regeln, Fehlerberichte,
+-- Einladungen). Die Einstellungen und das Geheimnis des zweiten Faktors
+-- stehen in der Zeile selbst. Feeds und Artikel gehoeren niemandem und bleiben fuer ihre anderen
 -- Abonnenten. Konten, die dieses eingeladen hat, bleiben; ihr Verweis auf die
 -- Einladung wird leer (invite_id, ON DELETE SET NULL).
 --

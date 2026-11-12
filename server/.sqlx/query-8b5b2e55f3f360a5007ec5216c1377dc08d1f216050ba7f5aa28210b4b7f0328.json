@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.totp_secret IS NOT NULL AS \"on!\",\n                  (SELECT count(*) FROM recovery_codes r WHERE r.account_id = a.id) AS \"left!\"\n           FROM accounts a WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "on!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "left!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "8b5b2e55f3f360a5007ec5216c1377dc08d1f216050ba7f5aa28210b4b7f0328"
+}

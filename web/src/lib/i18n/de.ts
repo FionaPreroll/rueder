@@ -127,6 +127,11 @@ const de: Messages = {
 		submit: 'Anmelden',
 		checking: 'Einen Moment …',
 		wrong: 'Name oder Passwort stimmt nicht.',
+		codeNeeded: 'Dieses Konto hat einen zweiten Faktor. Gib den Code ein, den deine App zeigt.',
+		wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+		code: 'Code',
+		codeNote:
+			'Die sechs Ziffern aus deiner Authenticator-App oder einer deiner Wiederherstellungscodes.',
 		tooMany: (minutes) =>
 			`Zu viele falsche Versuche. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
 		unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.',
@@ -220,6 +225,7 @@ const de: Messages = {
 			keys: 'Tastatur',
 			invites: 'Einladungen',
 			privacy: 'Datenschutz',
+			security: 'Sicherheit',
 			move: 'Umzug',
 			account: 'Konto'
 		},
@@ -252,6 +258,37 @@ const de: Messages = {
 		wakeLockMissing: 'Dieser Browser kann den Bildschirm nicht anlassen.',
 		note: 'Änderungen gelten sofort, liegen bei deinem Konto und gelten auf jedem Gerät.',
 		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.',
+		secondFactor: {
+			title: 'Zweiter Faktor',
+			intro:
+				'Mit einem zweiten Faktor braucht der Login neben dem Passwort einen Code aus einer Authenticator-App auf deinem Handy. Ein Passwort, das bekannt geworden ist, reicht dann nicht.',
+			on: 'An.',
+			left: (count) =>
+				`${n(count)} ${plural(count, { one: 'Wiederherstellungscode', other: 'Wiederherstellungscodes' })} übrig.`,
+			off: 'Aus.',
+			adminNeeds:
+				'Auf diesem Server sind Admins nur mit zweitem Faktor Admins. Richte ihn ein oder melde dich mit seinem Code neu an, um den Serverstatus zu sehen.',
+			password: 'Dein Passwort',
+			start: 'Einrichten',
+			scan: 'Scanne diesen Code mit deiner Authenticator-App oder tippe den Schlüssel darunter ein.',
+			qr: 'QR-Code für die Authenticator-App',
+			key: 'Schlüssel',
+			code: 'Der Code, den die App gerade zeigt',
+			confirm: 'Bestätigen',
+			cancel: 'Abbrechen',
+			codesTitle: 'Deine Wiederherstellungscodes',
+			codesIntro:
+				'Jeder bringt dich einmal hinein, wenn du dein Handy nicht hast. Bewahre sie sicher auf: Sie werden nur jetzt gezeigt.',
+			codesDone: 'Ich habe sie aufbewahrt',
+			switchOff: 'Ausschalten',
+			switchOffNote: 'Der Login braucht dann wieder nur das Passwort.',
+			refusals: {
+				wrongPassword: 'Das Passwort stimmt nicht.',
+				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
+				unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
+			}
+		},
 		reports: {
 			send: 'Fehlerberichte aus diesem Browser an diesen Server schicken',
 			intro:
@@ -400,8 +437,10 @@ const de: Messages = {
 			'Feeds bleiben für die anderen, die sie lesen. Willst du dein Konto vorher mitnehmen, nimm „Umzug“.',
 		password: 'Dein Passwort',
 		name: (name) => `Gib zur Bestätigung deinen Namen ein, ${name}`,
+		code: 'Code aus deiner App oder ein Wiederherstellungscode',
 		submit: 'Mein Konto endgültig löschen',
 		wrong: 'Das stimmt nicht. Gelöscht wurde nichts.',
+		codeNeeded: 'Dein Konto hat einen zweiten Faktor. Gib dazu einen Code aus deiner App ein.',
 		busy: (minutes) =>
 			`Zu viele falsche Versuche. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
 		unreachable: 'Der Server antwortet nicht. Gelöscht wurde nichts.'

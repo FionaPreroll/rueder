@@ -41,7 +41,25 @@ const TOKEN_LEN: usize = 43;
 pub struct Session {
     pub account_id: i32,
     pub username: String,
+    /// Whether the account is an admin in this session: where the operator
+    /// wants a second factor for that, only in a session that began with one.
     pub is_admin: bool,
+    /// Whether the session began with a second factor.
+    pub second_factor: bool,
+    /// An admin whose right waits for a session with a second factor.
+    pub admin_needs_second_factor: bool,
+}
+
+impl Session {
+    /// The session as the server sees it, where it wants (`required`) or does
+    /// not want a second factor of admins.
+    pub fn for_admins(mut self, required: bool) -> Self {
+        if required && self.is_admin && !self.second_factor {
+            self.is_admin = false;
+            self.admin_needs_second_factor = true;
+        }
+        self
+    }
 }
 
 pub(crate) fn token_hash(token: &str) -> Vec<u8> {
@@ -49,16 +67,17 @@ pub(crate) fn token_hash(token: &str) -> Vec<u8> {
 }
 
 /// Starts a session for the account and returns the token for the cookie.
-pub async fn start(db: &PgPool, account_id: i32) -> anyhow::Result<String> {
+pub async fn start(db: &PgPool, account_id: i32, second_factor: bool) -> anyhow::Result<String> {
     let mut random = [0u8; 32];
     getrandom::fill(&mut random).map_err(|err| anyhow::anyhow!("no random numbers: {err}"))?;
     let token = URL_SAFE_NO_PAD.encode(random);
     sqlx::query!(
-        "INSERT INTO sessions (token_hash, account_id, expires_at)
-         VALUES ($1, $2, now() + $3::float8 * interval '1 second')",
+        "INSERT INTO sessions (token_hash, account_id, expires_at, second_factor)
+         VALUES ($1, $2, now() + $3::float8 * interval '1 second', $4)",
         token_hash(&token),
         account_id,
         IDLE as f64,
+        second_factor,
     )
     .execute(db)
     .await?;
@@ -83,7 +102,7 @@ pub async fn find(db: &PgPool, token: &str) -> anyhow::Result<Option<Session>> {
     }
     let hash = token_hash(token);
     let found = sqlx::query!(
-        r#"SELECT a.id, a.username, a.is_admin,
+        r#"SELECT a.id, a.username, a.is_admin, s.second_factor,
                   s.last_seen_at < now() - $2::float8 * interval '1 second' AS "stale!"
            FROM sessions s JOIN accounts a ON a.id = s.account_id
            WHERE s.token_hash = $1 AND s.expires_at > now() AND a.disabled_at IS NULL"#,
@@ -110,6 +129,8 @@ pub async fn find(db: &PgPool, token: &str) -> anyhow::Result<Option<Session>> {
         account_id: found.id,
         username: found.username,
         is_admin: found.is_admin,
+        second_factor: found.second_factor,
+        admin_needs_second_factor: false,
     }))
 }
 
@@ -171,6 +192,7 @@ impl FromRequestParts<AppState> for Session {
             Some(token) => find(&state.db, token).await?,
             None => None,
         };
+        let session = session.map(|session| session.for_admins(state.admin_second_factor));
         session.ok_or_else(|| AppError::Status(StatusCode::UNAUTHORIZED, "not logged in".into()))
     }
 }

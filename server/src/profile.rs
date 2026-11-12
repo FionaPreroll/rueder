@@ -17,7 +17,8 @@ use ts_rs::TS;
 
 use crate::{
     AppError, AppState, accounts,
-    login::Key,
+    login::{CODE_NEEDED, Key},
+    second_factor,
     sessions::{self, Session},
 };
 
@@ -156,7 +157,8 @@ async fn change_password(
         Err(invalid) => Err(AppError::BadRequest(invalid.to_string())),
         Ok(false) => Err(AppError::NotFound),
         Ok(true) => {
-            let token = sessions::start(&state.db, session.account_id).await?;
+            let token =
+                sessions::start(&state.db, session.account_id, session.second_factor).await?;
             let cookie = [(header::SET_COOKIE, sessions::cookie(&token))];
             Ok((StatusCode::NO_CONTENT, cookie).into_response())
         }
@@ -173,12 +175,18 @@ struct Farewell {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
     name: String,
+    /// A code of the app or a recovery code, where the second factor is on.
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    code: String,
 }
 
 /// Deletes the reader's own account and everything that is its own (see
 /// [`accounts::remove`]). Its sessions end, on this device and all others,
 /// and so do its connections for live updates, as `events::changed` counts
-/// this address as a session that ended.
+/// this address as a session that ended. Where the second factor is on, it
+/// takes a code as well, as at login: without one the answer is 403 with
+/// `second factor needed`, and a wrong one counts like a wrong password.
 async fn remove_account(
     State(state): State<AppState>,
     session: Session,
@@ -207,9 +215,20 @@ async fn remove_account(
         let message = "the password is wrong";
         return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
     }
+    if second_factor::is_on(&state.db, session.account_id).await? {
+        let code = farewell.code.trim();
+        if code.is_empty() {
+            // The password was right; the code is what is missing.
+            state.logins.succeeded(&keys);
+            return Err(AppError::Status(StatusCode::FORBIDDEN, CODE_NEEDED.into()));
+        }
+        // A wrong code stays counted, like a wrong password.
+        if !second_factor::take(&state.db, session.account_id, code).await? {
+            let message = "wrong code";
+            return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+        }
+    }
     state.logins.succeeded(&keys);
-    // A second factor, once there is one (work package 5.7), is asked for here
-    // as well.
     if !accounts::remove(&state.db, session.account_id).await? {
         return Err(AppError::NotFound);
     }

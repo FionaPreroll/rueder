@@ -168,6 +168,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
+| `ADMIN_SECOND_FACTOR` | `required` makes admins admins only after logging in with a second factor (an authenticator app); readers set one up under Settings, Security. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | Login through an OpenID Connect provider. |
 
 Changing `POSTGRES_PASSWORD` later does not change the password of a database
@@ -211,6 +212,7 @@ docker compose exec rueder rueder account list
 docker compose exec rueder rueder registration show        # who may register or invite, see below
 docker compose exec rueder rueder admin add fiona          # sees the server status; admin remove, admin list
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
+docker compose exec rueder rueder account second-factor-off fiona   # lost the app and the recovery codes
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
 docker compose exec rueder rueder account disable mallory  # no login, sessions end; `enable` undoes it
 docker compose exec rueder rueder account remove mallory   # deletes the account and all that is its own

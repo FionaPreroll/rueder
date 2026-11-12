@@ -609,6 +609,22 @@ describe('Deleting the account in the settings', () => {
 		expect(server.accounts.has('fiona')).toBe(false);
 	});
 
+	it('asks for the code where the account has a second factor', async () => {
+		server.secondFactor = { code: '123456', recovery: ['ABCD-EFGH'] };
+		const removed = await opened();
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('Your account has a second factor.');
+		expect(server.accounts.has('fiona')).toBe(true);
+		const code = screen.getByLabelText('Code from your app, or a recovery code');
+		await userEvent.type(code, '654321{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was deleted.');
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.type(code, '123456{Enter}');
+		await vi.waitFor(() => expect(removed).toHaveBeenCalledOnce());
+		const asked = server.requests.findLast((request) => request.method === 'DELETE');
+		expect(asked?.body).toEqual({ password: 'correct horse', code: '123456' });
+	});
+
 	it('asks for the name where the account has no password', async () => {
 		server.accounts.delete('fiona');
 		const removed = await opened(false);
@@ -635,5 +651,76 @@ describe('Errors in browsers on the status page', () => {
 		expect(screen.getByText(/^3 times in 2 accounts, last/)).toBeInTheDocument();
 		expect(screen.getByText('Version 1762899600000 · Chrome 141, Firefox 140')).toBeInTheDocument();
 		expect(screen.getByText('Browsers reported 1 error in the last day.')).toBeInTheDocument();
+	});
+});
+
+describe('the second factor in the settings', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => vi.unstubAllGlobals());
+
+	function open(account = { name: 'fiona', admin: false }) {
+		const reader = new ServerReader(account, session);
+		render(SettingsDialog, { reader, tab: 'security', onclose: () => {} });
+		return reader;
+	}
+
+	it('is set up with the password and a code, and shows the recovery codes once', async () => {
+		open();
+		expect(await screen.findByText('Off.')).toBeInTheDocument();
+		const password = screen.getByLabelText('Your password');
+		await userEvent.type(password, 'wrong');
+		await userEvent.click(screen.getByRole('button', { name: 'Set up' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('The password is not right.');
+		expect(password).toHaveValue('');
+
+		await userEvent.type(password, 'correct horse');
+		await userEvent.click(screen.getByRole('button', { name: 'Set up' }));
+		const qr = await screen.findByRole('img', { name: 'QR code for the authenticator app' });
+		expect(qr.getAttribute('src')).toMatch(/^data:image\/svg\+xml,/);
+		expect(screen.getByText('JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
+
+		const code = screen.getByLabelText('The code the app shows now');
+		await userEvent.type(code, '111111');
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('That code is not right.');
+		await userEvent.type(code, server.appCode);
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+		expect(await screen.findByText('AAAAA-BBBBB')).toBeInTheDocument();
+		expect(screen.getByText('CCCCC-DDDDD')).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole('button', { name: 'I have kept them' }));
+		expect(await screen.findByText('On.')).toBeInTheDocument();
+		expect(screen.getByText('2 recovery codes left.')).toBeInTheDocument();
+		expect(screen.queryByText('AAAAA-BBBBB')).toBeNull();
+	});
+
+	it('is switched off with the password', async () => {
+		server.secondFactor = { code: server.appCode, recovery: ['AAAAA-BBBBB'] };
+		open();
+		expect(await screen.findByText('On.')).toBeInTheDocument();
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(screen.getByRole('button', { name: 'Switch off' }));
+		expect(await screen.findByText('Off.')).toBeInTheDocument();
+		expect(server.secondFactor).toBeNull();
+	});
+
+	it('tells an admin whose right waits for it', async () => {
+		server.adminNeedsSecondFactor = true;
+		open({ name: 'fiona', admin: false, adminNeedsSecondFactor: true } as never);
+		expect(await screen.findByRole('status')).toHaveTextContent(
+			'This server makes admins admins only with a second factor.'
+		);
+	});
+
+	it('has no tab where the reader cannot have one', () => {
+		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Security' })).toBeNull();
 	});
 });

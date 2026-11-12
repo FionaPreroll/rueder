@@ -5,7 +5,7 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{call, raw};
-use rueder::{AppState, accounts, login, oidc, reading, sessions};
+use rueder::{AppState, accounts, login, oidc, reading, second_factor, sessions};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -177,6 +177,12 @@ async fn fill(db: &PgPool, account_id: i32, name: &str, shared: i32) -> i32 {
     .execute(db)
     .await
     .unwrap();
+    // A recovery code of a second factor.
+    sqlx::query("INSERT INTO recovery_codes (account_id, code_hash) VALUES ($1, '\\x03')")
+        .bind(account_id)
+        .execute(db)
+        .await
+        .unwrap();
     assert!(
         oidc::link(db, name, "https://id.example", &format!("{name}-subject"))
             .await
@@ -475,7 +481,7 @@ async fn a_disabled_account_cannot_log_in_and_is_told_so(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(count, 0);
-    let token_after = sessions::start(&db, ada).await.unwrap();
+    let token_after = sessions::start(&db, ada, false).await.unwrap();
     assert_eq!(sessions::find(&db, &token_after).await.unwrap(), None);
 
     // Who knows the password hears that the account is disabled; who does
@@ -542,5 +548,109 @@ async fn an_admin_sees_which_accounts_are_disabled(db: PgPool) {
     assert_eq!(
         disabled,
         [(json!("ada"), json!(false)), (json!("grace"), json!(true))]
+    );
+}
+
+#[sqlx::test]
+async fn a_second_factor_is_asked_for_before_deleting(db: PgPool) {
+    let state = AppState::new(db.clone());
+    let ada = make(&db, "ada", false).await;
+    let cookie = common::session(&db, ada).await;
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/second-factor/setup",
+        Some(&cookie),
+        Some(json!({ "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let pending: Vec<u8> = sqlx::query_scalar("SELECT totp_pending FROM accounts WHERE id = $1")
+        .bind(ada)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    let unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let code = format!(
+        "{:06}",
+        second_factor::code_at(&pending, second_factor::step_of(unix))
+    );
+    let (status, codes) = call(
+        &state,
+        Method::POST,
+        "/api/second-factor/confirm",
+        Some(&cookie),
+        Some(json!({ "code": code })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let recovery = codes["codes"][0].as_str().unwrap().to_owned();
+
+    // The password alone is not enough, and says what is missing.
+    let (status, _, said) = raw(
+        &state,
+        Method::DELETE,
+        "/api/account",
+        Some(&cookie),
+        Some((
+            "application/json",
+            json!({ "password": PASSWORD }).to_string().into_bytes(),
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(String::from_utf8_lossy(&said), login::CODE_NEEDED);
+    // A wrong code with the right password deletes nothing either.
+    assert_eq!(
+        delete_own(
+            &state,
+            &cookie,
+            json!({ "password": PASSWORD, "code": "000000" })
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    // Nor a right code with a wrong password.
+    assert_eq!(
+        delete_own(
+            &state,
+            &cookie,
+            json!({ "password": "not the password", "code": recovery })
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    assert!(accounts::id_of(&db, "ada").await.unwrap().is_some());
+    assert_eq!(
+        delete_own(
+            &state,
+            &cookie,
+            json!({ "password": PASSWORD, "code": recovery })
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(accounts::id_of(&db, "ada").await.unwrap(), None);
+}
+
+#[sqlx::test]
+async fn a_disabled_account_with_a_second_factor_is_told_so_without_a_code(db: PgPool) {
+    let state = AppState::new(db.clone());
+    make(&db, "ada", false).await;
+    sqlx::query("UPDATE accounts SET totp_secret = '\\x0102' WHERE username = 'ada'")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        log_in(&state, "ada", PASSWORD).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    accounts::set_disabled(&db, "ada", true).await.unwrap();
+    assert_eq!(
+        log_in(&state, "ada", PASSWORD).await,
+        (StatusCode::FORBIDDEN, "disabled".to_owned())
     );
 }
