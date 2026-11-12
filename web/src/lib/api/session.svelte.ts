@@ -4,6 +4,7 @@
 
 import { api as theApi, ApiError, type Api, type ApiAccount, type ApiLoginWays } from './client.ts';
 import { ServerReader } from './reader.svelte.ts';
+import { forgetView } from '#lib/view.ts';
 
 /** Why a login did not work. */
 export type LoginFailure =
@@ -137,6 +138,8 @@ export class Session {
 
 	/** Ends the session on the server, and here whether or not the server heard it. */
 	async signOut() {
+		// Where the reader was is nobody else's business.
+		forgetView();
 		try {
 			await this.api.logout();
 		} catch {

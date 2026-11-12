@@ -5,7 +5,9 @@
 	// rows stacked, and an article opens in the pane instead of under its row. The
 	// magazine shows tiles (`Magazine.svelte`); they are light, so all are drawn.
 	// A long list draws only what is near the view; the rest is space of its height.
+	// After a reload the list goes back to where it was, by the article at its top.
 	import { tick, untrack } from 'svelte';
+	import { Hold, type Aim } from '#lib/hold.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
@@ -14,7 +16,8 @@
 	import ArticleRow from './ArticleRow.svelte';
 	import Icon from './Icon.svelte';
 	import Magazine from './Magazine.svelte';
-	import { offsets, rowsInSight } from '#lib/virtual.ts';
+	import { offsets, rowAt, rowsInSight } from '#lib/virtual.ts';
+	import { noteView, SPOT_IDS, takeListSpot, type ListSpot } from '#lib/view.ts';
 
 	/** Up to this many rows, or this many cards with their whole text, all are drawn. */
 	const FEW_ROWS = 60;
@@ -168,8 +171,54 @@
 			}
 			measured.clear();
 			heights = new Map();
+			noteView({ list: { ids: [], offset: 0, top: 0 } });
 		});
 	});
+
+	// Once the list that was shown before the reload is there again, it scrolls back
+	// to the article that was at its top, or the next one that is still there, and
+	// holds it there while the rows above it are measured and its text arrives.
+	let hold: Hold | null = null;
+	let placed = false;
+	$effect(() => {
+		if (placed || reader.loading || reader.resuming || ids.length === 0 || !scroller) return;
+		placed = true;
+		untrack(() => {
+			const spot = takeListSpot(reader.stream);
+			if (spot && scroller) hold = new Hold(scroller, aimAt(spot));
+		});
+	});
+	$effect(() => () => hold?.stop());
+
+	/** Where the list has to be to show `spot` again; null while its article is not drawn. */
+	function aimAt(spot: ListSpot): () => Aim | null {
+		const anchor = spot.ids.find((id) => ids.includes(id)) ?? reader.open;
+		const offset = anchor === spot.ids[0] ? spot.offset : 0;
+		return () => {
+			const at = anchor && !magazine ? ids.indexOf(anchor) : -1;
+			if (at === -1) return { top: spot.top, ready: true };
+			// A text that is still on its way would push the place down when it comes.
+			const withText = expanded || (!pane && reader.open === anchor);
+			return {
+				top: (list?.offsetTop ?? 0) + tops[at] + offset,
+				ready: !withText || reader.visible[at]?.html != null
+			};
+		};
+	}
+
+	/** Notes the article at the top of the list and how far into it the list is scrolled. */
+	function noteSpot() {
+		if (hold?.active) return;
+		const into = scrollTop - (list?.offsetTop ?? 0);
+		const at = magazine ? ids.length : Math.min(rowAt(tops, into), ids.length);
+		noteView({
+			list: {
+				ids: ids.slice(at, at + SPOT_IDS),
+				offset: at < ids.length ? into - tops[at] : 0,
+				top: scrollTop
+			}
+		});
+	}
 
 	// Once a frame: what is in sight, and in the expanded view, what scrolled out at
 	// the top has been read.
@@ -180,7 +229,9 @@
 			frame = 0;
 			if (!scroller) return;
 			scrollTop = scroller.scrollTop;
-			if (!expanded || !settings.markOnScroll) return;
+			noteSpot();
+			// What scrolls past while the list goes back to its place was read before.
+			if (!expanded || !settings.markOnScroll || hold?.active) return;
 			const start = list?.offsetTop ?? 0;
 			const articles = reader.visible;
 			for (let i = 0; i < articles.length; i++) {

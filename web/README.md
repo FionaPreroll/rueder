@@ -25,6 +25,9 @@ a new version. What comes with later work packages is in
 - `src/lib/demo/` fills it from made-up feeds and articles that live in the browser,
   the same on every start: for the tests, for `pnpm dev:demo` and for the one-file
   build. Nothing of it is saved.
+- Where the reader was (the list shown, the open article and how far the sidebar, the
+  list and the article were scrolled) is kept in the browser's local storage
+  (`src/lib/view.ts`), so a reload starts there again; logging out forgets it.
 - The settings (theme, density, language, keys of one's own …) are kept with the
   account through the server's reader, and in the browser's local storage, so the
   page looks right before the server answers. The draft keeps them in the browser

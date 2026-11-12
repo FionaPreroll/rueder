@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
+import { VIEW_KEY } from '#lib/view.ts';
 import Page from './+page.svelte';
 
 let server: FakeServer;
@@ -79,12 +80,37 @@ describe('the page with a server', () => {
 		await userEvent.keyboard('A');
 		await vi.waitFor(() => expect(server.unread(tech)).toBe(0));
 		expect(unreadInTitle()).toBe(1);
+		// Where the reader was is kept for a reload, and goes with the session.
+		window.dispatchEvent(new Event('pagehide'));
+		expect(localStorage.getItem(VIEW_KEY)).toContain(`"open":"${server.article(tech, 3)!.id}"`);
 
 		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
 		await userEvent.click(screen.getByRole('menuitem', { name: 'Log out' }));
 		expect(await screen.findByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
 		expect(server.signedIn).toBeNull();
 		expect(document.title).toBe('rueder');
+		expect(localStorage.getItem(VIEW_KEY)).toBeNull();
+	});
+
+	it('comes back to the article it was left at after a reload', async () => {
+		const first = render(Page);
+		await within(await screen.findByRole('navigation', { name: 'Subscriptions' })).findByRole(
+			'button',
+			{ name: /^Tech/ }
+		);
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		await userEvent.click(await screen.findByRole('button', { name: /Article 2 of feed/ }));
+		expect(await screen.findByText(`Text 2 of feed ${tech}.`)).toBeInTheDocument();
+		window.dispatchEvent(new Event('pagehide'));
+		first.unmount();
+		const asked = server.requests.length;
+
+		render(Page);
+		expect(await screen.findByText(`Text 2 of feed ${tech}.`)).toBeInTheDocument();
+		expect(heading()).toHaveTextContent('Tech');
+		// The start page was not asked for.
+		const after = server.requests.slice(asked);
+		expect(after.filter((r) => r.path.includes('limit=60'))).toHaveLength(0);
 	});
 
 	it('goes back to the login when the session runs out', async () => {

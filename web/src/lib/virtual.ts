@@ -14,8 +14,8 @@ export function offsets(
 	return tops;
 }
 
-/** The first row whose end lies below `y`: the row `y` falls in. */
-function rowAt(tops: readonly number[], y: number) {
+/** The first row whose end lies below `y`: the row `y` falls in; n below the last. */
+export function rowAt(tops: readonly number[], y: number) {
 	let low = 0;
 	let high = tops.length - 1;
 	// The smallest i with tops[i + 1] > y.

@@ -14,6 +14,7 @@ import type {
 	Imported,
 	Moved,
 	Reader,
+	Resumed,
 	RulePreview,
 	ServerStatus,
 	Subscribed
@@ -134,6 +135,8 @@ export class DemoReader implements Reader {
 
 	// What only a reader with a server has, and what only this one has.
 	readonly loading = false;
+	/** Every made-up article is at hand, so a resumed list is there at once. */
+	readonly resuming = false;
 	readonly notice = null;
 	readonly account = null;
 	readonly can: Abilities = {
@@ -339,6 +342,21 @@ export class DemoReader implements Reader {
 		this.open = null;
 		this.query = '';
 		this.refresh();
+	}
+
+	resume(view: Resumed) {
+		// A feed, a folder or a label made here is gone after a reload.
+		const there = this.title(view.stream) !== '';
+		this.show(there ? view.stream : { kind: 'home' });
+		if (!there) return;
+		this.unreadOnly = view.unreadOnly;
+		this.newestFirst = view.newestFirst;
+		const list = this.list;
+		const at = (id: string | null) => (id ? list.findIndex((article) => article.id === id) : -1);
+		const furthest = Math.max(at(view.cursor), at(view.open), ...view.wanted.map(at));
+		this.limit = Math.max(PAGE, Math.ceil((furthest + 1) / PAGE) * PAGE);
+		if (at(view.cursor) !== -1) this.cursor = view.cursor;
+		if (at(view.open) !== -1) this.open = view.open;
 	}
 
 	/** Brings in the articles that arrived since the list was drawn. */

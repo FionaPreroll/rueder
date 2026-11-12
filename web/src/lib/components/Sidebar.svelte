@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The left column, as in Google Reader: Subscribe on top, then the fixed lists and
 	// the tree of folders and feeds with their unread counts.
+	import { Hold } from '#lib/hold.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
@@ -9,6 +10,7 @@
 	import Icon, { type IconName } from './Icon.svelte';
 	import LabelList from './LabelList.svelte';
 	import TreeItem, { type DragState } from './TreeItem.svelte';
+	import { currentView, noteView } from '#lib/view.ts';
 
 	let {
 		reader,
@@ -39,6 +41,23 @@
 	}
 
 	const focus = (field: HTMLInputElement) => field.focus();
+
+	// The tree is scrolled as far as it was, after a reload and when the sidebar opens
+	// again on a phone, once it is there.
+	let scroller: HTMLElement | undefined = $state();
+	let hold: Hold | null = null;
+	let placed = false;
+	$effect(() => {
+		if (placed || !scroller || reader.tree.length === 0) return;
+		placed = true;
+		const top = currentView().sidebar;
+		if (top > 0) hold = new Hold(scroller, () => ({ top, ready: true }));
+	});
+	$effect(() => () => hold?.stop());
+
+	function scrolled() {
+		if (scroller && !hold?.active) noteView({ sidebar: scroller.scrollTop });
+	}
 </script>
 
 {#snippet entry(stream: Stream, icon: IconName, label: string, unread: number, quiet = 0)}
@@ -78,7 +97,7 @@
 		<div class="pt-3"></div>
 	{/if}
 
-	<div class="min-h-0 flex-1 overflow-y-auto pb-6">
+	<div class="min-h-0 flex-1 overflow-y-auto pb-6" bind:this={scroller} onscroll={scrolled}>
 		{@render entry({ kind: 'home' }, 'home', m.nav.home, 0)}
 		{@render entry({ kind: 'all' }, 'list', m.nav.all, reader.totalUnread)}
 		{@render entry({ kind: 'starred' }, 'star', m.nav.starred, 0)}

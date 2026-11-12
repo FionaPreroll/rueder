@@ -91,6 +91,28 @@ test('stars, keeps unread and finds both again after a reload', async ({ page })
 	await expect(articles(page).first()).toContainText('Harbour news 11');
 });
 
+test('comes back to the list and the open article after a reload', async ({ page }) => {
+	await logIn(page, 'reading');
+	await node(page, 'Harbour Herald').click();
+	await expect(articles(page)).toHaveCount(12);
+	await page.keyboard.press('U');
+	await expect(articles(page)).toHaveCount(11);
+	await page.keyboard.press('j');
+	await expect(page.locator('.article-body')).toContainText('trip 11.');
+	await expect.poll(() => unreadOnServer(page, 'Harbour Herald')).toBe(10);
+
+	// Read now, the open article is no longer in the list of the unread, and still comes back.
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Harbour Herald');
+	await expect(page.locator('.article-body')).toContainText('trip 11.');
+	await expect(articles(page)).toHaveCount(11);
+	await page.keyboard.press('U');
+	await expect(articles(page)).toHaveCount(12);
+	// The next test wants it unread again.
+	await page.keyboard.press('m');
+	await expect.poll(() => unreadOnServer(page, 'Harbour Herald')).toBe(11);
+});
+
 test('shows only what is unread, and marks all as read', async ({ page }) => {
 	await logIn(page, 'reading');
 	await node(page, 'Harbour Herald').click();
@@ -104,10 +126,10 @@ test('shows only what is unread, and marks all as read', async ({ page }) => {
 	await expect.poll(() => unreadInTitle(page)).toBe(0);
 
 	await expect.poll(() => unreadOnServer(page, 'Harbour Herald')).toBe(0);
+	// After a reload the list still shows only what is unread.
 	await page.reload();
 	await expect(node(page, 'Harbour Herald')).not.toContainText('(');
-	await node(page, 'Harbour Herald').click();
-	await expect(articles(page)).toHaveCount(12);
-	await page.keyboard.press('U');
 	await expect(page.getByText('Nothing unread here.')).toBeVisible();
+	await page.keyboard.press('U');
+	await expect(articles(page)).toHaveCount(12);
 });

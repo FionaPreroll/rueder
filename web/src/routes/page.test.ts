@@ -4,7 +4,9 @@ import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
+import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
+import { VIEW_KEY } from '#lib/view.ts';
 import Layout from './+layout.svelte';
 // The page with made-up data: the one of the builds that run without a server.
 import Page from '../single/+page.svelte';
@@ -472,6 +474,90 @@ describe('on a phone', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Show the sidebar' }));
 		await userEvent.click(screen.getAllByRole('button', { name: 'Hide the sidebar' })[1]);
 		expect(screen.queryByRole('navigation')).toBeNull();
+	});
+});
+
+describe('after a reload', () => {
+	const tagesbote = new DemoReader().articles['feed-tagesbote'];
+	const keep = (view: Record<string, unknown>) =>
+		localStorage.setItem(
+			VIEW_KEY,
+			JSON.stringify({
+				form: 1,
+				account: '',
+				stream: { kind: 'feed', id: 'feed-tagesbote' },
+				unreadOnly: false,
+				newestFirst: true,
+				cursor: null,
+				open: null,
+				sidebar: 0,
+				list: { ids: [], offset: 0, top: 0 },
+				pane: null,
+				...view
+			})
+		);
+	const scrollerOf = (part: HTMLElement) =>
+		part.querySelector<HTMLElement>('.overflow-y-auto') ?? part;
+
+	it('shows the list and the article it was left at', async () => {
+		const first = render(Page);
+		await userEvent.click(
+			within(screen.getByRole('main')).getByRole('button', { name: 'Tagesbote' })
+		);
+		const row = within(screen.getByRole('main')).getAllByRole('listitem')[2];
+		await userEvent.click(within(row).getAllByRole('button')[0]);
+		const title = openArticle()?.textContent?.trim();
+		await userEvent.click(
+			within(screen.getByRole('main')).getByRole('button', { name: /^All items$/ })
+		);
+		await userEvent.click(screen.getByRole('menuitemradio', { name: 'Unread only' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Unread only' }));
+		await userEvent.click(screen.getByRole('menuitemradio', { name: 'Oldest first' }));
+		// The page goes away, as on a reload.
+		window.dispatchEvent(new Event('pagehide'));
+		first.unmount();
+
+		render(Page);
+		expect(heading()).toHaveTextContent('Tagesbote');
+		expect(openArticle()?.textContent?.trim()).toBe(title);
+		await userEvent.click(screen.getByRole('button', { name: 'Unread only' }));
+		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeChecked();
+		expect(screen.getByRole('menuitemradio', { name: 'Oldest first' })).toBeChecked();
+	});
+
+	it('scrolls the sidebar and the list back to where they were', () => {
+		const open = tagesbote.at(-3)!;
+		keep({ open: open.id, sidebar: 140, list: { ids: [open.id], offset: 25, top: 900 } });
+		render(Page);
+		expect(scrollerOf(screen.getByRole('navigation')).scrollTop).toBe(140);
+		// Before the page is laid out the rows count with the guess of 56 pixels each.
+		expect(scrollerOf(screen.getByRole('main')).scrollTop).toBe(2 * 56 + 25);
+	});
+
+	it('takes the next article still there, or the bare distance, where the top one is gone', () => {
+		keep({ list: { ids: ['gone', tagesbote.at(-2)!.id], offset: 25, top: 900 } });
+		const first = render(Page);
+		expect(scrollerOf(screen.getByRole('main')).scrollTop).toBe(56);
+		first.unmount();
+
+		keep({ list: { ids: ['gone'], offset: 25, top: 900 } });
+		render(Page);
+		expect(scrollerOf(screen.getByRole('main')).scrollTop).toBe(900);
+	});
+
+	it('scrolls the open article in its pane back to where it was', async () => {
+		settings.view = 'split';
+		const open = tagesbote.at(-1)!;
+		keep({ open: open.id, cursor: open.id, pane: { id: open.id, top: 333 } });
+		render(Page);
+		const pane = await screen.findByRole('region', { name: open.title });
+		await vi.waitFor(() => expect(pane.scrollTop).toBe(333));
+	});
+
+	it('starts on the start page where what it was left at is gone', () => {
+		keep({ stream: { kind: 'feed', id: 'feed-gone' } });
+		render(Page);
+		expect(heading()).toHaveTextContent('New in your subscriptions');
 	});
 });
 
