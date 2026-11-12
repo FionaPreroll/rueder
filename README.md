@@ -1,7 +1,5 @@
 # rueder
 
-![rueder logo: a gopher with glasses reading a newspaper](docs/images/rueder3gopher_s.png)
-
 [![CI](https://github.com/FionaPreroll/rueder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FionaPreroll/rueder/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/FionaPreroll/rueder/graph/badge.svg?branch=main)](https://codecov.io/gh/FionaPreroll/rueder)
 
 rueder is a self-hosted feed reader for a handful of people, in the spirit of
