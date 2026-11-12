@@ -12,11 +12,19 @@ updates:
       cargo:
         patterns: ["*"]
   - package-ecosystem: npm
-    directory: /web
+    directories: ["/web", "/app"]
     schedule:
       interval: monthly
     groups:
       npm:
+        patterns: ["*"]
+  # The Android project of the app. Capacitor's own parts come with npm above.
+  - package-ecosystem: gradle
+    directory: /app/android
+    schedule:
+      interval: monthly
+    groups:
+      gradle:
         patterns: ["*"]
   # The base images in the Dockerfile.
   - package-ecosystem: docker

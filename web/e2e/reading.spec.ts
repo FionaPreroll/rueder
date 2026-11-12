@@ -23,7 +23,7 @@ test('subscribes to a feed found on a website', async ({ page }) => {
 	await page.getByRole('button', { name: 'Subscribe', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Subscribe to a feed' });
 	// The address of the site, not of its feed: the server looks for the feed.
-	await dialog.getByLabel('Address of the feed or the website').fill(`${SITE}/harbour/`);
+	await dialog.getByLabel('Address of the feed or the website').fill(`${SITE}/harbour-reading/`);
 	await dialog.getByRole('button', { name: 'Find feeds' }).click();
 	await expect(dialog.getByRole('status')).toHaveText('There is one feed:');
 	await dialog.getByRole('button', { name: 'Subscribe: Harbour Herald' }).click();

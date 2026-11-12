@@ -2,7 +2,7 @@
 
 Stand 2026-11-12. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
 
-Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand und der Import, aus Schritt 2 der gehärtete HTTP-Client, der Abruf, die Bereinigung, der Bild-Proxy und die Live-Updates. Alles andere hier ist der Entwurf, nach dem gebaut wird. Sobald ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für Filterregeln und Ordnerbaum die Modelle in `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
+Gebaut sind die Schritte 1 bis 3 bis auf das Security-Review (Paket 2.12); jeder Abschnitt nennt das Paket, mit dem sein Teil kam. Was noch Entwurf ist, sagt der Abschnitt selbst, so der [einmalige Import in den laufenden Bestand](implementation.md#einmaliger-import-in-den-laufenden-bestand) aus Schritt 4. Wo ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für die Endpunkte die Module in `server/src/`, für die Oberfläche `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
 
 - [Überblick](#überblick)
 - [Bausteine](#bausteine)
@@ -80,15 +80,16 @@ Die Tabellen im Überblick. Die genauen Spalten stehen in den Migrationen, `serv
 
 | Bereich | Tabellen | Idee |
 |---|---|---|
-| Konten | `accounts`, `account_identities`, `sessions`, `registration`, `invites` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON. `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit. |
+| Konten | `accounts`, `account_identities`, `sessions`, `registration`, `invites` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON, dazu das Recht als Admin, die Zustimmung zu [Fehlerberichten](#fehlerberichte-aus-dem-browser) (`sends_reports`) und, woher es stammt (`origin`, `invite_id`, `invite_quota`, siehe [Registrierung und Einladungen](#registrierung-und-einladungen)). `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit. |
 | Feeds | `feeds` | Ein Feed gehört allen seinen Abonnenten gemeinsam. Er kennt seine höchste Artikelnummer (`last_seq`), den Abrufstand (nächster Abruf, Intervall, ETag, Last-Modified, letzter Erfolg, letzter Fehler) und den User-Agent, mit dem er abgerufen wird. |
 | Baum | `folders`, `subscriptions` | Ordner mit Elternordner und Position. Ein Abo verbindet Konto und Feed, liegt in einem Ordner oder auf oberster Ebene, hat eine Position und trägt die Lesemarke. |
 | Artikel | `articles`, `article_content`, `article_versions` | Heiß, warm und kalt getrennt, siehe [Artikelspeicher und Versionen](#artikelspeicher-und-versionen). Der Index der [Suche](#suche) liegt auf `article_content`. |
-| Lesestand | `subscriptions.read_upto`, `article_states` | Lesemarke je Abo plus Ausnahmen je Artikel, siehe [Lesestand und Ungelesen-Zahlen](#lesestand-und-ungelesen-zahlen). |
+| Lesestand | `subscriptions.read_upto`, `article_states` | Lesemarke je Abo plus Ausnahmen je Artikel, siehe [Lesestand und Ungelesen-Zahlen](#lesestand-und-ungelesen-zahlen). Nach einem [Umzug](#umzug-eines-kontos) in einen Feed ohne ersten Abruf merkt sich `subscriptions.read_before` die Zeit, bis zu der gelesen ist. |
 | Regeln | `filter_rules` | Filterregeln je Konto, siehe [Filterregeln](#filterregeln). |
 | Labels | `labels`, `article_labels` | Labels mit Farbe je Konto und ihre Zuordnung zu Artikeln. Der Stern ist kein Label, sondern eine Ausnahme in `article_states`. |
+| Fehlerberichte | `client_reports` | Fehler aus den Browsern der User, die zustimmen, je Konto und Fingerabdruck gezählt, siehe [Fehlerberichte aus dem Browser](#fehlerberichte-aus-dem-browser). |
 
-Schlüssel sind fortlaufende Zahlen (`bigint`), keine UUIDs: Sie halten Zeilen und Indizes schmal, und neue Artikel liegen im Index beieinander. Feeds und Konten behalten ihre alte UUID in einer Spalte `legacy_id`, Artikel in der Tabelle `legacy_articles`, damit der Import weiß, was er schon übernommen hat, und Lesestand und Labels aus dem Browser zugeordnet werden können. Die Tabelle statt einer Spalte hält die heiße Artikeltabelle schmal und kann nach dem Umstieg weg.
+Schlüssel sind fortlaufende Zahlen, keine UUIDs, `bigint` für Artikel und Fehlerberichte, `integer` für alles andere (Konten, Feeds, Ordner, Regeln, Labels, Einladungen): Sie halten Zeilen und Indizes schmal, und neue Artikel liegen im Index beieinander. Feeds und Konten behalten ihre alte UUID in einer Spalte `legacy_id`, Artikel in der Tabelle `legacy_articles`, damit der Import weiß, was er schon übernommen hat, und Lesestand und Labels aus dem Browser zugeordnet werden können. Die Tabelle statt einer Spalte hält die heiße Artikeltabelle schmal und kann nach dem Umstieg weg.
 
 ## Artikelspeicher und Versionen
 
@@ -158,17 +159,17 @@ Der Lesestand hängt an (Konto, Feed, Nummer) und nicht an der ID des Artikels. 
 - Ordner lassen sich bis zu **fünf Ebenen** tief verschachteln. Ein Zug, der tiefer führen würde, wird abgelehnt, im Frontend und auf dem Server.
 - Ordner und Abos einer Ebene teilen sich eine Reihenfolge. Jede Zeile trägt eine **Position** als Sortierschlüssel zwischen ihren Nachbarn. Ein Zug ändert genau eine Zeile („verschiebe X vor Y in Ordner Z“); gleichzeitige Änderungen von zwei Geräten überschreiben sich nicht mehr.
 - Ein gelöschter Ordner gibt seinen Inhalt an die Ebene darüber ab.
-- Grenzen je Konto für Ordner und Abos, wie heute (100 Ordner, 1.000 Feeds je Ordner).
+- Grenzen je Konto für Ordner und Abos, wie heute 100 Ordner und 1.000 Feeds je Ordner, dazu 2.000 Feeds insgesamt.
 
 Das Modell mit Tests ist `web/src/lib/tree.ts` (`canMove`, `moveNode`, `nudge` für die Tastatur).
 
 Gebaut in Paket 2.6 (`server/src/tree.rs`, `server/src/subscribe.rs`):
 
 - **Züge.** `POST /api/tree/move` nimmt Knoten, Ziel und `before`, `after` oder `inside`, wie das Modell im Frontend. Ein Test spielt zufällige Züge gegen ein Modell, das `tree.ts` nachgebaut ist. Jede Änderung am Baum sperrt die Zeile des Kontos, es läuft also je Konto nur eine.
-- **Grenzen.** 100 Ordner je Konto, 1.000 Feeds je Ordner und ebenso auf der obersten Ebene, Namen bis 100 Zeichen.
+- **Grenzen.** 100 Ordner und 2.000 Feeds je Konto, 1.000 Feeds je Ordner und ebenso auf der obersten Ebene, Namen bis 100 Zeichen (siehe [Limits je Konto](#header-herkunft-und-limits)).
 - **Feed-Suche.** `POST /api/feeds/find` sieht sich eine Adresse an. Ist sie ein Feed, ist das der eine Treffer. Ist sie eine Webseite, nennt die Antwort die Feeds, auf die die Seite mit `<link rel="alternate">` zeigt, höchstens 20. Gelesen werden die ersten 512 kB der Seite, mit dem Parser der [Bereinigung](#bereinigung) und in dessen Grenzen. Die Suche legt nichts an. **YouTube:** Die Seite eines Kanals nennt seinen Feed zuerst, `https://www.youtube.com/feeds/videos.xml?channel_id=UC…`, mit dem Namen des Kanals. Bei Adressen wie `youtube.com/@name` steht die Kennung des Kanals im `<meta property="og:url">` der Seite (`…/channel/UC…`); eine Adresse `youtube.com/channel/UC…` führt ohne Umweg zum Feed, die Seite wird gar nicht erst geholt. Gilt nur für `youtube.com`, `www.youtube.com` und `m.youtube.com` und nur für eine Kennung aus „UC“ und 22 Buchstaben, Ziffern, `-` oder `_`. Schickt YouTube statt der Seite seine Frage nach Cookies (`consent.youtube.com`, wie es in der EU vorkommt), findet die Suche bei `@name` nichts.
 - **Abonnieren.** `POST /api/feeds` abonniert die Adresse eines Feeds. Einen Feed, den noch niemand liest, ruft der Server dabei ab und behält ihn nur, wenn das gelingt: Aus einer beliebigen Adresse wird so kein Feed. Eine Adresse mit Name und Passwort wird abgelehnt, denn ein Feed gehört allen, die ihn lesen. Ohne Schema gilt eine Adresse als https.
-- **Lesemarke eines neuen Abos.** Wer einen Feed abonniert, den andere schon lesen, findet die 20 neuesten Artikel ungelesen und alles davor gelesen. Ein neuer Feed bringt mit, was sein erster Abruf liefert. Die [Filterregeln](#filterregeln) des Kontos sehen sich den Feed sofort an.
+- **Lesemarke eines neuen Abos.** Wer einen Feed abonniert, den andere schon lesen, findet die 10 neuesten Artikel ungelesen und alles davor gelesen, wie in den [Detailfragen](plan.md#detailfragen) entschieden (`subscribe::NEWEST_UNREAD`). Ein neuer Feed bringt mit, was sein erster Abruf liefert. Die [Filterregeln](#filterregeln) des Kontos sehen sich den Feed sofort an.
 - **OPML.** `GET /api/opml` gibt den Baum aus, Ordner als Gliederung um ihre Feeds. `POST /api/opml` nimmt eine Datei bis 1 MB mit höchstens 2.000 Feeds und einer Gliederung bis 32 Ebenen. Ordner werden am Namen an ihrer Stelle wiedererkannt oder angelegt; was tiefer als fünf Ebenen liegt, landet im tiefsten Ordner, der passt. Die Reihenfolge der Datei bleibt, und Feeds, die das Konto schon liest, bleiben, wo sie sind. Der Import ruft nichts ab: Neue Feeds sind sofort fällig, die nächste Runde des [Abrufs](#abruf) holt sie, und ein Feed, der keiner ist, zeigt seinen Fehler im Baum. Der Leser kennt nur die fünf Entitäten von XML. Die Datei muss als `text/x-opml` oder XML gesendet werden, was ein Formular einer fremden Seite nicht kann.
 - **User-Agent.** `PUT /api/feeds/{id}/agent` stellt den Abruf eines Feeds auf den Browser-User-Agent um oder zurück. Der Feed gehört allen Abonnenten gemeinsam, die Einstellung gilt deshalb für alle, und jeder von ihnen kann sie setzen.
 
@@ -246,7 +247,7 @@ Gebaut in Paket 2.2 (`server/src/feeds.rs` liest und speichert, `server/src/fetc
 - **Fehler.** Der Grund steht am Feed (`error_message`), jeder Fehlschlag verdoppelt das Intervall bis zwölf Stunden, der erste Erfolg setzt es zurück.
 - **Einstellungen.** `FETCH_ALLOW_NETS` gibt interne Netze frei (siehe [Gehärteter HTTP-Client](#gehärteter-http-client)), `FETCH=off` startet den Server ohne Abruf.
 
-Abweichungen vom Entwurf oben: Schritt 7 meldet noch nichts, das kommt mit Paket 2.7. Die Filterregeln aus Schritt 6 gibt es seit Paket 2.6. Anders als der alte rueder probiert der Abruf bei einer http-Adresse nicht zuerst https, und eine dauerhafte Weiterleitung ändert die gespeicherte Adresse des Feeds nicht.
+Abweichungen vom Entwurf oben: Die Filterregeln aus Schritt 6 kamen mit Paket 2.6, die Meldung aus Schritt 7 mit Paket 2.7 (`events::Events::publish_to_readers`). Anders als der alte rueder probiert der Abruf bei einer http-Adresse nicht zuerst https, und eine dauerhafte Weiterleitung ändert die gespeicherte Adresse des Feeds nicht.
 
 ## Bereinigung
 
@@ -283,7 +284,7 @@ Abweichungen vom Entwurf und vom alten Cleaner:
 - Im gespeicherten Text zeigen Bilder auf ihre Quelle. Die Adresse des [Bild-Proxy](#bild-proxy) kommt erst beim Ausliefern hinein; ausgeliefert wird ein Text nie mit den eigenen Adressen seiner Bilder.
 - Der alte Cleaner löste relative Adressen von der Adresse des Feeds aus auf. Ein Text, der `bilder/1.png` sagt, wurde aber für die Seite des Artikels geschrieben, und Feeds liegen oft bei einem anderen Anbieter.
 - Der alte Cleaner entfernte jeden Link ohne gültiges Ziel samt Text. Das riss Worte aus Sätzen; jetzt fällt nur bei gesperrten Adressen der Text mit weg.
-- Der alte Cleaner merkte sich, ob ein Text ein Bild enthält, um das Aufmacherbild nicht doppelt zu zeigen. Das entscheidet künftig das Frontend (Schritt 3).
+- Der alte Cleaner merkte sich, ob ein Text ein Bild enthält, um das Aufmacherbild nicht doppelt zu zeigen. Das entscheidet seit Paket 3.1 das Frontend: Es zeigt das Aufmacherbild nur zu einem Text ohne eigenes Bild (`ArticleBody.svelte`).
 
 ## Bild-Proxy
 
@@ -325,7 +326,7 @@ Ereignisse sind Hinweise, nicht die Daten selbst. Sie sagen, was sich geändert 
 | `tree` | Ordner oder Abo angelegt, umbenannt, verschoben, gelöscht | `by` | Baum neu laden. |
 | `tree`, `labels`, `settings`, `rules` zugleich | Umzug eines Kontos (`POST /api/import`) | `by` | Was jedes einzelne sagt. |
 | `labels` | Label angelegt, geändert, gelöscht, zugeordnet | `by` | Labels und die sichtbare Liste neu laden. |
-| `settings` | Einstellungen geändert | `by` | Einstellungen neu laden. |
+| `settings` | Einstellungen oder die Zustimmung zu Fehlerberichten geändert | `by` | Einstellungen und Zustimmung neu laden. |
 | `rules` | Filterregel geändert | `by` | Regeln und Baum neu laden, denn Regeln blenden Artikel aus. |
 | `session` | Eine Sitzung des Kontos wurde beendet: Logout, Beenden von einem anderen Gerät aus, neues Passwort | `by` | Mit `GET /api/me` prüfen, ob die eigene noch gilt. |
 | `hello` | Verbindung steht | | Nichts; die ID ist der Stand, ab dem Ereignisse kommen. |
@@ -485,6 +486,7 @@ Der Server braucht dafür keine Einstellung mit seiner eigenen Adresse. Der Reve
 | Jede Anfrage, auch an Frontend und Bild-Proxy | 1200 auf einmal, danach 50 je Sekunde | Adresse (bei IPv6 das /64) |
 | Abrufe fremder Adressen: Feed-Suche und das Abonnieren eines Feeds, den noch niemand liest | 30 auf einmal, danach einer alle zwei Sekunden | Konto |
 | Umzüge in ein Konto (`POST /api/import`) | 3 auf einmal, danach einer alle zwei Stunden | Konto |
+| Fehlerberichte (`POST /api/reports`) | 100 auf einmal, danach etwa 100 am Tag, siehe [Fehlerberichte aus dem Browser](#fehlerberichte-aus-dem-browser) | Konto |
 | Falsche Passwörter | 10 je Name und 30 je Adresse in 15 Minuten, siehe [Login und Sitzungen](#login-und-sitzungen) | Name und Adresse |
 | Offene Live-Verbindungen | 20, siehe [Live-Updates](#live-updates) | Konto |
 
@@ -571,6 +573,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 | Regeln | `GET` und `POST /api/rules`, `PUT` und `DELETE /api/rules/{id}`, `POST /api/rules/order`, `POST /api/rules/preview`, `GET /api/rules/hits` |
 | Labels | `GET` und `POST /api/labels`, `PATCH` und `DELETE /api/labels/{id}`, `POST /api/labels/order`, `PUT` und `DELETE /api/feeds/{id}/articles/{seq}/labels/{label}` |
 | Einstellungen | `GET` und `PUT /api/settings` |
+| Fehlerberichte | `POST /api/reports`, `GET` und `PUT /api/reports/consent`, siehe [Fehlerberichte aus dem Browser](#fehlerberichte-aus-dem-browser) |
 | Umzug | `GET /api/export`, `POST /api/import`, siehe [Umzug eines Kontos](#umzug-eines-kontos) |
 | Live | `GET /api/events` (SSE), siehe [Live-Updates](#live-updates) |
 | Bilder | `GET /img/<signatur>/<größe>/<adresse>` |
@@ -656,16 +659,14 @@ Abweichungen vom Entwurf:
 - **Die Ungelesen-Zahlen rechnet der `ServerReader` nicht selbst.** Der Entwurf sah vor, dass das Modell aus `unread.ts` (Lesemarke und Ausnahmen) im Frontend bleibt. Die API liefert aber je Feed die fertige Zahl und je Artikel „gelesen“ und „Stern“, nicht die Ausnahmen. Der `ServerReader` übernimmt die Zahl des Servers und bewegt sie bei einer eigenen Änderung um eins; nach „alle als gelesen“ und nach jeder Ablehnung fragt er den Server neu. So gibt es weiterhin keine zweite Stelle, die zählt. Das Modell `unread.ts` bleibt das des `DemoReader` und der Maßstab für den Server.
 - **Ein neuer Ordner erscheint erst, wenn der Server ihn hat,** weil der Server seine Nummer vergibt. Alle anderen Änderungen am Baum wirken sofort.
 - **Welche Ordner zugeklappt sind,** merkt sich der Browser (`localStorage`), nicht der Server.
-- Was die Oberfläche mit Server noch weglässt, steht bei [Paket 3.1](implementation.md#schritt-3-frontend).
-
-Was noch fehlt und Schritt 3 ergänzt: eine virtualisierte Liste für sehr lange Feeds, Vorladen des nächsten Artikels.
+- Was der Oberfläche mit Server zuerst fehlte und mit welchem Paket es kam, steht bei [Paket 3.1](implementation.md#schritt-3-frontend).
 
 ### Prüfung im Browser
 
 Gebaut in Paket 3.7 (`web/e2e/`, `web/playwright.config.ts`). Die Tests in `web/src/` prüfen die Oberfläche gegen einen nachgebauten Server; ob Oberfläche und echter Server zusammenpassen, zeigen erst diese.
 
 - **Was läuft.** Playwright steuert Chromium gegen den gebauten Server mit dem gebauten Frontend, so wie beides in Betrieb geht. Der Server bekommt je Lauf eine eigene, neu angelegte Datenbank und für jede Spec ein eigenes Konto, damit das Lesen der einen nicht in der anderen auftaucht.
-- **Fixtures.** Eine erfundene Website (`harness/site.js`) liefert drei Feeds, eine Seite je Feed, die ihren Feed nennt, und ein Bild. Die Artikel enthalten, was die Bereinigung entfernen muss: ein Skript, ein Zählpixel, einen Tracking-Parameter. Der Server ruft sie über den gehärteten HTTP-Client ab, mit `FETCH_ALLOW_NETS=127.0.0.0/8`; das ist die Ausnahme für den Betreiber, sonst ist nichts abgeschaltet oder ersetzt. Über `/_control` lassen die Tests einen Artikel eintreffen oder sich ändern.
+- **Fixtures.** Eine erfundene Website (`harness/site.js`) liefert drei Feeds, eine Seite je Feed, die ihren Feed nennt, und ein Bild. Die Artikel enthalten, was die Bereinigung entfernen muss: ein Skript, ein Zählpixel, einen Tracking-Parameter. Der Server ruft sie über den gehärteten HTTP-Client ab, mit `FETCH_ALLOW_NETS=127.0.0.0/8`; das ist die Ausnahme für den Betreiber, sonst ist nichts abgeschaltet oder ersetzt. Über `/_control` lassen die Tests einen Artikel eintreffen oder sich ändern. Jede Spec liest ihre eigene Kopie eines Feeds unter eigener Adresse (`/harbour-tree/` ist `harbour`), damit nicht davon abhängt, welche Spec ihn vorher abonniert hat; ob ein zweiter Leser nur die 10 neuesten Artikel ungelesen findet, prüft `accounts.spec.ts` eigens.
 - **Wege.** Login mit falschem und richtigem Passwort, Attribute des Sitzungs-Cookies, Abmelden. Abonnieren über die Adresse einer Webseite, Lesen, Stern, wieder ungelesen, nur ungelesene, alle als gelesen, jeweils auch nach einem Neuladen. Ordner anlegen, mit Tastatur und Drag & Drop einsortieren, umbenennen, auflösen. Eine Filterregel mit Vorschau, der Liste der ausgeblendeten und dem Löschen. Live-Updates: ein neuer Artikel, eine neue Version mit Vergleich, Lesestand im zweiten Tab. Zwei Konten, von denen das eine nichts vom anderen sieht.
 - **Was sie an Security mitprüfen.** Ohne Sitzung antworten API und Bild-Proxy mit 401. Der Cookie ist `HttpOnly`, `Secure` und `SameSite=Lax` und für Skripte unsichtbar. Der Browser fragt beim Lesen nichts außer rueder selbst. Das Bild kommt vom Proxy, das Skript des Artikels läuft nicht. Ein fremdes Konto bekommt für Feed, Artikel und Ordner 404.
 - **Abruf auf Wunsch gibt es nicht.** Ein Test, der auf einen Abruf wartet, setzt in der Datenbank alle Feeds auf fällig und wartet die nächste Runde des Servers ab, höchstens 30 Sekunden.

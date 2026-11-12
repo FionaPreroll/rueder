@@ -19,8 +19,8 @@ const order = async (page: import('@playwright/test').Page) =>
 
 test('makes a folder and moves feeds into it, by keyboard and by dragging', async ({ page }) => {
 	await logIn(page, 'tree');
-	await subscribe(page, 'harbour', 'Harbour Herald');
-	await subscribe(page, 'market', 'Market Courier');
+	await subscribe(page, 'harbour-tree', 'Harbour Herald');
+	await subscribe(page, 'market-tree', 'Market Courier');
 
 	await page.getByRole('button', { name: 'New folder' }).click();
 	await page.getByLabel('Name of the folder').fill('Waterfront');

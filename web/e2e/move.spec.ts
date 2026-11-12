@@ -18,7 +18,7 @@ let file = '';
 
 test('gives out the account as a file', async ({ page }) => {
 	await logIn(page, 'moving');
-	await subscribe(page, 'harbour', 'Harbour Herald');
+	await subscribe(page, 'harbour-move', 'Harbour Herald');
 	await expect(node(page, 'Harbour Herald')).toContainText('(12)');
 	await node(page, 'Harbour Herald').click();
 	await article(page, 'Harbour news 12')
