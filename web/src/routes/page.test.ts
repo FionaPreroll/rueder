@@ -279,6 +279,37 @@ describe('the keyboard', () => {
 		expect(openArticle()).not.toBeNull();
 	});
 
+	it('shows the open article in a pane of its own beside the list in three panes', async () => {
+		render(Page);
+		await press('3');
+		expect(settings.view).toBe('split');
+		await press('ga');
+		const pane = () => document.querySelector<HTMLElement>('section[aria-label]')!;
+		expect(pane()).toHaveTextContent('Pick an article to read it here.');
+		await press('j');
+		const shown = () =>
+			document.querySelector('[data-pane-article]')?.getAttribute('data-pane-article');
+		const first = shown();
+		const title = within(pane()).getByRole('heading', { level: 2 }).textContent;
+		// The row stays a row: the text is in the pane, not under it.
+		const list = document.querySelector<HTMLElement>('[data-pane="list"]')!;
+		expect(within(list).queryByRole('heading', { level: 2 })).toBeNull();
+		expect(within(list).getByRole('button', { current: true })).toHaveTextContent(title!);
+
+		// A click on another row shows that one; Escape closes it.
+		const rows = within(list).getAllByRole('button', { current: false });
+		const other = rows.find((row) => !row.getAttribute('aria-label'))!;
+		await userEvent.click(other);
+		expect(shown()).not.toBe(first);
+		expect(other).toHaveAttribute('aria-current', 'true');
+		await press('{Escape}');
+		expect(pane()).toHaveTextContent('Pick an article to read it here.');
+
+		// The toolbar switches back to the list.
+		await userEvent.click(screen.getByRole('button', { name: 'List view' }));
+		expect(document.querySelector('[data-pane="list"]')).toBeNull();
+	});
+
 	it('puts labels on the open article and takes them off', async () => {
 		render(Page);
 		await press('gaj');
@@ -362,6 +393,9 @@ describe('the keyboard', () => {
 		expect(settings.view).toBe('expanded');
 		await press('2');
 		expect(settings.view).toBe('list');
+		await press('3');
+		expect(settings.view).toBe('split');
+		await press('2');
 		await press('u');
 		expect(screen.queryByRole('navigation')).toBeNull();
 		await press('u');

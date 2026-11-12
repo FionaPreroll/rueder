@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The row of buttons over the list, in Google Reader's order: refresh, what to
-	// show, mark all as read, the two views, previous and next.
+	// show, mark all as read, the views, previous and next.
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { settings } from '#lib/settings.svelte.ts';
@@ -112,13 +112,23 @@
 		</button>
 		<button
 			type="button"
-			class="tool rounded-l-none border-l-0"
+			class="tool rounded-none border-l-0"
 			aria-pressed={settings.view === 'list'}
 			aria-label={m.toolbar.listView}
 			title={m.toolbar.listView}
 			onclick={() => (settings.view = 'list')}
 		>
 			<Icon name="list" />
+		</button>
+		<button
+			type="button"
+			class="tool rounded-l-none border-l-0"
+			aria-pressed={settings.view === 'split'}
+			aria-label={m.toolbar.splitView}
+			title={m.toolbar.splitView}
+			onclick={() => (settings.view = 'split')}
+		>
+			<Icon name="split" />
 		</button>
 	</div>
 

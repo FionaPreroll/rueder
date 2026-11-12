@@ -74,6 +74,7 @@ const de: Messages = {
 		markOlderWeek: 'Artikel, die älter als eine Woche sind',
 		listView: 'Listenansicht',
 		expandedView: 'Erweiterte Ansicht',
+		splitView: 'Drei Bereiche: Baum, Liste und Artikel',
 		previous: 'Vorheriger Artikel',
 		next: 'Nächster Artikel',
 		newArticles: (count) =>
@@ -102,7 +103,8 @@ const de: Messages = {
 		hiddenBy: (rule) => `Ausgeblendet von der Regel: ${rule}`,
 		loading: 'Der Text wird geladen …',
 		loadingList: 'Wird geladen …',
-		toTop: 'Zurück nach oben'
+		toTop: 'Zurück nach oben',
+		pick: 'Einen Artikel wählen, um ihn hier zu lesen.'
 	},
 
 	media: {
@@ -238,7 +240,7 @@ const de: Messages = {
 		language: 'Sprache',
 		languageAuto: 'Wie der Browser',
 		view: 'Ansicht',
-		views: { list: 'Liste', expanded: 'Erweitert' },
+		views: { list: 'Liste', expanded: 'Erweitert', split: 'Drei Bereiche' },
 		markOnScroll: 'Artikel in der erweiterten Ansicht beim Vorbeiscrollen als gelesen markieren',
 		teasers: 'In der Liste nach dem Titel die ersten Worte des Textes zeigen',
 		wakeLock: 'Bildschirm anlassen, solange rueder offen ist',
@@ -314,6 +316,7 @@ const de: Messages = {
 		unreadOnly: 'Nur ungelesene oder alle Artikel',
 		listView: 'Listenansicht',
 		expandedView: 'Erweiterte Ansicht',
+		splitView: 'Drei Bereiche',
 		goHome: 'Startseite',
 		goAll: 'Alle Artikel',
 		goStarred: 'Markierte Artikel',

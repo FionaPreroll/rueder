@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The reader: the bar on top, the sidebar with the tree, and the list or the start
-	// page beside it. The keyboard shortcuts are handled here, for the whole page.
+	// page beside it; in the view of three panes the list and, beside it, the open
+	// article, where there is room for both. The keyboard shortcuts are handled here, for the whole page.
 	// Where the feeds and articles come from is the business of the `reader` it is
 	// given.
 	import { onMount } from 'svelte';
@@ -11,6 +12,7 @@
 	import { keyMap, type Action } from '#lib/keys.ts';
 	import { settings } from '#lib/settings.svelte.ts';
 	import ArticleList from './ArticleList.svelte';
+	import ArticlePane from './ArticlePane.svelte';
 	import HomeOverview from './HomeOverview.svelte';
 	import Icon from './Icon.svelte';
 	import SettingsDialog from './SettingsDialog.svelte';
@@ -61,6 +63,16 @@
 	});
 
 	const narrow = () => window.matchMedia?.('(max-width: 767px)').matches ?? false;
+
+	/**
+	 * How wide the list and the article must be together for three panes, in pixels.
+	 * Narrower, as on a phone or beside an open sidebar on a small screen, the view
+	 * of three panes is the list view, with the article under its row.
+	 */
+	const SPLIT_AT = 880;
+	let mainWidth = $state(0);
+	// Before the page is laid out, as in tests, the width is not known yet.
+	const split = $derived(settings.view === 'split' && (mainWidth === 0 || mainWidth >= SPLIT_AT));
 
 	// Whatever changes in the settings is kept with the account, where there is one.
 	$effect(() => reader.saveSettings({ ...settings }));
@@ -142,6 +154,9 @@
 				return true;
 			case 'listView':
 				settings.view = 'list';
+				return true;
+			case 'splitView':
+				settings.view = 'split';
 				return true;
 			case 'search':
 				document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
@@ -244,7 +259,7 @@
 			</aside>
 		{/if}
 
-		<main class="flex min-w-0 flex-1 flex-col">
+		<main class="flex min-w-0 flex-1 flex-col" bind:clientWidth={mainWidth}>
 			{#if reader.notice}
 				<p
 					class="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5 text-sm"
@@ -267,7 +282,19 @@
 				<HomeOverview {reader} {now} />
 			{:else}
 				<Toolbar {reader} {title} />
-				<ArticleList {reader} {now} onversions={compare} />
+				{#if split}
+					<div class="flex min-h-0 flex-1">
+						<div
+							class="flex w-[clamp(20rem,36%,30rem)] shrink-0 flex-col border-r border-line"
+							data-pane="list"
+						>
+							<ArticleList {reader} {now} onversions={compare} pane />
+						</div>
+						<ArticlePane {reader} {now} onversions={compare} />
+					</div>
+				{:else}
+					<ArticleList {reader} {now} onversions={compare} />
+				{/if}
 			{/if}
 		</main>
 	</div>

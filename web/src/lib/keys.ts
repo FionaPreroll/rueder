@@ -19,6 +19,7 @@ export const actions = [
 	'unreadOnly',
 	'expandedView',
 	'listView',
+	'splitView',
 	'goHome',
 	'goAll',
 	'goStarred',
@@ -44,6 +45,7 @@ export const defaultKeys: Record<Action, string> = {
 	unreadOnly: 'U',
 	expandedView: '1',
 	listView: '2',
+	splitView: '3',
 	goHome: 'g h',
 	goAll: 'g a',
 	goStarred: 'g s',
@@ -145,7 +147,8 @@ export const shortcutGroups = (m: Messages): { title: string; shortcuts: Shortcu
 			{ action: 'refresh', text: m.keys.refresh },
 			{ action: 'unreadOnly', text: m.keys.unreadOnly },
 			{ action: 'expandedView', text: m.keys.expandedView },
-			{ action: 'listView', text: m.keys.listView }
+			{ action: 'listView', text: m.keys.listView },
+			{ action: 'splitView', text: m.keys.splitView }
 		]
 	},
 	{
