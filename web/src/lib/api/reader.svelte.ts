@@ -1309,11 +1309,16 @@ export class ServerReader implements Reader {
 	}
 
 	/** The server gives a new label its number, so it shows once the server has it. */
-	addLabel(title: string, color: string) {
+	addLabel(title: string, color: string, article?: Article) {
 		this.write(
 			'labels',
 			async () => {
-				await this.api.addLabel(title, color);
+				const { id } = await this.api.addLabel(title, color);
+				if (article) {
+					await this.api.setLabel(serverId(article.feedId), article.seq, id, true);
+					const before = this.articleLabels[article.id] ?? [];
+					this.articleLabels = { ...this.articleLabels, [article.id]: [...before, labelKey(id)] };
+				}
 				await this.loadLabels();
 			},
 			() => {}

@@ -2,8 +2,9 @@ import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
-import type { Stream } from '#lib/model.ts';
+import { labelColors, type Stream } from '#lib/model.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
+import ArticleBody from './ArticleBody.svelte';
 import ArticleList from './ArticleList.svelte';
 
 const now = Date.parse('2026-11-10T14:30:00Z');
@@ -278,5 +279,29 @@ describe('a long list', () => {
 		scroller.dispatchEvent(new Event('scroll'));
 		await new Promise((done) => requestAnimationFrame(done));
 		expect(toTop()).toBeNull();
+	});
+});
+
+describe('an open article', () => {
+	it('offers labels when the account has none yet, and makes the first on the spot', async () => {
+		const reader = new DemoReader(() => now);
+		for (const label of [...reader.labels]) reader.removeLabel(label.id);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		const article = reader.list[0];
+		render(ArticleBody, { reader, article, now, onversions: vi.fn() });
+		await userEvent.click(screen.getByRole('button', { name: 'Labels' }));
+		expect(screen.queryAllByRole('menuitemcheckbox')).toEqual([]);
+		await userEvent.click(screen.getByRole('menuitem', { name: 'New label' }));
+		// Escape lets it be.
+		await userEvent.keyboard('{Escape}');
+		expect(screen.queryByLabelText('Name of the label')).toBeNull();
+		expect(reader.labels).toEqual([]);
+
+		await userEvent.click(screen.getByRole('button', { name: 'Labels' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'New label' }));
+		await userEvent.type(screen.getByLabelText('Name of the label'), '  Erstes  {Enter}');
+		expect(reader.labels).toMatchObject([{ title: 'Erstes', color: labelColors[0] }]);
+		expect(reader.labelsOf(article)).toEqual([reader.labels[0].id]);
+		expect(screen.getByLabelText('Label: Erstes')).toBeInTheDocument();
 	});
 });

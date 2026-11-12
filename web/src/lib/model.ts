@@ -105,6 +105,9 @@ export const labelColors = [
 	'#5f6368'
 ] as const;
 
+/** The color a new label takes, the next in turn after those there are. */
+export const nextLabelColor = (labels: number) => labelColors[labels % labelColors.length];
+
 /** What the main pane shows. */
 export type Stream =
 	| { kind: 'home' }

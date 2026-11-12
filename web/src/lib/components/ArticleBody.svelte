@@ -4,7 +4,7 @@
 	import type { Reader } from '#lib/reader.ts';
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import type { Article } from '#lib/model.ts';
+	import { nextLabelColor, type Article } from '#lib/model.ts';
 	import { ruleText } from '#lib/rule-text.ts';
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
@@ -32,6 +32,20 @@
 	const lead = $derived(
 		article.image && article.html !== null && !/<img\b/i.test(article.html) ? article.image : null
 	);
+
+	// A new label, named in a field beside the menu, goes on this article at once.
+	let naming = $state(false);
+	let name = $state('');
+
+	function addLabel(event: SubmitEvent) {
+		event.preventDefault();
+		const title = name.trim();
+		if (title) reader.addLabel(title, nextLabelColor(reader.labels.length), article);
+		naming = false;
+		name = '';
+	}
+
+	const focus = (field: HTMLInputElement) => field.focus();
 
 	// A list comes without the texts; the text is fetched when the article is shown.
 	$effect(() => {
@@ -135,26 +149,51 @@
 			/>
 			{m.list.keepUnread}
 		</label>
-		{#if reader.labels.length > 0}
-			<Menu class="inline-flex cursor-pointer items-center gap-1 hover:text-ink">
-				{#snippet button()}
-					<Icon name="tag" />
-					{m.labels.forArticle}
-				{/snippet}
-				{#each reader.labels as label (label.id)}
-					<button
-						type="button"
-						role="menuitemcheckbox"
-						aria-checked={labelled.has(label.id)}
-						class="menu-item flex items-center gap-2"
-						onclick={() => reader.setLabel(article, label.id, !labelled.has(label.id))}
-					>
-						<span class="size-2.5 rounded-full" style:background-color={label.color}></span>
-						<span class="flex-1">{label.title}</span>
-						{#if labelled.has(label.id)}<Icon name="check" class="size-4" />{/if}
-					</button>
-				{/each}
-			</Menu>
+		<Menu class="inline-flex cursor-pointer items-center gap-1 hover:text-ink">
+			{#snippet button()}
+				<Icon name="tag" />
+				{m.labels.forArticle}
+			{/snippet}
+			{#each reader.labels as label (label.id)}
+				<button
+					type="button"
+					role="menuitemcheckbox"
+					aria-checked={labelled.has(label.id)}
+					class="menu-item flex items-center gap-2"
+					onclick={() => reader.setLabel(article, label.id, !labelled.has(label.id))}
+				>
+					<span class="size-2.5 rounded-full" style:background-color={label.color}></span>
+					<span class="flex-1">{label.title}</span>
+					{#if labelled.has(label.id)}<Icon name="check" class="size-4" />{/if}
+				</button>
+			{/each}
+			{#if reader.labels.length > 0}<hr class="my-1 border-line" />{/if}
+			<button
+				type="button"
+				role="menuitem"
+				class="menu-item flex items-center gap-2"
+				onclick={() => (naming = true)}
+			>
+				<Icon name="plus" class="size-4" />
+				{m.labels.add}
+			</button>
+		</Menu>
+		{#if naming}
+			<form onsubmit={addLabel}>
+				<input
+					class="w-40 rounded px-2 py-0 text-sm"
+					placeholder={m.labels.name}
+					aria-label={m.labels.name}
+					bind:value={name}
+					use:focus
+					onblur={() => (naming = false)}
+					onkeydown={(event) => {
+						if (event.key !== 'Escape') return;
+						event.stopPropagation();
+						naming = false;
+					}}
+				/>
+			</form>
 		{/if}
 		{#each reader.labels.filter((label) => labelled.has(label.id)) as label (label.id)}
 			<span

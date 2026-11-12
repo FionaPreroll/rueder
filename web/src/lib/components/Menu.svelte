@@ -71,7 +71,7 @@
 
 <svelte:window onclick={outside} />
 
-<div class="relative" bind:this={root} onkeydown={keydown} role="presentation">
+<div class="relative flex" bind:this={root} onkeydown={keydown} role="presentation">
 	<button
 		type="button"
 		class={look}

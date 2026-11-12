@@ -1954,6 +1954,23 @@ describe('labels', () => {
 		expect(reader.notice).toBe('notSaved');
 	});
 
+	it('are made from an article, and go on it', async () => {
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		const second = reader.visible[1];
+		reader.addLabel('Read later', '#d93025', second);
+		await settle();
+		const made = server.labels.at(-1)!;
+		expect(made).toMatchObject({ title: 'Read later', color: '#d93025' });
+		expect(server.article(tech, 2)?.labels).toEqual([made.id]);
+		expect(reader.labelsOf(second)).toEqual([`label-${made.id}`]);
+		expect(server.writes).toEqual([
+			'POST /labels',
+			`PUT /feeds/${tech}/articles/2/labels/${made.id}`
+		]);
+	});
+
 	it('are made, renamed, recolored and deleted', async () => {
 		const reader = await started();
 		reader.addLabel('New', '#9334e6');
