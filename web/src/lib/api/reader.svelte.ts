@@ -62,6 +62,7 @@ import {
 	type ApiLabel,
 	type ApiListItem,
 	type EventStream,
+	type SearchScope,
 	type ApiNewRule,
 	type ApiRule,
 	type ApiTree,
@@ -89,6 +90,14 @@ const SETTLE_AFTER = 300;
 const RECONNECT_AFTER = 30_000;
 /** The longest list the server gives at once, for loading what is shown anew. */
 const MAX_PAGE = 200;
+/** A search is asked for once the typing has paused this long. */
+const SEARCH_AFTER = 300;
+/**
+ * The server searches for so long per request and then says where to go on, maybe
+ * with fewer articles than asked for; the reader asks again at most this often for
+ * one page.
+ */
+const SEARCH_ROUNDS = 10;
 /** Settings that change, as while a slider is dragged, are saved once they rest this long. */
 const SAVE_SETTINGS_AFTER = 500;
 
@@ -256,13 +265,22 @@ export class ServerReader implements Reader {
 	closed = $state.raw<ReadonlySet<string>>(readClosed());
 
 	stream = $state.raw<Stream>({ kind: 'home' });
-	query = $state('');
 	cursor = $state<string | null>(null);
 	open = $state<string | null>(null);
 	moved = $state(0);
-	hasMore = $state(false);
-	loading = $state(true);
 	notice = $state<Notice | null>(null);
+
+	/** The words of the search, as typed. */
+	private words = $state('');
+	/** What the server found for them, page after page; null while it is asked. */
+	private found = $state.raw<Article[] | null>(null);
+	/** Where the search goes on (`next`); null where it found all there is. */
+	private foundNext = $state<number | null>(null);
+	/** Counts the searches, so that an answer that comes late is dropped. */
+	private searchRun = 0;
+	private searchTimer: ReturnType<typeof setTimeout> | undefined;
+	private listHasMore = $state(false);
+	private listLoading = $state(true);
 
 	/** The filter rules, in the order the server keeps them. */
 	rules = $state.raw<FilterRule[]>([]);
@@ -564,9 +582,14 @@ export class ServerReader implements Reader {
 
 	// The list in the main pane
 
-	/** The loaded part of the list that passes the search. */
+	/**
+	 * What the list shows: what the server found for the search, or, in the lists
+	 * the server does not search (the starred, the hidden, a label's), the loaded
+	 * part of the list that has the words.
+	 */
 	visible = $derived.by(() => {
-		const query = this.query.trim().toLowerCase();
+		if (this.searchScope) return this.found ?? [];
+		const query = this.words.trim().toLowerCase();
 		if (!query) return this.items;
 		return this.items.filter(
 			(article) =>
@@ -632,7 +655,7 @@ export class ServerReader implements Reader {
 	private async loadList(more = false, again = false) {
 		const stream = this.stream;
 		const run = ++this.listRun;
-		if (!more && !again) this.loading = true;
+		if (!more && !again) this.listLoading = true;
 		const length = again ? Math.min(MAX_PAGE, Math.max(PAGE, this.items.length)) : PAGE;
 		try {
 			if (stream.kind === 'home') {
@@ -661,7 +684,7 @@ export class ServerReader implements Reader {
 				if (run !== this.listRun) return;
 				const articles = this.take(rows, stream.kind === 'hidden');
 				this.items = more ? [...this.items, ...articles] : articles;
-				this.hasMore = rows.length === length;
+				this.listHasMore = rows.length === length;
 				if (!more) {
 					this.newest = (newest ?? rows)[0]?.id ?? null;
 					// What arrived is in the list now.
@@ -678,14 +701,94 @@ export class ServerReader implements Reader {
 			// The feed or the folder is not there any more; the tree knows what is.
 			if (error instanceof ApiError && error.status === 404) void this.loadTree();
 		} finally {
-			if (run === this.listRun) this.loading = false;
+			if (run === this.listRun) this.listLoading = false;
 		}
 	}
 
-	/** Loads what is shown anew, from its start. */
+	/** Loads what is shown anew, from its start, and the search with it. */
 	private reload() {
 		this.pinned.clear();
 		void this.loadList();
+		if (this.searchScope) void this.search();
+	}
+
+	// The search
+
+	get query() {
+		return this.words;
+	}
+
+	/** New words are searched for once the typing pauses; no words end the search. */
+	set query(words: string) {
+		const before = this.words.trim();
+		this.words = words;
+		if (words.trim() === before) return;
+		clearTimeout(this.searchTimer);
+		this.searchRun++;
+		this.found = null;
+		this.foundNext = null;
+		if (!this.searchScope) return;
+		this.searchTimer = setTimeout(() => void this.search(), SEARCH_AFTER);
+	}
+
+	/** Where the server searches for what is shown; null where it does not search. */
+	private get searchScope(): SearchScope | null {
+		if (!this.words.trim()) return null;
+		const stream = this.stream;
+		switch (stream.kind) {
+			case 'home':
+			case 'all':
+				return { kind: 'all' };
+			case 'feed':
+			case 'folder':
+				return stream;
+			default:
+				return null;
+		}
+	}
+
+	/** Asks the server for the first page of the search, or with `more` the next. */
+	private async search(more = false) {
+		const scope = this.searchScope;
+		if (!scope) return;
+		const run = more ? this.searchRun : ++this.searchRun;
+		const words = this.words.trim();
+		let before = more ? (this.foundNext ?? undefined) : undefined;
+		const articles: Article[] = [];
+		try {
+			// A page may come back short, even empty, when the server ran out of
+			// time; then it says where to go on, and the reader asks again.
+			for (let round = 0; round < SEARCH_ROUNDS; round++) {
+				const hits = await this.api.search(words, scope, {
+					before,
+					limit: PAGE - articles.length,
+					unread: this.onlyUnread
+				});
+				if (run !== this.searchRun) return;
+				articles.push(...this.take(hits.articles, false));
+				before = hits.next ?? undefined;
+				if (hits.next === null || articles.length >= PAGE) break;
+			}
+			this.found = more ? [...(this.found ?? []), ...articles] : articles;
+			this.foundNext = before ?? null;
+			// A step that was asked for while the hits were on their way is taken now.
+			const waiting = this.waitingStep;
+			this.waitingStep = null;
+			if (!more && waiting) this.step(waiting.by, waiting.open);
+		} catch (error) {
+			if (run !== this.searchRun) return;
+			if (!more) this.found = [];
+			this.foundNext = null;
+			this.failed(error, 'unreachable');
+		}
+	}
+
+	get hasMore() {
+		return this.searchScope ? this.foundNext !== null : this.listHasMore;
+	}
+
+	get loading() {
+		return this.searchScope ? this.found === null : this.listLoading;
 	}
 
 	show(stream: Stream) {
@@ -696,7 +799,7 @@ export class ServerReader implements Reader {
 		this.open = null;
 		this.query = '';
 		this.items = [];
-		this.hasMore = false;
+		this.listHasMore = false;
 		this.newest = null;
 		this.reload();
 	}
@@ -717,15 +820,18 @@ export class ServerReader implements Reader {
 
 	/** Fetches the next page; false if there was none to fetch. */
 	private async more() {
-		if (!this.hasMore || this.loadingMore || this.stream.kind === 'home') return false;
+		const searching = this.searchScope !== null;
+		if (!this.hasMore || this.loadingMore || (!searching && this.stream.kind === 'home')) {
+			return false;
+		}
 		this.loadingMore = true;
-		const before = this.items.length;
+		const before = this.visible.length;
 		try {
-			await this.loadList(true);
+			await (searching ? this.search(true) : this.loadList(true));
 		} finally {
 			this.loadingMore = false;
 		}
-		return this.items.length > before;
+		return this.visible.length > before;
 	}
 
 	// The text of an article
@@ -737,6 +843,7 @@ export class ServerReader implements Reader {
 				? list.map((article) => (article.id === id ? change(article) : article))
 				: list;
 		this.items = within(this.items);
+		if (this.found) this.found = within(this.found);
 		this.homeUnread = within(this.homeUnread);
 		this.homeStarred = within(this.homeStarred);
 	}
@@ -945,7 +1052,12 @@ export class ServerReader implements Reader {
 		const counts = { ...this.counts };
 		const before = Date.now() - olderThan;
 		const swept = new Map<string, Article>();
-		for (const article of [...this.items, ...this.homeUnread, ...this.homeStarred]) {
+		for (const article of [
+			...this.items,
+			...(this.found ?? []),
+			...this.homeUnread,
+			...this.homeStarred
+		]) {
 			const mark = marks[article.id] ?? unmarked;
 			if (mark.read || !feeds.has(article.feedId) || Number(article.id) > upto) continue;
 			if (olderThan > 0 && article.publishedAt > before) continue;

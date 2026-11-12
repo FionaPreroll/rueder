@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT set_config('plan_cache_mode', 'force_custom_plan', true) AS plan,\n                set_config('enable_seqscan', 'off', true) AS seq,\n                set_config('statement_timeout', $1, true) AS timeout",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "plan",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "timeout",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "81441d1bf877655473341dbbb1d914ffa29ee92ec781d9786d5b158ab8fb5f08"
+}

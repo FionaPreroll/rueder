@@ -4,11 +4,11 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaces `backend/` once it can do what the plan asks of it. Plan, architecture
 and work packages are in [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching, cleaning, images, login, the API and its hardening
+## State: foundation, data, fetching, cleaning, images, login, the API, its hardening and the search
 
 What is here:
 
-- The schema (`migrations/0001_initial.sql`, comments in German).
+- The schema (`migrations/`, comments in German).
 - The article store (`src/articles.rs`): three tables, so that lists never read
   text and old versions never touch what new articles are read from. One query
   serves the lists of a feed, a folder and all feeds.
@@ -45,6 +45,13 @@ What is here:
   of a web page, OPML in and out, settings, the own sessions, and accounts for
   admins. Every query is bound to the account of the session; the list of
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
+- The search (`src/search.rs`): `GET /api/search` finds the articles of the
+  own feeds that have all the words, or words that begin with them, newest
+  first. A GIN index over `article_content` holds the words. A search first
+  looks at the newest few hundred articles, and from how common the words are
+  among them chooses whether to go on looking at articles one by one or to ask
+  the index, in growing windows of the order of arrival. After half a second
+  it says where to go on.
 - Moving an account (`src/transfer.rs`): `GET /api/export` gives out everything
   a reader made of their account as one JSON file (settings, folders, feeds,
   what was read, stars, labels, rules), and `POST /api/import` takes such a
@@ -74,8 +81,8 @@ What is here:
   (`fuzz/`), whose corpus runs as an ordinary test, and a soak test of the
   whole program under the load of readers and fetching (`tests/soak.rs`).
 
-This is step 1 of the plan and work packages 2.1 to 2.11 of step 2. The search
-follows.
+This is step 1 of the plan and work packages 2.1 to 2.11 and 2.13 of step 2.
+The security review (2.12) follows.
 
 ## Commands
 
@@ -213,7 +220,8 @@ cargo run --release -- bench measure    # times the queries, prints a table
 ```
 
 `bench generate` wants an empty database and takes `--accounts`, `--feeds` and
-`--articles`; 10 million articles take about 17 minutes and 18 GB. `bench measure`
+`--articles`; 10 million articles take about 50 minutes, 30 of them for the
+search index, and 21 GB. `bench measure`
 puts back what its writing queries changed, so it can run again. Results and how
 they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).

@@ -45,6 +45,12 @@ async function settle() {
 	flushSync();
 }
 
+/** Waits until a search that was typed is asked for and answered. */
+async function searched() {
+	await new Promise((resolve) => setTimeout(resolve, 350));
+	await settle();
+}
+
 async function started() {
 	const reader = new ServerReader({ name: 'fiona', admin: true }, session);
 	reader.start();
@@ -359,22 +365,106 @@ describe('the lists', () => {
 		expect(reader.visible).toEqual([]);
 	});
 
-	it('search what is loaded', async () => {
+	it('search on the server, in what is shown, once the typing pauses', async () => {
 		server.article(tech, 2)!.title = 'A Rare Word';
 		server.article(blog, 1)!.author = 'Rarely Seen';
+		server.article(lone, 1)!.html = '<p>Rarer still.</p>';
 		const reader = await started();
 		reader.show({ kind: 'all' });
 		await settle();
+		const searches = () => server.requests.filter((r) => r.path.startsWith('/search'));
+
+		reader.query = ' ra';
 		reader.query = ' rare ';
+		expect(reader.loading).toBe(true);
+		expect(reader.visible).toEqual([]);
+		await searched();
+		expect(searches().map((r) => r.path)).toEqual([`/search?q=rare&limit=${PAGE}`]);
+		expect(reader.loading).toBe(false);
 		expect(reader.visible.map((a) => [a.feedId, a.seq])).toEqual([
+			[`feed-${lone}`, 1],
 			[`feed-${blog}`, 1],
 			[`feed-${tech}`, 2]
 		]);
-		reader.query = 'teaser 3';
-		expect(reader.visible.length).toBe(1);
-		// Another list starts without the search.
+		expect(reader.hasMore).toBe(false);
+		// What is found is read like any list.
+		reader.step(1);
+		expect(reader.current?.seq).toBe(1);
+		await settle();
+		expect(server.article(lone, 1)!.read).toBe(true);
+
+		// Only the unread, again.
+		reader.unreadOnly = true;
+		await settle();
+		expect(searches().at(-1)?.path).toBe(`/search?q=rare&limit=${PAGE}&unread=true`);
+		expect(reader.visible.length).toBe(2);
+		reader.unreadOnly = false;
+
+		// In a feed, only there; another list starts without the search.
 		reader.show({ kind: 'feed', id: `feed-${tech}` });
 		expect(reader.query).toBe('');
+		await settle();
+		reader.query = 'RARE word';
+		await searched();
+		expect(searches().at(-1)?.path).toBe(`/search?q=RARE+word&limit=${PAGE}&feed=${tech}`);
+		expect(reader.visible.map((a) => a.seq)).toEqual([2]);
+		// No words, no search: the feed's list is back.
+		reader.query = '  ';
+		expect(reader.visible.length).toBe(3);
+	});
+
+	it('search page by page, and ask again where the server ran out of time', async () => {
+		server.addArticles(lone, 60);
+		server.searchWindow = 25;
+		const reader = await started();
+		reader.show({ kind: 'all' });
+		await settle();
+		reader.query = 'article';
+		// A step while the hits are on their way waits for them.
+		reader.step(1);
+		await searched();
+		expect(reader.current?.id).toBe(reader.visible[0].id);
+		// 66 articles, 25 at a time: the first page takes two answers.
+		const asked = () => server.requests.filter((r) => r.path.startsWith('/search'));
+		expect(asked()).toHaveLength(2);
+		expect(asked()[1].path).toMatch(
+			new RegExp(`^/search\\?q=article&limit=${PAGE - 25}&before=\\d+$`)
+		);
+		expect(reader.visible.length).toBe(PAGE);
+		expect(reader.hasMore).toBe(true);
+		for (let page = 0; page < 5 && reader.hasMore; page++) {
+			reader.showMore();
+			await settle();
+		}
+		const ids = reader.visible.map((a) => Number(a.id));
+		expect(ids).toHaveLength(66);
+		expect(ids).toEqual([...ids].sort((a, b) => b - a));
+		expect(reader.hasMore).toBe(false);
+	});
+
+	it('search in what the server does not search: what is loaded', async () => {
+		const reader = await started();
+		server.article(tech, 2)!.starred = true;
+		server.article(tech, 2)!.title = 'A Rare Word';
+		server.article(tech, 3)!.starred = true;
+		reader.show({ kind: 'starred' });
+		await settle();
+		reader.query = ' rare ';
+		expect(reader.visible.map((a) => a.seq)).toEqual([2]);
+		await searched();
+		expect(server.requests.some((r) => r.path.startsWith('/search'))).toBe(false);
+	});
+
+	it('say so when the server cannot search', async () => {
+		const reader = await started();
+		reader.show({ kind: 'all' });
+		await settle();
+		server.refuse('GET', /^\/search/, 503, 1, 'the search took too long');
+		reader.query = 'article';
+		await searched();
+		expect(reader.loading).toBe(false);
+		expect(reader.visible).toEqual([]);
+		expect(reader.notice).toBe('unreachable');
 	});
 
 	it('drop an answer that comes after another list was asked for', async () => {
