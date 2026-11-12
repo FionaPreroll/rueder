@@ -232,7 +232,7 @@ Ein Planer im Server ruft jeden Feed mit mindestens einem Abonnenten in seinem I
 6. In einer Transaktion: Nummern vergeben, die drei Tabellen schreiben, Filterregeln der Abonnenten anwenden, `last_seq` und Abrufstand des Feeds setzen.
 7. Meldung an die Live-Updates.
 
-Das Intervall passt sich wie heute der Aktivität des Feeds an, zwischen 15 Minuten und 12 Stunden (heutige Logik: `backend/pkg/worker/feed.go`, `updateFetchDelay`). Fehler verlängern das Intervall schrittweise und stehen am Feed, die Oberfläche zeigt ein Warnzeichen. Der User-Agent ist ehrlich („rueder“ mit Version und Adresse des Projekts) und lässt sich je Feed auf einen Browser-User-Agent umstellen.
+Das Intervall passt sich wie heute der Aktivität des Feeds an, zwischen 15 Minuten und 12 Stunden (Logik des alten rueder: `backend/pkg/worker/feed.go`, `updateFetchDelay`, im Commit `0b36a96`). Fehler verlängern das Intervall schrittweise und stehen am Feed, die Oberfläche zeigt ein Warnzeichen. Der User-Agent ist ehrlich („rueder“ mit Version und Adresse des Projekts) und lässt sich je Feed auf einen Browser-User-Agent umstellen.
 
 Die Feed-Suche auf Webseiten (heute der Dienst `feedfinder`) und der OPML-Import nutzen denselben Client.
 
@@ -254,7 +254,7 @@ Abweichungen vom Entwurf oben: Die Filterregeln aus Schritt 6 kamen mit Paket 2.
 
 Die Bereinigung läuft **einmal je Version auf dem Server** statt bei jedem Anzeigen im Browser. Gebaut in Paket 2.3 (`server/src/cleaning.rs`), in zwei Schritten und in dieser Reihenfolge:
 
-1. **Eigene Regeln auf dem Dokumentbaum**, übernommen aus `frontend/src/rueder/helpers/ArticleCleaner.ts` samt Tests.
+1. **Eigene Regeln auf dem Dokumentbaum**, übernommen aus `frontend/src/rueder/helpers/ArticleCleaner.ts` des alten rueder (Commit `0b36a96`) samt Tests.
 2. **`ammonia` mit fester Allowlist.** Es hat immer das letzte Wort: Was der erste Schritt auch tut oder übersieht, das Modul verlässt nur Auszeichnung von der Liste und keine Adresse, die nicht mit `http` oder `https` beginnt.
 
 Die eigenen Regeln:
@@ -595,7 +595,7 @@ Der Server verarbeitet unbeaufsichtigt Eingaben, die Fremde bestimmen. Tests von
 | Bild-Proxy: Formatprüfung und Dekodierung | Beliebige Bytes als Bild | Keine Panic. Angenommen werden nur die erlaubten Formate, die Grenzen für Dateigröße und Bildfläche greifen vor dem Dekodieren. |
 | Adressprüfung des HTTP-Clients | Adressen in allen Schreibweisen (dezimal, oktal, hexadezimal, IPv4 in IPv6, mit Zugangsdaten, mit Port) | Nur http und https. Keine private, lokale oder Link-Local-Adresse wird erlaubt. Hier ist die Eingabe strukturiert, deshalb ein Property-Test mit `proptest` statt eines Fuzz-Targets. |
 
-- Die Targets liegen in `server/fuzz/` und laufen mit `cargo-fuzz`, das Nightly-Rust braucht. Der Startkorpus sind die aufgezeichneten Feeds des alten Systems (`backend/test/data/`) und die Fälle der Cleaner-Tests, dazu ein paar Feeds in RSS, Atom und JSON Feed und kleine Bilder jedes Formats.
+- Die Targets liegen in `server/fuzz/` und laufen mit `cargo-fuzz`, das Nightly-Rust braucht. Der Startkorpus sind die aufgezeichneten Feeds des alten Systems (früher `backend/test/data/`, jetzt `server/tests/data/`) und die Fälle der Cleaner-Tests, dazu ein paar Feeds in RSS, Atom und JSON Feed und kleine Bilder jedes Formats.
 - Was gelten muss, steht einmal in `server/fuzz/checks.rs`. Die Targets binden die Datei ein, und `server/tests/fuzz_corpus.rs` auch: Der gespeicherte Korpus läuft so in der CI als gewöhnlicher Test mit stabilem Rust und prüft dasselbe wie der Fuzzer. Jeder Fund kommt als Datei in den Korpus, mit einem Namen, der sagt, was er fand (`found-…`), und bleibt so als Test erhalten.
 - Die Bereinigung wird mit zwei Basisadressen geprüft, mit und ohne Seite des Artikels, und danach so, wie der Text ausgeliefert wird: Jedes Bild zeigt dann auf `/img/`. Beim Bild-Proxy sagt das erste Byte der Eingabe, für welche Größe; was herauskommt, muss das Format haben, das der Proxy nennt, und in diese Größe passen.
 - Richtig gefuzzt wird von Hand vor den beiden Security-Reviews, etwa eine halbe Stunde je Target.

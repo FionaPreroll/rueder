@@ -19,11 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The new server (rust), the frontends (javascript-typescript), the
-        # workflows themselves (actions) and the old scripts in backend/utils
-        # (python). Go left with backend/go.mod: CodeQL can only analyse Go
-        # by building it.
-        language: [actions, javascript-typescript, python, rust]
+        # The server (rust), the web page and the app (javascript-typescript)
+        # and the workflows themselves (actions).
+        language: [actions, javascript-typescript, rust]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Every language here is analysed from its source, without a build.

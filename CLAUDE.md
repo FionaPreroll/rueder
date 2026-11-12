@@ -1,6 +1,6 @@
 # Notes for Claude
 
-The README describes the old rueder for the people who run it. `docs/` holds the rewrite, in German: `docs/plan.md` what is built, what was decided and the four steps, `docs/architecture.md` how the new system is laid out, `docs/implementation.md` the state, the conventions, the commands and the work packages. `server/README.md` and `web/README.md` say how to run the two new parts, `app/README.md` how to build the Android app, `deploy/README.md` how to install them as a container. These rules hold in every session:
+The README says what rueder is and where to find what. `docs/` holds the rewrite, in German: `docs/plan.md` what is built, what was decided and the four steps, `docs/architecture.md` how the new system is laid out, `docs/implementation.md` the state, the conventions, the commands and the work packages. `server/README.md` and `web/README.md` say how to run the two new parts, `app/README.md` how to build the Android app, `deploy/README.md` how to install them as a container. These rules hold in every session:
 
 ## Branches
 
@@ -18,7 +18,7 @@ The README describes the old rueder for the people who run it. `docs/` holds the
 ## Code
 
 - Before every push, run the checks of the part that changed. In `server/`: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test`, which needs a PostgreSQL 16. In `web/`: `pnpm lint`, `pnpm check`, `pnpm test` and `pnpm build`; after a change to what the page and the server say to each other also `pnpm e2e`, the tests in a browser against the real server (`web/README.md` says what they need). In `app/`: `pnpm lint`, `pnpm test` and, with the Android SDK, `./gradlew testGithubDebugUnitTest assembleGithubDebug assemblePlayDebug` in `app/android/`. After changing `Cargo.toml` or `Cargo.lock`, also `cargo audit` and `cargo deny check`; an exception goes into `server/.cargo/audit.toml` or `server/deny.toml` with its reason.
-- `backend/` (without `go.mod`/`go.sum`), `frontend/` (without `package.json`/`pnpm-lock.yaml`) and `config/` are the old system. They stay as they are until the switch and are only read: as the model for the import, the cleaning and the fetching. They cannot be built or run any more; their package files, compose files and workflows were removed on 2026-11-11, so that Dependabot stops reporting them.
+- The old Go backend and Svelte frontend were removed on 2026-11-12 (work package 4.7). To read them, e.g. as the model for the import or the takeover from the old frontend's `localStorage`, check out commit `0b36a96`, the last one where they still ran; `docs/implementation.md` says where in them what stands.
 - The server is one crate and one program with subcommands, next to PostgreSQL and nothing else. Queries are written with `sqlx::query!` and its relatives, without an ORM; after changing one, run `cargo sqlx prepare -- --all-targets` and commit `server/.sqlx/`, as CI builds without a database.
 - A migration that has reached main never changes again; changes come as a new file in `server/migrations/`.
 - Every query for an account's data is bound to the account's id: feeds and articles are readable only by their subscribers, and no endpoint lists the feeds of others. Every endpoint gets a test that another account sees nothing of it.

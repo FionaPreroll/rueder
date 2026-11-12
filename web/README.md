@@ -1,7 +1,7 @@
 # rueder web
 
 The new frontend of rueder: SvelteKit (as a single-page app), Svelte 5, Tailwind CSS 4
-and TypeScript. It replaces `frontend/` once the Rust server is in place.
+and TypeScript. It replaced the old frontend.
 
 ## State: connected to the server
 

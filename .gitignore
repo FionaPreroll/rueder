@@ -33,10 +33,5 @@ Thumbs.db
 __pycache__
 .*.swp
 
-# secrets
-config/rueder.env
-config/rueder-prod.env
-config/rueder-test.env
-config/imgproxy.env
 
 .vscode/*.log

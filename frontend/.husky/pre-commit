@@ -1,5 +1,0 @@
-#!/bin/sh
-HUSKY="$(dirname "$0")/_/husky.sh"
-[ -e "$HUSKY" ] && . "$HUSKY"
-
-pnpm lint

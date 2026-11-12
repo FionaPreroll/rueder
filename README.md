@@ -2,171 +2,100 @@
 
 ![rueder logo: a gopher with glasses reading a newspaper](docs/images/rueder3gopher_s.png)
 
-## Rewrite in Rust
-
 [![CI](https://github.com/FionaPreroll/rueder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/FionaPreroll/rueder/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/FionaPreroll/rueder/graph/badge.svg?branch=main)](https://codecov.io/gh/FionaPreroll/rueder)
 
-rueder is being rewritten as a single Rust server with a new Svelte frontend. The new
-code lives in `server/` (to come) and `web/`; the Go backend and the old frontend
-described below stay runnable until the switch. The plan and the design notes are
-in German:
+rueder is a self-hosted feed reader for a handful of people, in the spirit of
+Google Reader. It is one Rust server next to PostgreSQL, with a Svelte web page
+inside it and an Android app around that page.
+
+- **Reading:** a dense list, an expanded view, three panes (tree, list,
+  article) and a magazine view; keyboard shortcuts, dark mode, a layout for
+  phones, and settings for theme, accent color, density, font and sorting.
+- **Feeds and folders:** RSS, Atom and JSON Feed; folders up to five levels
+  deep, rearranged by drag and drop or keyboard; finding the feed on a web page;
+  OPML import and export.
+- **Unread counts that stay right:** what each account has read lives on the
+  server, and every count is worked out from it, never kept as a counter.
+- **Live updates:** new articles, reading on another device and changes to the
+  folders reach every open tab at once.
+- **Versions:** when a feed changes an article, rueder keeps up to 20 versions
+  of it and marks the article as updated without making it unread again.
+- **Filters, stars and labels:** rules per account on keywords, authors and
+  other fields that hide or mark articles as they arrive; stars, colored labels
+  and a search over your own subscriptions.
+- **Privacy:** the server removes ads, trackers and unsafe markup from every
+  article before storing it, and images come through its own image proxy, so
+  the browser talks to nothing but rueder.
+- **Running it:** local accounts with passwords or login through OpenID
+  Connect, open or invitation-only registration, a status page for admins, and
+  moving an account between rueder installations as one file.
+
+## Installing
+
+rueder runs as one container next to PostgreSQL, behind a reverse proxy that
+holds the TLS certificate. CI builds and tests the image for every change on
+`main` and publishes it as `ghcr.io/fionapreroll/rueder:latest`.
+
+```sh
+git clone https://github.com/FionaPreroll/rueder.git
+cd rueder/deploy
+cp .env.example .env    # set POSTGRES_PASSWORD
+docker compose up --detach --build
+docker compose exec rueder rueder account add <name> --admin
+```
+
+[deploy/README.md](deploy/README.md) has the whole of it: the reverse proxy,
+settings, registration, updates, backups, checking an installation and running
+without Docker. The Android app comes from the release
+[`android-latest`](https://github.com/FionaPreroll/rueder/releases/tag/android-latest);
+it asks for the address of your rueder at its first start.
+
+## Repository
+
+| Path | What |
+|---|---|
+| [`server/`](server/README.md) | The server in Rust (axum, tokio, sqlx): API, fetching, cleaning, image proxy, accounts and the command line, in one program. |
+| [`web/`](web/README.md) | The web page: SvelteKit as a single-page app, Svelte 5, Tailwind CSS and TypeScript. The server serves it. |
+| [`app/`](app/README.md) | The Android app, Capacitor around a start page that opens your rueder. |
+| [`deploy/`](deploy/README.md), `Dockerfile` | The container image, the compose file with PostgreSQL, and how to install it. |
+| [`docs/`](docs/implementation.md) | Plan, architecture and state of the work, in German. |
+| `.github/` | CI, CodeQL, gitleaks and Dependabot. |
+
+## Developing
+
+Each part has its own README with its commands and the checks to run before a
+push:
+
+- `server/`: Rust (stable) and PostgreSQL 16. `cargo run` serves on
+  `http://127.0.0.1:3000`; `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`
+  and `cargo test`.
+- `web/`: Node 22 and pnpm. `pnpm dev` talks to the server above,
+  `pnpm dev:demo` runs with made-up data and no server; `pnpm lint`,
+  `pnpm check`, `pnpm test`, `pnpm build`, and `pnpm e2e` for the tests in a
+  browser against the real server.
+- `app/`: Node 22, pnpm, Java 21 and the Android SDK.
+
+How the system is built and why, what is done and what is still open is written
+down in German:
 
 - [Plan](docs/plan.md): goals, requirements, decisions and the four steps
-- [Architecture](docs/architecture.md): how the new system is built, data model,
+- [Architecture](docs/architecture.md): how the system is built, data model,
   security
-- [Implementation](docs/implementation.md): where the work stands, conventions and
-  the open work packages, for anyone taking over
+- [Implementation](docs/implementation.md): where the work stands, conventions,
+  measurements and the open work packages, for anyone taking over
 
-How to install the new rueder is in [deploy/README.md](deploy/README.md); CI
-publishes its image as `ghcr.io/fionapreroll/rueder`.
+[CLAUDE.md](CLAUDE.md) sums up the rules of the project in English.
 
-**The old rueder described below no longer builds from this branch.** Its
-package files (`backend/go.mod`, `frontend/package.json` and their lockfiles),
-its compose files and its workflows were removed, so that nothing reports
-vulnerabilities in dependencies that no longer run anywhere. Its code stays as
-the model for the import. To run it, check out commit `0b36a96`, where
-everything below still applies.
+## Security
 
-## Dependencies
+Please report a vulnerability privately, as [SECURITY.md](SECURITY.md)
+describes, and not in a public issue.
 
-- Docker or podman. Everything is contained in docker images.
-- docker-compose (1.27+ required)
+## The old rueder
 
-## Installation (Production Build)
-
-1. copy `rueder.example.env` to `rueder-prod.env` and
-   1.1 change `LOGINSRV_JWT_SECRET` and `RUEDER_JWT` to something secure (eg. the output of `pwgen -s 128 1`)
-   1.2 change `LOGINSRV_SIMPLE` to something else, however you want to authenticate your users
-2. change `docker-compose.yaml` to match your setup's imgproxy URL
-3. build docker production images: `docker-compose build`
-4. start db only: `docker-compose up -d db`
-5. create databases: `docker-compose -f docker-compose.initdb.yaml up`, then
-   `Ctrl+C` after it's done
-6. ready to run with: `docker-compose up -d`
-
-## Development
-
-While the `docker-compose.*` files in the main directory are for production use
-the ones inside `backend/` and `frontend/` are intended for development purposes.
-The Dockerfiles for production and development are named `Dockerfile` and
-`Dockerfile.dev` respectively and are located next to each other in the `docker`
-sub-directories inside the backend and frontend directories.
-
-To start a local instance of `rueder3` with hot-reload on code changes, simply do:
-
-```shell
-make run
-
-# OR
-
-docker-compose up --force-recreate --build
-```
-
-inside `backend/` directory in one terminal and inside `frontend/` directory in
-another terminal. If you prefer to run the frontend without a docker container
-you can also use `pnpm dev` instead.
-
-**First run:** On the first run you need to initialize the database by running
-`./utils/reset_db.sh` from the `backend/` directory. Restart all containers after this.
-
-**Note:** Please use the provided Git hooks to make sure your changes pass
-linting and testing.
-
-### Services
-
-The commands above spawn the following services, all listening on localhost:
-
-- rueder web frontend that can be accessed at <http://127.0.0.1:3000> (with
-  vite hot-reload)
-- rueder backend processes (also with hot-reload): http feed api (:8080),
-  authbackend (:8082, auth claims provider for loginsrv), events api (:8083),
-  feedfinder api (:8081)
-- additional required backend services: auth (:8082, loginsrv), postgres (:5432)
-- additional utility services: imgproxy (:8086)
-
-Open the web frontend and login with user `bob` and password `secret`.
-
-You can also access the Swagger docs at <http://127.0.0.1:8080/swagger/index.html>
-for the Feed API, and <http://127.0.0.1:8081/swagger/index.html> for the
-Feedfinder.
-
-### Git Hooks
-
-#### Initial Setup for Development
-
-Development Requirements:
-
-- Python (3.7+ required, 3.11 recommended) for pre-commit, pipx
-- Docker for some pre-commit hooks
-- Node/**p**npm for frontend checks (16+ required, 18+ recommended)
-- Go (1.17+ required, 1.21 recommended) for backend checks (make sure `GOPATH` environment variable is set)
-- golangci-lint for backend checks: <https://golangci-lint.run/usage/install/>
-
-After installing these requirements and cloning the repository do these steps to
-set up Git hooks:
-
-```shell
-# install pre-commit (mainly for backend stuff)
-pipx install pre-commit
-# note that something like ~/.local/bin needs to be in your PATH
-pre-commit install
-
-# install husky (mainly for frontend stuff)
-cd frontend
-pnpm install
-# DO NOT run husky install
-```
-
-This installs [pre-commit](https://pre-commit.com/) which is triggered on Git commits.
-The included config file `.pre-commit-config.yaml` then runs some backend checks
-and finally runs [husky](https://typicode.github.io/husky) for frontend checks
-using `frontend/.husky/`.
-
-#### Running Manually
-
-To just check if everything is in order:
-
-```shell
-pre-commit run --all-files
-```
-
-### Linting/Formatting
-
-For backend use `gofmt` for formatting and the linters configured in `golangci-lint`.
-Use `make lint` inside `./backend` directory to lint all files.
-
-For frontend use (inside `./frontend` directory) `pnpm format` for formatting
-and as linters use `pnpm lint` and `pnpm validate`.
-
-### Testing
-
-Look at the GitHub Workflows in `.github` if anything is unclear.
-
-#### Backend
-
-Use `make test` inside `./backend` to run tests using the included `_test.go` files.
-
-When you change something which affects test execution in `APIPopRepository`
-you need to start the test database service with `docker-compose up db` in `./backend`
-and then run `make test_record` to update copyist's logfiles. The updated files
-need to be committed, too.
-
-#### Frontend
-
-Use `pnpm test` to run tests with Jest using the included `.test.ts` files.
-
-### Production Test
-
-Before deploying to production you can test the production build of the
-frontend with `pnpm preview` with the development version of the backend.
-
-You can also test production backend and frontend with:
-
-```shell
-cp config/rueder.example.env config/rueder-test.env
-# edit rueder-test.env to set LOGINSRV_JWT_SECRET and RUEDER_JWT values
-docker network create http_default
-docker-compose -f docker-compose.test.yaml up
-```
-
-The test-prod build will be accessible under <http://127.0.0.1:5000/rueder/>.
+rueder used to be five Go services with a separate Svelte frontend, loginsrv
+and imgproxy. The rewrite replaced it in November 2026, and its code was removed
+from this repository. To read it, check out commit `0b36a96`, the last one
+where it still built and ran. Its data comes over once with
+`rueder import-legacy`, as
+[deploy/README.md](deploy/README.md#bringing-over-the-old-rueder) describes.

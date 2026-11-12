@@ -15,9 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  # The new server in server/, the new frontend in web/ and the Android app in
-  # app/. The old Go backend and the old frontend are no longer built or
-  # checked.
+  # The server in server/, the web page in web/ and the Android app in app/.
   server:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

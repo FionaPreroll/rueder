@@ -1,5 +1,4 @@
-# The image is built from server/ and web/ and nothing else. The old system
-# has build contexts of its own (backend/, frontend/).
+# The image is built from server/ and web/ and nothing else.
 *
 !server
 !web

@@ -15,7 +15,7 @@ const NOW: OffsetDateTime = datetime!(2026-11-10 12:00 UTC);
 
 /// A feed as the old rueder's tests recorded it.
 fn recorded(name: &str) -> Vec<u8> {
-    std::fs::read(format!("../backend/test/data/{name}")).unwrap()
+    std::fs::read(format!("tests/data/{name}")).unwrap()
 }
 
 /// A small feed with one entry per (id, title, text).

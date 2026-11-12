@@ -1,5 +1,6 @@
--- The schema of the old rueder, as its migrations in backend/migrations/ (Fizz)
--- create it on PostgreSQL. The import is tested against this.
+-- The schema of the old rueder, as its migrations in backend/migrations/
+-- (Fizz, at commit 0b36a96) create it on PostgreSQL. The import is tested
+-- against this.
 
 CREATE TABLE feeds (
     id            uuid          NOT NULL PRIMARY KEY,
