@@ -533,6 +533,12 @@ const de: Messages = {
 		}
 	},
 
+	update: {
+		ready: 'Eine neue Version von rueder ist da.',
+		reload: 'Neu laden',
+		later: 'Später'
+	},
+
 	crash: {
 		title: 'Auf dieser Seite ist etwas schiefgegangen.',
 		text: 'Lade die Seite neu, um weiterzumachen. Was du gelesen und geändert hast, ist auf dem Server gespeichert.',

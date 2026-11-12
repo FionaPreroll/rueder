@@ -40,7 +40,10 @@ export default defineConfig({
 			},
 			// SPA build: the Rust server will serve build/ and fall back to index.html.
 			adapter: adapter(singleFile ? {} : { fallback: 'index.html' }),
-			...(demo ? { files: { routes: 'src/single' } } : {}),
+			// The page registers the service worker itself, to offer new versions
+			// (src/lib/updates.svelte.ts). The builds with made-up data have none.
+			serviceWorker: { register: false },
+			...(demo ? { files: { routes: 'src/single', serviceWorker: 'src/single/no-worker' } } : {}),
 			...(singleFile
 				? { output: { bundleStrategy: 'inline' as const }, router: { type: 'hash' as const } }
 				: {})

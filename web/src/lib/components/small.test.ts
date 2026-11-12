@@ -1,12 +1,15 @@
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { flushSync } from 'svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
+import { update } from '#lib/updates.svelte.ts';
 import Counter from './Counter.svelte';
 import Enclosures from './Enclosures.svelte';
 import Menu from './Menu.svelte';
 import Shortcuts from './Shortcuts.svelte';
+import UpdateNotice from './UpdateNotice.svelte';
 import MenuHarness from './test/MenuHarness.svelte';
 
 afterEach(() => {
@@ -162,5 +165,25 @@ describe('Shortcuts', () => {
 		useLanguage('de');
 		render(Shortcuts);
 		expect(screen.getByText('Startseite').previousElementSibling).toHaveTextContent(/g\s+dann\s+h/);
+	});
+});
+
+describe('UpdateNotice', () => {
+	afterEach(() => {
+		update.apply = null;
+	});
+
+	it('says a new version is there, reloads into it, or waits', async () => {
+		const { unmount } = render(UpdateNotice);
+		expect(screen.queryByRole('status')).toBeNull();
+		const apply = vi.fn();
+		update.apply = apply;
+		flushSync();
+		expect(screen.getByRole('status')).toHaveTextContent('A new version of rueder is ready.');
+		await userEvent.click(screen.getByRole('button', { name: 'Reload' }));
+		expect(apply).toHaveBeenCalledTimes(1);
+		await userEvent.click(screen.getByRole('button', { name: 'Later' }));
+		expect(screen.queryByRole('status')).toBeNull();
+		unmount();
 	});
 });
