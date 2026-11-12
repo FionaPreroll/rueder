@@ -419,6 +419,15 @@ Der [Soak-Test](architecture.md#soak-test) eine Stunde lang: `SOAK_SECONDS=3600 
 - **Der Median bleibt, das 99. Perzentil steigt** mit dem Bestand, von 19 ms auf rund 100 ms. Die langsamsten Anfragen waren alle `POST /api/rules` mit 270 bis 380 ms: Eine neue Regel prüft die neuesten 200 Artikel jedes Feeds und alles Ausgeblendete (siehe [Filterregeln](architecture.md#filterregeln)), und das wird mit jedem Artikel mehr. Welche Anfragen sonst das 99. Perzentil heben, hält der Test nicht fest. Für die Regeln ist das bei dieser Menge noch kein Problem, aber die Stelle, an der es sich zuerst zeigen würde.
 - Ein erster Lauf auf dem Stand vor dem Merge von Pull Request 24 zeigte in 16 Minuten dasselbe Bild, bevor er für den neuen Stand abgebrochen wurde.
 
+### Fuzzing vom 2026-11-12
+
+Die drei Fuzz-Targets aus Paket 2.11 zum [Security-Review](architecture.md#security-review-vom-2026-11-12), auf dem Stand von Paket 2.12 (main nach Pull Request #39 mit den Änderungen des Reviews): `cargo +nightly fuzz run <target> -- -max_total_time=1800 -rss_limit_mb=2048`, ausgehend vom gespeicherten Korpus.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,3 GHz), 15 GB Arbeitsspeicher; die drei Targets liefen zugleich, je eines auf einem Kern. Nightly-Rust vom 2026-11-06.
+- **Erster Lauf:** Bereinigung 102.858 Eingaben in einer halben Stunde ohne Fund, höchstens 621 MB; Bild-Proxy 446.585 Eingaben ohne Fund, höchstens 501 MB. Feeds brach nach etwa 16.000 Eingaben mit einer Panic in `quick-xml` ab, die `feed-rs` auslöste: Befund S7, ein Byte, das kein UTF-8 ist, mitten in der Deklaration. Behoben und als `found-broken-declaration` im Korpus.
+- **Zweiter Lauf, nur Feeds, mit der Behebung:** 199.270 Eingaben in einer halben Stunde ohne Fund, höchstens 712 MB. In derselben Zeit lief einmal `cargo test`, die Zahl der Eingaben ist deshalb etwas kleiner als ohne.
+- Was der Fuzzer an neuer Abdeckung fand, ist nicht in den gespeicherten Korpus gekommen; der bleibt beim Stand von Paket 2.11 und dem neuen Fund.
+
 ### Suche vom 2026-11-11
 
 Gemessen für Paket 2.13, bevor und während die [Suche](architecture.md#suche) gebaut wurde: was der Index kostet und wie schnell sie ist. Ergebnis: Der Index ist tragbar, die Suche ist gebaut.
