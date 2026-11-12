@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
 	// rules, the keyboard shortcuts, where the server takes them whether this browser
-	// sends reports of its errors, and moving the account to another rueder.
+	// sends reports of its errors, moving the account to another rueder and
+	// deleting it.
 	// Everything applies as it is changed.
 	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
@@ -20,10 +21,20 @@
 	import Dialog from './Dialog.svelte';
 	import Invitations from './Invitations.svelte';
 	import MoveAccount from './MoveAccount.svelte';
+	import RemoveAccount from './RemoveAccount.svelte';
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const allTabs = ['look', 'reading', 'rules', 'keys', 'invites', 'privacy', 'move'] as const;
+	const allTabs = [
+		'look',
+		'reading',
+		'rules',
+		'keys',
+		'invites',
+		'privacy',
+		'move',
+		'account'
+	] as const;
 	type Tab = (typeof allTabs)[number];
 
 	let {
@@ -39,6 +50,7 @@
 		allTabs.filter((name) => {
 			if (name === 'privacy') return reader.can.reports && reader.reportsConsent?.available;
 			if (name === 'move') return reader.can.move;
+			if (name === 'account') return reader.can.remove && reader.account !== null;
 			return name !== 'invites' || reader.can.invites;
 		})
 	);
@@ -197,6 +209,8 @@
 			</div>
 		{:else if tab === 'move'}
 			<MoveAccount {reader} />
+		{:else if tab === 'account'}
+			<RemoveAccount {reader} />
 		{:else}
 			<Shortcuts />
 		{/if}

@@ -4,6 +4,11 @@
 //! or by registering where the operator allows it (see `registration`). A
 //! password is kept as its Argon2id hash only, and whoever sets a new one ends
 //! every session of the account.
+//!
+//! An account goes when it deletes itself or the operator removes it: with it
+//! goes everything that is its own, as it all hangs on the account in the
+//! schema. The operator can also disable an account that is misused; it keeps
+//! what it has but cannot log in until it is enabled again.
 
 use std::{fmt, sync::LazyLock};
 
@@ -136,6 +141,8 @@ pub struct Account {
     pub username: String,
     pub is_admin: bool,
     pub has_password: bool,
+    /// Disabled by the operator: no login, no sessions.
+    pub disabled: bool,
     pub created_at: OffsetDateTime,
 }
 
@@ -228,15 +235,18 @@ pub async fn id_of(db: &PgPool, name: &str) -> anyhow::Result<Option<i32>> {
     Ok(id)
 }
 
-/// The account that name and password belong to, if they do.
+/// The account that name and password belong to, if they do. A disabled
+/// account is one too: whoever knows its password is told that it is
+/// disabled, nobody else.
 pub async fn login(db: &PgPool, name: &str, password: &str) -> anyhow::Result<Option<Account>> {
     let name = name.trim();
     let account = if name.chars().count() > MAX_NAME {
         None
     } else {
         sqlx::query!(
-            "SELECT id, username, is_admin, password_hash, created_at
-             FROM accounts WHERE lower(username) = lower($1)",
+            r#"SELECT id, username, is_admin, password_hash, disabled_at IS NOT NULL AS "disabled!",
+                      created_at
+               FROM accounts WHERE lower(username) = lower($1)"#,
             name
         )
         .fetch_optional(db)
@@ -253,6 +263,7 @@ pub async fn login(db: &PgPool, name: &str, password: &str) -> anyhow::Result<Op
         username: account.username,
         is_admin: account.is_admin,
         has_password: true,
+        disabled: account.disabled,
         created_at: account.created_at,
     }))
 }
@@ -261,10 +272,65 @@ pub async fn login(db: &PgPool, name: &str, password: &str) -> anyhow::Result<Op
 pub async fn list(db: &PgPool) -> anyhow::Result<Vec<Account>> {
     let accounts = sqlx::query_as!(
         Account,
-        r#"SELECT id, username, is_admin, password_hash IS NOT NULL AS "has_password!", created_at
+        r#"SELECT id, username, is_admin, password_hash IS NOT NULL AS "has_password!",
+                  disabled_at IS NOT NULL AS "disabled!", created_at
            FROM accounts ORDER BY lower(username)"#
     )
     .fetch_all(db)
     .await?;
     Ok(accounts)
+}
+
+/// Deletes the account and everything that is its own: sessions, identities
+/// at an OpenID Connect provider, folders, subscriptions with what was read
+/// and starred, labels, rules, settings, reports of errors and invitations.
+/// Feeds and their articles stay for their other subscribers. False if there
+/// is no such account.
+///
+/// Open connections for live updates end with the sessions: at once when the
+/// server is told (see `events::changed`), else within `events::SESSION_CHECK`.
+pub async fn remove(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
+    let gone = sqlx::query!("DELETE FROM accounts WHERE id = $1", account_id)
+        .execute(db)
+        .await
+        .context("deleting an account")?;
+    Ok(gone.rows_affected() > 0)
+}
+
+/// Disables an account, which ends its sessions, or enables it again. False if
+/// there is no account of that name.
+pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Result<bool> {
+    let mut tx = db.begin().await?;
+    // Disabled again keeps the time it was first disabled.
+    let account_id = sqlx::query_scalar!(
+        "UPDATE accounts
+         SET disabled_at = CASE WHEN $2 THEN coalesce(disabled_at, now()) END
+         WHERE lower(username) = lower($1) RETURNING id",
+        name.trim(),
+        disabled,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(account_id) = account_id else {
+        return Ok(false);
+    };
+    // Disabling ends its sessions. While it is disabled none of them counts,
+    // so enabling ends any that came about in the meantime, too: it starts
+    // logged out.
+    sqlx::query!("DELETE FROM sessions WHERE account_id = $1", account_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Whether the account is disabled. An account that is not there is not.
+pub async fn is_disabled(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
+    let disabled = sqlx::query_scalar!(
+        r#"SELECT disabled_at IS NOT NULL AS "disabled!" FROM accounts WHERE id = $1"#,
+        account_id
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(disabled.unwrap_or(false))
 }

@@ -201,8 +201,9 @@ struct Usable {
     by_admin: bool,
 }
 
-/// The invitation of this token if it is good for one more account. With
-/// `lock`, nobody else uses it until the transaction ends.
+/// The invitation of this token if it is good for one more account. The link
+/// of a disabled account takes nobody in. With `lock`, nobody else uses it
+/// until the transaction ends.
 async fn usable(
     conn: &mut PgConnection,
     token: &str,
@@ -217,6 +218,7 @@ async fn usable(
             Usable,
             "SELECT id, by_admin FROM invites
              WHERE token_hash = $1 AND NOT revoked AND expires_at > now() AND uses < max_uses
+               AND account_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)
              FOR UPDATE",
             hash,
         )
@@ -226,7 +228,8 @@ async fn usable(
         sqlx::query_as!(
             Usable,
             "SELECT id, by_admin FROM invites
-             WHERE token_hash = $1 AND NOT revoked AND expires_at > now() AND uses < max_uses",
+             WHERE token_hash = $1 AND NOT revoked AND expires_at > now() AND uses < max_uses
+               AND account_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)",
             hash,
         )
         .fetch_optional(conn)
@@ -441,7 +444,7 @@ async fn register(
         sessions::end(&state.db, old).await?;
     }
     let token = sessions::start(&state.db, id).await?;
-    let me = Me::new(id, new.username.trim().to_owned(), false);
+    let me = Me::new(id, new.username.trim().to_owned(), false, true);
     let cookie = [(header::SET_COOKIE, sessions::cookie(&token))];
     Ok((StatusCode::CREATED, cookie, Json(me)).into_response())
 }

@@ -25,7 +25,20 @@ export interface Fresh {
 export interface Account {
 	name: string;
 	admin: boolean;
+	/**
+	 * Whether it logs in with a password; one that logs in only through single
+	 * sign-on has none. Left out, it has one.
+	 */
+	password?: boolean;
 }
+
+/** Why the account was not deleted. The page has the words. */
+export type RemoveRefusal =
+	/** The password, or the name for an account without one, was not right. */
+	| { problem: 'wrong' }
+	/** Too many wrong tries; wait so many minutes. */
+	| { problem: 'busy'; minutes: number }
+	| { problem: 'unreachable' };
 
 /** What went wrong, for a line the reader can close. The page has the words. */
 export type Notice =
@@ -55,6 +68,8 @@ export interface Abilities {
 	invites: boolean;
 	/** Errors of the browser can be reported to the server, if the reader agrees. */
 	reports: boolean;
+	/** The account can delete itself, with everything that is its own. */
+	remove: boolean;
 }
 
 /** A feed found at an address. */
@@ -338,6 +353,13 @@ export interface Reader {
 	invite(uses: number): Promise<{ link: string } | 'none-left' | null>;
 	/** Takes an invitation back; false if that did not work. */
 	revokeInvite(id: number): Promise<boolean>;
+
+	/**
+	 * Deletes the account for good (`can.remove`), with the password, or the
+	 * account's name where it has none. Null when it is gone: then the page is
+	 * logged out.
+	 */
+	removeAccount(proof: string): Promise<RemoveRefusal | null>;
 
 	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
 	status(): Promise<ServerStatus | null>;

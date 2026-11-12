@@ -61,8 +61,9 @@ const WAITING: usize = 256;
 const STREAM_LASTS: Duration = Duration::from_secs(30 * 60);
 /// How often a connection sees whether its session still holds. A session
 /// that ends through a request closes its connections at once (see
-/// [`Area::Session`]); one that runs out or is ended on the command line
-/// closes them within this time.
+/// [`Area::Session`]); one that runs out or is ended on the command line,
+/// also by disabling or removing its account there, closes them within this
+/// time.
 pub const SESSION_CHECK: Duration = Duration::from_secs(60);
 /// A line that says nothing, so that proxies on the way keep the connection.
 const KEEP_ALIVE: Duration = Duration::from_secs(20);
@@ -686,8 +687,9 @@ pub fn changed(path: &str) -> Option<Changed> {
         // An admin's list of accounts is nothing a reader's tabs show.
         ["accounts", ..] => return None,
         // A session ended: by logging out, by ending it from another device,
-        // or with a new password, which ends them all.
-        ["logout"] | ["sessions", ..] | ["password"] => Changed::Area(Area::Session),
+        // with a new password, which ends them all, or with the account,
+        // which ends them all for good.
+        ["logout"] | ["sessions", ..] | ["password"] | ["account"] => Changed::Area(Area::Session),
         ["settings", ..] => Changed::Area(Area::Settings),
         // Whether the account sends reports of errors is one of its settings;
         // the reports themselves are nothing its tabs show.

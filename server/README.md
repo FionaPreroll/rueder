@@ -59,6 +59,12 @@ What is here:
   address and articles by their id in the feed, as the numbers differ from one
   server to the next. `rueder account export <name>` and
   `rueder account import <name> <file>` do the same on the command line.
+- Deleting and disabling an account (`src/accounts.rs`, `src/profile.rs`):
+  `DELETE /api/account` deletes the reader's own account after their password,
+  and `rueder account remove <name>` any account; everything that is the
+  account's own goes with it, the feeds stay for their other readers.
+  `rueder account disable <name>` keeps a misused account from logging in and
+  ends its sessions; `enable` undoes it.
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
 - The API's types for the frontend (`src/typescript.rs`): every type that is
@@ -124,6 +130,8 @@ below):
 cargo run -- account add ada            # asks for the password; --admin for an admin
 cargo run -- account password ada       # a new password, which ends ada's sessions
 cargo run -- account list
+cargo run -- account disable ada        # ada cannot log in, her sessions end; `enable` lets her again
+cargo run -- account remove ada         # deletes ada and all that is hers, for good; feeds stay
 cargo run -- registration show          # who may make an account, the limits, how many there are
 cargo run -- registration set --open true --max-accounts 50 --per-day 5
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20

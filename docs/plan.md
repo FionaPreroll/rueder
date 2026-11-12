@@ -41,10 +41,12 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A14 | Als App nutzbar | rueder lässt sich als App installieren (PWA) und startet ohne Netz aus dem Cache; eine neue Version bietet sich zum Neuladen an. Dazu eine Android-App mit Capacitor, die nach Zustimmung nach Updates sucht. |
 | A15 | Umzug zwischen rueder-Instanzen (2026-11-12) | Ein Konto geht als eine Datei hinaus und in einen anderen rueder hinein: Einstellungen, Ordner und Feeds, Lesestand, Sterne, Labels und Filterregeln. Feeds werden an ihrer Adresse und Artikel an ihrer Kennung wiedererkannt, nicht an ihren Nummern, denn die sind auf jeder Instanz andere. |
 | A16 | Öffentliche Instanz neben selbst gehosteten (2026-11-12) | Alles, was eine öffentliche Instanz braucht, ist eine Einstellung und aus als Standard. Eine selbst gehostete Instanz bleibt, wie sie ist. |
+| A18 | Konto löschen und sperren (2026-11-12) | Ein Konto löscht sich selbst, mit allem, was ihm gehört; Feeds bleiben für die anderen. Der Betreiber sperrt ein Konto bei Missbrauch. |
 | A20 | Rechtliches und Meldeweg (2026-11-12) | Impressum, Datenschutz und Nutzungsbedingungen mit Zustimmung; Meldungen von Inhalten; Sperre von Feeds. |
+| A21 | Wachstum im Griff (2026-11-12) | Aufbewahrung von Artikeln einstellbar, Abruf einstellbar und gemessen. |
 | A22 | Zweiter Faktor (2026-11-12) | TOTP mit Wiederherstellungscodes, Pflicht für Admins der öffentlichen Instanz. |
 
-Die Nummern ab A16 und die Kennungen E12 und 5.x stammen aus Fionas eigener Planung für eine öffentliche Instanz; was hier fehlt, steht dort und gehört nicht zu diesem Repository. Die Lücken sind Absicht.
+Die Nummern ab A16 und die Kennungen E4, E12, E13 und 5.x stammen aus Fionas eigener Planung für eine öffentliche Instanz; was hier fehlt, steht dort und gehört nicht zu diesem Repository. Die Lücken sind Absicht.
 
 ## Ausgangslage
 
@@ -93,7 +95,9 @@ Von Fiona am 2026-11-10 entschieden.
 | Registrierung (entschieden am 2026-11-12) | User können sich selbst registrieren, wenn der Betreiber es einschaltet; ohne sein Zutun bleibt alles zu. Er begrenzt die Gesamtzahl der Konten und die Registrierungen je Tag. Bei geschlossener Registrierung laden User mit einem Kontingent ein, das die Kommandozeile setzt; ihre Einladungen halten dieselben Grenzen ein. Admins können immer Einladungslinks erzeugen, deren Konten gegen ein eigenes Kontingent zählen. Links gelten eine einstellbare Zeit und für ein oder mehrere Konten. Alle Grenzen stehen in der Datenbank und werden per Kommandozeile gesetzt. Das ersetzt „Konten legt nur der Betreiber an“. | Login-Seite, Einstellungen, Kommandozeile; neue Angriffsfläche für das Security-Review. |
 | Weitere Ansichten (2026-11-12) | Neben Liste und erweiterter Ansicht drei Bereiche (Baum, Liste, Artikel) und ein Magazin mit großem Aufmacherbild und Kachelraster, vorgezogen aus „Nach dem Umstieg“. Je ein eigener Pull Request. | Pakete 3.13 und 3.14. |
 | Umzug eines Kontos (2026-11-12) | Import und Export der Daten eines Users mit Einstellungen und Lesestand, mit Feed- und Artikel-ID und -Adresse; weil die IDs auf einer anderen rueder-Instanz andere sind, erkennt der Import Feeds an der Adresse und Artikel an Kennung und Adresse. Der Plan dazu (ein Import, der nur hinzufügt; der Lesestand eines Feeds, den das Ziel noch nie abgerufen hat, wartet auf den ersten Abruf) ist freigegeben. Geändert am 2026-11-12 nach dem Security-Review: Texte von Artikeln kommen nicht mehr mit. Vorher kamen die mit Stern oder Label mit und standen dann im geteilten Feed, so dass jede selbst geschriebene Datei erfundene Artikel in Feeds anderer stellen konnte; Fiona hat das Weglassen den Kopien nur für das eigene Konto vorgezogen. Was ein Artikel, den das Ziel nicht hat, an Lesestand, Stern und Labels trug, geht verloren. | Paket 3.12, [Umzug eines Kontos](architecture.md#umzug-eines-kontos). |
+| E4 Aufbewahrung (2026-11-12) | Einstellbar, Standard bleibt alles, wie bisher. Vorgesehen für eine öffentliche Instanz: Texte 24 Monate, Versionen 12 Monate, Artikel mit Stern oder Label bleiben, verwaiste Feeds gehen nach 90 Tagen. Das ersetzt die Detailfrage „Werden Artikel irgendwann gelöscht? Nein.“ | Paket 5.3. |
 | E12 Meldungen (2026-11-12) | Admins sehen bei gemeldeten Feeds die Adresse, nie, wer gemeldet hat. Das ist eine Ausnahme davon, dass die Statusseite keine Feeds nennt. | Paket 5.9. |
+| E13 Inaktive Konten (2026-11-12) | Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht. | Paket 5.3. |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
 
@@ -119,7 +123,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
 
-5. **Öffentliche Instanz** (dazugekommen am 2026-11-12). Was ein rueder braucht, der für alle offen ist (A16): ein einstellbarer Abruf für viele Feeds, ein zweiter Faktor, die Rechtstexte mit Zustimmung und ein Meldeweg mit Sperre von Feeds. Jedes davon ist eine Einstellung und aus als Standard; eine selbst gehostete Instanz merkt nichts davon.
+5. **Öffentliche Instanz** (dazugekommen am 2026-11-12). Was ein rueder braucht, der für alle offen ist (A16): ein einstellbarer Abruf für viele Feeds, eine einstellbare Aufbewahrung, Konten, die sich löschen und sperren lassen, ein zweiter Faktor, die Rechtstexte mit Zustimmung und ein Meldeweg mit Sperre von Feeds. Jedes davon ist eine Einstellung und aus als Standard; eine selbst gehostete Instanz merkt nichts davon.
 
    Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass sich für eine selbst gehostete etwas ändert.
 
@@ -160,5 +164,5 @@ Fiona hat die Vorschläge am 2026-11-10 angenommen. Gebaut wird danach.
 | Wie viele Artikel sind bei einem neuen Abo ungelesen? | Die 10 neuesten, alles davor gilt als gelesen. Heute ist alles ungelesen. |
 | Wer darf den User-Agent eines Feeds umstellen? Ein Feed gehört allen seinen Abonnenten gemeinsam. | Jeder Abonnent; die Einstellung gilt für den Feed. |
 | Wie ziehen die htpasswd-Konten um? | Die Hashes aus htpasswd werden nicht übernommen. Geändert am 2026-11-10: Weil der neue rueder vor dem Import in Betrieb geht, gibt es die Konten dann meist schon. Der Import führt einen alten User mit dem Konto gleichen Namens zusammen oder mit dem Konto, das ihm beim Aufruf zugeordnet wird. Nur für alte User ohne Gegenstück legt er ein Konto ohne Passwort an; ein Kommandozeilenbefehl setzt ein Passwort oder erzeugt einen Einmal-Link. |
-| Werden Artikel irgendwann gelöscht? | Nein. Alte Artikel kosten nur Plattenplatz. Eine Aufbewahrungsgrenze ließe sich später am unteren Ende eines Feeds ergänzen. |
+| Werden Artikel irgendwann gelöscht? | Nein. Alte Artikel kosten nur Plattenplatz. Eine Aufbewahrungsgrenze ließe sich später am unteren Ende eines Feeds ergänzen. Ersetzt durch [E4](#entscheidungen) vom 2026-11-12: Die Aufbewahrung wird einstellbar, als Standard bleibt alles; bis Paket 5.3 gebaut ist, gilt noch „Nein“. |
 | Volltextsuche über alle Artikel? | Der Entwurf durchsucht die gezeigte Liste. Eine Suche auf dem Server über die eigenen Abos (PostgreSQL-Volltextsuche) kommt in Schritt 2 dazu, wenn die Messung zeigt, dass der Index tragbar ist. Gemessen und gebaut am 2026-11-11 mit Paket 2.13, siehe [Suche](architecture.md#suche) und [Messung](implementation.md#suche-vom-2026-11-11). Ohne Stammformen, dafür mit Wortanfängen, und ohne Rangfolge; die Listen der markierten und ausgeblendeten Artikel und der Labels durchsucht weiter das Frontend. |

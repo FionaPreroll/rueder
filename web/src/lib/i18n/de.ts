@@ -137,6 +137,8 @@ const de: Messages = {
 		oidcDenied: 'Die Anmeldung über Single Sign-on wurde abgebrochen.',
 		oidcUnknown:
 			'Zu dieser Anmeldung gehört hier kein Konto. Bitte die Person, die diesen rueder betreibt, es zu verknüpfen.',
+		disabled: 'Dieses Konto ist gesperrt. Frag die Person, die diesen rueder betreibt, warum.',
+		removed: 'Dein Konto ist gelöscht, mit allem, was deins war.',
 		note: 'Registrieren kann man sich nicht. Konten legt an, wer diesen rueder betreibt.'
 	},
 
@@ -218,7 +220,8 @@ const de: Messages = {
 			keys: 'Tastatur',
 			invites: 'Einladungen',
 			privacy: 'Datenschutz',
-			move: 'Umzug'
+			move: 'Umzug',
+			account: 'Konto'
 		},
 		theme: 'Farbschema',
 		themes: { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' },
@@ -386,6 +389,22 @@ const de: Messages = {
 			`${n(count)} ${plural(count, { one: 'Eintrag wurde', other: 'Einträge wurden' })} ausgelassen, weil sie keine lesbaren Feeds sind.`,
 		later: 'Ihre Artikel kommen mit der nächsten Runde des Abrufs.',
 		export: 'Als OPML exportieren'
+	},
+
+	removeAccount: {
+		title: 'Konto löschen',
+		intro:
+			'Damit löschst du dein Konto auf diesem rueder endgültig. Das lässt sich nicht rückgängig machen.',
+		goes: 'Mit ihm gehen: deine Sitzungen auf allen Geräten, deine Abos und Ordner, was du gelesen hast, Sterne, Labels, Filterregeln, Einstellungen, Fehlerberichte, Einladungen und die Verknüpfung mit Single Sign-on.',
+		stays:
+			'Feeds bleiben für die anderen, die sie lesen. Willst du dein Konto vorher mitnehmen, nimm „Umzug“.',
+		password: 'Dein Passwort',
+		name: (name) => `Gib zur Bestätigung deinen Namen ein, ${name}`,
+		submit: 'Mein Konto endgültig löschen',
+		wrong: 'Das stimmt nicht. Gelöscht wurde nichts.',
+		busy: (minutes) =>
+			`Zu viele falsche Versuche. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
+		unreachable: 'Der Server antwortet nicht. Gelöscht wurde nichts.'
 	},
 
 	move: {

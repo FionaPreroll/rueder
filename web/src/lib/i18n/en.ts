@@ -138,6 +138,8 @@ const en = {
 		oidcFailed: 'The login through single sign-on did not work. Try again.',
 		oidcDenied: 'The login through single sign-on was cancelled.',
 		oidcUnknown: 'No account here belongs to that login. Ask whoever runs this rueder to link it.',
+		disabled: 'This account is disabled. Ask whoever runs this rueder why.',
+		removed: 'Your account is deleted, with everything that was yours.',
 		note: 'There is no sign-up. Accounts are made by whoever runs this rueder.'
 	},
 
@@ -220,7 +222,8 @@ const en = {
 			keys: 'Keyboard',
 			invites: 'Invitations',
 			privacy: 'Privacy',
-			move: 'Move'
+			move: 'Move',
+			account: 'Account'
 		},
 		theme: 'Theme',
 		themes: { system: 'Like the system', light: 'Light', dark: 'Dark' },
@@ -389,6 +392,21 @@ const en = {
 			`${n(count)} ${plural(count, { one: 'entry was', other: 'entries were' })} left out, not being feeds that can be read.`,
 		later: 'Their articles arrive with the next round of fetching.',
 		export: 'Export as OPML'
+	},
+
+	removeAccount: {
+		title: 'Delete the account',
+		intro: 'This deletes your account on this rueder for good. It cannot be undone.',
+		goes: 'What goes with it: your sessions on all devices, your subscriptions and folders, what you have read, stars, labels, filter rules, settings, reports of errors, invitations and the link to single sign-on.',
+		stays:
+			'Feeds stay for the others who read them. To take your account elsewhere first, use “Move”.',
+		password: 'Your password',
+		name: (name: string) => `Type your name, ${name}, to confirm`,
+		submit: 'Delete my account for good',
+		wrong: 'That is not right. Nothing was deleted.',
+		busy: (minutes: number) =>
+			`Too many wrong tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
+		unreachable: 'The server does not answer. Nothing was deleted.'
 	},
 
 	move: {

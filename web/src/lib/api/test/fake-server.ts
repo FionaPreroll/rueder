@@ -114,6 +114,8 @@ export class FakeServer {
 	accounts = new Map([['fiona', 'correct horse']]);
 	/** Who the browser's session belongs to. */
 	signedIn: string | null = 'fiona';
+	/** Accounts the operator disabled, by name. */
+	disabled = new Set<string>();
 	/** Whether the account that is logged in is an admin, who sees the status. */
 	admin = true;
 	/** Whether the server takes reports of errors, whether the account sends them, and what it sent. */
@@ -372,6 +374,7 @@ export class FakeServer {
 				return refused(429, 'too many', { 'Retry-After': `${this.lockedFor}` });
 			const name = String(data.username).trim().toLowerCase();
 			if (this.accounts.get(name) !== data.password) return refused(401, 'wrong name or password');
+			if (this.disabled.has(name)) return refused(403, 'disabled');
 			this.signedIn = name;
 			return json(this.me());
 		}
@@ -383,6 +386,21 @@ export class FakeServer {
 		const invites = this.answerInvites(method, path, data);
 		if (invites) return invites;
 		if (method === 'GET' && path === '/me') return json(this.me());
+		if (method === 'DELETE' && path === '/account') {
+			const name = this.signedIn;
+			const password = this.accounts.get(name);
+			// An account that logs in only through single sign-on sends its name.
+			const proven =
+				password === undefined
+					? String(data.name ?? '')
+							.trim()
+							.toLowerCase() === name
+					: data.password === password;
+			if (!proven) return refused(403, 'the password is wrong');
+			this.accounts.delete(name);
+			this.signedIn = null;
+			return empty();
+		}
 		if (method === 'GET' && path === '/tree') return json(this.tree());
 		if (path === '/reports/consent') {
 			if (method === 'GET')
@@ -603,7 +621,12 @@ export class FakeServer {
 	}
 
 	private me() {
-		return { id: 1, username: this.signedIn, is_admin: this.admin };
+		return {
+			id: 1,
+			username: this.signedIn,
+			is_admin: this.admin,
+			has_password: this.accounts.has(this.signedIn ?? '')
+		};
 	}
 
 	private tree(): { folders: ApiFolder[]; feeds: ApiFeed[]; hidden: number } {

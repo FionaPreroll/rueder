@@ -1,0 +1,15 @@
+-- Konto loeschen und sperren (Paket 5.6, server/src/accounts.rs).
+--
+-- Geloescht wird ein Konto mit DELETE FROM accounts: Alles, was ihm gehoert,
+-- haengt mit ON DELETE CASCADE daran (Sitzungen, Identitaeten bei OpenID
+-- Connect, Ordner, Abos und mit ihnen der Lesestand und die Sterne, Labels,
+-- Regeln, Fehlerberichte, Einladungen). Die Einstellungen stehen in der Zeile
+-- selbst. Feeds und Artikel gehoeren niemandem und bleiben fuer ihre anderen
+-- Abonnenten. Konten, die dieses eingeladen hat, bleiben; ihr Verweis auf die
+-- Einladung wird leer (invite_id, ON DELETE SET NULL).
+--
+-- Gesperrt ist ein Konto, solange disabled_at gesetzt ist: Es kann sich nicht
+-- einloggen, seine Sitzungen sind beim Sperren beendet und gelten nicht mehr,
+-- und seine Einladungslinks nehmen niemanden auf. Alles andere bleibt, damit
+-- das Entsperren das Konto zurueckgibt, wie es war.
+ALTER TABLE accounts ADD COLUMN disabled_at timestamptz;

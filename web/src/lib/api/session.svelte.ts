@@ -11,6 +11,8 @@ export type LoginFailure =
 	| { kind: 'wrong' }
 	/** Too many wrong tries; the server says how long to wait. */
 	| { kind: 'tooMany'; minutes: number }
+	/** The password was right, but the operator disabled the account. */
+	| { kind: 'disabled' }
 	| { kind: 'unreachable' };
 
 /** Why nobody was registered. */
@@ -51,6 +53,8 @@ export class Session {
 	ways = $state.raw<ApiLoginWays>({ oidc: false, registration: false });
 	/** The invitation the page was opened with, once the server said whether it can be used. */
 	invitation = $state.raw<Invitation | null>(null);
+	/** The account was deleted here a moment ago, which the login page says. */
+	farewell = $state(false);
 
 	private api: Api;
 
@@ -71,11 +75,23 @@ export class Session {
 
 	private enter(account: ApiAccount) {
 		this.reader = new ServerReader(
-			{ name: account.username, admin: account.is_admin },
-			{ signOut: () => void this.signOut(), expired: () => this.leave() },
+			{ name: account.username, admin: account.is_admin, password: account.has_password },
+			{
+				signOut: () => void this.signOut(),
+				expired: () => this.leave(),
+				removed: () => this.removed()
+			},
 			this.api
 		);
+		this.farewell = false;
 		this.state = 'in';
+	}
+
+	/** The account is gone, and with it the session; where it was goes too. */
+	private removed() {
+		forgetView();
+		this.farewell = true;
+		this.leave();
 	}
 
 	private leave() {
@@ -130,6 +146,7 @@ export class Session {
 			if (error.status === 429) {
 				return { kind: 'tooMany', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
 			}
+			if (error.status === 403 && error.message.trim() === 'disabled') return { kind: 'disabled' };
 			// A name or a password the server cannot even read is a wrong one too.
 			if (error.status >= 400 && error.status < 500) return { kind: 'wrong' };
 			return { kind: 'unreachable' };

@@ -33,6 +33,11 @@ export type Me = {
 	id: number,
 	username: string,
 	is_admin: boolean,
+	/**
+	 * Whether the account has a password, which deleting it asks for. One
+	 * that logs in only through OpenID Connect has none.
+	 */
+	has_password: boolean,
 };
 
 /**
@@ -82,6 +87,17 @@ export type NewPassword = {
 };
 
 /**
+ * What `DELETE /api/account` reads: proof that the reader means it.
+ */
+export type Farewell = {
+	/**
+	 * The account's password. An account that has none sends its name.
+	 */
+	password?: string,
+	name?: string,
+};
+
+/**
  * An account as an admin sees it.
  *
  * `GET /api/accounts` answers with a list of them, for admins only.
@@ -91,6 +107,10 @@ export type Account = {
 	username: string,
 	is_admin: boolean,
 	has_password: boolean,
+	/**
+	 * Disabled by the operator, with `rueder account disable`.
+	 */
+	disabled: boolean,
 	created_at: string,
 };
 

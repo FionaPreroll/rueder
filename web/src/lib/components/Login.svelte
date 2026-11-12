@@ -59,7 +59,8 @@
 	const outcomes = {
 		failed: () => m.login.oidcFailed,
 		denied: () => m.login.oidcDenied,
-		unknown: () => m.login.oidcUnknown
+		unknown: () => m.login.oidcUnknown,
+		disabled: () => m.login.disabled
 	};
 	const came = new URLSearchParams(location.search).get('oidc') ?? '';
 	const outcome = came in outcomes ? outcomes[came as keyof typeof outcomes] : null;
@@ -76,6 +77,8 @@
 				return m.login.wrong;
 			case 'tooMany':
 				return m.login.tooMany(failure.minutes);
+			case 'disabled':
+				return m.login.disabled;
 			case 'unreachable':
 				return m.login.unreachable;
 			default:
@@ -138,6 +141,10 @@
 			</svg>
 			{registering ? m.register.title : m.login.title}
 		</h1>
+
+		{#if session.farewell && !problem}
+			<p class="mt-4 rounded bg-panel px-3 py-2 text-sm" role="status">{m.login.removed}</p>
+		{/if}
 
 		{#if problem}
 			<p class="mt-4 flex gap-2 rounded bg-panel px-3 py-2 text-sm" role="alert">

@@ -23,7 +23,7 @@ describe('Session', () => {
 		expect(session.state).toBe('checking');
 		await session.check();
 		expect(session.state).toBe('in');
-		expect(session.reader?.account).toEqual({ name: 'fiona', admin: true });
+		expect(session.reader?.account).toEqual({ name: 'fiona', admin: true, password: true });
 	});
 
 	it('finds none, and asks how one can log in', async () => {
@@ -87,6 +87,13 @@ describe('Session', () => {
 		expect(await session.login('fiona', 'correct horse')).toEqual({ kind: 'tooMany', minutes: 2 });
 		server.lockedFor = 0;
 
+		// Only who knows the password hears that the account is disabled.
+		server.disabled.add('fiona');
+		expect(await session.login('fiona', 'wrong')).toEqual({ kind: 'wrong' });
+		expect(await session.login('fiona', 'correct horse')).toEqual({ kind: 'disabled' });
+		expect(session.state).toBe('out');
+		server.disabled.clear();
+
 		server.refuse('POST', /^\/login$/, 500);
 		expect(await session.login('fiona', 'correct horse')).toEqual({ kind: 'unreachable' });
 		server.down = true;
@@ -104,6 +111,48 @@ describe('Session', () => {
 		await session.login('fiona', 'correct horse');
 		server.down = true;
 		await session.signOut();
+		expect(session.state).toBe('out');
+	});
+
+	it('deletes the account with its password and says so at the login', async () => {
+		const session = new Session();
+		await session.check();
+		const reader = session.reader!;
+		expect(reader.can.remove).toBe(true);
+		expect(await reader.removeAccount('wrong')).toEqual({ problem: 'wrong' });
+		expect(session.state).toBe('in');
+		server.refuse('DELETE', /^\/account$/, 429, 1, 'too many', { 'Retry-After': '90' });
+		expect(await reader.removeAccount('correct horse')).toEqual({ problem: 'busy', minutes: 2 });
+		server.refuse('DELETE', /^\/account$/, 500);
+		expect(await reader.removeAccount('correct horse')).toEqual({ problem: 'unreachable' });
+
+		expect(session.farewell).toBe(false);
+		expect(await reader.removeAccount('correct horse')).toBeNull();
+		expect(server.requests.findLast((request) => request.method === 'DELETE')).toMatchObject({
+			path: '/account',
+			body: { password: 'correct horse' }
+		});
+		expect(session.state).toBe('out');
+		expect(session.reader).toBeNull();
+		expect(session.farewell).toBe(true);
+		expect(server.accounts.has('fiona')).toBe(false);
+		// Whoever logs in next is not told again.
+		server.accounts.set('grace', 'a long password');
+		await session.login('grace', 'a long password');
+		expect(session.farewell).toBe(false);
+	});
+
+	it('deletes an account without a password by its name', async () => {
+		// As one that logs in only through single sign-on.
+		server.accounts.delete('fiona');
+		const session = new Session();
+		await session.check();
+		const reader = session.reader!;
+		expect(reader.account?.password).toBe(false);
+		expect(await reader.removeAccount('grace')).toEqual({ problem: 'wrong' });
+		expect(await reader.removeAccount('Fiona')).toBeNull();
+		const asked = server.requests.findLast((request) => request.method === 'DELETE');
+		expect(asked?.body).toEqual({ name: 'Fiona' });
 		expect(session.state).toBe('out');
 	});
 
@@ -146,7 +195,7 @@ describe('registering', () => {
 
 		expect(await session.register(' Grace ', 'a long password')).toBeNull();
 		expect(session.state).toBe('in');
-		expect(session.reader?.account).toEqual({ name: 'grace', admin: false });
+		expect(session.reader?.account).toEqual({ name: 'grace', admin: false, password: true });
 		expect(server.requests.at(-1)).toMatchObject({
 			method: 'POST',
 			path: '/register',

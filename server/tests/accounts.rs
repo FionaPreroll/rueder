@@ -221,7 +221,7 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
     let body: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         body,
-        json!({ "id": id, "username": "ada", "is_admin": false })
+        json!({ "id": id, "username": "ada", "is_admin": false, "has_password": true })
     );
 
     // Scripts cannot read the cookie, it travels over HTTPS only, belongs to
@@ -248,7 +248,7 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
     let body: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         body,
-        json!({ "id": id, "username": "ada", "is_admin": false })
+        json!({ "id": id, "username": "ada", "is_admin": false, "has_password": true })
     );
     // Among other cookies too.
     let among = format!("theme=dark; {pair}; other=1");

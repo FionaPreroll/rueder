@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.username, a.is_admin,\n                  s.last_seen_at < now() - $2::float8 * interval '1 second' AS \"stale!\"\n           FROM sessions s JOIN accounts a ON a.id = s.account_id\n           WHERE s.token_hash = $1 AND s.expires_at > now()",
+  "query": "SELECT a.id, a.username, a.is_admin,\n                  s.last_seen_at < now() - $2::float8 * interval '1 second' AS \"stale!\"\n           FROM sessions s JOIN accounts a ON a.id = s.account_id\n           WHERE s.token_hash = $1 AND s.expires_at > now() AND a.disabled_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -56,5 +56,5 @@
       null
     ]
   },
-  "hash": "88c96c8625acc45c2c416e02fff0e71dece023803ee814b2a0dcb159e5cb0e5e"
+  "hash": "b86fa44c9d60a6093818a1315ca49add88240b57ed658355345514d2a700a786"
 }

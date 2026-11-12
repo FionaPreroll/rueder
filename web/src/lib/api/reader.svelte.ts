@@ -36,6 +36,7 @@ import {
 	type Notice,
 	type Reader,
 	type Refusal,
+	type RemoveRefusal,
 	type Resumed,
 	type RulePreview,
 	type Subscribed
@@ -134,6 +135,8 @@ export interface SessionEnds {
 	signOut(): void;
 	/** The server says there is no session any more. */
 	expired(): void;
+	/** The account deleted itself; without this it counts as `expired`. */
+	removed?(): void;
 }
 
 const feedKey = (id: number) => `feed-${id}`;
@@ -376,7 +379,8 @@ export class ServerReader implements Reader {
 			move: true,
 			status: account.admin,
 			invites: true,
-			reports: true
+			reports: true,
+			remove: true
 		};
 		this.session = session;
 		this.api = api;
@@ -1812,6 +1816,23 @@ export class ServerReader implements Reader {
 		} catch (error) {
 			return this.refusal(error);
 		}
+	}
+
+	async removeAccount(proof: string): Promise<RemoveRefusal | null> {
+		const farewell = this.account.password === false ? { name: proof } : { password: proof };
+		try {
+			await this.api.removeAccount(farewell);
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 403) return { problem: 'wrong' };
+			if (error instanceof ApiError && error.status === 429) {
+				return { problem: 'busy', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
+			}
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			return { problem: 'unreachable' };
+		}
+		if (this.session.removed) this.session.removed();
+		else this.session.expired();
+		return null;
 	}
 
 	async invite(uses: number) {

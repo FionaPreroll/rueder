@@ -1,8 +1,8 @@
 //! Logging in and out over the API, and the limit on wrong passwords.
 //!
 //! `POST /api/login` takes a name and a password and answers with the session
-//! cookie; `POST /api/logout` ends the session; `GET /api/me` says who is
-//! logged in. Wrong tries are counted per name, per address and per network
+//! cookie, or, for an account the operator disabled, with `403 disabled`;
+//! `POST /api/logout` ends the session; `GET /api/me` says who is logged in. Wrong tries are counted per name, per address and per network
 //! around it, so neither one account nor one sender can be tried without end.
 
 use std::{
@@ -248,14 +248,18 @@ pub struct Me {
     id: i32,
     username: String,
     is_admin: bool,
+    /// Whether the account has a password, which deleting it asks for. One
+    /// that logs in only through OpenID Connect has none.
+    has_password: bool,
 }
 
 impl Me {
-    pub(crate) fn new(id: i32, username: String, is_admin: bool) -> Self {
+    pub(crate) fn new(id: i32, username: String, is_admin: bool, has_password: bool) -> Self {
         Self {
             id,
             username,
             is_admin,
+            has_password,
         }
     }
 }
@@ -303,6 +307,11 @@ pub async fn login(
         ));
     };
     state.logins.succeeded(&keys);
+    // Said only to whoever knows the password, so it tells nobody else which
+    // names exist.
+    if account.disabled {
+        return Err(AppError::Status(StatusCode::FORBIDDEN, "disabled".into()));
+    }
 
     // A session the browser still had ends here, so a login always starts a
     // fresh one.
@@ -310,11 +319,7 @@ pub async fn login(
         sessions::end(&state.db, old).await?;
     }
     let token = sessions::start(&state.db, account.id).await?;
-    let me = Me {
-        id: account.id,
-        username: account.username,
-        is_admin: account.is_admin,
-    };
+    let me = Me::new(account.id, account.username, account.is_admin, true);
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -332,12 +337,20 @@ pub async fn logout(
         .into_response())
 }
 
-pub async fn me(session: Session) -> Json<Me> {
-    Json(Me {
-        id: session.account_id,
-        username: session.username,
-        is_admin: session.is_admin,
-    })
+pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<Me>, AppError> {
+    let has_password = sqlx::query_scalar!(
+        r#"SELECT password_hash IS NOT NULL AS "has!" FROM accounts WHERE id = $1"#,
+        session.account_id
+    )
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or(false);
+    Ok(Json(Me::new(
+        session.account_id,
+        session.username,
+        session.is_admin,
+        has_password,
+    )))
 }
 
 #[cfg(test)]

@@ -15,6 +15,7 @@ import type {
 	ClientReports,
 	Created,
 	Credentials,
+	Farewell,
 	Feed,
 	FindFeeds,
 	Folder,
@@ -251,6 +252,8 @@ export const api = {
 	login: (username: string, password: string) =>
 		call<ApiAccount>('POST', '/login', { username, password } satisfies Credentials),
 	logout: () => call<void>('POST', '/logout'),
+	/** Deletes the account that is logged in, for good; the password, or the name of one without. */
+	removeAccount: (proof: Farewell) => call<void>('DELETE', '/account', proof),
 
 	/** Whether anybody can register, and whether an invitation can be used; for anybody. */
 	registering: (invite?: string) =>
