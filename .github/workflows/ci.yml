@@ -106,6 +106,58 @@ jobs:
           path: web/build/index.html
           if-no-files-found: error
 
+  # The built page in a real browser against the real server: logging in,
+  # subscribing, reading, folders, filter rules and live updates (web/e2e).
+  e2e:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SQLX_OFFLINE: "true"
+      # Where the run makes its own database, rueder_e2e.
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - run: cargo build
+        working-directory: server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+        working-directory: web
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm run build
+        working-directory: web
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - run: pnpm run e2e
+        working-directory: web
+      # What the browser saw when a test failed: screenshots and traces.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            web/playwright-report
+            web/test-results
+
   # The container image as deploy/compose.yaml runs it: built, started next to
   # PostgreSQL and asked whether it works. Published only by the job below.
   image:
@@ -133,7 +185,7 @@ jobs:
   # ghcr.io/fionapreroll/rueder:latest and :sha-<commit>.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [server, dependencies, web, image]
+    needs: [server, dependencies, web, e2e, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read
