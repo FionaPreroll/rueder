@@ -21,6 +21,7 @@ Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand 
 - [Frontend](#frontend)
 - [Betrieb](#betrieb)
 - [Status für Admins](#status-für-admins)
+- [Android-App](#android-app)
 
 ## Überblick
 
@@ -689,3 +690,17 @@ Gebaut in Paket 3.9 (`server/src/reports.rs`, `server/migrations/0002_client_rep
 - **Speicher.** Tabelle `client_reports` mit einem Fingerabdruck (SHA-256 über Art, Meldung und erste eigene Stack-Zeile), Zähler, erstem und letztem Auftreten, Version und Browser, je Konto in einer Zeile gezählt. Ein Bericht ist an das Konto gebunden, damit Ausschalten und das Löschen eines Kontos ihn mitnehmen. Stündlich geht, was vor mehr als 30 Tagen zuletzt auftrat.
 - **Anzeige.** Der Abschnitt „Fehler in Browsern“ der Statusseite fasst je Fingerabdruck zusammen: Art, Meldung, Stack, wie oft, bei wie vielen Konten, Versionen, Browser, zuletzt; die 20 zuletzt aufgetretenen. Namen von Konten zeigt er nicht. Dazu, wie viele Konten Berichte schicken, und ein Hinweis, wenn am letzten Tag Fehler gemeldet wurden.
 - **Verworfen:** ein selbst gehostetes Sentry oder GlitchTip mit deren SDK. Das wäre ein weiterer Dienst neben PostgreSQL, das SDK ist groß, und die Content-Security-Policy müsste dem Browser einen zweiten Host erlauben. Ebenso `navigator.sendBeacon`: `fetch` mit `keepalive` leistet dasselbe und geht durch denselben Client wie jede Anfrage.
+
+## Android-App
+
+Gebaut in Paket 3.11 (`app/`, beschrieben in [app/README.md](../app/README.md)). Capacitor um eine kleine Startseite, die nach der Adresse des eigenen rueder fragt und ihn dann öffnet. Die Seite von rueder kommt vom Server wie im Browser: gleicher Ursprung, das Sitzungs-Cookie, die Content-Security-Policy und die Prüfung der Herkunft bleiben, wie sie sind, und auch die PWA mit ihrem Hinweis auf neue Versionen läuft in der App.
+
+- **Startseite** (`app/www/`): Adresse (nur https, nur der Ursprung, weil rueder ganz oben auf seinem Host läuft) und die Zustimmung zur Update-Suche, aus als Standard. Bekannte Server öffnet sie sofort. Zurück kommt man über eine Verknüpfung am App-Icon („Server und Updates“) und über das Kontomenü der Seite, das in der App einen Eintrag dafür hat (erkannt an `rueder-android` im User-Agent, `web/src/lib/app.ts`). Antwortet der Server nicht, sagt es die Startseite.
+- **Wohin die WebView darf** (`ServerClient`): Seiten des eingestellten Servers bleiben in der App, die Startseite auch, alles andere öffnet der Browser. Login über OpenID Connect geht deshalb in der App nicht, nur mit Passwort.
+- **Das Plugin der App** (`RuederPlugin`) antwortet nur der Startseite. Die Seite des Servers läuft in derselben WebView, und Capacitor stellt seine Brücke jeder Seite darin bereit; ein Skript dort darf trotzdem weder den Server ändern noch die Update-Suche. Die Adresse prüft auch die native Seite (`Address.java`).
+- **Updates** nur im Build `github`: Mit Zustimmung liest die App bei jedem Start `version.json` aus dem Release `android-latest` (höchstens 4 KB, mit Build-Nummer, Commit und Größe), vergleicht die Build-Nummer mit ihrer eigenen und bietet einen neueren Build in einem Dialog an, mit Größe und einem Hinweis bei Netzen, die Geld kosten können. Den Download macht Androids Download-Manager, die Größe wird geprüft, die Installation übernimmt Androids Installer, der fragt und nur ein APK mit demselben Schlüssel annimmt. Sonst geht nichts nach außen.
+- **Zwei Builds**: `github` mit Update-Suche und der Berechtigung, Apps zu installieren; `play` für den Play Store ohne beides (`src/play/`), weil der Store Updates selbst bringt.
+- **CI** (`app` und `app-release` in `ci.yml`): Tests der Startseite und der nativen Teile, beide Builds. Auf `main` ersetzt `app-release` das Release `android-latest` durch das signierte APK und `version.json`, wenn die Prüfungen bestanden sind und der Schlüssel in den Secrets liegt; sonst baut die CI ein Debug-APK und veröffentlicht nichts. Der Schlüssel liegt nie im Repository (anders als im Vorbild, dessen öffentlicher Schlüssel nur beweist, dass ein APK aus einem Build des Projekts stammt).
+
+Abweichungen vom Vorbild: eigene Update-Logik statt `@fionapreroll/app-updates`, das nicht aus der npm-Registry kommt; kein Fortsetzen eines abgebrochenen Downloads über einen Neustart der App hinaus, das übernimmt der Download-Manager, soweit er es kann. Die Texte der App stehen nicht in `web/src/lib/i18n/`, weil sie nicht Teil der Seite sind: die der Startseite in `app/www/texts.js`, die nativen in `res/values*/strings.xml`, jeweils Englisch und Deutsch.
+

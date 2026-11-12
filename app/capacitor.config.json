@@ -1,0 +1,9 @@
+{
+	"appId": "io.github.fionapreroll.rueder",
+	"appName": "rueder",
+	"webDir": "www",
+	"appendUserAgent": "rueder-android",
+	"android": {
+		"backgroundColor": "#f4f5f7"
+	}
+}

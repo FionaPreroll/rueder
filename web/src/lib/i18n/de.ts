@@ -52,6 +52,7 @@ const de: Messages = {
 		paused: 'Angehalten',
 		account: (name) => `Angemeldet als ${name}`,
 		logout: 'Abmelden',
+		appSettings: 'Server und App-Updates',
 		unread: (count) => `${n(count)} ungelesen`,
 		fetchFailed: (reason) => `Der letzte Abruf ist fehlgeschlagen: ${reason}`,
 		waiting: 'Noch nicht abgerufen',

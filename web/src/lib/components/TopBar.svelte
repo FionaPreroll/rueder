@@ -2,6 +2,7 @@
 	// The bar across the top: the sidebar switch, the name, the search, and on the
 	// right the keyboard help, the settings and who is logged in. With made-up data
 	// there are the draft's own switches instead of an account.
+	import { APP_SETTINGS, inAndroidApp } from '#lib/app.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import Icon from './Icon.svelte';
@@ -149,6 +150,13 @@
 				<Icon name="user" class="size-5" />
 			{/snippet}
 			<p class="px-3 py-1.5 text-xs text-soft">{m.nav.account(reader.account.name)}</p>
+			{#if inAndroidApp()}
+				<!-- Back to the app's own start page, to change the server or the app's updates. -->
+				<a role="menuitem" class="menu-item" href={APP_SETTINGS}>
+					<Icon name="settings" />
+					{m.nav.appSettings}
+				</a>
+			{/if}
 			{#if reader.can.status}
 				<button type="button" role="menuitem" class="menu-item" onclick={onstatus}>
 					<Icon name="pulse" />
