@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET legacy_id = $2 WHERE id = $1 AND legacy_id IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5527e01b13289d75dd2a06bca2ac9a462e01ffd0bc0f4c13e7fc435bc7f0f919"
+}

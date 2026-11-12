@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO accounts (username, legacy_id, created_at)\n                 VALUES ($1, $2, coalesce($3, now())) RETURNING id",
+  "query": "INSERT INTO accounts (username, legacy_id, created_at)\n                     VALUES ($1, $2, coalesce($3, now())) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -26,5 +26,5 @@
       false
     ]
   },
-  "hash": "7c138cdb303d61e1925c7be126a6f65664a77b6048c72399bc9db107adc89940"
+  "hash": "5e0c5add3a7fd0fe8a398b151362c6160db20185ed5fba0bc33abf797c18eaf4"
 }

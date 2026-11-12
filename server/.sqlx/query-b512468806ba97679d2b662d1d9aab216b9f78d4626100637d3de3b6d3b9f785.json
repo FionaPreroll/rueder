@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, legacy_id AS \"legacy_id!\", last_seq, feed_url FROM feeds\n           WHERE legacy_id IS NOT NULL",
+  "query": "SELECT id, feed_url, title, legacy_id FROM feeds ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -16,34 +16,34 @@
       },
       {
         "ordinal": 1,
-        "name": "legacy_id!",
-        "type_info": "Uuid",
-        "origin": {
-          "Table": {
-            "table": "feeds",
-            "name": "legacy_id"
-          }
-        }
-      },
-      {
-        "ordinal": 2,
-        "name": "last_seq",
-        "type_info": "Int4",
-        "origin": {
-          "Table": {
-            "table": "feeds",
-            "name": "last_seq"
-          }
-        }
-      },
-      {
-        "ordinal": 3,
         "name": "feed_url",
         "type_info": "Text",
         "origin": {
           "Table": {
             "table": "feeds",
             "name": "feed_url"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "legacy_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "legacy_id"
           }
         }
       }
@@ -53,10 +53,10 @@
     },
     "nullable": [
       false,
-      true,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "1e14d68017574c5082ed4902c5ce201ae14207711cb5f46bb97cac661f1d556f"
+  "hash": "b512468806ba97679d2b662d1d9aab216b9f78d4626100637d3de3b6d3b9f785"
 }

@@ -1,28 +1,28 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM accounts WHERE legacy_id = $1",
+  "query": "SELECT last_seq FROM feeds WHERE id = $1 AND legacy_id IS NULL FOR UPDATE",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "last_seq",
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "accounts",
-            "name": "id"
+            "table": "feeds",
+            "name": "last_seq"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Int4"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "468371616de3e5e0913f86797f39c1be87bb7182688f5f944b25f5aa9fe16b1b"
+  "hash": "5cf43b8c2e806e7e75bf414f076f8925b4f774d0f76ad6bc11ded15ae57cce24"
 }

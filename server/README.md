@@ -205,14 +205,24 @@ nothing: the addresses are made anew whenever an article is delivered.
 ## Importing the old database
 
 ```sh
+cargo run --release -- import-legacy --from postgres://user:password@host/rueder --dry-run
 cargo run --release -- import-legacy --from postgres://user:password@host/rueder
 ```
 
 The old database is only read. The address can also come from
-`LEGACY_DATABASE_URL`. Stop the new server's fetching while the import runs. At
-the end it prints what it added and what it left out. What it brings over and
-what a second run does is in
-[docs/implementation.md](../docs/implementation.md#import-der-alten-daten).
+`LEGACY_DATABASE_URL`. The import merges the old data with what the new rueder
+already has: an old feed goes into the feed with the same address, its old
+articles before the ones fetched since, and an old user into the account with
+the same name. `--account <old name>=<new name>` sends an old user to an account
+of another name; it may be given more than once. Old users without an account
+get one without a password, which `account password` sets.
+
+Stop the server and back up its database first: the import moves the numbers of
+articles in merged feeds, which must not happen while it runs. `--dry-run` says
+which feeds and accounts would be merged and which added, and writes nothing.
+At the end the import prints what it merged, added and left out. If it stops
+halfway, run it again: it carries on with what is missing. The details are in
+[docs/implementation.md](../docs/implementation.md#einmaliger-import-in-den-laufenden-bestand).
 
 ## Measuring
 

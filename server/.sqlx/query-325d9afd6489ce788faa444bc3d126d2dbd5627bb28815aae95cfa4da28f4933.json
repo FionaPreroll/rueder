@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT guid, seq FROM article_content WHERE feed_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "guid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "guid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "325d9afd6489ce788faa444bc3d126d2dbd5627bb28815aae95cfa4da28f4933"
+}

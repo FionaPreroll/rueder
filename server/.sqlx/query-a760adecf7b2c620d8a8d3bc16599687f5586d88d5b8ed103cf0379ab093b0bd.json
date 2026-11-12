@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE article_states SET seq = seq - $2 WHERE feed_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a760adecf7b2c620d8a8d3bc16599687f5586d88d5b8ed103cf0379ab093b0bd"
+}
