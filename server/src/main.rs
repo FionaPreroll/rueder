@@ -20,7 +20,7 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    reclean, registration, reports, router, sessions,
+    reclean, registration, reports, router, sessions, transfer,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -99,6 +99,13 @@ enum AccountCommand {
     Link { name: String, subject: String },
     /// List the accounts.
     List,
+    /// Write what an account has made of rueder (settings, folders, feeds,
+    /// what was read, stars, labels and rules) as JSON to the standard output,
+    /// for moving it to another rueder with `account import`.
+    Export { name: String },
+    /// Take a file of `account export`, from this rueder or another one, into
+    /// an account. Adds to what the account has and replaces its settings.
+    Import { name: String, file: PathBuf },
     /// Say how many accounts this one may invite in all: a number, or
     /// `default` for what `rueder registration set --invites` gives everybody.
     Invites { name: String, quota: Quota },
@@ -310,6 +317,30 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                 name.trim(),
                 config.issuer
             );
+        }
+        AccountCommand::Export { name } => {
+            let id = accounts::id_of(db, &name)
+                .await?
+                .with_context(|| format!("there is no account {}", name.trim()))?;
+            let file = transfer::export(db, id).await?;
+            serde_json::to_writer_pretty(io::stdout().lock(), &file)?;
+            println!();
+        }
+        AccountCommand::Import { name, file } => {
+            let id = accounts::id_of(db, &name)
+                .await?
+                .with_context(|| format!("there is no account {}", name.trim()))?;
+            let text =
+                std::fs::read(&file).with_context(|| format!("reading {}", file.display()))?;
+            let file: transfer::Export =
+                serde_json::from_slice(&text).context("this is not a file of a rueder account")?;
+            let imported = match transfer::import(db, &Rules::from_env()?, id, file).await {
+                Ok(imported) => imported,
+                Err(rueder::AppError::BadRequest(reason)) => anyhow::bail!("{reason}"),
+                Err(rueder::AppError::Internal(err)) => return Err(err),
+                Err(_) => anyhow::bail!("the import failed"),
+            };
+            println!("{imported}");
         }
         AccountCommand::Invites { name, quota } => {
             if !registration::set_quota(db, &name, quota.0).await? {

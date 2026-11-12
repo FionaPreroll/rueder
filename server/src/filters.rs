@@ -99,7 +99,7 @@ pub enum Scope {
 }
 
 impl Field {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Any => "any",
             Self::Title => "title",
@@ -109,7 +109,7 @@ impl Field {
         }
     }
 
-    fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         [
             Self::Any,
             Self::Title,
@@ -123,7 +123,7 @@ impl Field {
 }
 
 impl Match {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Contains => "contains",
             Self::Word => "word",
@@ -131,7 +131,7 @@ impl Match {
         }
     }
 
-    fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         [Self::Contains, Self::Word, Self::Regex]
             .into_iter()
             .find(|matching| matching.as_str() == text)
@@ -139,7 +139,7 @@ impl Match {
 }
 
 impl Action {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Hide => "hide",
             Self::Read => "read",

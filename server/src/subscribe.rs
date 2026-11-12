@@ -85,7 +85,7 @@ pub fn routes() -> Router<AppState> {
 
 /// The address a reader typed, as one that can be fetched. Without a scheme
 /// it is taken as https.
-fn address(text: &str) -> Result<Url, AppError> {
+pub(crate) fn address(text: &str) -> Result<Url, AppError> {
     let text = text.trim();
     if text.is_empty() || text.len() > MAX_URL || text.chars().any(char::is_control) {
         return Err(bad("this is not an address"));
@@ -586,7 +586,7 @@ pub enum Step {
 
 /// A name from an OPML file as a name in the tree: within the length, without
 /// control characters, or none.
-fn name(text: &str) -> Option<String> {
+pub(crate) fn name(text: &str) -> Option<String> {
     let name: String = text.chars().filter(|c| !c.is_control()).collect();
     let name: String = name.trim().chars().take(tree::MAX_TITLE).collect();
     let name = name.trim_end();
@@ -724,16 +724,54 @@ async fn import(
     let read = tokio::task::spawn_blocking(move || outline(&String::from_utf8_lossy(&body)));
     let outline = read.await?.map_err(bad)?;
     let mut tx = state.db.begin().await?;
-    tree::lock(&mut tx, account_id).await?;
-    let mut imported = Imported {
-        feeds: 0,
-        folders: 0,
-        known: 0,
+    let taken = take(&mut tx, account_id, &outline).await?;
+    tx.commit().await?;
+    let added = taken.feeds.iter().filter(|feed| feed.added).count();
+    Ok(Json(Imported {
+        feeds: added,
+        folders: taken.folders_made,
+        known: taken.feeds.len() - added,
         skipped: outline.skipped,
+    }))
+}
+
+/// What [`take`] did with an outline.
+pub(crate) struct Taken {
+    /// The folders of the outline by their names from the top down.
+    pub folders: HashMap<Vec<String>, i32>,
+    /// How many folders were made.
+    pub folders_made: usize,
+    /// The feeds of the outline, in its order.
+    pub feeds: Vec<TakenFeed>,
+}
+
+/// A feed of an outline as [`take`] found or made it.
+pub(crate) struct TakenFeed {
+    pub feed_id: i32,
+    /// Nobody had this feed before: it was made here.
+    pub created: bool,
+    /// The account did not read it before.
+    pub added: bool,
+}
+
+/// Takes the folders and feeds of an outline into an account's tree, inside
+/// the caller's transaction, which it locks the tree in. Folders are found by
+/// their name in their place or made; feeds the account reads already stay
+/// where they are. Nothing is fetched here: the next round does that.
+pub(crate) async fn take(
+    tx: &mut PgConnection,
+    account_id: i32,
+    outline: &Outline,
+) -> Result<Taken, AppError> {
+    tree::lock(&mut *tx, account_id).await?;
+    let mut taken = Taken {
+        folders: HashMap::new(),
+        folders_made: 0,
+        feeds: Vec::new(),
     };
 
     // A folder is the one of that name in that place, or a new one.
-    let mut ids: HashMap<Vec<String>, i32> = HashMap::new();
+    let ids = &mut taken.folders;
     let have = sqlx::query_scalar!(
         r#"SELECT count(*) AS "n!" FROM folders WHERE account_id = $1"#,
         account_id
@@ -761,11 +799,11 @@ async fn import(
                 let id = match existing {
                     Some(id) => id,
                     None => {
-                        if have + imported.folders as i64 >= tree::MAX_FOLDERS {
+                        if have + taken.folders_made as i64 >= tree::MAX_FOLDERS {
                             return Err(bad("too many folders"));
                         }
-                        imported.folders += 1;
-                        let position = tree::end_of(&mut tx, account_id, parent).await?;
+                        taken.folders_made += 1;
+                        let position = tree::end_of(&mut *tx, account_id, parent).await?;
                         sqlx::query_scalar!(
                             "INSERT INTO folders (account_id, parent_id, title, position)
                              VALUES ($1, $2, $3, $4) RETURNING id",
@@ -785,28 +823,30 @@ async fn import(
                 let Some((path, url, title)) = outline.feeds.get(at) else {
                     continue;
                 };
-                let feed = match known(&mut tx, url.as_str(), None).await? {
-                    Some(id) => id,
+                let (feed_id, created) = match known(&mut *tx, url.as_str(), None).await? {
+                    Some(id) => (id, false),
                     None => {
-                        sqlx::query_scalar!(
+                        let id = sqlx::query_scalar!(
                             "INSERT INTO feeds (feed_url, title) VALUES ($1, $2) RETURNING id",
                             url.as_str(),
                             title.as_deref().unwrap_or_default(),
                         )
                         .fetch_one(&mut *tx)
-                        .await?
+                        .await?;
+                        (id, true)
                     }
                 };
-                if add(&mut tx, account_id, feed, ids.get(path).copied(), false).await? {
-                    imported.feeds += 1;
-                } else {
-                    imported.known += 1;
-                }
+                let added =
+                    add(&mut *tx, account_id, feed_id, ids.get(path).copied(), false).await?;
+                taken.feeds.push(TakenFeed {
+                    feed_id,
+                    created,
+                    added,
+                });
             }
         }
     }
-    tx.commit().await?;
-    Ok(Json(imported))
+    Ok(taken)
 }
 
 #[cfg(test)]

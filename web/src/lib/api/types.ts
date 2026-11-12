@@ -1279,3 +1279,239 @@ export type ClientReport = {
 	 */
 	browser: string,
 };
+
+/**
+ * An account as a file, for another rueder. `GET /api/export` answers with
+ * it, and `POST /api/import` reads it.
+ */
+export type AccountExport = {
+	/**
+	 * Always "rueder-account".
+	 */
+	format: string,
+	/**
+	 * The layout of the file, 1. A server reads only the layouts it knows.
+	 */
+	version: number,
+	exported_at: string,
+	/**
+	 * The settings of the interface, as `GET /api/settings` gives them.
+	 */
+	settings: Record<string, unknown>,
+	/**
+	 * Folders and feeds from the top down, in their order: a folder before
+	 * what is in it.
+	 */
+	tree: Array<ExportedNode>,
+	labels: Array<ExportedLabel>,
+	/**
+	 * The filter rules in their order.
+	 */
+	rules: Array<ExportedRule>,
+};
+
+/**
+ * An article, as it can be found on another server.
+ */
+export type ArticleRef = {
+	/**
+	 * Its number in its feed on the server the file comes from; with the
+	 * feed's number its id in that server's API.
+	 */
+	seq: number,
+	/**
+	 * Its id in its feed, as the feed gives it.
+	 */
+	guid: string,
+	/**
+	 * Its page.
+	 */
+	url: string | null,
+	published_at: string,
+};
+
+/**
+ * Who a feed is fetched as.
+ */
+export type ExportedAgent = "rueder" | "browser";
+
+/**
+ * An article the reader did something with.
+ */
+export type ExportedArticle = {
+	seq: number,
+	guid: string,
+	url: string | null,
+	published_at: string,
+	title: string,
+	/**
+	 * Whether it is read, whatever the mark says.
+	 */
+	read: boolean,
+	starred: boolean,
+	/**
+	 * The names of its labels.
+	 */
+	labels: Array<string>,
+	/**
+	 * Its text, if it is starred or labelled.
+	 */
+	content: ExportedContent | null,
+};
+
+/**
+ * The text of an article and what goes with it, as it is shown.
+ */
+export type ExportedContent = {
+	author: string,
+	html: string,
+	tags: Array<string>,
+	enclosures: Array<ExportedEnclosure>,
+	image_url: string | null,
+	image_title: string | null,
+	thumbnail_url: string | null,
+};
+
+/**
+ * A file of an article, as the feed lists it.
+ */
+export type ExportedEnclosure = {
+	url: string,
+	type: string | null,
+	length: number | null,
+};
+
+/**
+ * A subscription, with what the reader did in it.
+ */
+export type ExportedFeed = {
+	/**
+	 * The feed's number on the server the file comes from.
+	 */
+	id: number,
+	/**
+	 * The address of the feed: how it is found again.
+	 */
+	url: string,
+	site_url: string | null,
+	/**
+	 * The feed's own title.
+	 */
+	title: string,
+	/**
+	 * The name the reader gave it.
+	 */
+	own_title: string | null,
+	/**
+	 * The folder it is in, by its path; empty at the top.
+	 */
+	folder: Array<string>,
+	agent: ExportedAgent,
+	/**
+	 * The number of the newest article on the server the file comes from.
+	 */
+	last_seq: number,
+	/**
+	 * The article the mark stands at: it and everything before it is read,
+	 * but for the articles below that say otherwise. None if the mark is at
+	 * the start.
+	 */
+	read_upto: ArticleRef | null,
+	/**
+	 * The articles that are read above the mark or unread below it, starred
+	 * or labelled.
+	 */
+	articles: Array<ExportedArticle>,
+};
+
+export type ExportedLabel = {
+	title: string,
+	color: string,
+};
+
+/**
+ * A folder or a feed of the tree.
+ */
+export type ExportedNode =
+	| {
+		"kind": "folder",
+		path: Array<string>,
+	}
+	| {
+		"kind": "feed",
+	} & ExportedFeed;
+
+export type ExportedRule = {
+	enabled: boolean,
+	scope: ExportedScope,
+	field: RuleField,
+	match: RuleMatch,
+	pattern: string,
+	action: RuleAction,
+};
+
+/**
+ * Where a rule holds: a folder by its path, a feed by its address.
+ */
+export type ExportedScope =
+	| {
+		"kind": "all",
+	}
+	| {
+		"kind": "folder",
+		path: Array<string>,
+	}
+	| {
+		"kind": "feed",
+		url: string,
+	};
+
+/**
+ * What an import did. `POST /api/import` answers with it.
+ */
+export type AccountImported = {
+	/**
+	 * Feeds the account reads now and did not before.
+	 */
+	feeds: number,
+	/**
+	 * Feeds of the file the account read already.
+	 */
+	known: number,
+	/**
+	 * Folders that were made.
+	 */
+	folders: number,
+	/**
+	 * Articles of the file that were found here.
+	 */
+	articles: number,
+	/**
+	 * Starred and labelled articles that were not here and came with their
+	 * text.
+	 */
+	carried: number,
+	/**
+	 * Articles that were not found and had no text with them: what was read
+	 * of them is lost.
+	 */
+	missing: number,
+	/**
+	 * Labels that were made.
+	 */
+	labels: number,
+	/**
+	 * Rules that were added.
+	 */
+	rules: number,
+	/**
+	 * What the file has that could not be taken: feeds without an address
+	 * that can be fetched, articles without an id, labels and rules that
+	 * break the rules, rules whose folder or feed is not there.
+	 */
+	skipped: number,
+	/**
+	 * Whether the settings came with it.
+	 */
+	settings: boolean,
+};

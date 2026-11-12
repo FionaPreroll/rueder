@@ -731,6 +731,39 @@ export class FakeServer {
 				'text/x-opml; charset=utf-8'
 			);
 		}
+		if (method === 'GET' && path === '/export') {
+			const tree = this.feeds.map((f) => ({ kind: 'feed', id: f.id, url: f.url, title: f.title }));
+			const file = { format: 'rueder-account', version: 1, settings: this.settings, tree };
+			return text(JSON.stringify(file), 'application/json');
+		}
+		if (method === 'POST' && path === '/import') {
+			if (type !== 'application/json')
+				return refused(415, 'the file of an account comes as application/json');
+			let file: { format?: string; settings?: unknown; tree?: { url?: string; title?: string }[] };
+			try {
+				file = JSON.parse(String(body));
+			} catch {
+				return refused(400, 'this is not a file of a rueder account');
+			}
+			if (file.format !== 'rueder-account')
+				return refused(400, 'this is not a file of a rueder account');
+			const moved = {
+				...{ feeds: 0, known: 0, folders: 0, articles: 0, carried: 0, missing: 0 },
+				...{ labels: 0, rules: 0, skipped: 0, settings: false }
+			};
+			for (const { url = '', title = '' } of file.tree ?? []) {
+				if (this.feeds.some((f) => f.url === url)) moved.known++;
+				else {
+					this.addFeed(title, null, { url, fetched: false });
+					moved.feeds++;
+				}
+			}
+			if (file.settings && Object.keys(file.settings).length > 0) {
+				this.settings = file.settings;
+				moved.settings = true;
+			}
+			return json(moved);
+		}
 		if (method === 'POST' && path === '/opml') {
 			if (type !== 'text/x-opml') return refused(415, 'an OPML file comes as text/x-opml or XML');
 			const file = String(body);

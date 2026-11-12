@@ -52,6 +52,13 @@ What is here:
   among them chooses whether to go on looking at articles one by one or to ask
   the index, in growing windows of the order of arrival. After half a second
   it says where to go on.
+- Moving an account (`src/transfer.rs`): `GET /api/export` gives out everything
+  a reader made of their account as one JSON file (settings, folders, feeds,
+  what was read, stars, labels, rules), and `POST /api/import` takes such a
+  file in, from this rueder or another one. Feeds are found again by their
+  address and articles by their id in the feed, as the numbers differ from one
+  server to the next. `rueder account export <name>` and
+  `rueder account import <name> <file>` do the same on the command line.
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
 - The API's types for the frontend (`src/typescript.rs`): every type that is

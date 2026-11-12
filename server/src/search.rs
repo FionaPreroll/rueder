@@ -1,7 +1,7 @@
 //! The search over the articles of the feeds an account subscribes to.
 //!
 //! An index over `article_content` holds the words of every article's current
-//! version: title, author, tags and text (`migrations/0004_search.sql`). A
+//! version: title, author, tags and text (`migrations/0005_search.sql`). A
 //! search asks for articles that have all the words, or words that begin with
 //! them, newest first, and pages through them with the same anchor as the lists.
 //!

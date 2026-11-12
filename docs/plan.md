@@ -1,6 +1,6 @@
 # rueder: Plan für den Rewrite in Rust
 
-Stand 2026-11-11. Dieses Dokument sagt, was gebaut wird, warum, in welcher Reihenfolge und was entschieden ist. Wie das neue System aufgebaut ist, steht in [architecture.md](architecture.md). Wie gearbeitet wird, was fertig ist und welche Arbeitspakete offen sind, steht in [implementation.md](implementation.md).
+Stand 2026-11-12. Dieses Dokument sagt, was gebaut wird, warum, in welcher Reihenfolge und was entschieden ist. Wie das neue System aufgebaut ist, steht in [architecture.md](architecture.md). Wie gearbeitet wird, was fertig ist und welche Arbeitspakete offen sind, steht in [implementation.md](implementation.md).
 
 - [Ziel und Anlass](#ziel-und-anlass)
 - [Anforderungen](#anforderungen)
@@ -39,6 +39,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A12 | Vorhandenes bleibt: OPML-Import und -Export, Feed-Suche auf Webseiten, Labels mit Farben | Zieht mit um. |
 | A13 | Den Betrieb überblicken | Eine Statusseite für Admins: Tempo und Engpässe, Fehler des Servers, Zustand von Abruf, Feed-Suche und Bild-Proxy. Admins werden auf der Kommandozeile bestimmt. Dazu, von Usern, die zustimmen, Fehler aus ihren Browsern. |
 | A14 | Als App nutzbar | rueder lässt sich als App installieren (PWA) und startet ohne Netz aus dem Cache; eine neue Version bietet sich zum Neuladen an. Dazu eine Android-App mit Capacitor, die nach Zustimmung nach Updates sucht. |
+| A15 | Umzug zwischen rueder-Instanzen (2026-11-12) | Ein Konto geht als eine Datei hinaus und in einen anderen rueder hinein: Einstellungen, Ordner und Feeds, Lesestand, Sterne, Labels und Filterregeln. Feeds werden an ihrer Adresse und Artikel an ihrer Kennung wiedererkannt, nicht an ihren Nummern, denn die sind auf jeder Instanz andere. |
 
 ## Ausgangslage
 
@@ -85,6 +86,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Apps (2026-11-12) | Nach dem Vorbild von vibe-wormholesurfing: zuerst eine PWA mit Service Worker und Hinweis auf neue Versionen, dann eine Android-App mit Capacitor, die nach Updates sucht, wenn der User zustimmt, und deren Update-Suche sich für Builds für den Play Store abschalten lässt. Je ein eigener Pull Request. Für die App am 2026-11-12 entschieden: Sie fragt nach der Adresse des eigenen rueder und lädt dann dessen Seite (Server und Härtung bleiben, wie sie sind); Updates kommen aus einem GitHub-Release, der Signaturschlüssel liegt nur in den Secrets der CI; die Update-Logik ist eigener Code statt der Bibliothek des Vorbilds, die nicht aus der npm-Registry kommt. | Pakete 3.10 und 3.11. |
 | Fuzzing | Ja, gezielt dort, wo eigener Code über Sicherheit entscheidet: Bereinigung, Feed-Verarbeitung und Bild-Proxy bekommen Fuzz-Targets, die Adressprüfung des HTTP-Clients einen Property-Test. Kein Fuzz-Target für jeden Parser. | Arbeitspaket in Schritt 2, läuft vor beiden Security-Reviews. |
 | Registrierung (entschieden am 2026-11-12) | User können sich selbst registrieren, wenn der Betreiber es einschaltet; ohne sein Zutun bleibt alles zu. Er begrenzt die Gesamtzahl der Konten und die Registrierungen je Tag. Bei geschlossener Registrierung laden User mit einem Kontingent ein, das die Kommandozeile setzt; ihre Einladungen halten dieselben Grenzen ein. Admins können immer Einladungslinks erzeugen, deren Konten gegen ein eigenes Kontingent zählen. Links gelten eine einstellbare Zeit und für ein oder mehrere Konten. Alle Grenzen stehen in der Datenbank und werden per Kommandozeile gesetzt. Das ersetzt „Konten legt nur der Betreiber an“. | Login-Seite, Einstellungen, Kommandozeile; neue Angriffsfläche für das Security-Review. |
+| Umzug eines Kontos (2026-11-12) | Import und Export der Daten eines Users mit Einstellungen und Lesestand, mit Feed- und Artikel-ID und -Adresse; weil die IDs auf einer anderen rueder-Instanz andere sind, erkennt der Import Feeds an der Adresse und Artikel an Kennung und Adresse. Der Plan dazu (ein Import, der nur hinzufügt; Texte von Artikeln mit Stern oder Label kommen mit; der Lesestand eines Feeds, den das Ziel noch nie abgerufen hat, wartet auf den ersten Abruf) ist freigegeben. | Paket 3.12, [Umzug eines Kontos](architecture.md#umzug-eines-kontos). |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
 

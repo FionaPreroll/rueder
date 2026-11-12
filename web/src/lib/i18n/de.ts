@@ -212,7 +212,8 @@ const de: Messages = {
 			rules: 'Filterregeln',
 			keys: 'Tastatur',
 			invites: 'Einladungen',
-			privacy: 'Datenschutz'
+			privacy: 'Datenschutz',
+			move: 'Umzug'
 		},
 		theme: 'Farbschema',
 		themes: { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' },
@@ -376,6 +377,37 @@ const de: Messages = {
 			`${n(count)} ${plural(count, { one: 'Eintrag wurde', other: 'Einträge wurden' })} ausgelassen, weil sie keine lesbaren Feeds sind.`,
 		later: 'Ihre Artikel kommen mit der nächsten Runde des Abrufs.',
 		export: 'Als OPML exportieren'
+	},
+
+	move: {
+		intro:
+			'Nimm dein Konto zu einem anderen rueder mit, oder hol es von dort hierher: Einstellungen, Ordner und Feeds, was du gelesen hast, Sterne, Labels und Filterregeln, alles in einer Datei.',
+		howItWorks:
+			'Ein Import fügt zu dem hinzu, was hier ist, und nimmt nichts weg. Feeds werden an ihrer Adresse erkannt, Artikel an ihrer Kennung im Feed, denn die Nummern sind von rueder zu rueder verschieden. Deine Einstellungen werden die aus der Datei.',
+		notInIt:
+			'Nicht in der Datei: dein Passwort, deine Sitzungen und die Zustimmung zu Fehlerberichten.',
+		export: 'Konto exportieren',
+		import: 'Kontodatei importieren',
+		importing: 'Importiere …',
+		feeds: (feeds, known) =>
+			`${n(feeds)} ${plural(feeds, { one: 'neuer Feed', other: 'neue Feeds' })}, ${n(known)} schon abonniert.`,
+		folders: (count) =>
+			`${n(count)} ${plural(count, { one: 'neuer Ordner', other: 'neue Ordner' })}.`,
+		articles: (found, carried) =>
+			`${n(found)} Artikel hier gefunden, ${n(carried)} mit Stern oder Label mitgebracht.`,
+		missing: (count) =>
+			`${n(count)} Artikel ${plural(count, { one: 'war', other: 'waren' })} hier nicht zu finden; was du davon gelesen hattest, geht verloren.`,
+		marks: (labels, rules) =>
+			`${n(labels)} ${plural(labels, { one: 'neues Label', other: 'neue Labels' })} und ${n(rules)} ${plural(rules, { one: 'neue Filterregel', other: 'neue Filterregeln' })}.`,
+		skipped: (count) =>
+			`${n(count)} ${plural(count, { one: 'Eintrag', other: 'Einträge' })} der Datei ließen sich nicht übernehmen.`,
+		settings: 'Deine Einstellungen sind jetzt die aus der Datei.',
+		later:
+			'Feeds, die dieser rueder noch nicht hatte, bringen ihre Artikel mit der nächsten Runde des Abrufs. Was du vorher gelesen hattest, bleibt gelesen.',
+		busy: (seconds) =>
+			seconds
+				? `Zu viele Importe. Versuch es in ${n(Math.ceil(seconds / 60))} ${plural(Math.ceil(seconds / 60), { one: 'Minute', other: 'Minuten' })} wieder.`
+				: 'Zu viele Importe. Versuch es später noch einmal.'
 	},
 
 	status: {

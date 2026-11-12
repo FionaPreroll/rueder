@@ -214,7 +214,8 @@ const en = {
 			rules: 'Filter rules',
 			keys: 'Keyboard',
 			invites: 'Invitations',
-			privacy: 'Privacy'
+			privacy: 'Privacy',
+			move: 'Move'
 		},
 		theme: 'Theme',
 		themes: { system: 'Like the system', light: 'Light', dark: 'Dark' },
@@ -379,6 +380,36 @@ const en = {
 			`${n(count)} ${plural(count, { one: 'entry was', other: 'entries were' })} left out, not being feeds that can be read.`,
 		later: 'Their articles arrive with the next round of fetching.',
 		export: 'Export as OPML'
+	},
+
+	move: {
+		intro:
+			'Take your account to another rueder, or bring it here from one: settings, folders and feeds, what you have read, stars, labels and filter rules, all in one file.',
+		howItWorks:
+			'An import adds to what is here and takes nothing away. Feeds are found by their address and articles by their id in the feed, as the numbers differ from one rueder to the next. Your settings become those of the file.',
+		notInIt: 'Not in the file: your password, your sessions and the consent to reports of errors.',
+		export: 'Export the account',
+		import: 'Import an account file',
+		importing: 'Importing …',
+		feeds: (feeds: number, known: number) =>
+			`${n(feeds)} new ${plural(feeds, { one: 'feed', other: 'feeds' })}, ${n(known)} subscribed already.`,
+		folders: (count: number) =>
+			`${n(count)} new ${plural(count, { one: 'folder', other: 'folders' })}.`,
+		articles: (found: number, carried: number) =>
+			`${articles(found)} found here, ${n(carried)} starred or labelled ${plural(carried, { one: 'one', other: 'ones' })} brought along.`,
+		missing: (count: number) =>
+			`${articles(count)} could not be found here; what you had read of them is lost.`,
+		marks: (labels: number, rules: number) =>
+			`${n(labels)} new ${plural(labels, { one: 'label', other: 'labels' })} and ${n(rules)} new filter ${plural(rules, { one: 'rule', other: 'rules' })}.`,
+		skipped: (count: number) =>
+			`${n(count)} ${plural(count, { one: 'entry', other: 'entries' })} of the file could not be taken.`,
+		settings: 'Your settings are those of the file now.',
+		later:
+			'Feeds this rueder did not have bring their articles with the next round of fetching. What you had read before stays read.',
+		busy: (seconds: number | null) =>
+			seconds
+				? `Too many imports. Try again in ${n(Math.ceil(seconds / 60))} ${plural(Math.ceil(seconds / 60), { one: 'minute', other: 'minutes' })}.`
+				: 'Too many imports. Try again later.'
 	},
 
 	status: {

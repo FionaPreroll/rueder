@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT guid_hash, seq FROM article_content WHERE feed_id = $1 AND guid_hash = ANY($2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "guid_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "guid_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "ByteaArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "38decbcff5237b6bdb97a608f2ec87bda379f157223d97575d9dd01c25674248"
+}
