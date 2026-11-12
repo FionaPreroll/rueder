@@ -6,6 +6,8 @@ rueder is a self-hosted feed reader for a handful of people, in the spirit of
 Google Reader. It is one Rust server next to PostgreSQL, with a Svelte web page
 inside it and an Android app around that page.
 
+![Temporary project logo: A red cartoon crab holding a newspaper titled 'rueder'](docs/images/logo.png)
+
 - **Reading:** a dense list, an expanded view, three panes (tree, list,
   article) and a magazine view; keyboard shortcuts, dark mode, a layout for
   phones, and settings for theme, accent color, density, font and sorting.
