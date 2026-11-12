@@ -177,6 +177,17 @@ export interface DemoSwitches {
 	revise(article: Article, note: string): unknown;
 }
 
+/** What the main pane showed before the page was loaded anew, to show it again. */
+export interface Resumed {
+	stream: Stream;
+	unreadOnly: boolean;
+	newestFirst: boolean;
+	cursor: string | null;
+	open: string | null;
+	/** Articles the list should hold again, such as the one that was at its top. */
+	wanted: string[];
+}
+
 export interface Reader {
 	readonly tree: TreeNode[];
 	readonly feeds: Record<string, Feed>;
@@ -239,6 +250,14 @@ export interface Reader {
 	title(stream?: Stream): string | null;
 
 	show(stream: Stream): void;
+	/**
+	 * Shows a stream as it was left, with its filters and its open article, before
+	 * `start`. The list is loaded far enough to hold the wanted articles and the
+	 * open one, as far as they are still in it.
+	 */
+	resume(view: Resumed): void;
+	/** Whether `resume` is still looking for the articles it wants. */
+	readonly resuming: boolean;
 	/** Brings in the articles that arrived since the list was drawn. */
 	showNew(): void;
 	refresh(): void;

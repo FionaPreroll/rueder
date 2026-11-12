@@ -4,13 +4,14 @@
 	// article, where there is room for both. The keyboard shortcuts are handled here, for the whole page.
 	// Where the feeds and articles come from is the business of the `reader` it is
 	// given.
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
-	import type { Article, ArticleVersion, Stream } from '#lib/model.ts';
+	import { sameStream, type Article, type ArticleVersion, type Stream } from '#lib/model.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { keyMap, type Action } from '#lib/keys.ts';
 	import { settings } from '#lib/settings.svelte.ts';
+	import { closeView, dropSpots, noteView, openView } from '#lib/view.ts';
 	import ArticleList from './ArticleList.svelte';
 	import ArticlePane from './ArticlePane.svelte';
 	import HomeOverview from './HomeOverview.svelte';
@@ -77,6 +78,29 @@
 	// Whatever changes in the settings is kept with the account, where there is one.
 	$effect(() => reader.saveSettings({ ...settings }));
 
+	// A page loaded anew starts where it was left: the same list with the same article
+	// open. The parts that scroll go back to their places once they are drawn.
+	// The page is made anew for another reader, so the first one is the one.
+	const kept = untrack(() => {
+		const view = openView(reader.account?.name ?? '');
+		if (view && view.stream.kind !== 'home') reader.resume({ ...view, wanted: view.list.ids });
+		return view;
+	});
+
+	$effect(() => {
+		const now = {
+			stream: reader.stream,
+			unreadOnly: reader.unreadOnly,
+			newestFirst: reader.newestFirst,
+			cursor: reader.cursor,
+			open: reader.open
+		};
+		// Until the resumed list is there, what was left is still what is kept.
+		if (reader.resuming) return;
+		if (kept && !sameStream(now.stream, kept.stream)) dropSpots();
+		noteView(now);
+	});
+
 	onMount(() => {
 		// On a phone the sidebar lies over the list, so it starts closed.
 		if (narrow()) sidebarOpen = false;
@@ -85,6 +109,7 @@
 		return () => {
 			stopLive();
 			clearInterval(clock);
+			closeView();
 		};
 	});
 

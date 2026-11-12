@@ -36,6 +36,7 @@ import {
 	type Notice,
 	type Reader,
 	type Refusal,
+	type Resumed,
 	type RulePreview,
 	type Subscribed
 } from '#lib/reader.ts';
@@ -100,6 +101,9 @@ const SEARCH_AFTER = 300;
 const SEARCH_ROUNDS = 10;
 /** Settings that change, as while a slider is dragged, are saved once they rest this long. */
 const SAVE_SETTINGS_AFTER = 500;
+
+/** A resumed list loads at most this many pages more to find its articles again. */
+const SEEK_PAGES = 10;
 
 /** Where the closed folders are kept in the browser. */
 const CLOSED_KEY = 'rueder.closed';
@@ -330,6 +334,9 @@ export class ServerReader implements Reader {
 	private pinned = new Set<string>();
 	/** A step with the keyboard that waits for the list to arrive. */
 	private waitingStep: { by: 1 | -1; open: boolean } | null = null;
+	/** What `resume` looks for once the list is there; null once found or given up. */
+	private seeking: Resumed | null = null;
+	resuming = $state(false);
 
 	/** The connection for live updates, and what keeps it going. */
 	private events: EventStream | null = null;
@@ -695,12 +702,21 @@ export class ServerReader implements Reader {
 				const waiting = this.waitingStep;
 				this.waitingStep = null;
 				if (!more && waiting) this.step(waiting.by, waiting.open);
+				if (!more && !again && this.seeking) void this.seek(this.seeking);
 			}
 		} catch (error) {
 			if (run !== this.listRun) return;
+			const resumed = !more && this.seeking !== null;
+			if (!more) this.stopSeeking();
+			const gone = error instanceof ApiError && error.status === 404;
+			// What was shown before the page was loaded anew may be gone since; then all items show.
+			if (resumed && gone) {
+				this.show({ kind: 'all' });
+				return;
+			}
 			this.failed(error, 'unreachable');
 			// The feed or the folder is not there any more; the tree knows what is.
-			if (error instanceof ApiError && error.status === 404) void this.loadTree();
+			if (gone) void this.loadTree();
 		} finally {
 			if (run === this.listRun) this.listLoading = false;
 		}
@@ -708,6 +724,7 @@ export class ServerReader implements Reader {
 
 	/** Loads what is shown anew, from its start, and the search with it. */
 	private reload() {
+		this.stopSeeking();
 		this.pinned.clear();
 		void this.loadList();
 		if (this.searchScope) void this.search();
@@ -793,6 +810,7 @@ export class ServerReader implements Reader {
 	}
 
 	show(stream: Stream) {
+		this.stopSeeking();
 		this.stream = stream;
 		this.waitingStep = null;
 		this.pending = 0;
@@ -803,6 +821,84 @@ export class ServerReader implements Reader {
 		this.listHasMore = false;
 		this.newest = null;
 		this.reload();
+	}
+
+	resume(view: Resumed) {
+		this.stream = view.stream;
+		this.onlyUnread = view.unreadOnly;
+		this.oldestFirst = !view.newestFirst;
+		this.seeking = view.stream.kind === 'home' ? null : view;
+		this.resuming = this.seeking !== null;
+	}
+
+	private stopSeeking() {
+		this.seeking = null;
+		this.resuming = false;
+	}
+
+	/**
+	 * Loads pages of a resumed list until it holds what it wants, or has gone past
+	 * where it would be. The open article may be read now, and so not in a list of
+	 * the unread: it is asked for on its own and put in its place.
+	 */
+	private async seek(view: Resumed) {
+		const ids = [view.open, view.cursor, ...view.wanted].filter((id) => id !== null);
+		const wanted = new Set(ids.map(Number).filter(Number.isSafeInteger));
+		const has = (id: number) => this.items.some((article) => article.id === String(id));
+		// The list goes by the order of arrival, so its last article says how far it got.
+		const passed = (id: number) => {
+			const last = Number(this.items.at(-1)?.id ?? NaN);
+			return this.oldestFirst ? last > id : last < id;
+		};
+		try {
+			for (let page = 0; page < SEEK_PAGES; page++) {
+				const missing = [...wanted].some((id) => !has(id) && !passed(id));
+				if (!missing || !this.listHasMore) break;
+				const grew = await this.more();
+				if (this.seeking !== view || !grew) break;
+			}
+			const open = Number(view.open);
+			if (this.seeking === view && view.open && !has(open) && Number.isSafeInteger(open)) {
+				await this.fetchOne(open);
+			}
+		} finally {
+			if (this.seeking === view) {
+				this.stopSeeking();
+				if (view.cursor && has(Number(view.cursor))) this.cursor = view.cursor;
+				const opened = this.items.find((article) => article.id === view.open);
+				if (opened) {
+					this.open = opened.id;
+					this.loadAhead(opened, 1);
+				}
+			}
+		}
+	}
+
+	/** Asks for one article of the list shown, whether read or not, and puts it in its place. */
+	private async fetchOne(id: number) {
+		const stream = this.stream;
+		if (stream.kind === 'home') return;
+		const view = this.seeking;
+		try {
+			const rows = await this.api.list(
+				stream,
+				this.oldestFirst ? { after: id - 1, limit: 1 } : { before: id + 1, limit: 1 }
+			);
+			const row = rows[0];
+			if (this.seeking !== view || row?.id !== id) return;
+			if (this.items.some((article) => article.id === String(id))) return;
+			const [article] = this.take(rows, stream.kind === 'hidden');
+			const after = (other: Article) =>
+				this.oldestFirst ? Number(other.id) > id : Number(other.id) < id;
+			const at = this.items.findIndex(after);
+			// Past the end of what is loaded it would come before articles not loaded yet.
+			if (at === -1 && this.listHasMore) return;
+			const items = [...this.items];
+			items.splice(at === -1 ? items.length : at, 0, article);
+			this.items = items;
+		} catch {
+			// Without it the list starts without an open article.
+		}
 	}
 
 	/** Brings in what arrived: the list is loaded anew from its start. */

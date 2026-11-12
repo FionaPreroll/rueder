@@ -1,6 +1,6 @@
 # Notes for Claude
 
-The README says what rueder is and where to find what. `docs/` holds the rewrite, in German: `docs/plan.md` what is built, what was decided and the four steps, `docs/architecture.md` how the new system is laid out, `docs/implementation.md` the state, the conventions, the commands and the work packages. `server/README.md` and `web/README.md` say how to run the two new parts, `app/README.md` how to build the Android app, `deploy/README.md` how to install them as a container. These rules hold in every session:
+The README says what rueder is and where to find what. `docs/` holds the rewrite, in German: `docs/plan.md` what is built, what was decided and the four steps, `docs/architecture.md` how the new system is laid out, `docs/implementation.md` the state, the conventions, the commands and the work packages. `server/README.md` and `web/README.md` say how to run the two new parts, `app/README.md` how to build the Android app, `deploy/README.md` how to install them as a container. `docs/user_data.md` is about the old rueder: it describes what the old frontend kept in the browser, as the model for taking it over (work package 4.6), not what the new one keeps. These rules hold in every session:
 
 ## Branches
 

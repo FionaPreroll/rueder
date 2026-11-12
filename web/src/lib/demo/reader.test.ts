@@ -175,6 +175,49 @@ describe('the list', () => {
 	});
 });
 
+describe('resuming after a reload', () => {
+	const view = {
+		unreadOnly: false,
+		newestFirst: true,
+		cursor: null,
+		open: null,
+		wanted: []
+	};
+
+	it('shows the list again, long enough for the article that was open', () => {
+		const { reader } = setup();
+		const all = { kind: 'all' } as const;
+		reader.show(all);
+		const deep = reader.list[90];
+		reader.resume({ ...view, stream: all, open: deep.id, cursor: deep.id, newestFirst: true });
+		expect(reader.resuming).toBe(false);
+		expect(reader.visible.length).toBe(120);
+		expect(reader.open).toBe(deep.id);
+		expect(reader.current?.id).toBe(deep.id);
+	});
+
+	it('keeps its filters, and forgets an article that is not there', () => {
+		const { reader } = setup();
+		reader.resume({
+			...view,
+			stream: { kind: 'feed', id: 'feed-tagesbote' },
+			unreadOnly: true,
+			newestFirst: false,
+			open: 'feed-tagesbote-999'
+		});
+		expect(reader.stream).toEqual({ kind: 'feed', id: 'feed-tagesbote' });
+		expect(reader.unreadOnly).toBe(true);
+		expect(reader.newestFirst).toBe(false);
+		expect(reader.open).toBeNull();
+	});
+
+	it('starts on the start page where the feed is gone', () => {
+		const { reader } = setup();
+		reader.resume({ ...view, stream: { kind: 'folder', id: 'folder-made-here' } });
+		expect(reader.stream).toEqual({ kind: 'home' });
+	});
+});
+
 describe('the cursor', () => {
 	it('steps through the list and opens what it lands on', () => {
 		const { reader } = setup();

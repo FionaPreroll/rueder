@@ -5,7 +5,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TreeNode } from '#lib/model.ts';
-import { MAX_ACCOUNT_FILE, MAX_OPML } from '#lib/reader.ts';
+import { MAX_ACCOUNT_FILE, MAX_OPML, type Resumed } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { TAB } from './client.ts';
 import { PAGE, ServerReader, toTree } from './reader.svelte.ts';
@@ -501,6 +501,99 @@ describe('the lists', () => {
 		await settle();
 		expect(reader.notice).toBeNull();
 		expect(reader.visible.length).toBe(6);
+	});
+});
+
+describe('resuming after a reload', () => {
+	function resumed(view: Partial<Resumed> & Pick<Resumed, 'stream'>) {
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		reader.resume({
+			unreadOnly: false,
+			newestFirst: true,
+			cursor: null,
+			open: null,
+			wanted: [],
+			...view
+		});
+		return reader;
+	}
+
+	it('shows the list again with the article open, loading pages until it is there', async () => {
+		server.addArticles(lone, PAGE + 20);
+		const deep = server.article(lone, 3)!;
+		const reader = resumed({
+			stream: { kind: 'feed', id: `feed-${lone}` },
+			open: String(deep.id),
+			cursor: String(deep.id)
+		});
+		expect(reader.resuming).toBe(true);
+		reader.start();
+		await settle();
+		expect(reader.resuming).toBe(false);
+		expect(reader.visible.length).toBe(PAGE + 21);
+		expect(reader.open).toBe(String(deep.id));
+		expect(reader.cursor).toBe(String(deep.id));
+		expect(reader.current?.html).toContain('Text 3 of feed');
+		// The start page was never asked for.
+		expect(server.requests.some((r) => r.path.includes('unread=true&limit=60'))).toBe(false);
+	});
+
+	it('stops looking once the list is past what it wants, or after a few pages', async () => {
+		server.addArticles(lone, PAGE * 20);
+		const reader = resumed({ stream: { kind: 'feed', id: `feed-${lone}` }, wanted: ['1'] });
+		reader.start();
+		await settle();
+		expect(reader.resuming).toBe(false);
+		expect(reader.visible.length).toBe(PAGE * 11);
+		expect(reader.open).toBeNull();
+	});
+
+	it('puts the open article back into a list of the unread, where it was read', async () => {
+		server.addArticles(tech, 3);
+		const open = server.article(tech, 4)!;
+		open.read = true;
+		server.article(tech, 5)!.read = true;
+		const reader = resumed({
+			stream: { kind: 'feed', id: `feed-${tech}` },
+			unreadOnly: true,
+			newestFirst: false,
+			open: String(open.id)
+		});
+		reader.start();
+		await settle();
+		expect(reader.unreadOnly).toBe(true);
+		expect(reader.newestFirst).toBe(false);
+		// The oldest first: 1, 2, 3, the open 4, then 6; 5 was read and stays out.
+		expect(reader.visible.map((article) => article.seq)).toEqual([1, 2, 3, 4, 6]);
+		expect(reader.open).toBe(String(open.id));
+		expect(reader.isRead(reader.visible[3])).toBe(true);
+	});
+
+	it('shows all items when the feed is gone, without saying the server failed', async () => {
+		const reader = resumed({ stream: { kind: 'feed', id: 'feed-999' }, open: '5' });
+		reader.start();
+		await settle();
+		expect(reader.stream).toEqual({ kind: 'all' });
+		expect(reader.resuming).toBe(false);
+		expect(reader.open).toBeNull();
+		expect(reader.notice).toBeNull();
+		expect(reader.visible.length).toBe(6);
+	});
+
+	it('gives up when the reader goes elsewhere first', async () => {
+		const release = server.hold(new RegExp(`/feeds/${tech}/articles`));
+		const article = server.article(tech, 1)!;
+		const reader = resumed({
+			stream: { kind: 'feed', id: `feed-${tech}` },
+			open: String(article.id)
+		});
+		reader.start();
+		reader.show({ kind: 'feed', id: `feed-${blog}` });
+		expect(reader.resuming).toBe(false);
+		release();
+		await settle();
+		expect(reader.open).toBeNull();
+		expect(titles(reader)).toEqual([`Article 2 of feed ${blog}`, `Article 1 of feed ${blog}`]);
 	});
 });
 
