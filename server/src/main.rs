@@ -20,7 +20,7 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    reclean, reports, router, sessions, transfer,
+    reclean, registration, reports, router, sessions, transfer,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -68,6 +68,10 @@ enum Command {
     /// make accounts in the browser.
     #[command(subcommand)]
     Admin(AdminCommand),
+    /// Say whether readers can make accounts for themselves or invite others,
+    /// and how many. Nothing is open until it is said here.
+    #[command(subcommand)]
+    Registration(RegistrationCommand),
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
     /// old rueder. Adds what is not there yet, so it can run more than once.
     ImportLegacy {
@@ -102,6 +106,77 @@ enum AccountCommand {
     /// Take a file of `account export`, from this rueder or another one, into
     /// an account. Adds to what the account has and replaces its settings.
     Import { name: String, file: PathBuf },
+    /// Say how many accounts this one may invite in all: a number, or
+    /// `default` for what `rueder registration set --invites` gives everybody.
+    Invites { name: String, quota: Quota },
+}
+
+/// A limit on the command line: a number, or `none` for no limit.
+#[derive(Clone, Copy)]
+struct Limit(Option<i32>);
+
+impl std::str::FromStr for Limit {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "none" => Ok(Self(None)),
+            _ => match text.parse::<i32>() {
+                Ok(number) if number >= 0 => Ok(Self(Some(number))),
+                _ => Err("a number from 0 on, or `none`".into()),
+            },
+        }
+    }
+}
+
+/// An account's quota of invitations: a number, or `default`.
+#[derive(Clone, Copy)]
+struct Quota(Option<i32>);
+
+impl std::str::FromStr for Quota {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "default" => Ok(Self(None)),
+            _ => match text.parse::<i32>() {
+                Ok(number) if number >= 0 => Ok(Self(Some(number))),
+                _ => Err("a number from 0 on, or `default`".into()),
+            },
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum RegistrationCommand {
+    /// Show what is set and how many accounts there are.
+    Show,
+    /// Change what is set. What is not named stays as it is, and a change
+    /// counts at once, without a restart.
+    Set {
+        /// Whether anybody can make an account without an invitation.
+        #[arg(long)]
+        open: Option<bool>,
+        /// The most accounts there can be, not counting those admins invited;
+        /// `none` for no limit. Registration and readers' invitations stop there.
+        #[arg(long, value_name = "N|none")]
+        max_accounts: Option<Limit>,
+        /// The most accounts registration and readers' invitations make in 24
+        /// hours; `none` for no limit.
+        #[arg(long, value_name = "N|none")]
+        per_day: Option<Limit>,
+        /// How many accounts every reader may invite in all. `rueder account
+        /// invites` gives one account a number of its own.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(i32).range(0..))]
+        invites: Option<i32>,
+        /// How many days an invitation link is good for.
+        #[arg(long, value_name = "DAYS", value_parser = clap::value_parser!(i32).range(1..=3650))]
+        invite_days: Option<i32>,
+        /// The most accounts admins' invitations make in all; `none` for no
+        /// limit. They count here and nowhere else.
+        #[arg(long, value_name = "N|none")]
+        admin_invite_accounts: Option<Limit>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -189,6 +264,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Account(command) => account(&db, command).await,
         Command::Admin(command) => admin(&db, command).await,
+        Command::Registration(command) => registering(&db, command).await,
         Command::Reclean { feed } => {
             let report = reclean::run(&db, &Rules::from_env()?, feed).await?;
             println!("{report}");
@@ -266,6 +342,15 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
             };
             println!("{imported}");
         }
+        AccountCommand::Invites { name, quota } => {
+            if !registration::set_quota(db, &name, quota.0).await? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            match quota.0 {
+                Some(quota) => println!("Account {} may invite {quota} in all.", name.trim()),
+                None => println!("Account {} may invite as many as everybody.", name.trim()),
+            }
+        }
         AccountCommand::List => {
             for account in accounts::list(db).await? {
                 println!(
@@ -281,6 +366,58 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Result<()> {
+    let mut settings = registration::settings(db).await?;
+    if let RegistrationCommand::Set {
+        open,
+        max_accounts,
+        per_day,
+        invites,
+        invite_days,
+        admin_invite_accounts,
+    } = command
+    {
+        settings.open = open.unwrap_or(settings.open);
+        if let Some(Limit(limit)) = max_accounts {
+            settings.max_accounts = limit;
+        }
+        if let Some(Limit(limit)) = per_day {
+            settings.per_day = limit;
+        }
+        settings.invites_per_account = invites.unwrap_or(settings.invites_per_account);
+        settings.invite_days = invite_days.unwrap_or(settings.invite_days);
+        if let Some(Limit(limit)) = admin_invite_accounts {
+            settings.admin_invite_accounts = limit;
+        }
+        registration::set_settings(db, &settings).await?;
+    }
+    let counts = registration::counts(&mut *db.acquire().await?).await?;
+    let limit = |limit: Option<i32>| limit.map_or("no limit".to_owned(), |n| n.to_string());
+    let open = if settings.open { "open" } else { "closed" };
+    println!("Registration without an invitation: {open}");
+    println!(
+        "Accounts, without those admins invited: {} of {}",
+        counts.general,
+        limit(settings.max_accounts)
+    );
+    println!(
+        "New accounts in the last 24 hours, by registration and readers' invitations: {} of {}",
+        counts.today,
+        limit(settings.per_day)
+    );
+    println!(
+        "Accounts a reader may invite in all: {}",
+        settings.invites_per_account
+    );
+    println!("An invitation is good for: {} days", settings.invite_days);
+    println!(
+        "Accounts admins invited: {} of {}",
+        counts.by_admins,
+        limit(settings.admin_invite_accounts)
+    );
     Ok(())
 }
 

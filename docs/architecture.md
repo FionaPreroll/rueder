@@ -22,6 +22,7 @@ Vom Server stehen seit Schritt 1 das Schema, der Artikelspeicher, der Lesestand 
 - [Frontend](#frontend)
 - [Betrieb](#betrieb)
 - [Status für Admins](#status-für-admins)
+- [Android-App](#android-app)
 
 ## Überblick
 
@@ -79,7 +80,7 @@ Die Tabellen im Überblick. Die genauen Spalten stehen in der ersten Migration, 
 
 | Bereich | Tabellen | Idee |
 |---|---|---|
-| Konten | `accounts`, `account_identities`, `sessions` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON. `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit. |
+| Konten | `accounts`, `account_identities`, `sessions`, `registration`, `invites` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON. `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit. |
 | Feeds | `feeds` | Ein Feed gehört allen seinen Abonnenten gemeinsam. Er kennt seine höchste Artikelnummer (`last_seq`), den Abrufstand (nächster Abruf, Intervall, ETag, Last-Modified, letzter Erfolg, letzter Fehler) und den User-Agent, mit dem er abgerufen wird. |
 | Baum | `folders`, `subscriptions` | Ordner mit Elternordner und Position. Ein Abo verbindet Konto und Feed, liegt in einem Ordner oder auf oberster Ebene, hat eine Position und trägt die Lesemarke. |
 | Artikel | `articles`, `article_content`, `article_versions` | Heiß, warm und kalt getrennt, siehe [Artikelspeicher und Versionen](#artikelspeicher-und-versionen). |
@@ -337,7 +338,7 @@ Abweichungen vom Entwurf:
 
 Gebaut in Paket 2.5 (`server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs`).
 
-- **Lokale Konten** mit Passwort-Hash nach Argon2id (19 MiB, 2 Durchläufe, ein Salt je Hash). Es gibt keine offene Registrierung: Konten legt die Kommandozeile an (`rueder account add`, `password`, `link`, `list`). Ein Name ist höchstens 64 Zeichen lang und unterscheidet keine Groß- und Kleinschreibung, ein Passwort hat mindestens 8 Zeichen und höchstens 1024 Byte. Höchstens vier Hashes werden gleichzeitig gerechnet, damit Login-Versuche den Speicher nicht füllen.
+- **Lokale Konten** mit Passwort-Hash nach Argon2id (19 MiB, 2 Durchläufe, ein Salt je Hash). Konten legt die Kommandozeile an (`rueder account add`, `password`, `link`, `list`) oder ein Admin; selbst anlegen kann sich jemand nur ein Konto, wenn der Betreiber es erlaubt, siehe [Registrierung und Einladungen](#registrierung-und-einladungen). Ein Name ist höchstens 64 Zeichen lang und unterscheidet keine Groß- und Kleinschreibung, ein Passwort hat mindestens 8 Zeichen und höchstens 1024 Byte. Höchstens vier Hashes werden gleichzeitig gerechnet, damit Login-Versuche den Speicher nicht füllen.
 - **Sitzung** als zufälliges Token (32 Byte) im Cookie `__Host-rueder` mit `HttpOnly`, `Secure`, `SameSite=Lax` und `Path=/`. In der Datenbank liegt nur der SHA-256 des Tokens. Eine Sitzung endet nach 30 Tagen ohne Nutzung, beim Abmelden und sobald das Konto ein neues Passwort bekommt; ein neuer Login ersetzt die Sitzung, die der Browser noch hatte. Dass eine Sitzung genutzt wurde, schreibt der Server höchstens einmal je Stunde auf. Abgelaufene Sitzungen räumt er stündlich weg.
 - **Wer eingeloggt ist**, sagt der Extraktor `Session` mit der Nummer des Kontos. Jeder Handler, der ihn nimmt, antwortet ohne Sitzung mit 401; an seine Kontonummer binden die Endpunkte aus Paket 2.6 ihre Abfragen. Der Bild-Proxy unter `/img/` nimmt ihn schon.
 - **Login** über `POST /api/login` mit Name und Passwort als JSON, `POST /api/logout`, `GET /api/me`. `GET /api/login/ways` sagt der Login-Seite ohne Sitzung, welche Wege es außer Name und Passwort gibt (`{"oidc": true}`), und sonst nichts. Ein falscher Name, ein falsches Passwort und ein Konto ohne Passwort bekommen dieselbe Antwort nach derselben Arbeit: Für einen Namen, den es nicht gibt, wird gegen einen Hash geprüft, dessen Passwort niemand kennt.
@@ -359,9 +360,30 @@ Abweichungen vom Entwurf, und was offen ist:
 
 Wie die bestehenden Konten umziehen, steht bei den [Detailfragen](plan.md#detailfragen): Der Import führt sie mit den Konten zusammen, die es im neuen rueder schon gibt, und legt nur die übrigen ohne Passwort an.
 
+### Registrierung und Einladungen
+
+Von Fiona am 2026-11-12 entschieden, gebaut in `server/src/registration.rs` und der Migration `0003_registration.sql`. Bis der Betreiber etwas öffnet, ist alles zu: keine Registrierung, kein Kontingent für Einladungen.
+
+- **Zwei Wege zu einem Konto.** Offene Registrierung, wenn der Betreiber sie einschaltet, und Einladungslinks. Beide führen über `POST /api/register` (Name, Passwort, optional das Token der Einladung); die Antwort setzt wie ein Login den Sitzungs-Cookie.
+- **Zwei Kontingente, die sich nicht berühren.** Das allgemeine: Konten vom Betreiber, aus offener Registrierung und aus Einladungen von Usern zählen gegen `max_accounts`, die beiden letzten außerdem gegen `per_day` (neue Konten in 24 Stunden). Das der Admins: Konten aus Einladungen von Admins zählen nur gegen `admin_invite_accounts` und belegen keinen Platz im allgemeinen. Woher ein Konto stammt, steht in `accounts.origin`.
+- **Einladungen von Usern.** Jeder User darf insgesamt so viele Konten einladen, wie sein Kontingent sagt: der Wert für alle (`invites_per_account`) oder ein eigener (`accounts.invite_quota`). Gezählt wird, was seine Links gebracht haben und noch bringen können; ein abgelaufener oder zurückgezogener Link gibt die Plätze zurück, die er nicht gebraucht hat. Die Grenzen für Gesamtzahl und Tag gelten für diese Einladungen wie für die offene Registrierung.
+- **Einladungen von Admins** gehen immer, ohne Kontingent je Admin und unabhängig davon, ob die Registrierung offen ist. Ein Link bleibt der eines Admins, auch wenn sein Konto später keiner mehr ist.
+- **Ein Link** ist `/?invite=<token>`. Das Token sind 32 zufällige Byte wie bei einer Sitzung; gespeichert ist nur sein SHA-256, gezeigt wird der Link genau einmal, beim Erzeugen. Er gilt für 1 bis 1000 Konten (Standard 1) und so viele Tage, wie eingestellt ist (Standard 7); wer ihn erzeugt hat, kann ihn zurückziehen.
+- **Einstellungen in der Datenbank**, gesetzt mit `rueder registration set` (`--open`, `--max-accounts`, `--per-day`, `--invites`, `--invite-days`, `--admin-invite-accounts`) und für ein einzelnes Konto mit `rueder account invites <name> <n|default>`. Eine Änderung gilt sofort, ohne Neustart; `rueder registration show` zeigt Einstellungen und Stand.
+- **Gleichzeitige Registrierungen** laufen nacheinander: Zählen und Anlegen geschehen in einer Transaktion, die die Zeile der Einstellungen sperrt. Es entstehen nie mehr Konten, als Platz ist, und ein Link bringt nie mehr als seine Zahl.
+- **Ablehnungen** sind 403 mit einem Wort, das die Oberfläche in ihre Sprache übersetzt: `closed`, `invite`, `full`, `today`. Ob Platz ist, wird geprüft, bevor der Name angesehen und das Passwort gehasht wird: Wer nicht hineinkann, erfährt nicht, welche Namen vergeben sind, und lässt den Server keine Hashes rechnen. Ein vergebener Name ist 409.
+- **Die Login-Seite** fragt `GET /api/login/ways` (`registration` ist wahr, wenn die Registrierung offen und Platz ist) und, wenn die Adresse eine Einladung trägt, `GET /api/register?invite=…`, ob der Link gilt. Die Einladungen eines Users stehen in den Einstellungen im Reiter „Einladungen“.
+
+Was offen ist:
+
+- Es gibt keine Bestätigung über E-Mail und kein CAPTCHA; rueder kennt keine E-Mail-Adressen. Gegen massenhaftes Registrieren stehen die Grenze je Tag, die Gesamtgrenze und das Rate-Limit je Adresse. Wer die Registrierung öffnet, sollte `--per-day` setzen.
+- Offene Registrierung verrät, welche Namen vergeben sind (409), solange Platz ist. Das liegt in der Sache.
+- Ein Admin sieht nicht, wer wen eingeladen hat; es steht in der Datenbank (`accounts.invite_id`), aber in keiner Ansicht.
+- Das Security-Review (Paket 2.12) kennt diese Fläche noch nicht.
+
 ## Umzug eines Kontos
 
-Gebaut in Paket 3.12 (`server/src/transfer.rs`, Migration `0003_moving.sql`). Ein Konto zieht als eine JSON-Datei von einem rueder zum anderen: `GET /api/export` gibt sie aus, `POST /api/import` nimmt sie in das eingeloggte Konto, auf demselben rueder oder einem anderen. Für Admins tun `rueder account export <name>` und `rueder account import <name> <datei>` dasselbe auf der Kommandozeile, etwa um mehrere Konten auf einmal umzuziehen.
+Gebaut in Paket 3.12 (`server/src/transfer.rs`, Migration `0004_moving.sql`). Ein Konto zieht als eine JSON-Datei von einem rueder zum anderen: `GET /api/export` gibt sie aus, `POST /api/import` nimmt sie in das eingeloggte Konto, auf demselben rueder oder einem anderen. Für Admins tun `rueder account export <name>` und `rueder account import <name> <datei>` dasselbe auf der Kommandozeile, etwa um mehrere Konten auf einmal umzuziehen.
 
 **Was in der Datei steht.** Die Einstellungen, der Baum von oben nach unten in seiner Reihenfolge (Ordner mit ihrem Pfad aus Namen, Abos mit Feed-Adresse, Website, Titel des Feeds, eigenem Namen, Ordnerpfad und User-Agent), die Labels mit Farbe, die Filterregeln mit ihrem Bereich als Ordnerpfad oder Feed-Adresse, und je Abo der Lesestand: der Artikel, an dem die Lesemarke steht, und die Artikel, die davon abweichen (gelesen über der Marke, ungelesen behalten darunter), die einen Stern oder Labels haben. Jeder Artikel steht mit Nummer im Feed, Kennung (GUID), Adresse seiner Seite, Zeit und Titel darin, jeder Feed mit seiner Nummer. Artikel mit Stern oder Label bringen dazu ihren Text mit, ihre Anhänge und ihr Aufmacherbild, damit sie nicht verloren gehen, wo der andere rueder sie nie hatte. Kopf: `format` (`rueder-account`), `version` (1) und `exported_at`.
 
@@ -525,6 +547,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 |---|---|
 | Zustand | `GET /api/health`; für Admins `GET /api/status`, siehe [Status für Admins](#status-für-admins) |
 | Sitzung | `POST /api/login`, `GET /api/login/ways`, `POST /api/logout`, `GET /api/me`, `GET /api/oidc/start`, `GET /api/oidc/callback` |
+| Registrierung | `GET` und `POST /api/register` (ohne Sitzung), `GET` und `POST /api/invites`, `DELETE /api/invites/{id}` |
 | Konto | `GET /api/sessions`, `DELETE /api/sessions`, `DELETE /api/sessions/{id}`, `PUT /api/password`; für Admins `GET` und `POST /api/accounts` |
 | Baum | `GET /api/tree` (Ordner, Abos, Feeds mit `last_seq`, Lesemarken, Ungelesen-Zahlen und dem Fehler des letzten Abrufs, dazu die Zahl der ausgeblendeten Artikel), `POST /api/tree/move`, `POST /api/folders`, `PATCH` und `DELETE /api/folders/{id}` |
 | Abos | `POST /api/feeds/find`, `POST /api/feeds`, `PATCH` und `DELETE /api/feeds/{id}`, `PUT /api/feeds/{id}/agent`, `GET` und `POST /api/opml` |
@@ -694,3 +717,17 @@ Gebaut in Paket 3.9 (`server/src/reports.rs`, `server/migrations/0002_client_rep
 - **Speicher.** Tabelle `client_reports` mit einem Fingerabdruck (SHA-256 über Art, Meldung und erste eigene Stack-Zeile), Zähler, erstem und letztem Auftreten, Version und Browser, je Konto in einer Zeile gezählt. Ein Bericht ist an das Konto gebunden, damit Ausschalten und das Löschen eines Kontos ihn mitnehmen. Stündlich geht, was vor mehr als 30 Tagen zuletzt auftrat.
 - **Anzeige.** Der Abschnitt „Fehler in Browsern“ der Statusseite fasst je Fingerabdruck zusammen: Art, Meldung, Stack, wie oft, bei wie vielen Konten, Versionen, Browser, zuletzt; die 20 zuletzt aufgetretenen. Namen von Konten zeigt er nicht. Dazu, wie viele Konten Berichte schicken, und ein Hinweis, wenn am letzten Tag Fehler gemeldet wurden.
 - **Verworfen:** ein selbst gehostetes Sentry oder GlitchTip mit deren SDK. Das wäre ein weiterer Dienst neben PostgreSQL, das SDK ist groß, und die Content-Security-Policy müsste dem Browser einen zweiten Host erlauben. Ebenso `navigator.sendBeacon`: `fetch` mit `keepalive` leistet dasselbe und geht durch denselben Client wie jede Anfrage.
+
+## Android-App
+
+Gebaut in Paket 3.11 (`app/`, beschrieben in [app/README.md](../app/README.md)). Capacitor um eine kleine Startseite, die nach der Adresse des eigenen rueder fragt und ihn dann öffnet. Die Seite von rueder kommt vom Server wie im Browser: gleicher Ursprung, das Sitzungs-Cookie, die Content-Security-Policy und die Prüfung der Herkunft bleiben, wie sie sind, und auch die PWA mit ihrem Hinweis auf neue Versionen läuft in der App.
+
+- **Startseite** (`app/www/`): Adresse (nur https, nur der Ursprung, weil rueder ganz oben auf seinem Host läuft) und die Zustimmung zur Update-Suche, aus als Standard. Bekannte Server öffnet sie sofort. Zurück kommt man über eine Verknüpfung am App-Icon („Server und Updates“) und über das Kontomenü der Seite, das in der App einen Eintrag dafür hat (erkannt an `rueder-android` im User-Agent, `web/src/lib/app.ts`). Antwortet der Server nicht, sagt es die Startseite.
+- **Wohin die WebView darf** (`ServerClient`): Seiten des eingestellten Servers bleiben in der App, die Startseite auch, alles andere öffnet der Browser. Login über OpenID Connect geht deshalb in der App nicht, nur mit Passwort.
+- **Das Plugin der App** (`RuederPlugin`) antwortet nur der Startseite. Die Seite des Servers läuft in derselben WebView, und Capacitor stellt seine Brücke jeder Seite darin bereit; ein Skript dort darf trotzdem weder den Server ändern noch die Update-Suche. Die Adresse prüft auch die native Seite (`Address.java`).
+- **Updates** nur im Build `github`: Mit Zustimmung liest die App bei jedem Start `version.json` aus dem Release `android-latest` (höchstens 4 KB, mit Build-Nummer, Commit und Größe), vergleicht die Build-Nummer mit ihrer eigenen und bietet einen neueren Build in einem Dialog an, mit Größe und einem Hinweis bei Netzen, die Geld kosten können. Den Download macht Androids Download-Manager, die Größe wird geprüft, die Installation übernimmt Androids Installer, der fragt und nur ein APK mit demselben Schlüssel annimmt. Sonst geht nichts nach außen.
+- **Zwei Builds**: `github` mit Update-Suche und der Berechtigung, Apps zu installieren; `play` für den Play Store ohne beides (`src/play/`), weil der Store Updates selbst bringt.
+- **CI** (`app` und `app-release` in `ci.yml`): Tests der Startseite und der nativen Teile, beide Builds. Auf `main` ersetzt `app-release` das Release `android-latest` durch das signierte APK und `version.json`, wenn die Prüfungen bestanden sind und der Schlüssel in den Secrets liegt; sonst baut die CI ein Debug-APK und veröffentlicht nichts. Der Schlüssel liegt nie im Repository (anders als im Vorbild, dessen öffentlicher Schlüssel nur beweist, dass ein APK aus einem Build des Projekts stammt).
+
+Abweichungen vom Vorbild: eigene Update-Logik statt `@fionapreroll/app-updates`, das nicht aus der npm-Registry kommt; kein Fortsetzen eines abgebrochenen Downloads über einen Neustart der App hinaus, das übernimmt der Download-Manager, soweit er es kann. Die Texte der App stehen nicht in `web/src/lib/i18n/`, weil sie nicht Teil der Seite sind: die der Startseite in `app/www/texts.js`, die nativen in `res/values*/strings.xml`, jeweils Englisch und Deutsch.
+

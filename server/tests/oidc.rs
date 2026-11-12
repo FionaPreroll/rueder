@@ -702,12 +702,12 @@ async fn the_login_page_learns_whether_there_is_a_provider(db: PgPool) {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers.get(header::SET_COOKIE), None);
     let ways: Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(ways, json!({ "oidc": true }));
+    assert_eq!(ways, json!({ "oidc": true, "registration": false }));
 
     let (status, _, body) = send(&AppState::new(db), "/api/login/ways", &[]).await;
     assert_eq!(status, StatusCode::OK);
     let ways: Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(ways, json!({ "oidc": false }));
+    assert_eq!(ways, json!({ "oidc": false, "registration": false }));
 }
 
 #[sqlx::test]

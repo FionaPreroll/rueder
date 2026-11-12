@@ -1,0 +1,21 @@
+{
+	"name": "rueder-app",
+	"private": true,
+	"version": "0.1.0",
+	"description": "rueder as an Android app: Capacitor around a start page that asks for the server.",
+	"type": "module",
+	"packageManager": "pnpm@12.8.1",
+	"scripts": {
+		"test": "node --test test/*.test.js",
+		"lint": "prettier --check .",
+		"sync": "cap sync android"
+	},
+	"dependencies": {
+		"@capacitor/android": "^8.6.0",
+		"@capacitor/core": "^8.6.0"
+	},
+	"devDependencies": {
+		"@capacitor/cli": "^8.6.0",
+		"prettier": "^3.8.3"
+	}
+}

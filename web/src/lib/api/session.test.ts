@@ -13,6 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	history.replaceState(null, '', '/');
 	vi.unstubAllGlobals();
 });
 
@@ -32,7 +33,7 @@ describe('Session', () => {
 		await session.check();
 		expect(session.state).toBe('out');
 		expect(session.reader).toBeNull();
-		await vi.waitFor(() => expect(session.ways).toEqual({ oidc: true }));
+		await vi.waitFor(() => expect(session.ways).toEqual({ oidc: true, registration: false }));
 	});
 
 	it('takes a server that does not say for one without other ways', async () => {
@@ -41,7 +42,7 @@ describe('Session', () => {
 		const session = new Session();
 		await session.check();
 		await vi.waitFor(() => expect(server.requests.at(-1)?.path).toBe('/login/ways'));
-		expect(session.ways).toEqual({ oidc: false });
+		expect(session.ways).toEqual({ oidc: false, registration: false });
 	});
 
 	it('says when the server does not answer, and can ask again', async () => {
@@ -114,6 +115,96 @@ describe('Session', () => {
 		reader.refresh();
 		await vi.waitFor(() => expect(session.state).toBe('out'));
 		expect(session.reader).toBeNull();
+	});
+});
+
+describe('registering', () => {
+	const invitation = (uses = 1) => {
+		const invite = {
+			id: 1,
+			token: 'a-token',
+			max_uses: uses,
+			uses: 0,
+			created_at: new Date().toISOString(),
+			expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+			revoked: false
+		};
+		server.invites = [invite];
+		return invite;
+	};
+
+	beforeEach(() => {
+		server.signedIn = null;
+	});
+
+	it('is offered where the server lets anybody register', async () => {
+		server.registrationOpen = true;
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.ways.registration).toBe(true));
+		expect(session.invitation).toBeNull();
+
+		expect(await session.register(' Grace ', 'a long password')).toBeNull();
+		expect(session.state).toBe('in');
+		expect(session.reader?.account).toEqual({ name: 'grace', admin: false });
+		expect(server.requests.at(-1)).toMatchObject({
+			method: 'POST',
+			path: '/register',
+			body: { username: ' Grace ', password: 'a long password' }
+		});
+	});
+
+	it('takes the invitation from the address the page was opened with', async () => {
+		const invite = invitation();
+		history.replaceState(null, '', '/?invite=a-token');
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.invitation).toEqual({ token: 'a-token', valid: true }));
+		expect(session.ways.registration).toBe(false);
+
+		expect(await session.register('grace', 'a long password')).toBeNull();
+		expect(server.requests.at(-1)?.body).toMatchObject({ invite: 'a-token' });
+		expect(invite.uses).toBe(1);
+		expect(session.invitation).toBeNull();
+	});
+
+	it('says when the invitation cannot be used', async () => {
+		invitation().revoked = true;
+		history.replaceState(null, '', '/?invite=a-token');
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.invitation).toEqual({ token: 'a-token', valid: false }));
+		expect(await session.register('grace', 'a long password')).toEqual({ kind: 'invite' });
+		expect(session.state).toBe('out');
+
+		// A server that does not answer the question leaves the invitation unusable.
+		server.down = true;
+		const other = new Session();
+		await other.check();
+		server.down = false;
+		expect(other.state).toBe('unreachable');
+	});
+
+	it('says why nobody was registered', async () => {
+		const session = new Session();
+		await session.check();
+		expect(await session.register('grace', 'a long password')).toEqual({ kind: 'closed' });
+		server.registrationOpen = true;
+		server.noRoom = 'full';
+		expect(await session.register('grace', 'a long password')).toEqual({ kind: 'full' });
+		server.noRoom = 'today';
+		expect(await session.register('grace', 'a long password')).toEqual({ kind: 'today' });
+		server.noRoom = null;
+		expect(await session.register('Fiona', 'a long password')).toEqual({ kind: 'taken' });
+		expect(await session.register('grace', 'short')).toEqual({
+			kind: 'invalid',
+			reason: 'the password is shorter than 8 characters'
+		});
+		server.refuse('POST', /^\/register$/, 500);
+		expect(await session.register('grace', 'a long password')).toEqual({ kind: 'unreachable' });
+		server.down = true;
+		expect(await session.register('grace', 'a long password')).toEqual({ kind: 'unreachable' });
+		expect(session.state).toBe('out');
 	});
 });
 

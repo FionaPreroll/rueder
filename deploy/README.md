@@ -152,6 +152,7 @@ The server's commands run inside its container:
 
 ```sh
 docker compose exec rueder rueder account list
+docker compose exec rueder rueder registration show        # who may register or invite, see below
 docker compose exec rueder rueder admin add fiona          # sees the server status; admin remove, admin list
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
@@ -162,6 +163,30 @@ docker compose logs --follow rueder
 ```
 
 `docker compose exec rueder rueder --help` lists all of them.
+
+## Letting people register
+
+Out of the box nobody can make an account but you. Three switches change that,
+each on the command line and at once, without a restart:
+
+```sh
+# Anybody can register, up to 50 accounts in all and 5 new ones a day.
+docker compose exec rueder rueder registration set --open true --max-accounts 50 --per-day 5
+
+# Registration stays closed, but every reader may invite 3 others with a link
+# that is good for 14 days. The limits above count for these too.
+docker compose exec rueder rueder registration set --invites 3 --invite-days 14
+docker compose exec rueder rueder account invites fiona 10   # a quota of fiona's own
+
+# Admins can always make invitation links. The accounts these bring count in a
+# pool of their own, which you can cap.
+docker compose exec rueder rueder registration set --admin-invite-accounts 20
+```
+
+`none` lifts a limit (`--max-accounts none`), `registration show` says what is
+set and how many accounts there are. Readers make their links in the settings
+under "Invitations". There is no confirmation by email and no CAPTCHA: if you
+open registration to everybody, set `--per-day`.
 
 ## Updates
 

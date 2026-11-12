@@ -8,9 +8,9 @@ import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
-import type { ReportKind, ServerStatus } from './api/types.ts';
+import type { Invites, ReportKind, ServerStatus } from './api/types.ts';
 
-export type { ServerStatus };
+export type { Invites, ServerStatus };
 
 /** A feed with something unread, for the start page. */
 export interface Fresh {
@@ -51,6 +51,8 @@ export interface Abilities {
 	move: boolean;
 	/** The status of the server can be shown: for admins. */
 	status: boolean;
+	/** Others can be invited with a link that lets them make an account. */
+	invites: boolean;
 	/** Errors of the browser can be reported to the server, if the reader agrees. */
 	reports: boolean;
 }
@@ -307,6 +309,17 @@ export interface Reader {
 	 * has and replaces the settings, then shows it all anew.
 	 */
 	importAccount(file: Blob): Promise<Moved>;
+
+	/** The reader's invitations and how many more they can make (`can.invites`); null if there was no answer. */
+	invites(): Promise<Invites | null>;
+	/**
+	 * Makes an invitation for so many accounts. The link is shown once: nobody
+	 * can ask for it again. `none-left` if the reader's invitations are used up,
+	 * null if there was no answer.
+	 */
+	invite(uses: number): Promise<{ link: string } | 'none-left' | null>;
+	/** Takes an invitation back; false if that did not work. */
+	revokeInvite(id: number): Promise<boolean>;
 
 	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
 	status(): Promise<ServerStatus | null>;

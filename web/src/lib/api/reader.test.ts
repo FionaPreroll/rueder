@@ -741,8 +741,51 @@ describe('reading', () => {
 			opml: true,
 			move: true,
 			status: true,
+			invites: true,
 			reports: true
 		});
+	});
+});
+
+describe('invitations', () => {
+	it('are listed with how many more the reader can make', async () => {
+		server.admin = false;
+		server.inviteQuota = 3;
+		const reader = await started();
+		expect(await reader.invites()).toEqual({ invites: [], left: 3, days: 7 });
+
+		// The link leads to this rueder and is shown this once.
+		const made = await reader.invite(2);
+		expect(made).toEqual({ link: `${location.origin}/?invite=${server.invites[0].token}` });
+		expect(server.requests.at(-1)).toMatchObject({
+			method: 'POST',
+			path: '/invites',
+			body: { uses: 2 }
+		});
+		const list = await reader.invites();
+		expect(list).toMatchObject({ left: 1, invites: [{ max_uses: 2, uses: 0, usable: true }] });
+		expect(JSON.stringify(list)).not.toContain(server.invites[0].token);
+
+		// More than are left cannot be made, and taking one back gives its places back.
+		expect(await reader.invite(2)).toBe('none-left');
+		expect(await reader.revokeInvite(list!.invites[0].id)).toBe(true);
+		expect(await reader.invites()).toMatchObject({ left: 3, invites: [{ usable: false }] });
+		expect(await reader.revokeInvite(4711)).toBe(false);
+	});
+
+	it('have no quota for an admin', async () => {
+		const reader = await started();
+		expect(await reader.invite(50)).toMatchObject({ link: expect.stringContaining('?invite=') });
+		const list = await reader.invites();
+		expect(list?.left).toBeUndefined();
+	});
+
+	it('say nothing when the server does not answer', async () => {
+		const reader = await started();
+		server.down = true;
+		expect(await reader.invites()).toBeNull();
+		expect(await reader.invite(1)).toBeNull();
+		expect(await reader.revokeInvite(1)).toBe(false);
 	});
 });
 

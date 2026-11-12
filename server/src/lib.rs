@@ -20,6 +20,7 @@ pub mod profile;
 pub mod rate;
 pub mod reading;
 pub mod reclean;
+pub mod registration;
 pub mod reports;
 pub mod sessions;
 pub mod status;
@@ -210,6 +211,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(filters::routes())
         .merge(subscribe::routes())
         .merge(profile::routes())
+        .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())
         .merge(transfer::routes())

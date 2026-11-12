@@ -1,8 +1,9 @@
 //! Accounts and their passwords.
 //!
-//! There is no open registration: an account is made on the command line (see
-//! `rueder account`). A password is kept as its Argon2id hash only, and whoever
-//! sets a new one ends every session of the account.
+//! An account is made on the command line (see `rueder account`), by an admin,
+//! or by registering where the operator allows it (see `registration`). A
+//! password is kept as its Argon2id hash only, and whoever sets a new one ends
+//! every session of the account.
 
 use std::{fmt, sync::LazyLock};
 

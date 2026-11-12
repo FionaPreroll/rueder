@@ -645,6 +645,9 @@ pub fn changed(path: &str) -> Option<Changed> {
     Some(match parts.as_slice() {
         // Logging in changes nothing for those who already are.
         ["login"] | ["oidc", ..] => return None,
+        // Nor does making an account, and invitations are shown where they
+        // are made.
+        ["register"] | ["invites", ..] => return None,
         // Questions that are sent like changes: what a rule would do, and
         // which feeds a page has.
         ["rules", "preview"] | ["feeds", "find"] => return None,

@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- The app's own texts, in English; values-de/ has them in German. The page of
+     rueder has its own, in web/src/lib/i18n/, and the start page in www/texts.js. -->
+<resources>
+    <string name="app_name" translatable="false">rueder</string>
+    <string name="title_activity_main" translatable="false">rueder</string>
+    <string name="package_name" translatable="false">io.github.fionapreroll.rueder</string>
+    <string name="custom_url_scheme" translatable="false">io.github.fionapreroll.rueder</string>
+    <string name="shortcut_setup_short">Server and updates</string>
+    <string name="shortcut_setup_long">Server and app updates</string>
+    <string name="update_title">A new version of rueder</string>
+    <string name="update_text">Build %1$d is out (%2$s MB). Download and install it now?</string>
+    <string name="update_metered">You are on a network that may cost money.</string>
+    <string name="update_download">Download</string>
+    <string name="update_later">Later</string>
+</resources>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The mark of rueder (web/static/icon.svg) as the foreground of the adaptive
+     icon: white on the red of values/ic_launcher_background.xml, inside the
+     middle 66 of 108 dp that every launcher's mask keeps. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="16.5"
+        android:translateY="19.5"
+        android:scaleX="3"
+        android:scaleY="3">
+        <path
+            android:pathData="M7,11a6,6 0,0 1,6 6"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.4"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M7,6a11,11 0,0 1,11 11"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.4"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M6,16.6a1.6,1.6 0,1 0,3.2 0a1.6,1.6 0,1 0,-3.2 0"
+            android:fillColor="#FFFFFF" />
+    </group>
+</vector>

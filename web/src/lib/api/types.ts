@@ -45,6 +45,10 @@ export type LoginWays = {
 	 * Through the OpenID Connect provider, at `/api/oidc/start`.
 	 */
 	oidc: boolean,
+	/**
+	 * Anybody can make an account for themselves, at `/api/register`.
+	 */
+	registration: boolean,
 };
 
 /**
@@ -107,6 +111,114 @@ export type NewAccount = {
  */
 export type Created = {
 	id: number,
+};
+
+/**
+ * The query of `GET /api/register`.
+ */
+export type AskedInvite = {
+	/**
+	 * The token of an invitation to ask about.
+	 */
+	invite?: string,
+};
+
+/**
+ * What the page for registering needs to know before anybody typed a name.
+ *
+ * `GET /api/register` answers with it, to anybody; with `?invite=<token>` it
+ * also says whether that invitation can be used.
+ */
+export type Registering = {
+	/**
+	 * Anybody can register, and there is room.
+	 */
+	open: boolean,
+	/**
+	 * Whether the invitation that was asked about is good: known, not taken
+	 * back, not run out, not used up. Left out if none was asked about.
+	 */
+	invite?: boolean,
+};
+
+/**
+ * What `POST /api/register` reads. It answers with `Me` and sets the
+ * session's cookie, as a login does.
+ *
+ * A refusal is 403 with one word: `closed` (no invitation, and registration
+ * is not open), `invite` (the invitation cannot be used), `full` (no room for
+ * another account) or `today` (enough accounts for one day). A name or a
+ * password that cannot be one is 400 with the reason, a name that is taken
+ * 409.
+ */
+export type NewRegistration = {
+	username: string,
+	password: string,
+	/**
+	 * The token of an invitation.
+	 */
+	invite?: string,
+};
+
+/**
+ * An invitation as the one who made it sees it. The link itself is shown
+ * once, when it is made.
+ */
+export type Invite = {
+	id: number,
+	/**
+	 * For how many accounts it is, and how many it brought.
+	 */
+	max_uses: number,
+	uses: number,
+	created_at: string,
+	expires_at: string,
+	revoked: boolean,
+	/**
+	 * It can still be used: not taken back, not run out, not used up.
+	 */
+	usable: boolean,
+};
+
+/**
+ * The reader's invitations and how many more they can make.
+ *
+ * `GET /api/invites` answers with it.
+ */
+export type Invites = {
+	/**
+	 * The newest first.
+	 */
+	invites: Array<Invite>,
+	/**
+	 * For how many more accounts the reader can make invitations. Left out
+	 * for an admin, who has no quota.
+	 */
+	left?: number,
+	/**
+	 * How many days a new invitation is good for.
+	 */
+	days: number,
+};
+
+/**
+ * What `POST /api/invites` reads. It answers with `MadeInvite`.
+ */
+export type NewInvite = {
+	/**
+	 * For how many accounts the link is; one if left out.
+	 */
+	uses?: number,
+};
+
+/**
+ * A new invitation, with its token, which is never shown again. The link is
+ * the page's address with `?invite=<token>`.
+ */
+export type MadeInvite = {
+	id: number,
+	token: string,
+	expires_at: string,
 };
 
 /**

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET invite_quota = $2 WHERE lower(username) = lower($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b4f676b472c810001ffa5222bb3423c2722cd643cadc43c4b0cd63f95de87190"
+}

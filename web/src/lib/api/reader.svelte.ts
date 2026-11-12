@@ -349,6 +349,7 @@ export class ServerReader implements Reader {
 			opml: true,
 			move: true,
 			status: account.admin,
+			invites: true,
 			reports: true
 		};
 		this.session = session;
@@ -1569,6 +1570,15 @@ export class ServerReader implements Reader {
 		}
 	}
 
+	async invites() {
+		try {
+			return await this.api.invites();
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
+
 	/**
 	 * Everything the account has may have changed, so everything is loaded anew.
 	 * The other tabs hear of it from the server; this one does not hear its own.
@@ -1587,6 +1597,28 @@ export class ServerReader implements Reader {
 			return moved;
 		} catch (error) {
 			return this.refusal(error);
+		}
+	}
+
+	async invite(uses: number) {
+		try {
+			const made = await this.api.invite(uses);
+			// The link leads to this rueder's page, which reads the token from it.
+			return { link: `${location.origin}/?invite=${made.token}` };
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 403) return 'none-left' as const;
+			this.refusal(error);
+			return null;
+		}
+	}
+
+	async revokeInvite(id: number) {
+		try {
+			await this.api.revokeInvite(id);
+			return true;
+		} catch (error) {
+			this.refusal(error);
+			return false;
 		}
 	}
 

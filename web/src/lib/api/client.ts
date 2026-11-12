@@ -11,34 +11,39 @@ import type {
 	AccountImported,
 	Article,
 	ArticleVersion,
+	ClientReport,
+	ClientReports,
 	Created,
 	Credentials,
 	Feed,
 	FindFeeds,
 	Folder,
 	FoundFeeds,
+	Invites,
 	Label,
 	LabelChange,
 	List,
 	ListItem,
 	LoginWays,
+	MadeInvite,
 	Me,
 	Move,
 	NewFolder,
+	NewInvite,
 	NewLabel,
+	NewRegistration,
 	NewSubscription,
 	NodeRef,
 	OpmlImported,
+	Registering,
 	Rename,
+	ReportsConsent,
+	ReportsConsentChange,
 	Rule,
 	RuleOutcome,
 	RulePreview,
 	RuleScope,
 	RulesHits,
-	ReportsConsent,
-	ReportsConsentChange,
-	ClientReport,
-	ClientReports,
 	ServerStatus,
 	StateChange,
 	Subscribed,
@@ -233,6 +238,24 @@ export const api = {
 	login: (username: string, password: string) =>
 		call<ApiAccount>('POST', '/login', { username, password } satisfies Credentials),
 	logout: () => call<void>('POST', '/logout'),
+
+	/** Whether anybody can register, and whether an invitation can be used; for anybody. */
+	registering: (invite?: string) =>
+		call<Registering>(
+			'GET',
+			invite ? `/register?invite=${encodeURIComponent(invite)}` : '/register'
+		),
+	/** Makes an account and logs it in. A refusal is 403 with one word, see `NewRegistration`. */
+	register: (username: string, password: string, invite?: string) =>
+		call<ApiAccount>('POST', '/register', {
+			username,
+			password,
+			...(invite ? { invite } : {})
+		} satisfies NewRegistration),
+
+	invites: () => call<Invites>('GET', '/invites'),
+	invite: (uses: number) => call<MadeInvite>('POST', '/invites', { uses } satisfies NewInvite),
+	revokeInvite: (id: number) => call<void>('DELETE', `/invites/${id}`),
 
 	tree: () => call<ApiTree>('GET', '/tree'),
 

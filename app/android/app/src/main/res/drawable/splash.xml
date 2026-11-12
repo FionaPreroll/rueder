@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- While the app starts: the color of rueder's panels, so nothing flashes. -->
+<color xmlns:android="http://schemas.android.com/apk/res/android" android:color="#F4F5F7" />
