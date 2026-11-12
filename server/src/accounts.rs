@@ -217,6 +217,17 @@ pub async fn set_admin(db: &PgPool, name: &str, is_admin: bool) -> anyhow::Resul
     Ok(changed.rows_affected() > 0)
 }
 
+/// The number of the account of that name, if there is one.
+pub async fn id_of(db: &PgPool, name: &str) -> anyhow::Result<Option<i32>> {
+    let id = sqlx::query_scalar!(
+        "SELECT id FROM accounts WHERE lower(username) = lower($1)",
+        name.trim(),
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(id)
+}
+
 /// The account that name and password belong to, if they do.
 pub async fn login(db: &PgPool, name: &str, password: &str) -> anyhow::Result<Option<Account>> {
     let name = name.trim();

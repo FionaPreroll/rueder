@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds SET fetch_agent = $2, site_url = coalesce(site_url, $3) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2cdadf07bceab2cd673e25a215d1fdade3e07ce5a6cdca7494eabdb930633596"
+}

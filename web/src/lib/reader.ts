@@ -44,6 +44,11 @@ export interface Abilities {
 	subscribe: boolean;
 	/** Subscriptions can be taken in from an OPML file and given out as one. */
 	opml: boolean;
+	/**
+	 * The whole account can go out as a file and come in again, for moving to
+	 * another rueder: settings, folders, feeds, what was read, stars, labels, rules.
+	 */
+	move: boolean;
 	/** The status of the server can be shown: for admins. */
 	status: boolean;
 	/** Others can be invited with a link that lets them make an account. */
@@ -106,6 +111,35 @@ export type Imported =
 
 /** The largest OPML file a server takes, in bytes. */
 export const MAX_OPML = 1024 * 1024;
+
+/** What bringing in the file of an account did. */
+export type Moved =
+	| {
+			/** Feeds read now that were not before. */
+			feeds: number;
+			/** Feeds of the file that were read already. */
+			known: number;
+			/** Folders that were made. */
+			folders: number;
+			/** Articles of the file that were found on this server. */
+			articles: number;
+			/** Starred and labelled articles this server did not have, brought along with their text. */
+			carried: number;
+			/** Articles that were not found, so what was read of them is lost. */
+			missing: number;
+			/** Labels that were made. */
+			labels: number;
+			/** Filter rules that were added. */
+			rules: number;
+			/** Entries of the file that were left out. */
+			skipped: number;
+			/** Whether the settings came with it. */
+			settings: boolean;
+	  }
+	| Refusal;
+
+/** The largest file of an account a server takes, in bytes. */
+export const MAX_ACCOUNT_FILE = 32 * 1024 * 1024;
 
 /**
  * What a rule would catch if it were saved now, or why nobody can say: its pattern
@@ -268,6 +302,13 @@ export interface Reader {
 	importOpml(file: Blob): Promise<Imported>;
 	/** All subscriptions as an OPML file; null if there was no answer. */
 	exportOpml(): Promise<string | null>;
+	/** The whole account as a file for another rueder (`can.move`); null if there was no answer. */
+	exportAccount(): Promise<string | null>;
+	/**
+	 * Brings in the file of an account, from this rueder or another: adds what it
+	 * has and replaces the settings, then shows it all anew.
+	 */
+	importAccount(file: Blob): Promise<Moved>;
 
 	/** The reader's invitations and how many more they can make (`can.invites`); null if there was no answer. */
 	invites(): Promise<Invites | null>;

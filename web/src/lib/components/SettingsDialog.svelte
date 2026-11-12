@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
-	// rules, the keyboard shortcuts and, where the server takes them, whether this
-	// browser sends reports of its errors. Everything applies as it is changed.
+	// rules, the keyboard shortcuts, where the server takes them whether this browser
+	// sends reports of its errors, and moving the account to another rueder.
+	// Everything applies as it is changed.
 	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
 	import {
@@ -17,10 +18,11 @@
 	import Choice from './Choice.svelte';
 	import Dialog from './Dialog.svelte';
 	import Invitations from './Invitations.svelte';
+	import MoveAccount from './MoveAccount.svelte';
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const allTabs = ['look', 'reading', 'rules', 'keys', 'invites', 'privacy'] as const;
+	const allTabs = ['look', 'reading', 'rules', 'keys', 'invites', 'privacy', 'move'] as const;
 	type Tab = (typeof allTabs)[number];
 
 	let {
@@ -29,11 +31,13 @@
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
 
-	// Privacy only says something where the server takes reports of errors, and
-	// invitations only where there is a server to make an account on.
+	// Privacy only says something where the server takes reports of errors,
+	// invitations only where there is a server to make an account on, and moving
+	// only where there is a server to move from.
 	const tabs = $derived(
 		allTabs.filter((name) => {
 			if (name === 'privacy') return reader.can.reports && reader.reportsConsent?.available;
+			if (name === 'move') return reader.can.move;
 			return name !== 'invites' || reader.can.invites;
 		})
 	);
@@ -177,6 +181,8 @@
 				<p class="text-soft">{m.settings.reports.never}</p>
 				<p class="text-xs text-soft">{m.settings.reports.off}</p>
 			</div>
+		{:else if tab === 'move'}
+			<MoveAccount {reader} />
 		{:else}
 			<Shortcuts />
 		{/if}

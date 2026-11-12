@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_labels (label_id, feed_id, seq)\n             SELECT u.id, $1, u.seq FROM unnest($2::int4[], $3::int4[]) AS u(id, seq)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c07b33eef08d517308d55d56f178ebd2650ec57e6c759aca6528ff55a2f45b73"
+}

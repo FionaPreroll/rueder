@@ -1,12 +1,14 @@
 //! How much one sender and one account may ask of the server.
 //!
-//! Two limits, both counted in memory:
+//! These limits, all counted in memory:
 //!
 //! - every request, per address it comes from ([`REQUESTS`]), so that nobody
 //!   keeps the server busy for everybody else, logged in or not;
 //! - per account, what makes the server reach out to an address the reader
 //!   names ([`LOOKUPS`]): looking for the feeds of a page and subscribing. It
-//!   keeps an account from using rueder to knock on other servers' doors.
+//!   keeps an account from using rueder to knock on other servers' doors;
+//! - per account, the reports of errors from its browsers ([`REPORTS`]) and
+//!   the moves from another rueder ([`IMPORTS`]), which add to what is stored.
 //!
 //! Wrong passwords have their own, much smaller limit in [`crate::login`].
 //! Who is over a limit gets 429 with `Retry-After`.
@@ -41,6 +43,10 @@ pub const LOOKUPS: Rate = Rate::new(30, Duration::from_secs(2));
 /// How many reports of errors in its browsers an account may send: 100 at
 /// once, and about 100 more a day.
 pub const REPORTS: Rate = Rate::new(100, Duration::from_secs(864));
+/// How many moves from another rueder an account may bring in: 3 at once, and
+/// one more every two hours. Each can bring a lot (see `transfer`), and a
+/// move is done once.
+pub const IMPORTS: Rate = Rate::new(3, Duration::from_secs(2 * 60 * 60));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
 
@@ -122,6 +128,7 @@ pub struct Rates {
     requests: Limiter<IpAddr>,
     lookups: Limiter<i32>,
     reports: Limiter<i32>,
+    imports: Limiter<i32>,
 }
 
 impl Rates {
@@ -130,7 +137,23 @@ impl Rates {
             requests: Limiter::new(requests),
             lookups: Limiter::new(lookups),
             reports: Limiter::new(REPORTS),
+            imports: Limiter::new(IMPORTS),
         }
+    }
+
+    /// Other limits for the moves from another rueder than [`IMPORTS`].
+    pub fn with_imports(self, imports: Rate) -> Self {
+        Self {
+            imports: Limiter::new(imports),
+            ..self
+        }
+    }
+
+    /// Counts a move from another rueder into the account.
+    pub fn import(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
+        self.imports
+            .take(&account_id, now)
+            .map_err(|wait| AppError::TooMany(wait, "too many imports, try again later"))
     }
 
     /// Other limits for the reports of errors than [`REPORTS`].

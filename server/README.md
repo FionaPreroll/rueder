@@ -45,6 +45,13 @@ What is here:
   of a web page, OPML in and out, settings, the own sessions, and accounts for
   admins. Every query is bound to the account of the session; the list of
   endpoints is in [docs/architecture.md](../docs/architecture.md#api).
+- Moving an account (`src/transfer.rs`): `GET /api/export` gives out everything
+  a reader made of their account as one JSON file (settings, folders, feeds,
+  what was read, stars, labels, rules), and `POST /api/import` takes such a
+  file in, from this rueder or another one. Feeds are found again by their
+  address and articles by their id in the feed, as the numbers differ from one
+  server to the next. `rueder account export <name>` and
+  `rueder account import <name> <file>` do the same on the command line.
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
 - The API's types for the frontend (`src/typescript.rs`): every type that is

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_states (account_id, feed_id, seq, read, kept_unread, starred)\n             SELECT $1, $2, u.seq, u.read, u.kept, u.starred\n             FROM unnest($3::int4[], $4::bool[], $5::bool[], $6::bool[])\n                  AS u(seq, read, kept, starred)\n             ON CONFLICT (account_id, feed_id, seq) DO UPDATE\n             SET read = article_states.read OR excluded.read,\n                 kept_unread = (article_states.kept_unread OR excluded.kept_unread)\n                               AND NOT (article_states.read OR excluded.read),\n                 starred = article_states.starred OR excluded.starred",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array",
+        "BoolArray",
+        "BoolArray",
+        "BoolArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "668da991224d4f7278b8f60be4408578a95ca65abd6cbd340665072e5fab8f4c"
+}

@@ -480,6 +480,97 @@ describe('Privacy in the settings', () => {
 	});
 });
 
+describe('Moving the account in the settings', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		Object.assign(settings, defaults);
+	});
+
+	async function opened() {
+		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
+		const stop = reader.start();
+		await vi.waitFor(() => expect(reader.reportsConsent).not.toBeNull());
+		render(SettingsDialog, { reader, onclose: () => {} });
+		await userEvent.click(screen.getByRole('tab', { name: 'Move' }));
+		return { reader, stop };
+	}
+
+	it('imports the file of an account and says what came with it', async () => {
+		const { stop } = await opened();
+		const file = new File(
+			[
+				JSON.stringify({
+					format: 'rueder-account',
+					version: 1,
+					settings: { theme: 'dark' },
+					tree: [{ kind: 'feed', url: 'https://moved.example/feed.xml', title: 'Moved' }]
+				})
+			],
+			'rueder-2026-11-12.json',
+			{ type: 'application/json' }
+		);
+		await userEvent.upload(screen.getByLabelText('Import an account file'), file);
+		const status = await screen.findByRole('status');
+		expect(status).toHaveTextContent('1 new feed, 0 subscribed already.');
+		expect(status).toHaveTextContent('Your settings are those of the file now.');
+		expect(status).toHaveTextContent('with the next round of fetching');
+		await vi.waitFor(() => expect(settings.theme).toBe('dark'));
+		stop();
+	});
+
+	it('says why a file was not taken', async () => {
+		const { stop } = await opened();
+		const input = screen.getByLabelText('Import an account file');
+		await userEvent.upload(input, new File(['{}'], 'other.json', { type: 'application/json' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'The server says: this is not a file of a rueder account'
+		);
+		server.refuse('POST', /^\/import$/, 429, 1, 'too many imports', { 'Retry-After': '3600' });
+		await userEvent.upload(input, new File(['{}'], 'other.json', { type: 'application/json' }));
+		await vi.waitFor(() =>
+			expect(screen.getByRole('alert')).toHaveTextContent(
+				'Too many imports. Try again in 60 minutes.'
+			)
+		);
+		stop();
+	});
+
+	it('exports the account as a file to download', async () => {
+		const { stop } = await opened();
+		const made = vi.fn((_: Blob) => 'blob:rueder/account');
+		vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: made, revokeObjectURL: vi.fn() }));
+		const clicked: HTMLAnchorElement[] = [];
+		vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+			this: HTMLAnchorElement
+		) {
+			clicked.push(this);
+		});
+		await userEvent.click(screen.getByRole('button', { name: 'Export the account' }));
+		await vi.waitFor(() => expect(clicked).toHaveLength(1));
+		expect(clicked[0].download).toMatch(/^rueder-\d{4}-\d{2}-\d{2}\.json$/);
+		expect(JSON.parse(await made.mock.calls[0][0].text())).toMatchObject({
+			format: 'rueder-account'
+		});
+		server.down = true;
+		await userEvent.click(screen.getByRole('button', { name: 'Export the account' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('The server does not answer.');
+		stop();
+	});
+
+	it('is not there with made-up data', () => {
+		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Move' })).toBeNull();
+	});
+});
+
 describe('Errors in browsers on the status page', () => {
 	it('says how often and in how many accounts, never which', async () => {
 		render(StatusDialog, { reader: new DemoReader(() => now), onclose: () => {} });

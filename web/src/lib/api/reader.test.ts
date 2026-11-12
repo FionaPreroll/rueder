@@ -5,7 +5,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TreeNode } from '#lib/model.ts';
-import { MAX_OPML } from '#lib/reader.ts';
+import { MAX_ACCOUNT_FILE, MAX_OPML } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { TAB } from './client.ts';
 import { PAGE, ServerReader, toTree } from './reader.svelte.ts';
@@ -739,6 +739,7 @@ describe('reading', () => {
 			markOlder: true,
 			subscribe: true,
 			opml: true,
+			move: true,
 			status: true,
 			invites: true,
 			reports: true
@@ -1366,6 +1367,65 @@ describe('the subscriptions', () => {
 			[`News (folder-${news})`]: [`feed-${tech}`, `feed-${blog}`]
 		});
 		expect(reader.notice).toBe('notSaved');
+	});
+});
+
+describe('Moving the account', () => {
+	afterEach(() => {
+		Object.assign(settings, defaults);
+	});
+
+	const account = (over: object = {}) =>
+		new Blob(
+			[
+				JSON.stringify({
+					format: 'rueder-account',
+					version: 1,
+					settings: { theme: 'dark' },
+					tree: [
+						{ kind: 'feed', url: 'https://moved.example/feed.xml', title: 'Moved' },
+						{ kind: 'feed', url: `https://feed-${tech}.example/feed.xml`, title: 'Tech' }
+					],
+					...over
+				})
+			],
+			{ type: 'application/json' }
+		);
+
+	it('sends the file as JSON and shows everything anew', async () => {
+		const reader = await started();
+		const moved = await reader.importAccount(account());
+		expect(moved).toMatchObject({ feeds: 1, known: 1, settings: true });
+		const sent = server.requests.find((r) => r.path === '/import');
+		expect(sent?.type).toBe('application/json');
+		await settle();
+		expect(Object.values(reader.feeds).map((feed) => feed.title)).toContain('Moved');
+		expect(settings.theme).toBe('dark');
+		// The rules and the labels were asked for anew, too.
+		const asked = server.requests.slice(server.requests.indexOf(sent!)).map((r) => r.path);
+		expect(asked).toEqual(expect.arrayContaining(['/tree', '/settings', '/labels', '/rules']));
+	});
+
+	it('says why the server would not take a file', async () => {
+		const reader = await started();
+		expect(await reader.importAccount(account({ format: 'opml' }))).toEqual({
+			problem: 'refused',
+			reason: 'this is not a file of a rueder account'
+		});
+		const large = new Blob(['x'.repeat(MAX_ACCOUNT_FILE + 1)]);
+		expect(await reader.importAccount(large)).toEqual({ problem: 'tooLarge' });
+		server.refuse('POST', /^\/import$/, 429, 1, 'too many imports', { 'Retry-After': '600' });
+		expect(await reader.importAccount(account())).toEqual({ problem: 'busy', retryAfter: 600 });
+		server.down = true;
+		expect(await reader.importAccount(account())).toEqual({ problem: 'unreachable' });
+	});
+
+	it('gives out the account as a file', async () => {
+		const reader = await started();
+		const file = await reader.exportAccount();
+		expect(JSON.parse(file ?? '')).toMatchObject({ format: 'rueder-account', version: 1 });
+		server.down = true;
+		expect(await reader.exportAccount()).toBeNull();
 	});
 });
 

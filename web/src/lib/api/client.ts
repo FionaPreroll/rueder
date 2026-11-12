@@ -8,6 +8,7 @@
 import type { Stream } from '#lib/model.ts';
 import type { DropPosition } from '#lib/tree.ts';
 import type {
+	AccountImported,
 	Article,
 	ArticleVersion,
 	ClientReport,
@@ -163,14 +164,16 @@ export const CLOSED = 2;
 
 /**
  * Sends a request and gives back the answer, if the server took it. A body is
- * sent as JSON, a `Blob` as it is, as an OPML file.
+ * sent as JSON, a `Blob` as it is, as an OPML file unless `kind` says otherwise.
  */
 async function send(
 	method: string,
 	path: string,
 	body?: unknown,
 	/** The request may outlive the page, as one sent while it is left. */
-	keepalive = false
+	keepalive = false,
+	/** What a `Blob` is said to be. */
+	kind = OPML
 ): Promise<Response> {
 	const file = body instanceof Blob;
 	let response: Response;
@@ -181,7 +184,7 @@ async function send(
 			keepalive,
 			headers: {
 				'X-Rueder-Tab': TAB,
-				...(body === undefined ? {} : { 'Content-Type': file ? OPML : 'application/json' })
+				...(body === undefined ? {} : { 'Content-Type': file ? kind : 'application/json' })
 			},
 			body: body === undefined ? undefined : file ? body : JSON.stringify(body)
 		});
@@ -199,8 +202,8 @@ async function send(
 /** A request as a report names it: without what follows the `?`. */
 const asked = (method: string, path: string) => `${method} ${path.split('?')[0]}`;
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-	const response = await send(method, path, body);
+async function call<T>(method: string, path: string, body?: unknown, kind?: string): Promise<T> {
+	const response = await send(method, path, body, false, kind);
 	if (response.status === 204) return undefined as T;
 	try {
 		return (await response.json()) as T;
@@ -310,6 +313,10 @@ export const api = {
 	unsubscribe: (id: number) => call<void>('DELETE', `/feeds/${id}`),
 	importOpml: (file: Blob) => call<OpmlImported>('POST', '/opml', file),
 	exportOpml: () => text('GET', '/opml'),
+	/** The whole account as a file, for another rueder. */
+	exportAccount: () => text('GET', '/export'),
+	/** A file of `exportAccount`, from this rueder or another, sent as it is. */
+	importAccount: (file: Blob) => call<AccountImported>('POST', '/import', file, 'application/json'),
 
 	/** The settings as the account keeps them; what is in them is the page's business. */
 	settings: () => call<unknown>('GET', '/settings'),

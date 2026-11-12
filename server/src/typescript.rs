@@ -18,7 +18,8 @@ use std::any::TypeId;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use crate::{
-    api, events, filters, labels, login, profile, registration, reports, status, subscribe, tree,
+    api, events, filters, labels, login, profile, registration, reports, status, subscribe,
+    transfer, tree,
 };
 
 /// Where the committed file lies, seen from the crate.
@@ -135,6 +136,7 @@ pub fn generate() -> anyhow::Result<String> {
     events::types(&mut types);
     status::types(&mut types);
     reports::types(&mut types);
+    transfer::types(&mut types);
     anyhow::ensure!(
         types.clashes.is_empty(),
         "different types with the same name in TypeScript: {}",
