@@ -158,6 +158,117 @@ jobs:
             web/playwright-report
             web/test-results
 
+  # The Android app (app/): the start page's tests, then both builds. "github"
+  # is the one released below, which looks for new versions of itself if the
+  # reader agrees; "play" is for the Play Store, without the update check. With
+  # the signing key in the repository's secrets, the github build is a signed
+  # release; without it (as in pull requests from forks) a debug build, which
+  # installs but cannot update an installed release.
+  app:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm test
+      # The start page into the Android project.
+      - run: pnpm run sync
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      # The key from the secrets, into a file only this run sees.
+      - name: Signing key
+        id: key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/rueder.keystore"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build
+        working-directory: app/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          RUEDER_KEYSTORE: ${{ steps.key.outputs.signed == 'true' && format('{0}/rueder.keystore', runner.temp) || '' }}
+          RUEDER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RUEDER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RUEDER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        # The version, the build and the commit, as Android shows the app's version.
+        run: |
+          export VERSION_NAME="$(node -p "require('../package.json').version")-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+          if [ "${{ steps.key.outputs.signed }}" = true ]; then github=assembleGithubRelease; else github=assembleGithubDebug; fi
+          ./gradlew --no-daemon testGithubDebugUnitTest testPlayDebugUnitTest "$github" assemblePlayRelease
+          mkdir -p ../out
+          if [ "${{ steps.key.outputs.signed }}" = true ]; then
+            mv app/build/outputs/apk/github/release/app-github-release.apk ../out/rueder.apk
+          else
+            mv app/build/outputs/apk/github/debug/app-github-debug.apk ../out/rueder-debug.apk
+          fi
+          mv app/build/outputs/apk/play/release/app-play-release-unsigned.apk ../out/rueder-play-unsigned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rueder-android
+          path: app/out/
+          if-no-files-found: error
+
+  # Every push to main that passed the checks and was signed replaces the
+  # release "rueder for Android" (tag android-latest): the APK and its
+  # version.json, which the app reads to find a newer build.
+  app-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [web, e2e, app]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: android-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rueder-android
+          path: out
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: android-latest
+        run: |
+          if [ ! -f out/rueder.apk ]; then
+            echo "No signed APK (no key in the secrets): nothing to release."
+            exit 0
+          fi
+          # Only for the commit main points at now, so an older run that ends
+          # last does not replace a newer build.
+          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$head" != "$GITHUB_SHA" ]; then echo "main moved on"; exit 0; fi
+          printf '{"build":%s,"commit":"%s","size":%s}\n' "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" "$(stat -c %s out/rueder.apk)" > out/version.json
+          cat > notes.md <<NOTES
+          The newest build of rueder for Android, from commit ${GITHUB_SHA::7} (build ${GITHUB_RUN_NUMBER}). This release is replaced with every change to \`main\`.
+
+          **Installing:** download \`rueder.apk\` below and open it on the phone; Android asks once to allow installing apps from that source. At the first start the app asks for the address of your rueder. A newer APK installs over an older one, and the app can look for one itself if you agree (on its start page, or with a long press on its icon: Server and updates).
+          NOTES
+          git push -f origin "HEAD:refs/tags/$TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" out/rueder.apk out/version.json --clobber
+            gh release edit "$TAG" --title "rueder for Android" --notes-file notes.md --latest=false
+          else
+            gh release create "$TAG" out/rueder.apk out/version.json --title "rueder for Android" --notes-file notes.md --latest=false
+          fi
+
   # The container image as deploy/compose.yaml runs it: built, started next to
   # PostgreSQL and asked whether it works. Published only by the job below.
   image:

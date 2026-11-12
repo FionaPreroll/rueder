@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="light dark" />
+		<title>rueder</title>
+		<link rel="stylesheet" href="start.css" />
+		<script type="module" src="start.js"></script>
+	</head>
+	<body>
+		<main>
+			<h1><img src="icon.svg" alt="" width="40" height="40" /> rueder</h1>
+			<p id="intro"></p>
+			<form id="form" hidden novalidate>
+				<label for="address" id="address-label"></label>
+				<input
+					id="address"
+					type="url"
+					inputmode="url"
+					autocomplete="url"
+					autocapitalize="none"
+					spellcheck="false"
+					placeholder="https://reader.example"
+				/>
+				<button id="open" type="submit"></button>
+				<fieldset id="updates" hidden>
+					<label class="check">
+						<input id="check-updates" type="checkbox" />
+						<span id="updates-label"></span>
+					</label>
+					<p id="updates-hint" class="hint"></p>
+					<button id="look" type="button" class="quiet"></button>
+				</fieldset>
+			</form>
+			<p id="message" role="status"></p>
+			<p id="version" class="hint"></p>
+		</main>
+	</body>
+</html>

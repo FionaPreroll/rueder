@@ -55,6 +55,7 @@ const en = {
 		paused: 'Paused',
 		account: (name: string) => `Logged in as ${name}`,
 		logout: 'Log out',
+		appSettings: 'Server and app updates',
 		unread: (count: number) => `${n(count)} unread`,
 		fetchFailed: (reason: string) => `The last fetch failed: ${reason}`,
 		waiting: 'Not fetched yet',

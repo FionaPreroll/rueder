@@ -1,0 +1,124 @@
+/* The start page in rueder's colors (web/src/routes/layout.css), light and dark. */
+:root {
+	--paper: #ffffff;
+	--panel: #f4f5f7;
+	--ink: #1f2328;
+	--soft: #5f6670;
+	--line: #d9dce1;
+	--accent: #c8402e;
+	--warn: #b3261e;
+	color-scheme: light dark;
+	font-family: system-ui, sans-serif;
+	background: var(--panel);
+	color: var(--ink);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--paper: #15171b;
+		--panel: #1c1f25;
+		--ink: #e6e8eb;
+		--soft: #a0a7b0;
+		--line: #343943;
+		--warn: #f2b8b5;
+	}
+}
+
+body {
+	margin: 0;
+	padding: env(safe-area-inset-top) 1.25rem 2rem;
+}
+
+main {
+	max-width: 28rem;
+	margin: 12vh auto 0;
+}
+
+h1 {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin: 0 0 0.5rem;
+	font-size: 1.75rem;
+}
+
+label,
+.hint,
+#intro {
+	display: block;
+	margin: 0.25rem 0;
+}
+
+.hint,
+#intro,
+#version {
+	color: var(--soft);
+	font-size: 0.875rem;
+}
+
+input[type='url'] {
+	box-sizing: border-box;
+	width: 100%;
+	margin: 0.5rem 0 1rem;
+	padding: 0.7rem 0.8rem;
+	border: 1px solid var(--line);
+	border-radius: 0.4rem;
+	background: var(--paper);
+	color: var(--ink);
+	font-size: 1rem;
+}
+
+button {
+	padding: 0.65rem 1.4rem;
+	border: 0;
+	border-radius: 0.4rem;
+	background: var(--accent);
+	color: #fff;
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+button:disabled {
+	opacity: 0.6;
+}
+
+button.quiet {
+	margin-top: 0.5rem;
+	padding: 0.45rem 0.9rem;
+	border: 1px solid var(--line);
+	background: var(--paper);
+	color: var(--ink);
+	font-weight: 400;
+	font-size: 0.875rem;
+}
+
+fieldset {
+	margin: 1.75rem 0 0;
+	padding: 1rem 0 0;
+	border: 0;
+	border-top: 1px solid var(--line);
+}
+
+.check {
+	display: flex;
+	gap: 0.6rem;
+	align-items: flex-start;
+}
+
+.check input {
+	margin-top: 0.2rem;
+	accent-color: var(--accent);
+}
+
+#message {
+	min-height: 1.5rem;
+	margin-top: 1.25rem;
+}
+
+#message.problem {
+	color: var(--warn);
+}
+
+[hidden] {
+	display: none !important;
+}
