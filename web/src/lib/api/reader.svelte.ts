@@ -244,6 +244,7 @@ function toArticle(item: ApiListItem): Article {
 		html: null,
 		enclosures: [],
 		image: null,
+		thumbnail: item.thumbnail_url,
 		changes: Math.max(0, item.version - 1),
 		updatedAt: item.updated_at ? Date.parse(item.updated_at) : null
 	};

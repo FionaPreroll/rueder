@@ -2,7 +2,8 @@
 	// The articles of what is picked in the sidebar, in one of two views: a dense list
 	// whose rows open in place, or every article in full, one card after the other.
 	// Beside the article in the view of three panes (`pane`), the list is narrow, its
-	// rows stacked, and an article opens in the pane instead of under its row.
+	// rows stacked, and an article opens in the pane instead of under its row. The
+	// magazine shows tiles (`Magazine.svelte`); they are light, so all are drawn.
 	// A long list draws only what is near the view; the rest is space of its height.
 	import { tick, untrack } from 'svelte';
 	import type { Reader } from '#lib/reader.ts';
@@ -12,6 +13,7 @@
 	import ArticleBody from './ArticleBody.svelte';
 	import ArticleRow from './ArticleRow.svelte';
 	import Icon from './Icon.svelte';
+	import Magazine from './Magazine.svelte';
 	import { offsets, rowsInSight } from '#lib/virtual.ts';
 
 	/** Up to this many rows, or this many cards with their whole text, all are drawn. */
@@ -72,6 +74,7 @@
 	}
 
 	const expanded = $derived(settings.view === 'expanded');
+	const magazine = $derived(settings.view === 'magazine');
 	const showFeed = $derived(reader.stream.kind !== 'feed');
 	const shownFeed = $derived(
 		reader.stream.kind === 'feed' ? reader.feeds[reader.stream.id] : undefined
@@ -117,7 +120,7 @@
 			await tick();
 			await reach(id);
 			rowOf(id)?.scrollIntoView({
-				block: expanded || (!pane && reader.open === id) ? 'start' : 'nearest'
+				block: expanded || (!pane && !magazine && reader.open === id) ? 'start' : 'nearest'
 			});
 		});
 	});
@@ -130,7 +133,7 @@
 		const opened = reader.open;
 		const id = opened ?? lastOpen;
 		lastOpen = opened;
-		if (!id || expanded || pane) return;
+		if (!id || expanded || pane || magazine) return;
 		untrack(async () => {
 			await tick();
 			const row = rowOf(id);
@@ -154,6 +157,7 @@
 		void reader.stream;
 		void expanded;
 		void pane;
+		void magazine;
 		untrack(() => {
 			scroller?.scrollTo?.({ top: 0 });
 			scrollTop = 0;
@@ -242,6 +246,8 @@
 					<p>{m.list.empty}</p>
 				{/if}
 			</div>
+		{:else if magazine}
+			<Magazine {reader} {now} articles={reader.visible} />
 		{:else if expanded}
 			<div class="mx-auto max-w-4xl px-3 pb-3" bind:this={list}>
 				<div style:height="{above}px"></div>

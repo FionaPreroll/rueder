@@ -78,6 +78,7 @@ const en = {
 		listView: 'List view',
 		expandedView: 'Expanded view',
 		splitView: 'Three panes: tree, list and article',
+		magazineView: 'Magazine',
 		previous: 'Previous item',
 		next: 'Next item',
 		newArticles: (count: number) =>
@@ -107,7 +108,8 @@ const en = {
 		loading: 'Loading the text …',
 		loadingList: 'Loading …',
 		toTop: 'Back to the top',
-		pick: 'Pick an article to read it here.'
+		pick: 'Pick an article to read it here.',
+		closeArticle: 'Close the article'
 	},
 
 	media: {
@@ -242,7 +244,7 @@ const en = {
 		language: 'Language',
 		languageAuto: 'Like the browser',
 		view: 'View',
-		views: { list: 'List', expanded: 'Expanded', split: 'Three panes' },
+		views: { list: 'List', expanded: 'Expanded', split: 'Three panes', magazine: 'Magazine' },
 		markOnScroll: 'Mark articles as read while scrolling past them in the expanded view',
 		teasers: 'Show the first words of the text after the title in the list',
 		wakeLock: 'Keep the screen on while rueder is open',
@@ -321,6 +323,7 @@ const en = {
 		listView: 'List view',
 		expandedView: 'Expanded view',
 		splitView: 'Three panes',
+		magazineView: 'Magazine',
 		goHome: 'Home',
 		goAll: 'All items',
 		goStarred: 'Starred items',

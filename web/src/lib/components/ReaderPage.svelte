@@ -158,6 +158,9 @@
 			case 'splitView':
 				settings.view = 'split';
 				return true;
+			case 'magazineView':
+				settings.view = 'magazine';
+				return true;
 			case 'search':
 				document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
 				return true;
@@ -299,6 +302,53 @@
 		</main>
 	</div>
 </div>
+
+<!-- In the magazine an article opens over the tiles; j, k and Escape work as in a list. -->
+{#if settings.view === 'magazine' && reader.stream.kind !== 'home' && reader.open}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-40 flex justify-center bg-black/40 md:p-6"
+		onclick={(event) => event.target === event.currentTarget && (reader.open = null)}
+	>
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-label={reader.current?.title ?? m.list.pick}
+			class="flex max-h-full w-full max-w-3xl flex-col overflow-hidden bg-paper shadow-xl md:rounded-md"
+		>
+			<div class="flex items-center justify-end gap-1 border-b border-line px-2 py-1">
+				<button
+					type="button"
+					class="plain size-8"
+					aria-label={m.toolbar.previous}
+					title={m.toolbar.previous}
+					onclick={() => reader.step(-1)}
+				>
+					<Icon name="up" />
+				</button>
+				<button
+					type="button"
+					class="plain size-8"
+					aria-label={m.toolbar.next}
+					title={m.toolbar.next}
+					onclick={() => reader.step(1)}
+				>
+					<Icon name="down" />
+				</button>
+				<button
+					type="button"
+					class="plain size-8"
+					aria-label={m.list.closeArticle}
+					title={m.list.closeArticle}
+					onclick={() => (reader.open = null)}
+				>
+					<Icon name="close" />
+				</button>
+			</div>
+			<ArticlePane {reader} {now} onversions={compare} />
+		</div>
+	</div>
+{/if}
 
 {#if dialog === 'settings'}
 	<SettingsDialog {reader} bind:tab={settingsTab} onclose={() => (dialog = null)} />

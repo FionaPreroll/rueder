@@ -77,6 +77,11 @@ export interface Article {
 	/** The files and the picture that come with the article. Like the text, they are there once it is opened. */
 	enclosures: Enclosure[];
 	image: Picture | null;
+	/**
+	 * The picture a list shows the article by, as lists come: from the feed or the
+	 * first in the text. Without a server's lists, as in tests, it may be missing.
+	 */
+	thumbnail?: string | null;
 	/** The rule that hides the article, where the server names it; it comes with the text. */
 	hiddenBy?: string | null;
 	/** How many earlier versions there are; 0 for an article that never changed. */

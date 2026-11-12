@@ -59,6 +59,8 @@ export interface FakeArticle {
 	labels: number[];
 	enclosures: ApiArticle['enclosures'];
 	image_url: string | null;
+	/** The picture a list shows the article by, at the proxy. */
+	thumbnail_url?: string | null;
 	image_title: string | null;
 }
 
@@ -954,7 +956,7 @@ function listed(a: FakeArticle): ApiListItem {
 		teaser: a.teaser,
 		author: a.author,
 		url: a.url,
-		thumbnail_url: null,
+		thumbnail_url: a.thumbnail_url ?? null,
 		read: a.read,
 		starred: a.starred,
 		labels: a.labels

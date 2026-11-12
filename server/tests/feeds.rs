@@ -718,3 +718,49 @@ async fn other_rules_are_no_new_version(db: PgPool) {
     // From here on nothing is left to do.
     assert_eq!(store(&stricter).await, Stored::default());
 }
+
+#[test]
+fn an_article_is_shown_by_the_first_picture_of_its_text_where_the_feed_names_none() {
+    let parsed = parse(&rss(&[
+        (
+            "a",
+            "Pictures",
+            "<p><img src=\"https://s.example/smile.png\" width=\"72\" height=\"72\">Hi</p>\
+             <p><img src=\"/tiny.gif\" height=\"16\"><img src=\"/photo.jpg?utm_source=feed\" width=\"800\"></p>\
+             <img src=\"https://example.org/later.jpg\">",
+        ),
+        ("b", "Words", "<p>Nothing to see.</p>"),
+    ]));
+    let titled = |title: &str| {
+        parsed
+            .articles
+            .iter()
+            .find(|article| article.original.title == title)
+            .unwrap()
+    };
+    let (pictured, plain) = (titled("Pictures"), titled("Words"));
+    // Small ones are icons; the address is whole and without what tracks.
+    assert_eq!(
+        pictured.thumbnail_url.as_deref(),
+        Some("https://example.org/photo.jpg")
+    );
+    // The picture beside the text stays the feed's own: this one is in the text already.
+    assert_eq!(pictured.image_url, None);
+    assert_eq!(plain.thumbnail_url, None);
+
+    // A picture the feed names comes first.
+    let named = br#"<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>Example</title>
+        <item><guid>c</guid><title>Named</title><link>https://example.org/c</link>
+        <media:content url="https://example.org/named.jpg" type="image/jpeg"/>
+        <description><![CDATA[<img src="https://example.org/in-text.jpg">]]></description></item>
+        </channel></rss>"#;
+    let named = &parse(named).articles[0];
+    assert_eq!(
+        named.thumbnail_url.as_deref(),
+        Some("https://example.org/named.jpg")
+    );
+    assert_eq!(
+        named.image_url.as_deref(),
+        Some("https://example.org/named.jpg")
+    );
+}

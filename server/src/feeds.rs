@@ -133,7 +133,7 @@ fn article(
         .map_or(fetched_at, |at| at.min(fetched_at));
 
     let media = entry.media;
-    let thumbnail_url = media
+    let media_image = media
         .iter()
         .flat_map(|media| &media.thumbnails)
         .find_map(|thumbnail| web(&thumbnail.image.uri))
@@ -165,6 +165,11 @@ fn article(
     };
     let cleaned = cleaning::clean(&content, base, rules);
     add_inline(&mut enclosures, cleaned.enclosures);
+    // A feed that names no picture often has one in its text, and the list
+    // shows the article by it.
+    let thumbnail_url = media_image
+        .clone()
+        .or_else(|| cleaning::first_image(&cleaned.html));
 
     let mut tags: Vec<String> = Vec::new();
     for category in entry.categories {
@@ -186,10 +191,10 @@ fn article(
         published_at,
         fetched_at,
         teaser: teaser(summary.as_deref().unwrap_or(&content)),
-        thumbnail_url: thumbnail_url.clone(),
+        thumbnail_url,
         html: cleaned.html,
         enclosures: enclosures.into(),
-        image_url: thumbnail_url,
+        image_url: media_image,
         image_title: None,
         original: Original {
             title,

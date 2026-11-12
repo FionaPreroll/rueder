@@ -483,6 +483,7 @@ function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): DemoArti
 			? [{ url: tone(330 + 110 * (seq % 4)), type: 'audio/wav', length: 8044 }]
 			: [],
 		image: seed.recorded && drawn ? { url: drawn, title } : null,
+		thumbnail: drawn,
 		changes: versions.length,
 		versions,
 		updatedAt

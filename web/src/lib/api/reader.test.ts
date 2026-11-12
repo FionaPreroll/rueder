@@ -223,6 +223,7 @@ describe('the tree', () => {
 
 describe('the lists', () => {
 	it('show a feed, a folder and everything, newest first', async () => {
+		server.article(tech, 3)!.thumbnail_url = '/img/sig/thumbnail/pic';
 		const reader = await started();
 		expect(reader.loading).toBe(false);
 		reader.show({ kind: 'feed', id: `feed-${tech}` });
@@ -238,6 +239,12 @@ describe('the lists', () => {
 		const [first] = reader.visible;
 		expect(first).toMatchObject({ feedId: `feed-${tech}`, seq: 3, html: null, changes: 0 });
 		expect(first.link).toBe(`https://feed-${tech}.example/3`);
+		// The picture of the list, for the magazine.
+		expect(reader.visible.map((article) => article.thumbnail)).toEqual([
+			'/img/sig/thumbnail/pic',
+			null,
+			null
+		]);
 
 		reader.show({ kind: 'folder', id: `folder-${news}` });
 		await settle();

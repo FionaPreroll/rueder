@@ -122,13 +122,23 @@
 		</button>
 		<button
 			type="button"
-			class="tool rounded-l-none border-l-0"
+			class="tool rounded-none border-l-0"
 			aria-pressed={settings.view === 'split'}
 			aria-label={m.toolbar.splitView}
 			title={m.toolbar.splitView}
 			onclick={() => (settings.view = 'split')}
 		>
 			<Icon name="split" />
+		</button>
+		<button
+			type="button"
+			class="tool rounded-l-none border-l-0"
+			aria-pressed={settings.view === 'magazine'}
+			aria-label={m.toolbar.magazineView}
+			title={m.toolbar.magazineView}
+			onclick={() => (settings.view = 'magazine')}
+		>
+			<Icon name="magazine" />
 		</button>
 	</div>
 

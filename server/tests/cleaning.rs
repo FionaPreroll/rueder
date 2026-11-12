@@ -697,3 +697,42 @@ fn the_feeds_a_page_names_are_found_within_limits() {
     assert_eq!(urls(&deep), Vec::<String>::new());
     assert!(started.elapsed() < Duration::from_secs(20));
 }
+
+#[test]
+fn the_first_picture_of_a_text_is_the_first_that_is_not_small() {
+    use rueder::cleaning::first_image;
+    let base = Base {
+        article: Some("https://example.org/post/1"),
+        feed: None,
+    };
+    let text = html(
+        "<p>Hi <img src=\"/smiley.png\" width=\"20\"></p>\
+         <figure><img src=\"/big.jpg\" alt=\"Big\"><figcaption>Big</figcaption></figure>\
+         <img src=\"/second.jpg\">",
+        base,
+    );
+    assert_eq!(
+        first_image(&text).as_deref(),
+        Some("https://example.org/big.jpg"),
+        "{text}"
+    );
+    // A size that is no number says nothing.
+    assert_eq!(
+        first_image("<img src=\"https://e.example/a.png\" width=\"wide\">").as_deref(),
+        Some("https://e.example/a.png")
+    );
+    for none in [
+        "",
+        "words only",
+        "<img alt=\"no address\">",
+        "<img src=\"https://e.example/i.png\" height=\"99\">",
+    ] {
+        assert_eq!(first_image(none), None, "{none}");
+    }
+    // A tree too deep to read is read as words.
+    let deep = format!(
+        "{}<img src=\"https://e.example/x.png\">",
+        "<div>".repeat(100_000)
+    );
+    let _ = first_image(&deep);
+}
