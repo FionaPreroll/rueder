@@ -1,8 +1,12 @@
 <script lang="ts">
 	// The page of rueder with its server: the reader for whoever is logged in, the
 	// login for everybody else. The builds without a server have a page of their own
-	// (src/single).
+	// (src/single). Only this one has a service worker, which keeps the app for a
+	// quick start and tells of new versions.
 	import { onMount } from 'svelte';
+	import { dev } from '$app/env';
+	import UpdateNotice from '#lib/components/UpdateNotice.svelte';
+	import { registerServiceWorker } from '#lib/updates.svelte.ts';
 	import { Session } from '#lib/api/session.svelte.ts';
 	import Login from '#lib/components/Login.svelte';
 	import ReaderPage from '#lib/components/ReaderPage.svelte';
@@ -12,6 +16,10 @@
 
 	onMount(() => {
 		void session.check();
+		// The dev server has no worker, and one would keep its files from changing.
+		if (dev) return;
+		const stopping = registerServiceWorker();
+		return () => void stopping.then((stop) => stop());
 	});
 </script>
 
@@ -37,3 +45,5 @@
 {:else}
 	<Login {session} />
 {/if}
+
+<UpdateNotice />
