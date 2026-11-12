@@ -6,6 +6,7 @@ import { labelColors, type Stream } from '#lib/model.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import ArticleBody from './ArticleBody.svelte';
 import ArticleList from './ArticleList.svelte';
+import ArticleRow from './ArticleRow.svelte';
 
 const now = Date.parse('2026-11-10T14:30:00Z');
 
@@ -147,6 +148,38 @@ describe('an empty list', () => {
 		reader.deleteRule('rule-2');
 		reader.show({ kind: 'hidden' });
 		await vi.waitFor(() => expect(screen.getByText('No articles here.')).toBeInTheDocument());
+	});
+});
+
+describe('the stacked rows beside the article', () => {
+	function stacked(author: string) {
+		const reader = new DemoReader(() => now);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		const article = { ...reader.list[0], author };
+		const { container } = render(ArticleRow, {
+			reader,
+			article,
+			now,
+			showFeed: false,
+			stacked: true
+		});
+		const title = within(container).getByText(article.title);
+		const time = container.querySelector('time')!;
+		return { title, time };
+	}
+
+	it('puts the author and the time over the title', () => {
+		const { title, time } = stacked('Ruth Vogel');
+		expect(time.parentElement).toHaveTextContent('Ruth Vogel');
+		expect(time.parentElement).not.toContainElement(title);
+	});
+
+	it('puts the time beside the title when there is no author, leaving no empty line', () => {
+		for (const author of ['', '  ']) {
+			const { title, time } = stacked(author);
+			expect(time.parentElement).toContainElement(title);
+			document.body.innerHTML = '';
+		}
 	});
 });
 

@@ -2,8 +2,10 @@
 	// One line of the list view: star, feed, title with the first words of the text,
 	// time. Unread is bold on paper, read is quiet on gray, as in Google Reader.
 	// Stacked, for the narrow list beside the article in the view of three panes,
-	// it puts feed and time over the title and the first words under it, and a
-	// click opens the article in its pane instead of under the row.
+	// it puts feed (or author) and time over the title and the first words under
+	// it, and a click opens the article in its pane instead of under the row. An
+	// article of a single feed without an author has nothing to put over the
+	// title, so its time goes beside the title instead of on a line of its own.
 	import type { Reader } from '#lib/reader.ts';
 	import { formatFull, formatWhen } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -32,6 +34,7 @@
 	);
 	const feed = $derived(reader.feeds[article.feedId]);
 	const opened = $derived(reader.open === article.id);
+	const byline = $derived((showFeed ? feed?.title : article.author)?.trim());
 </script>
 
 {#snippet star()}
@@ -92,16 +95,28 @@
 			aria-current={opened ? 'true' : undefined}
 			onclick={() => reader.select(article)}
 		>
-			<span class="flex items-baseline gap-2">
-				<span class={['min-w-0 flex-1 truncate text-xs', read ? 'text-soft' : 'text-ink']}>
-					{showFeed ? feed?.title : article.author}
+			{#if byline}
+				<span class="flex items-baseline gap-2">
+					<span class={['min-w-0 flex-1 truncate text-xs', read ? 'text-soft' : 'text-ink']}>
+						{byline}
+					</span>
+					{@render dots()}
+					{@render when()}
 				</span>
-				{@render dots()}
-				{@render when()}
-			</span>
-			<span class={['mt-0.5 line-clamp-2', read ? 'text-soft' : 'font-semibold text-ink']}>
-				{article.title}
-			</span>
+				<span class={['mt-0.5 line-clamp-2', read ? 'text-soft' : 'font-semibold text-ink']}>
+					{article.title}
+				</span>
+			{:else}
+				<span class="flex items-baseline gap-2">
+					<span
+						class={['line-clamp-2 min-w-0 flex-1', read ? 'text-soft' : 'font-semibold text-ink']}
+					>
+						{article.title}
+					</span>
+					{@render dots()}
+					{@render when()}
+				</span>
+			{/if}
 			{#if settings.teasers && article.teaser}
 				<span class="mt-0.5 line-clamp-2 text-xs text-soft">{article.teaser}</span>
 			{/if}
