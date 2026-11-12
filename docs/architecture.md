@@ -484,7 +484,7 @@ Auf Fionas Wunsch vom 2026-11-12 nach dem Merge von Pull Request #40, weil das R
 **Restrisiken, bewusst offen:**
 
 - **Alte WebViews.** Auf Android System WebView vor Version 86 gibt Capacitor seine Brücke jeder Seite in der WebView, auch der des Servers. Das Plugin der App prüft dann, welche Seite gezeigt wird; die eingebauten Plugins von Capacitor (etwa `WebView.setServerBasePath`) prüfen nichts. Ausnutzen kann das nur ein Skript in der Seite des Servers, also nach einem Fehler, an dem die Content-Security-Policy vorbeikäme. Version 86 kam im Oktober 2020; eine ältere WebView ist seitdem nicht mehr aktualisiert worden.
-- **Actions nach Tag, nicht nach Commit** (behoben am selben Tag, auf Fionas Wunsch): Actions stehen mit dem Hash ihres Commits, die Basis-Images des Image mit Digest, die Tools der CI mit fester Version und geprüfter Prüfsumme, und der Gradle-Wrapper wird geprüft (siehe [CI](implementation.md#ci)). Offen ist noch die Prüfsumme der Gradle-Distribution.
+- **Actions nach Tag, nicht nach Commit** (behoben am selben Tag, auf Fionas Wunsch): Actions stehen mit dem Hash ihres Commits, die Basis-Images des Image mit Digest, die Tools der CI mit fester Version und geprüfter Prüfsumme, und der Gradle-Wrapper wird geprüft (siehe [CI](implementation.md#ci)). Die Distribution von Gradle prüft der Wrapper gegen ihre Prüfsumme.
 - **Der Signier-Schlüssel in den Secrets von GitHub.** Wer `main` ändern kann, kann ihn lesen. Ein Schlüssel, den nur ein geschützter Release-Weg sieht (eine Environment mit Freigabe), wäre enger.
 
 ### Header, Herkunft und Limits
