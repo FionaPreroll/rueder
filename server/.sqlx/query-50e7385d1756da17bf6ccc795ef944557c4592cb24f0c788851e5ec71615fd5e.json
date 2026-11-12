@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FILTER (WHERE f.fetched_at IS NULL) AS \"waiting!\",\n                  count(*) FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')\n                      AS \"overdue!\",\n                  extract(epoch FROM now() - min(f.next_fetch_at)\n                      FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')\n                  )::float8 AS most_overdue,\n                  extract(epoch FROM now() - min(f.next_fetch_at)\n                      FILTER (WHERE f.next_fetch_at < now()))::float8 AS behind\n           FROM feeds f\n           WHERE EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "waiting!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "overdue!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "most_overdue",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "behind",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "50e7385d1756da17bf6ccc795ef944557c4592cb24f0c788851e5ec71615fd5e"
+}

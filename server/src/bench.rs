@@ -9,6 +9,8 @@
 //! way words of a language are: a few very often, most of them rarely (Zipf).
 //! That is what the size of the search index and the time of a search depend on.
 
+pub mod fetching;
+
 use std::{
     fmt,
     time::{Duration, Instant},

@@ -34,6 +34,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Begonnen am 2026-11-10, alle Pakete fertig am 2026-11-12: Pakete 2.1 (gehärteter HTTP-Client), 2.2 (Abruf mit Versionen), 2.3 (Bereinigung), 2.4 (Bild-Proxy), 2.5 (Konten und Sitzungen), 2.6 (API), 2.7 (Live-Updates), 2.8 (API-Typen für das Frontend), 2.9 (Härtung), 2.10 (Betrieb), 2.11 (Fuzzing, dazu ein Soak-Test), 2.12 (Security-Review), 2.13 (Suche auf dem Server) und 2.14 (Registrierung und Einladungen) | `server/src/http_client.rs`, `server/src/feeds.rs`, `server/src/fetch.rs`, `server/src/cleaning.rs`, `server/src/images.rs`, `server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs`, `server/src/api.rs`, `server/src/tree.rs`, `server/src/labels.rs`, `server/src/filters.rs`, `server/src/subscribe.rs`, `server/src/profile.rs`, `server/src/events.rs`, `server/src/typescript.rs`, `web/src/lib/api/types.ts`, `server/src/hardening.rs`, `server/src/rate.rs`, `server/src/search.rs`, `server/src/registration.rs`, `server/deny.toml`, `server/fuzz/`, `server/tests/soak.rs`, `server/src/search.rs`, `server/migrations/0005_search.sql`, `Dockerfile`, `deploy/` |
 | 3 Frontend | Begonnen am 2026-11-11, alle Pakete fertig am 2026-11-12: 3.1 (Anbindung, auch mit dem, was ihm zuerst fehlte), 3.2 (Live-Updates), 3.3 (Einstellungen und Tasten), 3.4 (Labels), 3.5 (Abonnieren und OPML), 3.6 (Tempo), 3.7 (Prüfung im Browser), 3.8 (Statusseite für Admins), 3.9 (Fehlerberichte aus dem Browser), 3.10 (PWA), 3.11 (Android-App), 3.12 (Umzug eines Kontos), 3.13 (drei Bereiche) und 3.14 (Magazin-Ansicht) | `web/e2e/`, `web/src/lib/api/`, `web/src/lib/reader.ts`, `web/src/lib/components/SubscribeDialog.svelte`, `web/src/lib/components/StatusDialog.svelte`, `web/src/service-worker.ts`, `server/src/monitor.rs`, `server/src/status.rs`, `server/src/reports.rs`, `server/src/transfer.rs`, `app/` |
 | 4 Umstieg | Begonnen am 2026-11-12: 4.1 übersprungen, 4.2 (Inbetriebnahme) erledigt | `deploy/check.sh` |
+| 5 Öffentliche Instanz | Begonnen am 2026-11-12: 5.2 (Abruf einstellbar) ist fertig, offen sind 5.7 (zweiter Faktor), 5.8 (Rechtliches) und 5.9 (Meldeweg und Sperre) | `server/src/fetch.rs`, `server/src/bench/fetching.rs` |
 
 Was es heute gibt:
 
@@ -306,6 +307,32 @@ Es gibt keinen Parallelbetrieb: Die alte Produktion ist abgeschaltet, ihre Daten
 - [ ] **4.6 Lesestand und Labels aus dem Browser.** Das neue Frontend liest nach dem Import die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte und der Browser den Speicher noch hat. Weil der Import nach der Inbetriebnahme kommt, bietet das Frontend die Übernahme an, sobald das Konto importierte Daten hat, nicht beim ersten Login.
 - [x] **4.7 Abbau.** `backend/`, `frontend/` und `config/` entfernen, README neu schreiben. Vorgezogen am 2026-11-11: die alten Workflows, die Paketdateien in `backend/` und `frontend/` und die Compose-Dateien in `/` und `backend/` sind schon weg. `server/tests/feeds.rs` liest Testdaten aus `backend/test/data/`; die ziehen vor dem Abbau nach `server/tests/`. Fertig am 2026-11-12, auf Fionas Wunsch vor 4.4 bis 4.6: Die aufgezeichneten Feeds liegen in `server/tests/data/`, `backend/`, `frontend/` und `config/` sind weg, mit ihnen `.golangci.yaml`, `.pre-commit-config.yaml`, `.mdlrc`, die Go-Einträge in `.vscode/`, die Python-Analyse von CodeQL und auf Fionas Wunsch das Gopher-Logo in `docs/images/`. Die README im Hauptverzeichnis beschreibt den neuen rueder. Was 4.4 bis 4.6 vom alten Code brauchen, steht im Commit `0b36a96`: der Import liest nur die alte Datenbank selbst, das Format des `localStorage` für 4.6 beschreibt [user_data.md](user_data.md).
 
+### Schritt 5: Öffentliche Instanz
+
+Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass sich für eine selbst gehostete etwas ändert (A16). Die Nummern stammen aus Fionas eigener Planung; die Pakete, die hier fehlen, gehören nicht zu diesem Repository.
+
+- [x] **5.2 Abruf einstellbar (A6).** Bisher rief der Server 100 Feeds alle 30 Sekunden ab, 8 gleichzeitig (`ROUND`, `AT_ONCE` und das Intervall in `server/src/fetch.rs`), zusammen höchstens rund 12.000 Abrufe je Stunde. Diese drei Werte kommen künftig aus der Umgebung (`FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`), mit Grenzen, die der Server beim Start prüft. Je Host bleibt es bei einem Abruf. Die Statusseite zeigt Abrufe je Stunde und wie weit der Abruf hinterherhinkt; überfällige Feeds zählt sie schon. Zum Messen bekommt `rueder bench` eine lokale Quelle mit vielen Feeds unter vielen Namen, weil je Host nur einer läuft, erreichbar über `FETCH_ALLOW_NETS`. Fertig, wenn:
+  - Tests die Grenzen der Einstellungen prüfen;
+  - der Durchsatz auf einer Maschine wie der der übrigen Messungen unter [Messung](#messung) steht;
+  - [deploy/README.md](../deploy/README.md) Werte für eine große Instanz nennt.
+
+  Fertig am 2026-11-12, beschrieben unter [Abruf](architecture.md#abruf) und [Status für Admins](architecture.md#status-für-admins). `fetch::Pace` liest die drei Werte (Runde 1 bis 10.000 Feeds, 1 bis 256 gleichzeitig, alle 5 bis 3.600 Sekunden); ein Wert außerhalb oder keine Zahl hält den Start an. Ohne sie bleibt alles wie bisher. Eine Runde, die länger dauert als der Takt, lässt die nächste warten, statt mehrere zugleich zu starten. Die Statusseite nennt Takt, Abrufe der letzten Stunde und den Rückstand des Feeds, der am längsten über seiner Zeit wartet, und gibt einen Hinweis, wenn Runden voll kommen und trotzdem Feeds warten. `rueder bench fetch` dient die Feeds selbst unter bis zu 1.000 Adressen aus 127.0.0.0/8 und gibt sich dafür selbst `FETCH_ALLOW_NETS`; die Werte stehen unter [Abruf vom 2026-11-12](#abruf-vom-2026-11-12).
+- [ ] **5.7 Zweiter Faktor (A22, aus „Für später“).** TOTP nach RFC 6238 mit zehn Wiederherstellungscodes, nur als Hash gespeichert und je einmal nutzbar. Einrichten und Abschalten geht nur mit Passwort. Falsche Codes zählen wie falsche Passwörter. Eine Einstellung verlangt ihn für Admins; ohne zweiten Faktor wirkt deren Recht nicht. Passkeys folgen später; ihre Crates vorher gegen `deny.toml` prüfen, das OpenSSL sperrt. Fertig, wenn:
+  - Tests Einrichten, Login mit Code, falsche Codes bis zur Grenze, Wiederherstellungscodes, Abschalten und die Pflicht für Admins prüfen;
+  - der Punkt unter [Für später](#für-später) abgehakt ist.
+- [ ] **5.8 Rechtliches in der Oberfläche (A20).** Die Adressen von Impressum, Datenschutzerklärung und Nutzungsbedingungen kommen aus der Umgebung (`LEGAL_IMPRINT_URL`, `LEGAL_PRIVACY_URL`, `LEGAL_TERMS_URL`); die Texte liegen auf der Website des Betreibers. rueder verlinkt sie auf der Login-Seite, bei der Registrierung, im Kontomenü und auf der Startseite der App. Mit `TERMS_VERSION` verlangt die Registrierung die Zustimmung, und das Konto merkt sich Fassung und Zeit. Nach einer neuen Fassung fragt die Seite beim nächsten Besuch. Ohne die Einstellungen zeigt rueder nichts davon. Fertig, wenn:
+  - Tests die Zustimmung bei der Registrierung, eine neue Fassung und den Fall ohne Einstellungen prüfen;
+  - beide Reader und die Startseite der App die Links zeigen.
+- [ ] **5.9 Meldeweg und Sperre von Feeds (A20, E12).** Ein Eintrag „Melden“ im Menü eines Artikels und eines Feeds nimmt einen Grund aus einer festen Liste und einen kurzen Text, mit Grenzen je Konto wie bei den Fehlerberichten. Die Statusseite zeigt gemeldete Feeds mit Adresse und Zahl der Meldungen, nie, wer gemeldet hat. `rueder feed block <adresse>` wirkt so:
+  - der Abruf stoppt;
+  - die Artikel sind für alle ausgeblendet;
+  - neue Abos werden abgelehnt;
+  - die Bilder des Feeds verschwinden aus dem Cache.
+
+  `unblock` hebt die Sperre auf. Fertig, wenn:
+  - Tests Meldung, Grenzen, Sperre und Aufhebung prüfen;
+  - die Ausnahme aus E12 in architecture.md begründet ist.
+
 ### Für später
 
 Von Fiona am 2026-11-12 für später notiert, noch keinem Schritt zugeordnet:
@@ -491,6 +518,24 @@ Die Listen blieben in beiden Läufen bei den Zeiten unter [Ergebnisse vom 2026-1
 - **Warum der Planer daneben lag.** Ein häufiges Wort ist am schnellsten gefunden, wenn man rückwärts durch die neuesten Artikel geht: Jeder zehnte ist ein Treffer, nach 500 Artikeln ist die Seite voll. Der Planer nahm stattdessen oft den Index, der für das Wort eine Million Artikel lesen musste, auch wenn nur die im Fenster der neuesten 20.000 gebraucht wurden: eine halbe Sekunde. Bei seltenen Wörtern lag er manchmal andersherum und ging rückwärts durch ein Fenster von Millionen Artikeln, bis die Grenze von drei Sekunden die Suche abbrach (14 von 3.500 Suchen). Beides kommt von seiner Schätzung, wie viele Artikel ein Wort und seine Verlängerungen haben; mit höheren Kosten für den Index (`cpu_index_tuple_cost`) verschob sich der Fehler nur von der einen Seite auf die andere.
 - **Was die eigene Wahl kostet.** Ein sehr häufiges Wort ist langsamer als beim Planer (29 statt 6 ms), weil die Suche immer erst 500 Artikel ansieht, bevor sie entscheidet. Dafür bleibt jede Art von Suche im 99. Perzentil unter einer halben Sekunde. Die zwei Ausreißer über zwei Sekunden mit warmem Cache kamen in einem Lauf, kurz nachdem PostgreSQL nach einem Neustart des Containers den Absturz aufgeräumt hatte, und im selben Lauf hatte auch das Schreiben Ausreißer. Im Lauf davor, der bei mehreren Wörtern noch alle im Index fragte, blieb jede Suche mit einem Wort unter 350 ms, und nach dem Neustart gab es einen Ausreißer von 7,4 s, als die Seiten noch von der Platte kamen. Die Kosten je Artikel misst die Suche selbst, die je Artikel im Index (1,3 µs) sind in `server/src/search.rs` eingetragen und stammen aus dieser Messung.
 - **Nicht gemessen:** Suchen in einem einzelnen Feed oder Ordner und mit langen Texten. Die Wahl rechnet mit beidem (wie weit die Artikel der Suche auseinanderliegen und was einer kostet), geprüft ist das aber nur mit dem Modell-Test in `server/tests/search.rs` und kleinen Versuchen von Hand. Die Messung an echten Daten gehört zu Paket 4.4.
+
+### Abruf vom 2026-11-12
+
+Für Paket 5.2: wie viele Abrufe je Stunde eine Maschine bei einem gegebenen Takt schafft. `rueder bench fetch` auf einer eigenen Datenbank, im Release-Build, je Lauf fünf Minuten (der Standardtakt zwei).
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher, PostgreSQL 16.15 mit `shared_buffers = 2GB`. Server, Datenbank und Quelle auf derselben Maschine.
+- **Daten:** Erfundene RSS-Feeds mit je 20 Artikeln zu Beginn und einem neuen je Minute, jeder mit einem Absatz, einem Bild und einem Link mit Tracking-Parameter. Ein Feed ohne Neues antwortet mit „nicht geändert“ (ETag). Vor jeder Runde werden alle Feeds wieder fällig, so dass jede Runde nimmt, so viel sie darf.
+
+| Takt | Feeds, Namen | Runde im Mittel, längste | Abrufe (mit Inhalt, unverändert) | Neue Artikel | Abruf Median, 95. Perzentil | Je Stunde |
+|---|---|---|---|---|---|---|
+| 100 alle 30 s, 8 gleichzeitig (Standard) | 2.000, 250 | 0,27 s, 0,53 s | 500 (407, 93) | 5.405 | 20 ms, 51 ms | 12.000 |
+| 1.000 alle 10 s, 64 gleichzeitig | 5.000, 250 | 1,1 s, 3,4 s | 31.000 (16.536, 14.464) | 117.097 | 41 ms, 163 ms | 360.000 |
+| 10.000 alle 5 s, 256 gleichzeitig | 20.000, 1.000 | 4,7 s, 28 s | 490.000 (94.478, 395.522) | 476.275 | 81 ms, 258 ms | 5,9 Millionen |
+
+- **Der Takt begrenzt, nicht die Maschine,** bis weit über das, was eine Instanz braucht: Beim Standard ist eine Runde nach einer Viertelsekunde von 30 fertig, bei 1.000 alle 10 Sekunden nach gut einer Sekunde.
+- **Teuer ist der erste Abruf.** Die längste Runde des größten Takts war die erste: 10.000 Feeds, die zum ersten Mal je 20 Artikel bringen, in 28 Sekunden, rund 350 Feeds mit Inhalt je Sekunde. Danach antworten die meisten Feeds „nicht geändert“, und eine Runde dauert 3 bis 5 Sekunden.
+- **Echte Websites antworten langsamer** als eine Quelle auf derselben Maschine. Dann begrenzt `FETCH_AT_ONCE`: 64 gleichzeitig bei einer halben Sekunde je Abruf sind rund 130 Abrufe je Sekunde. Die Werte für eine große Instanz in [deploy/README.md](../deploy/README.md#a-large-instance) rechnen damit.
+- Ein erster Lauf scheiterte an einem Deadlock: Die Messung hatte, anders als der Server beim Start, die Partition des Monats für `article_versions` nicht angelegt, und mehrere Abrufe legten sie zugleich an. Sie legt sie jetzt vorher an wie der Server.
 
 ### Import vom 2026-11-12
 

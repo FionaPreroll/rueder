@@ -447,6 +447,8 @@ const en = {
 			feedsFailing: (failing: number, subscribed: number) =>
 				`${n(failing)} of ${n(subscribed)} feeds fail.`,
 			notFetching: 'The server does not fetch feeds. Is FETCH set to off?',
+			fetchPaceFull: (most: number) =>
+				`Every round takes as many feeds as it may, and feeds still wait: the pace allows ${n(most)} fetches an hour. FETCH_ROUND, FETCH_AT_ONCE and FETCH_EVERY set it.`,
 			cacheMisses: (share: string) =>
 				`The database finds only ${share} of what it reads in memory; more shared_buffers would help.`,
 			longQuery: (took: string) => `A query has been running for ${took}.`,
@@ -501,6 +503,13 @@ const en = {
 			overdue: 'Fetched late',
 			overdueValue: (count: number, late: string) => `${n(count)}, the latest by ${late}`,
 			waiting: 'Not fetched yet',
+			pace: 'Pace',
+			paceValue: (round: number, every: string, atOnce: number, most: number) =>
+				`${n(round)} ${plural(round, { one: 'feed', other: 'feeds' })} every ${every}, ${n(atOnce)} at once: at most ${n(most)} an hour`,
+			perHour: 'Fetches in the last hour',
+			behind: 'Behind',
+			behindValue: (late: string) => `the feed waiting longest is ${late} past its time`,
+			notBehind: 'Nothing is waiting',
 			failing: 'Failing feeds, by why',
 			noneFailing: 'No feed fails.',
 			feeds: (count: number) => `${n(count)} ${plural(count, { one: 'feed', other: 'feeds' })}`,

@@ -106,6 +106,9 @@ enum Hint {
     PoolBusy { size: u32 },
     /// Feeds are fetched later than they are due.
     FetchBacklog { overdue: i64, most_overdue_s: f64 },
+    /// Rounds come full and feeds wait: the pace, not the sites, holds the
+    /// fetching back, and `FETCH_ROUND` or `FETCH_EVERY` would let more through.
+    FetchPaceFull { per_hour: u64 },
     /// Many feeds fail.
     FeedsFailing { failing: i64, subscribed: i64 },
     /// The fetching does not run.
@@ -196,6 +199,13 @@ struct Table {
 struct Fetcher {
     /// Whether the server fetches feeds at all.
     running: bool,
+    /// The pace it fetches at, where it does.
+    pace: Option<FetchPace>,
+    /// How many fetches the last hour had, of all kinds.
+    per_hour: u64,
+    /// How long the feed that has waited longest past its time has waited, in
+    /// seconds; 0 when none is due.
+    behind_s: f64,
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
     last_round_at: Option<OffsetDateTime>,
@@ -216,6 +226,17 @@ struct Fetcher {
     most_overdue_s: Option<f64>,
     /// Feeds not fetched yet at all.
     waiting: i64,
+}
+
+/// How fast feeds are fetched (`FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`).
+#[derive(Serialize, TS)]
+#[ts(rename = "StatusFetchPace")]
+struct FetchPace {
+    round: i64,
+    at_once: usize,
+    every_s: u64,
+    /// The most fetches an hour can have at this pace.
+    per_hour: u64,
 }
 
 /// Why fetches fail.
@@ -369,7 +390,9 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
                       AS "overdue!",
                   extract(epoch FROM now() - min(f.next_fetch_at)
                       FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')
-                  )::float8 AS most_overdue
+                  )::float8 AS most_overdue,
+                  extract(epoch FROM now() - min(f.next_fetch_at)
+                      FILTER (WHERE f.next_fetch_at < now()))::float8 AS behind
            FROM feeds f
            WHERE EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)"#,
         OVERDUE_S,
@@ -414,6 +437,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
 
     let fetches = monitor.fetches(now);
     let round = monitor.last_round();
+    let pace = monitor.fetching();
     let lookups = monitor.lookups(now);
     let images = state.images.as_deref();
     let served = images.map(|images| images.served(now)).unwrap_or_default();
@@ -435,7 +459,15 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         tables,
     };
     let fetcher = Fetcher {
-        running: monitor.is_fetching(),
+        running: pace.is_some(),
+        pace: pace.map(|pace| FetchPace {
+            round: pace.round,
+            at_once: pace.at_once,
+            every_s: pace.every.as_secs(),
+            per_hour: pace.per_hour(),
+        }),
+        per_hour: fetches.fetched + fetches.unchanged + fetches.failed + fetches.broken,
+        behind_s: fetching.behind.unwrap_or_default().max(0.0),
         last_round_at: round.map(|round| round.at),
         last_round_feeds: round.map(|round| round.feeds),
         last_round_s: round.map(|round| round.took.as_secs_f64()),
@@ -563,6 +595,13 @@ fn hints(
             overdue: fetcher.overdue,
             most_overdue_s: fetcher.most_overdue_s.unwrap_or_default(),
         });
+        if let Some(pace) = &fetcher.pace
+            && fetcher.last_round_feeds == usize::try_from(pace.round).ok()
+        {
+            hints.push(Hint::FetchPaceFull {
+                per_hour: pace.per_hour,
+            });
+        }
     }
     if let Some(seconds) = database.longest_query_s
         && seconds >= 30.0

@@ -66,6 +66,8 @@
 				return hints.feedsFailing(h.failing, h.subscribed);
 			case 'not_fetching':
 				return hints.notFetching;
+			case 'fetch_pace_full':
+				return hints.fetchPaceFull(h.per_hour);
 			case 'cache_misses':
 				return hints.cacheMisses(formatPercent(h.hit_ratio));
 			case 'long_query':
@@ -179,6 +181,24 @@
 			])}
 			{@render facts(m.status.fetcher.title, [
 				[m.status.fetcher.state, s.fetcher.running ? m.status.on : m.status.off],
+				[
+					m.status.fetcher.pace,
+					s.fetcher.pace
+						? m.status.fetcher.paceValue(
+								s.fetcher.pace.round,
+								ms(s.fetcher.pace.every_s * 1000),
+								s.fetcher.pace.at_once,
+								s.fetcher.pace.per_hour
+							)
+						: empty
+				],
+				[m.status.fetcher.perHour, formatNumber(s.fetcher.per_hour)],
+				[
+					m.status.fetcher.behind,
+					s.fetcher.behind_s > 0
+						? m.status.fetcher.behindValue(ms(s.fetcher.behind_s * 1000))
+						: m.status.fetcher.notBehind
+				],
 				[
 					m.status.fetcher.lastRound,
 					s.fetcher.last_round_at

@@ -6,7 +6,10 @@ use std::time::Instant;
 
 use axum::http::{Method, StatusCode};
 use common::call;
-use rueder::{AppState, accounts, monitor::Severity};
+use rueder::{
+    AppState, accounts, fetch,
+    monitor::{Fetched, Round, Severity},
+};
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -131,4 +134,89 @@ async fn the_status_counts_and_names_nobody(db: PgPool) {
     for secret in ["secret", "grace", "linus", "example"] {
         assert!(!text.contains(secret), "{secret} in {text}");
     }
+}
+
+#[sqlx::test]
+async fn the_status_says_how_fast_feeds_are_fetched_and_how_far_behind(db: PgPool) {
+    let root = common::account(&db, "root").await;
+    accounts::set_admin(&db, "root", true).await.unwrap();
+    let (_, waiting) = common::reader(&db, "grace", 0).await;
+    let (_, also_waiting) = common::reader(&db, "linus", 0).await;
+    // Twenty minutes past their time, and fetched before.
+    for feed in [waiting, also_waiting] {
+        sqlx::query(
+            "UPDATE feeds SET next_fetch_at = now() - interval '20 minutes', fetched_at = now()
+             WHERE id = $1",
+        )
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    }
+    let state = AppState::new(db.clone());
+    let admin = common::session(&db, root).await;
+    let pace = fetch::Pace {
+        round: 2,
+        at_once: 4,
+        every: std::time::Duration::from_secs(60),
+    };
+    state.monitor.fetching_runs(pace);
+    let now = Instant::now();
+    for fetched in [
+        Fetched::Fetched { new: 3 },
+        Fetched::Unchanged,
+        Fetched::Failed,
+    ] {
+        state
+            .monitor
+            .fetch(fetched, std::time::Duration::from_millis(40), now);
+    }
+    // The last round was full: the pace, not the sites, holds the feeds back.
+    state.monitor.round(Round {
+        at: time::OffsetDateTime::now_utc(),
+        feeds: 2,
+        took: std::time::Duration::from_secs(1),
+    });
+
+    let (answer, body) = status(&state, Some(&admin)).await;
+    assert_eq!(answer, StatusCode::OK);
+    let fetcher = &body["fetcher"];
+    assert_eq!(fetcher["running"], true);
+    assert_eq!(
+        fetcher["pace"],
+        serde_json::json!({ "round": 2, "at_once": 4, "every_s": 60, "per_hour": 120 })
+    );
+    assert_eq!(fetcher["per_hour"], 3);
+    let behind = fetcher["behind_s"].as_f64().unwrap();
+    assert!((20.0 * 60.0..21.0 * 60.0).contains(&behind), "{behind}");
+    let kinds: Vec<&str> = body["hints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hint| hint["kind"].as_str().unwrap())
+        .collect();
+    assert!(kinds.contains(&"fetch_backlog"), "{kinds:?}");
+    let full = body["hints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|hint| hint["kind"] == "fetch_pace_full")
+        .unwrap_or_else(|| panic!("{kinds:?}"));
+    assert_eq!(full["per_hour"], 120);
+
+    // A round with room to spare is no sign of the pace.
+    state.monitor.round(Round {
+        at: time::OffsetDateTime::now_utc(),
+        feeds: 1,
+        took: std::time::Duration::from_secs(1),
+    });
+    let (_, body) = status(&state, Some(&admin)).await;
+    assert!(!body.to_string().contains("fetch_pace_full"));
+    // Nothing is behind once nothing is due.
+    sqlx::query("UPDATE feeds SET next_fetch_at = now() + interval '1 hour'")
+        .execute(&db)
+        .await
+        .unwrap();
+    let (_, body) = status(&state, Some(&admin)).await;
+    assert_eq!(body["fetcher"]["behind_s"], 0.0);
 }

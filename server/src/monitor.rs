@@ -10,10 +10,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     fmt::{self, Write as _},
-    sync::{
-        Arc, LazyLock, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
 
@@ -30,7 +27,7 @@ use tracing::{
 };
 use tracing_subscriber::layer::{Context, Layer};
 
-use crate::AppState;
+use crate::{AppState, fetch::Pace};
 
 /// How long one part of the hour is.
 const SLOT: Duration = Duration::from_secs(10 * 60);
@@ -315,8 +312,8 @@ pub struct Monitor {
     requests: Mutex<HashMap<String, Window<Requests>>>,
     fetches: Mutex<Window<Fetches>>,
     last_round: Mutex<Option<Round>>,
-    /// Whether the loop that fetches feeds runs.
-    fetching: AtomicBool,
+    /// The pace of the loop that fetches feeds, while it runs.
+    pace: Mutex<Option<Pace>>,
     lookups: Mutex<Window<Lookups>>,
     pub problems: Arc<Problems>,
 }
@@ -336,7 +333,7 @@ impl Monitor {
             requests: Mutex::default(),
             fetches: Mutex::default(),
             last_round: Mutex::default(),
-            fetching: AtomicBool::new(false),
+            pace: Mutex::default(),
             lookups: Mutex::default(),
             problems,
         }
@@ -374,12 +371,16 @@ impl Monitor {
     }
 
     /// Notes that the loop that fetches feeds runs.
-    pub fn fetching_runs(&self) {
-        self.fetching.store(true, Ordering::Relaxed);
+    /// Notes that the loop that fetches feeds runs, at this pace.
+    pub fn fetching_runs(&self, pace: Pace) {
+        if let Ok(mut running) = self.pace.lock() {
+            *running = Some(pace);
+        }
     }
 
-    pub fn is_fetching(&self) -> bool {
-        self.fetching.load(Ordering::Relaxed)
+    /// The pace feeds are fetched at; none where the server does not fetch.
+    pub fn fetching(&self) -> Option<Pace> {
+        self.pace.lock().ok().and_then(|pace| *pace)
     }
 
     /// Counts a fetch of a feed.

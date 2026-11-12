@@ -217,6 +217,20 @@ enum BenchCommand {
         #[arg(long, default_value_t = 500)]
         runs: usize,
     },
+    /// Fetch made-up feeds from a source on this machine at the pace of
+    /// FETCH_ROUND, FETCH_AT_ONCE and FETCH_EVERY, and say how many an hour
+    /// that makes. Wants a database of its own.
+    Fetch {
+        #[arg(long, default_value_t = 5000)]
+        feeds: u32,
+        /// Under how many names the source answers; one fetch runs per name.
+        #[arg(long, default_value_t = 250)]
+        hosts: u32,
+        #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..=3600))]
+        seconds: u64,
+        #[arg(long, default_value_t = 39_871)]
+        port: u16,
+    },
 }
 
 #[tokio::main]
@@ -292,6 +306,22 @@ async fn main() -> anyhow::Result<()> {
             let options = import::Options { accounts, dry_run };
             let report = import::run(&db, &mut legacy, &Rules::from_env()?, &options).await?;
             println!("{report}");
+            Ok(())
+        }
+        Command::Bench(BenchCommand::Fetch {
+            feeds,
+            hosts,
+            seconds,
+            port,
+        }) => {
+            let options = bench::fetching::Options {
+                feeds,
+                hosts,
+                seconds,
+                port,
+                pace: fetch::Pace::from_env()?,
+            };
+            println!("{}", bench::fetching::run(&db, options).await?);
             Ok(())
         }
         Command::Bench(BenchCommand::Measure { runs }) => {
@@ -530,6 +560,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     let rules = Arc::new(Rules::from_env()?);
     // What fetching finds and what readers change reaches open tabs at once.
     let events = Events::new();
+    // FETCH_ROUND, FETCH_AT_ONCE and FETCH_EVERY set how fast feeds are
+    // fetched; a value out of bounds stops the start.
+    let pace = fetch::Pace::from_env()?;
     // FETCH=off keeps the server from fetching feeds.
     if env::var("FETCH").is_ok_and(|value| value == "off") {
         tracing::info!("not fetching feeds (FETCH=off)");
@@ -540,6 +573,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             rules.clone(),
             events.clone(),
             monitor.clone(),
+            pace,
         ));
     }
 
