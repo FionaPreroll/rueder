@@ -11,7 +11,9 @@ starred and sorted and the filter rules. It finds the feeds of a website and
 subscribes to them, renames and ends subscriptions, and takes them in and out as an
 OPML file; admins open the status of the server from the account menu. What changes
 elsewhere, a fetch of the server or another tab, comes in as it happens over the
-server's live updates. What comes with later work packages is in
+server's live updates. It installs as an app (PWA): its service worker keeps the
+app's own files, never the reader's data, and offers to reload when the server has
+a new version. What comes with later work packages is in
 [docs/implementation.md](../docs/implementation.md#schritt-3-frontend).
 
 - `src/lib/reader.ts` is the seam: what the page needs from whatever holds the feeds

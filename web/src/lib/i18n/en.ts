@@ -526,6 +526,12 @@ const en = {
 		}
 	},
 
+	update: {
+		ready: 'A new version of rueder is ready.',
+		reload: 'Reload',
+		later: 'Later'
+	},
+
 	crash: {
 		title: 'Something went wrong on this page.',
 		text: 'Reload the page to go on. What you read and changed is saved on the server.',

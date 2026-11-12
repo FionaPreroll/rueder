@@ -1,4 +1,4 @@
--- Umzug eines Kontos von einem anderen rueder (Paket 3.10, server/src/transfer.rs).
+-- Umzug eines Kontos von einem anderen rueder (Paket 3.12, server/src/transfer.rs).
 --
 -- Ein Abo, das ein Import auf einem Feed anlegt, der hier noch nie abgerufen
 -- wurde, kennt dessen Artikel noch nicht und kann seine Lesemarke nicht auf
