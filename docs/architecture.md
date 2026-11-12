@@ -502,6 +502,7 @@ Gebaut in Paket 2.9 (`server/src/hardening.rs`, `server/src/rate.rs`). Drei Schi
 |---|---|---|
 | `Content-Security-Policy` | Für das Frontend die Policy unten, für `/api` und `/img` `default-src 'none'; frame-ancestors 'none'` | Zweite Linie hinter der Bereinigung. |
 | `X-Content-Type-Options` | `nosniff` | Der genannte Typ gilt, was auch immer in den Bytes steht. |
+| `Strict-Transport-Security` | `max-age=31536000` | Ein Browser, der einmal da war, kommt ein Jahr lang nur über HTTPS wieder (seit dem 2026-11-12, siehe unten). |
 | `Referrer-Policy` | `no-referrer` | Verlinkte Seiten erfahren nicht, woher jemand kommt. |
 | `X-Frame-Options` | `DENY` | Kein Rahmen auf fremden Seiten, für Browser ohne `frame-ancestors`. |
 | `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy` | `same-origin` | Eine geöffnete oder öffnende Seite bekommt keinen Zugriff auf das Fenster, und keine fremde Seite lädt, was rueder ausliefert. |
@@ -524,7 +525,7 @@ manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
 - Geprüft im Browser (Chromium) am gebauten Frontend: Die Oberfläche läuft, und ein eingeschleustes Skript, ein Event-Handler, `eval`, ein fremdes Bild und ein Abruf an einen fremden Server werden abgelehnt.
 - Für Schritt 3: Der Login über OpenID Connect beginnt mit einem Link auf `/api/oidc/start`, nicht mit einem Formular, weil `form-action 'self'` die Weiterleitung zum Anbieter sonst sperrt.
 
-`Strict-Transport-Security` setzt der Server nicht: TLS macht der Reverse-Proxy, und nur der weiß, ob die ganze Domain HTTPS spricht. Die Beispiele in [deploy/README.md](../deploy/README.md) setzen den Header dort.
+`Strict-Transport-Security` setzt seit dem 2026-11-12 der Server selbst, ohne `includeSubDomains`. Bis dahin sollte der Reverse-Proxy ihn setzen, weil nur der weiß, ob die ganze Domain HTTPS spricht. Aber nicht jeder Proxy kann das: `tailscale serve`, über das rueder bei Fiona im Tailnet läuft, setzt keine eigenen Header, und `deploy/check.sh` meldete den fehlenden Header als Fehler. Ohne `includeSubDomains` gilt der Header nur für den Host von rueder, und der braucht ohnehin HTTPS, weil der Sitzungs-Cookie `Secure` ist. Browser nehmen ihn nur aus einer Antwort über HTTPS an, `http://localhost` in der Entwicklung bleibt also, wie es ist. Ein Proxy, der ihn selbst setzt, ersetzt ihn oder schickt ihn doppelt; dann gilt der erste.
 
 **Herkunft ändernder Anfragen.** Jede Anfrage außer `GET`, `HEAD` und `OPTIONS` wird geprüft, bevor sie einen Endpunkt erreicht:
 

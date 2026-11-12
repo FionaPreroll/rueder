@@ -46,9 +46,15 @@ const MAX_SCRIPT: u64 = 4 * 1024 * 1024;
 const MAX_ANNOUNCER_STYLES: usize = 4;
 
 /// The headers every answer gets, unless the endpoint set its own.
-const ALWAYS: [(HeaderName, &str); 6] = [
+const ALWAYS: [(HeaderName, &str); 7] = [
     // The type the server names is the type, whatever the bytes look like.
     (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    // Browsers that were here once come back over HTTPS only, for a year. It
+    // holds for this host alone, which needs HTTPS anyway: the session cookie
+    // is `Secure`. Browsers take it only from an answer over HTTPS, so plain
+    // HTTP on localhost stays as it is. Set here because not every proxy in
+    // front can set it (`tailscale serve` cannot).
+    (header::STRICT_TRANSPORT_SECURITY, "max-age=31536000"),
     // Sites that are linked from articles do not learn where the reader
     // came from.
     (header::REFERRER_POLICY, "no-referrer"),
