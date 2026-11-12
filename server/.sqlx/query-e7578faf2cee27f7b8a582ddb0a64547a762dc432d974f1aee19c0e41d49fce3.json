@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT '''' || replace(replace(w, '\\', '\\\\'), '''', '''''') || ''''\n                  || CASE WHEN char_length(w) >= 3 THEN ':*' ELSE '' END AS \"term!\"\n           FROM unnest(tsvector_to_array(to_tsvector('simple', $1))) w\n           ORDER BY w",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "term!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e7578faf2cee27f7b8a582ddb0a64547a762dc432d974f1aee19c0e41d49fce3"
+}

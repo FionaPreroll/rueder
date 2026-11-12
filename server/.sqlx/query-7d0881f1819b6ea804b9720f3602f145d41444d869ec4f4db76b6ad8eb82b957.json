@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT set_config('enable_indexscan', 'off', true) AS scan",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "scan",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7d0881f1819b6ea804b9720f3602f145d41444d869ec4f4db76b6ad8eb82b957"
+}

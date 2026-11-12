@@ -54,6 +54,22 @@ describe('the start page', () => {
 	});
 });
 
+describe('the search', () => {
+	it('from the start page goes through all articles', async () => {
+		render(Page);
+		const main = screen.getByRole('main');
+		const first = within(main).getAllByRole('listitem')[0];
+		const title = within(first).getAllByRole('button')[0].textContent?.trim() ?? '';
+		const word = title.split(/\s+/).find((w) => w.length > 4) ?? title;
+		await userEvent.type(screen.getByRole('searchbox'), word);
+		expect(heading()).toHaveTextContent('All items');
+		expect(screen.getByRole('searchbox')).toHaveValue(word);
+		const rows = within(screen.getByRole('main')).getAllByRole('listitem');
+		expect(rows.length).toBeGreaterThan(0);
+		for (const row of rows) expect(row.textContent?.toLowerCase()).toContain(word.toLowerCase());
+	});
+});
+
 describe('an article', () => {
 	it('shows the picture beside its text and plays its recording only when asked', async () => {
 		render(Page);

@@ -22,6 +22,7 @@ pub mod reading;
 pub mod reclean;
 pub mod registration;
 pub mod reports;
+pub mod search;
 pub mod sessions;
 pub mod status;
 pub mod subscribe;

@@ -129,6 +129,11 @@ export class FakeServer {
 	inviteDays = 7;
 	/** Wrong tries are refused for this many seconds. */
 	lockedFor = 0;
+	/**
+	 * Searches only this many ids back per request and then says where to go on,
+	 * as the real server does when a search takes long; 0 searches everything.
+	 */
+	searchWindow = 0;
 
 	folders: ApiFolder[] = [];
 	feeds: FakeFeed[] = [];
@@ -396,6 +401,8 @@ export class FakeServer {
 
 		const labelled = this.labelling(method, path, query, body);
 		if (labelled) return labelled;
+
+		if (method === 'GET' && path === '/search') return this.search(query);
 
 		const list = /^\/(articles|starred|hidden)$|^\/(feeds|folders)\/(\d+)\/articles$/.exec(path);
 		if (method === 'GET' && list) {
@@ -781,22 +788,44 @@ export class FakeServer {
 			)
 			.sort((a, b) => (after === null ? b.id - a.id : a.id - b.id))
 			.slice(0, limit)
-			.map((a) => ({
-				feed_id: a.feed_id,
-				seq: a.seq,
-				id: a.id,
-				published_at: a.published_at,
-				updated_at: a.updated_at,
-				version: a.version,
-				title: a.title,
-				teaser: a.teaser,
-				author: a.author,
-				url: a.url,
-				thumbnail_url: null,
-				read: a.read,
-				starred: a.starred,
-				labels: a.labels
-			}));
+			.map(listed);
+	}
+
+	/** Like the server: all the words, from three letters on also as a beginning. */
+	private search(query: URLSearchParams): Response {
+		const split = (text: string) =>
+			text
+				.toLowerCase()
+				.split(/[^\p{L}\p{N}]+/u)
+				.filter(Boolean);
+		const words = split(query.get('q') ?? '');
+		if (words.length === 0) return refused(400, 'there is no word to search for');
+		const feed = query.get('feed');
+		const folder = query.get('folder');
+		const feeds = feed
+			? this.scope('feeds', Number(feed))
+			: folder
+				? this.scope('folders', Number(folder))
+				: this.scope('articles', 0);
+		if (!feeds) return refused(404);
+		const newest = Math.max(0, ...this.articles.map((a) => a.id)) + 1;
+		const before = Math.min(Number(query.get('before') ?? newest), newest);
+		const from = this.searchWindow ? before - this.searchWindow : 0;
+		const limit = Number(query.get('limit') ?? 50);
+		const unread = query.get('unread') === 'true';
+		const hits = this.articles
+			.filter((a) => {
+				if (!feeds.has(a.feed_id) || a.hidden || (unread && a.read)) return false;
+				if (a.id >= before || a.id < from) return false;
+				const has = split([a.title, a.author, ...a.tags, a.html].join(' '));
+				return words.every((word) =>
+					has.some((one) => one === word || (word.length >= 3 && one.startsWith(word)))
+				);
+			})
+			.sort((a, b) => b.id - a.id)
+			.slice(0, limit);
+		const next = hits.length === limit ? hits[limit - 1].id : from > 1 ? from : null;
+		return json({ articles: hits.map(listed), next });
 	}
 
 	// Filter rules
@@ -877,4 +906,24 @@ export class FakeServer {
 		this.renumber(rows);
 		return empty();
 	}
+}
+
+/** An article as a line of a list. */
+function listed(a: FakeArticle): ApiListItem {
+	return {
+		feed_id: a.feed_id,
+		seq: a.seq,
+		id: a.id,
+		published_at: a.published_at,
+		updated_at: a.updated_at,
+		version: a.version,
+		title: a.title,
+		teaser: a.teaser,
+		author: a.author,
+		url: a.url,
+		thumbnail_url: null,
+		read: a.read,
+		starred: a.starred,
+		labels: a.labels
+	};
 }
