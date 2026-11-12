@@ -68,13 +68,13 @@ docker compose exec rueder rueder account add fiona --admin
 ## The reverse proxy
 
 rueder speaks plain HTTP on `127.0.0.1:3000`; the proxy does TLS and passes
-everything on. With Caddy that is the whole configuration, certificate
-included:
+everything on. rueder sets its security headers itself, including
+`Strict-Transport-Security`, so a proxy that cannot add headers, such as
+`tailscale serve`, is enough. With Caddy this is the whole configuration,
+certificate included:
 
 ```caddyfile
 reader.example {
-	# Browsers that were here once come back over HTTPS only.
-	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy 127.0.0.1:3000
 }
 ```
@@ -88,9 +88,6 @@ server {
     server_name reader.example;
     ssl_certificate     /etc/letsencrypt/live/reader.example/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/reader.example/privkey.pem;
-
-    # Browsers that were here once come back over HTTPS only.
-    add_header Strict-Transport-Security "max-age=31536000" always;
 
     location / {
         proxy_pass http://127.0.0.1:3000;

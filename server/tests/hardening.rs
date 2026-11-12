@@ -79,6 +79,7 @@ fn text<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
 fn assert_hardened(headers: &HeaderMap, what: &str) {
     for (name, value) in [
         ("x-content-type-options", "nosniff"),
+        ("strict-transport-security", "max-age=31536000"),
         ("referrer-policy", "no-referrer"),
         ("x-frame-options", "DENY"),
         ("cross-origin-opener-policy", "same-origin"),

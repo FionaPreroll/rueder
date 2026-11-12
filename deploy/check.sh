@@ -117,7 +117,7 @@ outside() {
 	hsts=$(header strict-transport-security "$headers")
 	age=$(printf '%s' "$hsts" | sed -n 's/.*max-age=\([0-9]*\).*/\1/p')
 	if [ -z "$hsts" ]; then
-		bad "no Strict-Transport-Security header: the proxy should set it (deploy/README.md)"
+		bad "no Strict-Transport-Security header: rueder sets it, so the proxy drops it (or rueder is older than 2026-11-12)"
 	elif [ "${age:-0}" -lt 15552000 ]; then
 		warn "Strict-Transport-Security has max-age=${age:-0}, less than half a year"
 	else
