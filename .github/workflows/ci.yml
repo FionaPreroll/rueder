@@ -224,15 +224,44 @@ jobs:
           path: app/out/
           if-no-files-found: error
 
-  # Every push to main that passed the checks replaces the release "rueder for
-  # Android" (tag android-latest): the APK, signed here, and its version.json,
-  # which the app reads to find a newer build. Only this job sees the signing
-  # key, and it runs none of the repository's build scripts. The key's secrets
-  # belong in the environment android-release, which can ask for an approval
-  # before the job starts (app/README.md says how to set it up).
-  app-release:
+  # Whether what goes into the app changed since the build released as
+  # android-latest, whose commit the tag points at. Only then does app-release
+  # make a new release, so installed apps are offered an update only when there
+  # is something new in it: a change elsewhere in the repository, or only to the
+  # app's README or tests, leaves the release as it is. Without the tag, or if
+  # git cannot tell, it counts as changed.
+  app-changed:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [web, e2e, app]
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: diff
+        run: |
+          changed=true
+          # Only the released commit is fetched; comparing two trees needs no history.
+          if git fetch --no-tags --depth=1 origin "+refs/tags/android-latest:refs/tags/android-latest"; then
+            if git diff --quiet android-latest HEAD -- app \
+              ':(exclude)app/README.md' ':(exclude)app/test' ':(exclude)app/android/app/src/test' \
+              ':(exclude)app/.prettierignore' ':(exclude)app/prettier.config.js'; then
+              changed=false
+            fi
+          fi
+          echo "Released from $(git rev-parse --short android-latest 2>/dev/null || echo nothing), app changed: $changed"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+  # Every push to main that passed the checks and changed the app (see
+  # app-changed) replaces the release "rueder for Android" (tag android-latest):
+  # the APK, signed here, and its version.json, which the app reads to find a
+  # newer build. Only this job sees the signing key, and it runs none of the
+  # repository's build scripts. The key's secrets belong in the environment
+  # android-release, which can ask for an approval before the job starts
+  # (app/README.md says how to set it up); a push that leaves the app alone
+  # never gets that far.
+  app-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.app-changed.outputs.changed == 'true'
+    needs: [web, e2e, app, app-changed]
     runs-on: ubuntu-latest
     environment: android-release
     permissions:
@@ -283,7 +312,7 @@ jobs:
           if [ "$head" != "$GITHUB_SHA" ]; then echo "main moved on"; exit 0; fi
           printf '{"build":%s,"commit":"%s","size":%s}\n' "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" "$(stat -c %s out/rueder.apk)" > out/version.json
           cat > notes.md <<NOTES
-          The newest build of rueder for Android, from commit ${GITHUB_SHA::7} (build ${GITHUB_RUN_NUMBER}). This release is replaced with every change to \`main\`.
+          The newest build of rueder for Android, from commit ${GITHUB_SHA::7} (build ${GITHUB_RUN_NUMBER}). This release is replaced whenever the app changes on \`main\`.
 
           **Installing:** download \`rueder.apk\` below and open it on the phone; Android asks once to allow installing apps from that source. At the first start the app asks for the address of your rueder. A newer APK installs over an older one, and the app can look for one itself if you agree (on its start page, or with a long press on its icon: Server and updates).
           NOTES
