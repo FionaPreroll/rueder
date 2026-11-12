@@ -385,7 +385,7 @@ const de: Messages = {
 		howItWorks:
 			'Ein Import fügt zu dem hinzu, was hier ist, und nimmt nichts weg. Feeds werden an ihrer Adresse erkannt, Artikel an ihrer Kennung im Feed, denn die Nummern sind von rueder zu rueder verschieden. Deine Einstellungen werden die aus der Datei.',
 		notInIt:
-			'Nicht in der Datei: dein Passwort, deine Sitzungen und die Zustimmung zu Fehlerberichten.',
+			'Nicht in der Datei: dein Passwort, deine Sitzungen, die Zustimmung zu Fehlerberichten und die Texte der Artikel. Einen Artikel, den dieser rueder nicht kennt, kann der Import deshalb nicht übernehmen.',
 		export: 'Konto exportieren',
 		import: 'Kontodatei importieren',
 		importing: 'Importiere …',
@@ -393,10 +393,9 @@ const de: Messages = {
 			`${n(feeds)} ${plural(feeds, { one: 'neuer Feed', other: 'neue Feeds' })}, ${n(known)} schon abonniert.`,
 		folders: (count) =>
 			`${n(count)} ${plural(count, { one: 'neuer Ordner', other: 'neue Ordner' })}.`,
-		articles: (found, carried) =>
-			`${n(found)} Artikel hier gefunden, ${n(carried)} mit Stern oder Label mitgebracht.`,
+		articles: (found) => `${n(found)} Artikel hier gefunden.`,
 		missing: (count) =>
-			`${n(count)} Artikel ${plural(count, { one: 'war', other: 'waren' })} hier nicht zu finden; was du davon gelesen hattest, geht verloren.`,
+			`${n(count)} Artikel ${plural(count, { one: 'war', other: 'waren' })} hier nicht zu finden; was du davon gelesen, mit Stern oder mit Labels versehen hattest, geht verloren.`,
 		marks: (labels, rules) =>
 			`${n(labels)} ${plural(labels, { one: 'neues Label', other: 'neue Labels' })} und ${n(rules)} ${plural(rules, { one: 'neue Filterregel', other: 'neue Filterregeln' })}.`,
 		skipped: (count) =>

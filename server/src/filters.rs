@@ -753,6 +753,8 @@ async fn add(
     session: Session,
     Json(rule): Json<Rule>,
 ) -> Result<(StatusCode, Json<Outcome>), AppError> {
+    // Looks at many articles: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let rule = rule.checked(&state, &session).await?;
     let (folder_id, feed_id) = rule.scope_ids();
     let id = sqlx::query_scalar!(
@@ -785,6 +787,8 @@ async fn change(
     Path(id): Path<i32>,
     Json(rule): Json<Rule>,
 ) -> Result<Json<Outcome>, AppError> {
+    // Looks at many articles: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let rule = rule.checked(&state, &session).await?;
     let (folder_id, feed_id) = rule.scope_ids();
     let updated = sqlx::query!(
@@ -816,6 +820,8 @@ async fn remove(
     session: Session,
     Path(id): Path<i32>,
 ) -> Result<Json<Outcome>, AppError> {
+    // Looks at many articles: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let gone = sqlx::query!(
         "DELETE FROM filter_rules WHERE account_id = $1 AND id = $2",
         session.account_id,
@@ -885,6 +891,8 @@ async fn preview(
     session: Session,
     Json(rule): Json<Rule>,
 ) -> Result<Json<Preview>, AppError> {
+    // Looks at many articles: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let rule = rule.checked(&state, &session).await?;
     let test = Test::new(rule.field, rule.matching, &rule.pattern, rule.action)
         .ok_or_else(|| bad("the pattern cannot be used"))?;
@@ -936,6 +944,8 @@ struct AllHits {
 /// Counts what each of the account's rules finds. Every article is read once,
 /// however many rules there are.
 async fn hits(State(state): State<AppState>, session: Session) -> Result<Json<AllHits>, AppError> {
+    // Looks at many articles: one of only a few at a time (see `rate`).
+    let _turn = state.rates.heavy(session.account_id).await?;
     let mut conn = state.db.acquire().await?;
     let rules = stored_of(&mut conn, session.account_id, true).await?;
     let mut hits: Vec<Hits> = rules

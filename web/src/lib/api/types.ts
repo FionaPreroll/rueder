@@ -1353,32 +1353,6 @@ export type ExportedArticle = {
 	 * The names of its labels.
 	 */
 	labels: Array<string>,
-	/**
-	 * Its text, if it is starred or labelled.
-	 */
-	content: ExportedContent | null,
-};
-
-/**
- * The text of an article and what goes with it, as it is shown.
- */
-export type ExportedContent = {
-	author: string,
-	html: string,
-	tags: Array<string>,
-	enclosures: Array<ExportedEnclosure>,
-	image_url: string | null,
-	image_title: string | null,
-	thumbnail_url: string | null,
-};
-
-/**
- * A file of an article, as the feed lists it.
- */
-export type ExportedEnclosure = {
-	url: string,
-	type: string | null,
-	length: number | null,
 };
 
 /**
@@ -1487,13 +1461,8 @@ export type AccountImported = {
 	 */
 	articles: number,
 	/**
-	 * Starred and labelled articles that were not here and came with their
-	 * text.
-	 */
-	carried: number,
-	/**
-	 * Articles that were not found and had no text with them: what was read
-	 * of them is lost.
+	 * Articles that were not found: what was read, starred or labelled of
+	 * them is lost.
 	 */
 	missing: number,
 	/**

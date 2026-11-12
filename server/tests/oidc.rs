@@ -108,7 +108,21 @@ async fn setup(db: &PgPool) -> (AppState, Shared, String) {
 }
 
 async fn send(state: &AppState, path: &str, cookies: &[&str]) -> (StatusCode, HeaderMap, String) {
+    send_from(state, path, cookies, None).await
+}
+
+/// A request as a browser sends it from a page, which it names in
+/// `Sec-Fetch-Site`.
+async fn send_from(
+    state: &AppState,
+    path: &str,
+    cookies: &[&str],
+    site: Option<&str>,
+) -> (StatusCode, HeaderMap, String) {
     let mut request = Request::get(path);
+    if let Some(site) = site {
+        request = request.header("sec-fetch-site", site);
+    }
     if !cookies.is_empty() {
         request = request.header(header::COOKIE, cookies.join("; "));
     }
@@ -142,7 +156,12 @@ struct Flow {
 }
 
 async fn start(state: &AppState, path: &str) -> Flow {
-    let (status, headers, _) = send(state, path, &[]).await;
+    start_with(state, path, &[]).await
+}
+
+/// Starts a flow from a page of rueder, with the cookies the browser has.
+async fn start_with(state: &AppState, path: &str, bring: &[&str]) -> Flow {
+    let (status, headers, _) = send_from(state, path, bring, Some("same-origin")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
     let to = reqwest::Url::parse(location(&headers)).unwrap();
     let asked: HashMap<_, _> = to.query_pairs().into_owned().collect();
@@ -191,7 +210,7 @@ async fn log_in(
     start_at: &str,
     session: Option<&str>,
 ) -> (HeaderMap, Flow) {
-    let flow = start(state, start_at).await;
+    let flow = start_with(state, start_at, &Vec::from_iter(session)).await;
     answer_with(provider, &claims(issuer, subject, &flow.nonce));
     let path = format!("/api/oidc/callback?code=the-code&state={}", flow.state);
     let mut bring = vec![flow.cookie.as_str()];
@@ -384,19 +403,41 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
     .await;
     assert_eq!(location(&headers), "/?oidc=unknown");
     assert_eq!(cookies(&headers), ["__Host-rueder-oidc="]);
-    // Not when logged in either, unless that is what was asked for, and not
-    // when it was asked for by nobody.
-    for (at, bring) in [
-        ("/api/oidc/start", Some(ada_session.as_str())),
-        ("/api/oidc/start?link", None),
-        (
-            "/api/oidc/start?link",
-            Some("__Host-rueder=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-        ),
+    // Not when logged in either, unless that is what was asked for.
+    let (headers, _) = log_in(
+        &state,
+        &provider,
+        &issuer,
+        "subject-1",
+        "/api/oidc/start",
+        Some(&ada_session),
+    )
+    .await;
+    assert_eq!(location(&headers), "/?oidc=unknown");
+    // Asked for by nobody, or by a page of another site, or by a browser that
+    // does not say where from, it does not even start.
+    let nobody = "__Host-rueder=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    for (bring, site) in [
+        (None, Some("same-origin")),
+        (Some(nobody), Some("same-origin")),
+        (Some(ada_session.as_str()), Some("cross-site")),
+        (Some(ada_session.as_str()), Some("same-site")),
+        (Some(ada_session.as_str()), None),
     ] {
-        let (headers, _) = log_in(&state, &provider, &issuer, "subject-1", at, bring).await;
-        assert_eq!(location(&headers), "/?oidc=unknown", "{at} {bring:?}");
+        let path = "/api/oidc/start?link";
+        let bringing = Vec::from_iter(bring);
+        let (status, headers, _) = send_from(&state, path, &bringing, site).await;
+        assert_eq!(status, StatusCode::SEE_OTHER);
+        assert_eq!(location(&headers), "/?oidc=failed", "{bring:?} {site:?}");
+        assert_eq!(cookies(&headers), ["__Host-rueder-oidc="]);
     }
+    // Started for Ada, it ties nothing to whoever is logged in when the
+    // browser comes back.
+    let flow = start_with(&state, "/api/oidc/start?link", &[&ada_session]).await;
+    answer_with(&provider, &claims(&issuer, "subject-1", &flow.nonce));
+    let path = format!("/api/oidc/callback?code=the-code&state={}", flow.state);
+    let (_, headers, _) = send(&state, &path, &[&flow.cookie, &grace_session]).await;
+    assert_eq!(location(&headers), "/?oidc=unknown");
     assert_eq!(count(&db, "account_identities").await, 0);
     assert_eq!(count(&db, "accounts").await, 2);
     assert_eq!(count(&db, "sessions").await, 2);

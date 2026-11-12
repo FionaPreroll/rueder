@@ -8,7 +8,12 @@
 //!   names ([`LOOKUPS`]): looking for the feeds of a page and subscribing. It
 //!   keeps an account from using rueder to knock on other servers' doors;
 //! - per account, the reports of errors from its browsers ([`REPORTS`]) and
-//!   the moves from another rueder ([`IMPORTS`]), which add to what is stored.
+//!   the moves from another rueder ([`IMPORTS`]), which add to what is stored;
+//! - what costs the server more than a moment, such as looking at all of an
+//!   account's articles for its rules, runs only a few at a time
+//!   ([`HEAVY_AT_ONCE`], [`HEAVY_PER_ACCOUNT`], see [`Rates::heavy`]), so that
+//!   no account takes the database's connections and the processors from
+//!   everybody else.
 //!
 //! Wrong passwords have their own, much smaller limit in [`crate::login`].
 //! Who is over a limit gets 429 with `Retry-After`.
@@ -20,6 +25,8 @@ use std::{
     sync::{Mutex, PoisonError},
     time::{Duration, Instant},
 };
+
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 use axum::{
     extract::{Request, State},
@@ -49,6 +56,12 @@ pub const REPORTS: Rate = Rate::new(100, Duration::from_secs(864));
 pub const IMPORTS: Rate = Rate::new(3, Duration::from_secs(2 * 60 * 60));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
+/// How many costly requests run at once on the whole server: fewer than the
+/// database has connections, so that reading goes on meanwhile. More wait.
+pub const HEAVY_AT_ONCE: usize = 3;
+/// How many costly requests one account may have under way, waiting or
+/// running. More are refused.
+pub const HEAVY_PER_ACCOUNT: usize = 2;
 
 /// A limit: `burst` at once, and one more after every `every`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,12 +136,42 @@ impl<K: Hash + Eq + Clone> Limiter<K> {
     }
 }
 
+/// Costly requests: how many run, and how many each account has under way.
+struct Heavy {
+    running: Semaphore,
+    accounts: Mutex<HashMap<i32, usize>>,
+}
+
+/// A costly request's turn: while it is kept, the request counts.
+pub struct Turn<'a> {
+    heavy: &'a Heavy,
+    account_id: i32,
+    _running: Option<SemaphorePermit<'a>>,
+}
+
+impl Drop for Turn<'_> {
+    fn drop(&mut self) {
+        let mut accounts = self
+            .heavy
+            .accounts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(count) = accounts.get_mut(&self.account_id) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                accounts.remove(&self.account_id);
+            }
+        }
+    }
+}
+
 /// The limits of a server.
 pub struct Rates {
     requests: Limiter<IpAddr>,
     lookups: Limiter<i32>,
     reports: Limiter<i32>,
     imports: Limiter<i32>,
+    heavy: Heavy,
 }
 
 impl Rates {
@@ -138,7 +181,38 @@ impl Rates {
             lookups: Limiter::new(lookups),
             reports: Limiter::new(REPORTS),
             imports: Limiter::new(IMPORTS),
+            heavy: Heavy {
+                running: Semaphore::new(HEAVY_AT_ONCE),
+                accounts: Mutex::default(),
+            },
         }
+    }
+
+    /// Waits for a costly request's turn, or refuses it if the account has
+    /// [`HEAVY_PER_ACCOUNT`] under way already. The request keeps the turn
+    /// until it is done, and takes no connection of the database before.
+    pub async fn heavy(&self, account_id: i32) -> Result<Turn<'_>, AppError> {
+        {
+            let mut accounts = self
+                .heavy
+                .accounts
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let count = accounts.entry(account_id).or_default();
+            if *count >= HEAVY_PER_ACCOUNT {
+                let message = "too much at once for this account, try again in a moment";
+                return Err(AppError::TooMany(Duration::from_secs(1), message));
+            }
+            *count += 1;
+        }
+        let mut turn = Turn {
+            heavy: &self.heavy,
+            account_id,
+            _running: None,
+        };
+        // Never closed, so the permit always comes.
+        turn._running = self.heavy.running.acquire().await.ok();
+        Ok(turn)
     }
 
     /// Other limits for the moves from another rueder than [`IMPORTS`].
@@ -286,6 +360,37 @@ mod tests {
         assert_eq!(rates.request(ip("2001:db8:0:1::1"), now), Ok(()));
         assert_eq!(rates.request(ip("192.0.2.1"), now), Ok(()));
         assert_eq!(rates.request(ip("192.0.2.2"), now), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn costly_requests_take_turns() {
+        let rates = Rates::default();
+        // An account has so many under way, and no more.
+        let mut ada = Vec::new();
+        for _ in 0..HEAVY_PER_ACCOUNT {
+            ada.push(rates.heavy(1).await.ok().unwrap());
+        }
+        assert!(matches!(rates.heavy(1).await, Err(AppError::TooMany(..))));
+        // Others still have theirs, until the server runs as many as it may.
+        let mut others = Vec::new();
+        for account in 2..=(HEAVY_AT_ONCE - HEAVY_PER_ACCOUNT + 1) as i32 {
+            others.push(rates.heavy(account).await.ok().unwrap());
+        }
+        assert_eq!(rates.heavy.running.available_permits(), 0);
+        // The next one waits for a turn to end, and then runs.
+        let waiting = rates.heavy(99);
+        tokio::pin!(waiting);
+        let early = tokio::time::timeout(Duration::from_millis(50), &mut waiting).await;
+        assert!(early.is_err());
+        ada.pop();
+        let turn = tokio::time::timeout(SECOND, &mut waiting).await;
+        assert!(matches!(turn, Ok(Ok(_))));
+        drop(turn);
+        // A turn that ends gives the account its place back.
+        assert!(rates.heavy(1).await.is_ok());
+        drop(ada);
+        drop(others);
+        assert!(rates.heavy.accounts.lock().unwrap().len() <= 1);
     }
 
     #[test]

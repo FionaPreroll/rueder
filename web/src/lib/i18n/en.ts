@@ -387,7 +387,8 @@ const en = {
 			'Take your account to another rueder, or bring it here from one: settings, folders and feeds, what you have read, stars, labels and filter rules, all in one file.',
 		howItWorks:
 			'An import adds to what is here and takes nothing away. Feeds are found by their address and articles by their id in the feed, as the numbers differ from one rueder to the next. Your settings become those of the file.',
-		notInIt: 'Not in the file: your password, your sessions and the consent to reports of errors.',
+		notInIt:
+			'Not in the file: your password, your sessions, the consent to reports of errors and the texts of articles. So an article this rueder does not know cannot be brought in.',
 		export: 'Export the account',
 		import: 'Import an account file',
 		importing: 'Importing …',
@@ -395,10 +396,9 @@ const en = {
 			`${n(feeds)} new ${plural(feeds, { one: 'feed', other: 'feeds' })}, ${n(known)} subscribed already.`,
 		folders: (count: number) =>
 			`${n(count)} new ${plural(count, { one: 'folder', other: 'folders' })}.`,
-		articles: (found: number, carried: number) =>
-			`${articles(found)} found here, ${n(carried)} starred or labelled ${plural(carried, { one: 'one', other: 'ones' })} brought along.`,
+		articles: (found: number) => `${articles(found)} found here.`,
 		missing: (count: number) =>
-			`${articles(count)} could not be found here; what you had read of them is lost.`,
+			`${articles(count)} could not be found here; what you had read, starred or labelled of them is lost.`,
 		marks: (labels: number, rules: number) =>
 			`${n(labels)} new ${plural(labels, { one: 'label', other: 'labels' })} and ${n(rules)} new filter ${plural(rules, { one: 'rule', other: 'rules' })}.`,
 		skipped: (count: number) =>

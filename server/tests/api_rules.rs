@@ -657,3 +657,44 @@ async fn the_reader_learns_how_much_is_hidden_and_by_which_rule(db: PgPool) {
         json!({ "hits": [] })
     );
 }
+
+#[sqlx::test]
+async fn an_account_looks_at_all_its_articles_only_so_often_at_once(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 12).await;
+    let grace = common::account(&db, "grace").await;
+    common::subscribe(&db, grace, news).await;
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    // Two of Ada's costly requests are under way.
+    let held: Vec<_> = futures_util::future::join_all(
+        (0..rueder::rate::HEAVY_PER_ACCOUNT).map(|_| state.rates.heavy(ada)),
+    )
+    .await
+    .into_iter()
+    .map(|turn| turn.ok().unwrap())
+    .collect();
+    let preview = rule(json!({ "pattern": "x" }));
+    for (method, path, body) in [
+        (Method::GET, "/api/rules/hits", Value::Null),
+        (Method::POST, "/api/rules/preview", preview.clone()),
+        (Method::POST, "/api/rules", preview.clone()),
+        (Method::GET, "/api/export", Value::Null),
+        (
+            Method::GET,
+            &format!("/api/feeds/{news}/articles/1/versions"),
+            Value::Null,
+        ),
+    ] {
+        let (status, _) = send(&state, method, path, &cookie, body).await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{path}");
+    }
+    // Reading goes on, and another account is not held up.
+    get(&state, "/api/tree", &cookie).await;
+    get(&state, "/api/rules/hits", &grace_cookie).await;
+    // When they are done, Ada's turn comes again.
+    drop(held);
+    get(&state, "/api/rules/hits", &cookie).await;
+}

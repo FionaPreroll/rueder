@@ -6,7 +6,14 @@
 //! ID token that says who logged in there. Who that is in rueder says
 //! `account_identities`: nobody gets an account by logging in. An identity is
 //! tied to an account on the command line, or by a reader who is logged in and
-//! starts the flow with `?link`.
+//! starts the flow with `?link` from a page of rueder itself.
+//!
+//! Starting is a `GET`, which the check of where changes come from lets pass
+//! (see `hardening`), so `?link` checks for itself: a page of another site
+//! could otherwise send a logged-in reader there, and tie to their account
+//! whoever their browser is logged in as at the provider, which may be the
+//! one who sent them. The flow keeps the account it was started for, and the
+//! identity is tied to that one only.
 //!
 //! The ID token comes straight from the provider over TLS and is not passed
 //! through the browser, so its signature is not checked a second time (OpenID
@@ -125,12 +132,12 @@ struct Claims {
     nonce: Option<String>,
 }
 
-/// Who logged in at the provider, and whether the flow was started to tie
-/// that identity to the account that is logged in here.
+/// Who logged in at the provider, and the account the flow was started to tie
+/// that identity to, if it was.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Identity {
     pub subject: String,
-    pub link: bool,
+    pub link: Option<i32>,
 }
 
 pub struct Oidc {
@@ -221,7 +228,9 @@ impl Oidc {
     }
 
     /// Where to send the browser, and what it has to keep until it is back.
-    pub async fn start(&self, link: bool) -> anyhow::Result<(Url, String)> {
+    /// `link` is the account the identity is to be tied to, if that is what
+    /// the flow is for.
+    pub async fn start(&self, link: Option<i32>) -> anyhow::Result<(Url, String)> {
         let provider = self.provider().await?;
         let (state, nonce, verifier) = (random()?, random()?, random()?);
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
@@ -235,7 +244,10 @@ impl Oidc {
             .append_pair("nonce", &nonce)
             .append_pair("code_challenge", &challenge)
             .append_pair("code_challenge_method", "S256");
-        let link = if link { "link" } else { "login" };
+        let link = match link {
+            Some(account_id) => format!("link-{account_id}"),
+            None => "login".into(),
+        };
         Ok((to, format!("{state}.{nonce}.{verifier}.{link}")))
     }
 
@@ -292,10 +304,14 @@ impl Oidc {
         let answer: TokenAnswer =
             serde_json::from_slice(&response.body).context("the provider sent no ID token")?;
         let subject = self.subject(&answer.id_token, nonce, OffsetDateTime::now_utc())?;
-        Ok(Identity {
-            subject,
-            link: link == "link",
-        })
+        let link = match link {
+            "login" => None,
+            link => {
+                let account_id = link.strip_prefix("link-").and_then(|id| id.parse().ok());
+                Some(account_id.context("the browser kept something else")?)
+            }
+        };
+        Ok(Identity { subject, link })
     }
 
     /// Who an ID token is about, if it is one for this login.
@@ -388,11 +404,52 @@ pub struct Start {
     link: Option<String>,
 }
 
-pub async fn start(State(state): State<AppState>, Query(query): Query<Start>) -> Response {
-    let Some(oidc) = state.oidc else {
+/// Whether a request was sent by a page of rueder itself, or by the reader
+/// by hand, as browsers say in `Sec-Fetch-Site`. A browser too old to say is
+/// taken for another site's.
+fn from_own_page(headers: &HeaderMap) -> bool {
+    let site = headers
+        .get("sec-fetch-site")
+        .and_then(|site| site.to_str().ok());
+    matches!(site, Some("same-origin" | "none"))
+}
+
+/// The account a flow with `?link` is for: the one logged in, if the request
+/// comes from rueder's own page.
+async fn linking(state: &AppState, headers: &HeaderMap) -> anyhow::Result<Option<i32>> {
+    if !from_own_page(headers) {
+        return Ok(None);
+    }
+    let session = match sessions::token(headers) {
+        Some(token) => sessions::find(&state.db, token).await?,
+        None => None,
+    };
+    Ok(session.map(|session| session.account_id))
+}
+
+pub async fn start(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<Start>,
+) -> Response {
+    let Some(oidc) = state.oidc.clone() else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    match oidc.start(query.link.is_some()).await {
+    let link = match query.link {
+        None => None,
+        Some(_) => match linking(&state, &headers).await {
+            Ok(Some(account_id)) => Some(account_id),
+            Ok(None) => {
+                tracing::debug!("OpenID Connect: refused to link from another site or nobody");
+                return back(Some("failed"));
+            }
+            Err(err) => {
+                tracing::error!("OpenID Connect: {err:#}");
+                return back(Some("failed"));
+            }
+        },
+    };
+    match oidc.start(link).await {
         Ok((to, keep)) => (
             StatusCode::SEE_OTHER,
             [
@@ -467,11 +524,14 @@ async fn arrive(
     .await?;
 
     let Some(account_id) = account_id else {
-        let session = match old {
-            Some(token) if identity.link => sessions::find(&state.db, token).await?,
+        // Tied only to the account the flow was started for, and only while
+        // that account is still the one logged in here.
+        let session = match (old, identity.link) {
+            (Some(token), Some(_)) => sessions::find(&state.db, token).await?,
             _ => None,
         };
-        let Some(session) = session else {
+        let Some(session) = session.filter(|session| Some(session.account_id) == identity.link)
+        else {
             return Ok(back(Some("unknown")));
         };
         sqlx::query!(
