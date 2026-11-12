@@ -225,6 +225,7 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
             "id": id,
             "username": "ada",
             "is_admin": false,
+            "has_password": true,
             "admin_needs_second_factor": false
         })
     );
@@ -257,6 +258,7 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
             "id": id,
             "username": "ada",
             "is_admin": false,
+            "has_password": true,
             "admin_needs_second_factor": false
         })
     );

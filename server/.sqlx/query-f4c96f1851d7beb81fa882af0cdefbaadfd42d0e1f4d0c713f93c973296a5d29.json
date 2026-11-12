@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, by_admin FROM invites\n             WHERE token_hash = $1 AND NOT revoked AND expires_at > now() AND uses < max_uses\n             FOR UPDATE",
+  "query": "SELECT id, by_admin FROM invites\n             WHERE token_hash = $1 AND NOT revoked AND expires_at > now() AND uses < max_uses\n               AND account_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)",
   "describe": {
     "columns": [
       {
@@ -36,5 +36,5 @@
       false
     ]
   },
-  "hash": "70b277d22bd7109d7c95f64a6e54d85f472a3a2f4d9687de0eeae09eb9e58507"
+  "hash": "f4c96f1851d7beb81fa882af0cdefbaadfd42d0e1f4d0c713f93c973296a5d29"
 }

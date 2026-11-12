@@ -1,8 +1,8 @@
 //! Logging in and out over the API, and the limit on wrong passwords.
 //!
 //! `POST /api/login` takes a name and a password and answers with the session
-//! cookie; `POST /api/logout` ends the session; `GET /api/me` says who is
-//! logged in. Wrong tries are counted per name, per address and per network
+//! cookie, or, for an account the operator disabled, with `403 disabled`;
+//! `POST /api/logout` ends the session; `GET /api/me` says who is logged in. Wrong tries are counted per name, per address and per network
 //! around it, so neither one account nor one sender can be tried without end.
 
 use std::{
@@ -255,27 +255,32 @@ pub struct Me {
     id: i32,
     username: String,
     is_admin: bool,
+    /// Whether the account has a password, which deleting it asks for. One
+    /// that logs in only through OpenID Connect has none.
+    has_password: bool,
     /// An admin whose right waits for a login with a second factor, where the
     /// server wants one of admins.
     admin_needs_second_factor: bool,
 }
 
 impl Me {
-    pub(crate) fn new(id: i32, username: String, is_admin: bool) -> Self {
+    pub(crate) fn new(id: i32, username: String, is_admin: bool, has_password: bool) -> Self {
         Self {
             id,
             username,
             is_admin,
+            has_password,
             admin_needs_second_factor: false,
         }
     }
 
-    /// Who the session is.
-    pub(crate) fn of(session: Session) -> Self {
+    /// Who the session is, and whether its account has a password.
+    pub(crate) fn of(session: Session, has_password: bool) -> Self {
         Self {
             id: session.account_id,
             username: session.username,
             is_admin: session.is_admin,
+            has_password,
             admin_needs_second_factor: session.admin_needs_second_factor,
         }
     }
@@ -323,6 +328,12 @@ pub async fn login(
             "wrong name or password".into(),
         ));
     };
+    // Said only to whoever knows the password, so it tells nobody else which
+    // names exist. No code is asked for: the account cannot log in anyway.
+    if account.disabled {
+        state.logins.succeeded(&keys);
+        return Err(AppError::Status(StatusCode::FORBIDDEN, "disabled".into()));
+    }
     let second_factor = second_factor::is_on(&state.db, account.id).await?;
     if second_factor {
         let Some(code) = credentials
@@ -358,7 +369,7 @@ pub async fn login(
         second_factor,
         admin_needs_second_factor: false,
     };
-    let me = Me::of(session.for_admins(state.admin_second_factor));
+    let me = Me::of(session.for_admins(state.admin_second_factor), true);
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -376,8 +387,15 @@ pub async fn logout(
         .into_response())
 }
 
-pub async fn me(session: Session) -> Json<Me> {
-    Json(Me::of(session))
+pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<Me>, AppError> {
+    let has_password = sqlx::query_scalar!(
+        r#"SELECT password_hash IS NOT NULL AS "has!" FROM accounts WHERE id = $1"#,
+        session.account_id
+    )
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or(false);
+    Ok(Json(Me::of(session, has_password)))
 }
 
 #[cfg(test)]

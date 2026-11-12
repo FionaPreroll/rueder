@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, username, is_admin, password_hash, created_at\n             FROM accounts WHERE lower(username) = lower($1)",
+  "query": "SELECT id, username, is_admin, password_hash IS NOT NULL AS \"has_password!\",\n                  disabled_at IS NOT NULL AS \"disabled!\", created_at\n           FROM accounts ORDER BY lower(username)",
   "describe": {
     "columns": [
       {
@@ -38,17 +38,18 @@
       },
       {
         "ordinal": 3,
-        "name": "password_hash",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "accounts",
-            "name": "password_hash"
-          }
-        }
+        "name": "has_password!",
+        "type_info": "Bool",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
+        "name": "disabled!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -60,17 +61,16 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
       false,
       false,
-      true,
+      null,
+      null,
       false
     ]
   },
-  "hash": "71b5d980ca2bfe82de8fd1271ae775f092863ecff86f74baa3b8423b70501626"
+  "hash": "fedb2a850f29ac79d2eafc4dc92a3e16b294cd2513e2e812d4584ecdca5368d7"
 }

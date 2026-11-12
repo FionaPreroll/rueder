@@ -1,5 +1,6 @@
 //! What a reader does with their own account, and an admin with accounts:
-//! the list of the own sessions, a new password, and making accounts.
+//! the list of the own sessions, a new password, deleting the own account,
+//! and making accounts.
 
 use std::time::Instant;
 
@@ -16,7 +17,8 @@ use ts_rs::TS;
 
 use crate::{
     AppError, AppState, accounts,
-    login::Key,
+    login::{CODE_NEEDED, Key},
+    second_factor,
     sessions::{self, Session},
 };
 
@@ -25,6 +27,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
     types
         .add::<Device>()
         .add::<NewPassword>()
+        .add::<Farewell>()
         .add::<Listed>()
         .add::<NewAccount>()
         .add::<Created>();
@@ -35,6 +38,7 @@ pub fn routes() -> Router<AppState> {
         .route("/sessions", get(own_sessions).delete(end_others))
         .route("/sessions/{id}", delete(end_one))
         .route("/password", put(change_password))
+        .route("/account", delete(remove_account))
         .route("/accounts", get(all_accounts).post(add_account))
 }
 
@@ -161,6 +165,78 @@ async fn change_password(
     }
 }
 
+/// What `DELETE /api/account` reads: proof that the reader means it.
+#[derive(Deserialize, TS)]
+struct Farewell {
+    /// The account's password. An account that has none sends its name.
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    password: String,
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    name: String,
+    /// A code of the app or a recovery code, where the second factor is on.
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    code: String,
+}
+
+/// Deletes the reader's own account and everything that is its own (see
+/// [`accounts::remove`]). Its sessions end, on this device and all others,
+/// and so do its connections for live updates, as `events::changed` counts
+/// this address as a session that ended. Where the second factor is on, it
+/// takes a code as well, as at login: without one the answer is 403 with
+/// `second factor needed`, and a wrong one counts like a wrong password.
+async fn remove_account(
+    State(state): State<AppState>,
+    session: Session,
+    Json(farewell): Json<Farewell>,
+) -> Result<Response, AppError> {
+    // As for a new password: a stolen session must not be a way to try
+    // passwords without end.
+    let keys = [Key::name(&session.username)];
+    if let Err(wait) = state.logins.attempt(&keys, Instant::now()) {
+        let message = "too many wrong tries, try again later";
+        return Err(AppError::TooMany(wait, message));
+    }
+    let hash = sqlx::query_scalar!(
+        "SELECT password_hash FROM accounts WHERE id = $1",
+        session.account_id
+    )
+    .fetch_one(&state.db)
+    .await?;
+    let proven = match hash {
+        Some(_) => accounts::verify(&farewell.password, hash).await?,
+        // Logged in through OpenID Connect only: typing the name shows that a
+        // person means it, not a page that sends requests in their name.
+        None => farewell.name.trim().to_lowercase() == session.username.to_lowercase(),
+    };
+    if !proven {
+        let message = "the password is wrong";
+        return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+    }
+    if second_factor::is_on(&state.db, session.account_id).await? {
+        let code = farewell.code.trim();
+        if code.is_empty() {
+            // The password was right; the code is what is missing.
+            state.logins.succeeded(&keys);
+            return Err(AppError::Status(StatusCode::FORBIDDEN, CODE_NEEDED.into()));
+        }
+        // A wrong code stays counted, like a wrong password.
+        if !second_factor::take(&state.db, session.account_id, code).await? {
+            let message = "wrong code";
+            return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+        }
+    }
+    state.logins.succeeded(&keys);
+    if !accounts::remove(&state.db, session.account_id).await? {
+        return Err(AppError::NotFound);
+    }
+    tracing::info!("an account deleted itself");
+    let cookie = [(header::SET_COOKIE, sessions::no_cookie())];
+    Ok((StatusCode::NO_CONTENT, cookie).into_response())
+}
+
 pub(crate) fn admin(session: &Session) -> Result<(), AppError> {
     if session.is_admin {
         return Ok(());
@@ -179,6 +255,8 @@ struct Listed {
     username: String,
     is_admin: bool,
     has_password: bool,
+    /// Disabled by the operator, with `rueder account disable`.
+    disabled: bool,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
     created_at: OffsetDateTime,
@@ -196,6 +274,7 @@ async fn all_accounts(
         username: account.username,
         is_admin: account.is_admin,
         has_password: account.has_password,
+        disabled: account.disabled,
         created_at: account.created_at,
     });
     Ok(Json(listed.collect()))

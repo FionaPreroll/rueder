@@ -84,6 +84,23 @@ describe('Login', () => {
 		expect(session.state).toBe('out');
 	});
 
+	it('says that an account is disabled, once the password is right', async () => {
+		const session = await loginPage();
+		server.disabled.add('fiona');
+		await fill('fiona', 'correct horse{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('This account is disabled.');
+		expect(session.state).toBe('out');
+	});
+
+	it('says that the account was deleted', async () => {
+		server.signedIn = 'fiona';
+		const session = new Session();
+		await session.check();
+		await session.reader!.removeAccount('correct horse');
+		render(Login, { session });
+		expect(screen.getByRole('status')).toHaveTextContent('Your account is deleted');
+	});
+
 	it('says how long to wait after too many wrong tries', async () => {
 		await loginPage();
 		server.lockedFor = 14 * 60 + 5;
@@ -127,7 +144,8 @@ describe('Login', () => {
 	it.each([
 		['failed', 'The login through single sign-on did not work. Try again.'],
 		['denied', 'The login through single sign-on was cancelled.'],
-		['unknown', 'No account here belongs to that login.']
+		['unknown', 'No account here belongs to that login.'],
+		['disabled', 'This account is disabled.']
 	])('says how single sign-on ended: %s', async (outcome, text) => {
 		history.replaceState(null, '', `/?oidc=${outcome}`);
 		await loginPage();

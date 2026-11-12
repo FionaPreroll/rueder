@@ -114,6 +114,8 @@ export class FakeServer {
 	accounts = new Map([['fiona', 'correct horse']]);
 	/** Who the browser's session belongs to. */
 	signedIn: string | null = 'fiona';
+	/** Accounts the operator disabled, by name. */
+	disabled = new Set<string>();
 	/** Whether the account that is logged in is an admin, who sees the status. */
 	admin = true;
 	/** An admin whose right waits for a login with a second factor. */
@@ -383,6 +385,7 @@ export class FakeServer {
 				return refused(429, 'too many', { 'Retry-After': `${this.lockedFor}` });
 			const name = String(data.username).trim().toLowerCase();
 			if (this.accounts.get(name) !== data.password) return refused(401, 'wrong name or password');
+			if (this.disabled.has(name)) return refused(403, 'disabled');
 			if (this.secondFactor) {
 				const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : '';
 				if (!code) return refused(401, 'second factor needed');
@@ -401,6 +404,28 @@ export class FakeServer {
 		const invites = this.answerInvites(method, path, data);
 		if (invites) return invites;
 		if (method === 'GET' && path === '/me') return json(this.me());
+		if (method === 'DELETE' && path === '/account') {
+			const name = this.signedIn;
+			const password = this.accounts.get(name);
+			// An account that logs in only through single sign-on sends its name.
+			const proven =
+				password === undefined
+					? String(data.name ?? '')
+							.trim()
+							.toLowerCase() === name
+					: data.password === password;
+			if (!proven) return refused(403, 'the password is wrong');
+			if (this.secondFactor) {
+				const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : '';
+				if (!code) return refused(403, 'second factor needed');
+				if (code !== this.secondFactor.code && !this.secondFactor.recovery.includes(code)) {
+					return refused(403, 'wrong code');
+				}
+			}
+			this.accounts.delete(name);
+			this.signedIn = null;
+			return empty();
+		}
 		const secondFactor = this.answerSecondFactor(method, path, data);
 		if (secondFactor) return secondFactor;
 		if (method === 'GET' && path === '/tree') return json(this.tree());
@@ -627,6 +652,7 @@ export class FakeServer {
 			id: 1,
 			username: this.signedIn,
 			is_admin: this.admin,
+			has_password: this.accounts.has(this.signedIn ?? ''),
 			admin_needs_second_factor: this.adminNeedsSecondFactor
 		};
 	}

@@ -43,7 +43,7 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 
 use crate::{
-    AppState,
+    AppState, accounts,
     http_client::{HttpClient, Request},
     sessions,
 };
@@ -546,6 +546,11 @@ async fn arrive(
         return Ok(back(Some("linked")));
     };
 
+    // As at the login with a password: the provider vouched for who this is,
+    // so they may hear that their account is disabled.
+    if accounts::is_disabled(&state.db, account_id).await? {
+        return Ok(back(Some("disabled")));
+    }
     if let Some(old) = old {
         sessions::end(&state.db, old).await?;
     }

@@ -760,3 +760,48 @@ async fn without_a_provider_there_is_no_such_login(db: PgPool) {
         assert_eq!(headers.get(header::SET_COOKIE), None);
     }
 }
+
+#[sqlx::test]
+async fn a_disabled_account_is_told_so_and_not_logged_in(db: PgPool) {
+    let (state, provider, issuer) = setup(&db).await;
+    let ada = common::account(&db, "ada").await;
+    assert!(oidc::link(&db, "ada", &issuer, "subject-1").await.unwrap());
+    assert!(
+        rueder::accounts::set_disabled(&db, "ada", true)
+            .await
+            .unwrap()
+    );
+    let sessions_before = count(&db, "sessions").await;
+    let (headers, _) = log_in(
+        &state,
+        &provider,
+        &issuer,
+        "subject-1",
+        "/api/oidc/start",
+        None,
+    )
+    .await;
+    assert_eq!(location(&headers), "/?oidc=disabled");
+    assert_eq!(cookies(&headers), ["__Host-rueder-oidc="]);
+    assert_eq!(count(&db, "sessions").await, sessions_before);
+
+    // Enabled again, the same way logs in.
+    rueder::accounts::set_disabled(&db, "ada", false)
+        .await
+        .unwrap();
+    let (headers, _) = log_in(
+        &state,
+        &provider,
+        &issuer,
+        "subject-1",
+        "/api/oidc/start",
+        None,
+    )
+    .await;
+    assert_eq!(location(&headers), "/");
+    let set = cookies(&headers);
+    let (status, _, body) = send(&state, "/api/me", &[&set[1]]).await;
+    assert_eq!(status, StatusCode::OK);
+    let me: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(me["id"].as_i64(), Some(i64::from(ada)));
+}

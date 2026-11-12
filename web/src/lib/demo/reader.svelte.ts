@@ -14,6 +14,7 @@ import type {
 	Imported,
 	Moved,
 	Reader,
+	RemoveRefusal,
 	Resumed,
 	RulePreview,
 	SecondFactorRefusal,
@@ -149,7 +150,8 @@ export class DemoReader implements Reader {
 		status: true,
 		invites: false,
 		reports: false,
-		secondFactor: false
+		secondFactor: false,
+		remove: false
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -630,6 +632,11 @@ export class DemoReader implements Reader {
 
 	async revokeInvite() {
 		return false;
+	}
+
+	/** Nobody is logged in, so there is no account to delete. */
+	async removeAccount(): Promise<RemoveRefusal | null> {
+		return { problem: 'unreachable' };
 	}
 
 	/** A made-up status, so the page can be seen without a server. */

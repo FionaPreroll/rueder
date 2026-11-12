@@ -183,6 +183,7 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/sessions", area(Area::Session)),
         ("/api/sessions/3", area(Area::Session)),
         ("/api/password", area(Area::Session)),
+        ("/api/account", area(Area::Session)),
         ("/api/second-factor", area(Area::Session)),
         ("/api/second-factor/confirm", area(Area::Session)),
         ("/api/tree/move", area(Area::Tree)),
@@ -676,6 +677,93 @@ async fn a_session_that_ends_outside_a_request_closes_its_connections(db: PgPool
     );
     assert_eq!(phone_tab.next().await.unwrap().kind, "tree");
     assert_eq!(state.events.streams(ada), 1);
+}
+
+#[sqlx::test]
+async fn deleting_an_account_ends_all_its_connections_at_once(db: PgPool) {
+    let ada = rueder::accounts::create(&db, "ada", Some("a long password"), false)
+        .await
+        .unwrap()
+        .unwrap();
+    let grace = common::account(&db, "grace").await;
+    let state = AppState::new(db.clone());
+    let laptop = common::session(&db, ada).await;
+    let phone = common::session(&db, ada).await;
+    let theirs = common::session(&db, grace).await;
+    let mut laptop_tab = listening(&state, &laptop).await;
+    let mut phone_tab = listening(&state, &phone).await;
+    let mut grace_tab = listening(&state, &theirs).await;
+
+    assert_eq!(
+        send(
+            &state,
+            Method::DELETE,
+            "/api/account",
+            &laptop,
+            None,
+            json!({ "password": "a long password" }),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    // Within the time a connection takes to see a session that ended through
+    // a request, well before it would look by itself.
+    assert!(laptop_tab.has_ended().await);
+    assert!(phone_tab.has_ended().await);
+    assert_eq!(state.events.streams(ada), 0);
+    assert_eq!(
+        open(&state, Some(&phone), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    // Grace hears nothing of it and stays.
+    assert!(grace_tab.is_quiet().await);
+    assert_eq!(state.events.streams(grace), 1);
+}
+
+#[sqlx::test]
+async fn a_disabled_account_gets_no_events(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 3).await;
+    let grace = common::account(&db, "grace").await;
+    common::subscribe(&db, grace, feed).await;
+    let state = AppState {
+        events: Events::checking_sessions_every(Duration::from_millis(100)),
+        ..AppState::new(db.clone())
+    };
+    let laptop = common::session(&db, ada).await;
+    let theirs = common::session(&db, grace).await;
+    let mut ada_tab = listening(&state, &laptop).await;
+    let mut grace_tab = listening(&state, &theirs).await;
+
+    // On the command line, so no request tells the connections.
+    assert!(
+        rueder::accounts::set_disabled(&db, "ada", true)
+            .await
+            .unwrap()
+    );
+    assert!(ada_tab.has_ended().await);
+    // No new connection, not even with a session made after disabling.
+    assert_eq!(
+        open(&state, Some(&laptop), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    let after = common::session(&db, ada).await;
+    assert_eq!(
+        open(&state, Some(&after), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    // New articles of the feed reach Grace only.
+    let change = Change::Articles {
+        feed_id: feed,
+        last_seq: 4,
+        new: 1,
+    };
+    state
+        .events
+        .publish_to_readers(&db, feed, change)
+        .await
+        .unwrap();
+    assert_eq!(grace_tab.next().await.unwrap().kind, "articles");
+    assert_eq!(state.events.streams(ada), 0);
 }
 
 #[test]

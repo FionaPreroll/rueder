@@ -571,6 +571,75 @@ describe('Moving the account in the settings', () => {
 	});
 });
 
+describe('Deleting the account in the settings', () => {
+	let server: FakeServer;
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	async function opened(password = true) {
+		const removed = vi.fn();
+		const session = { signOut: () => {}, expired: () => {}, removed };
+		const reader = new ServerReader({ name: 'fiona', admin: false, password }, session);
+		render(SettingsDialog, { reader, onclose: () => {} });
+		await userEvent.click(screen.getByRole('tab', { name: 'Account' }));
+		return removed;
+	}
+
+	it('asks for the password and says what goes', async () => {
+		const removed = await opened();
+		expect(screen.getByText(/your subscriptions and folders/)).toBeInTheDocument();
+		expect(screen.getByText(/Feeds stay for the others/)).toBeInTheDocument();
+		const button = screen.getByRole('button', { name: 'Delete my account for good' });
+		expect(button).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('Your password'), 'wrong{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was deleted.');
+		expect(server.accounts.has('fiona')).toBe(true);
+		expect(removed).not.toHaveBeenCalled();
+
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(button);
+		await vi.waitFor(() => expect(removed).toHaveBeenCalledOnce());
+		expect(server.accounts.has('fiona')).toBe(false);
+	});
+
+	it('asks for the code where the account has a second factor', async () => {
+		server.secondFactor = { code: '123456', recovery: ['ABCD-EFGH'] };
+		const removed = await opened();
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('Your account has a second factor.');
+		expect(server.accounts.has('fiona')).toBe(true);
+		const code = screen.getByLabelText('Code from your app, or a recovery code');
+		await userEvent.type(code, '654321{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was deleted.');
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.type(code, '123456{Enter}');
+		await vi.waitFor(() => expect(removed).toHaveBeenCalledOnce());
+		const asked = server.requests.findLast((request) => request.method === 'DELETE');
+		expect(asked?.body).toEqual({ password: 'correct horse', code: '123456' });
+	});
+
+	it('asks for the name where the account has no password', async () => {
+		server.accounts.delete('fiona');
+		const removed = await opened(false);
+		expect(screen.queryByLabelText('Your password')).toBeNull();
+		await userEvent.type(screen.getByLabelText(/Type your name, fiona/), 'fiona{Enter}');
+		await vi.waitFor(() => expect(removed).toHaveBeenCalledOnce());
+		expect(server.requests.at(-1)?.body).toEqual({ name: 'fiona' });
+	});
+
+	it('is not there with made-up data', () => {
+		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Account' })).toBeNull();
+	});
+});
+
 describe('Errors in browsers on the status page', () => {
 	it('says how often and in how many accounts, never which', async () => {
 		render(StatusDialog, { reader: new DemoReader(() => now), onclose: () => {} });

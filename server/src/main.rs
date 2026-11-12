@@ -110,6 +110,16 @@ enum AccountCommand {
     Link { name: String, subject: String },
     /// List the accounts.
     List,
+    /// Delete an account and everything that is its own: sessions,
+    /// subscriptions, what was read, stars, labels, rules, settings, reports
+    /// of errors, invitations and identities at the OpenID Connect provider.
+    /// Feeds stay for their other subscribers. This cannot be undone.
+    Remove { name: String },
+    /// Disable an account that is misused: it cannot log in, and its sessions
+    /// end. What it has stays, for `account enable`.
+    Disable { name: String },
+    /// Let a disabled account log in again.
+    Enable { name: String },
     /// Write what an account has made of rueder (settings, folders, feeds,
     /// what was read, stars, labels and rules) as JSON to the standard output,
     /// for moving it to another rueder with `account import`.
@@ -410,10 +420,35 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                 None => println!("Account {} may invite as many as everybody.", name.trim()),
             }
         }
+        AccountCommand::Remove { name } => {
+            let id = accounts::id_of(db, &name)
+                .await?
+                .with_context(|| format!("there is no account {}", name.trim()))?;
+            accounts::remove(db, id).await?;
+            println!(
+                "Account {} is deleted, with all that was its own.",
+                name.trim()
+            );
+        }
+        AccountCommand::Disable { name } => {
+            if !accounts::set_disabled(db, &name, true).await? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            println!(
+                "Account {} is disabled. Its sessions are over.",
+                name.trim()
+            );
+        }
+        AccountCommand::Enable { name } => {
+            if !accounts::set_disabled(db, &name, false).await? {
+                anyhow::bail!("there is no account {}", name.trim());
+            }
+            println!("Account {} can log in again.", name.trim());
+        }
         AccountCommand::List => {
             for account in accounts::list(db).await? {
                 println!(
-                    "{}\t{}\t{}",
+                    "{}\t{}\t{}{}",
                     account.username,
                     if account.is_admin { "admin" } else { "reader" },
                     if account.has_password {
@@ -421,6 +456,7 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                     } else {
                         "no password"
                     },
+                    if account.disabled { "\tdisabled" } else { "" },
                 );
             }
         }

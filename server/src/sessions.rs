@@ -3,7 +3,8 @@
 //! A login gives the browser a random token in a cookie that scripts cannot
 //! read. The database keeps only the token's SHA-256, so whoever reads the
 //! database cannot log in with what is there. A session ends when it is not
-//! used for [`IDLE`], on logout, and when the account gets a new password.
+//! used for [`IDLE`], on logout, when the account gets a new password, is
+//! disabled or deleted. A session of a disabled account is no session.
 //!
 //! A handler that takes a [`Session`] answers only to logged-in readers, and
 //! has the account's id to bind its queries to.
@@ -104,7 +105,7 @@ pub async fn find(db: &PgPool, token: &str) -> anyhow::Result<Option<Session>> {
         r#"SELECT a.id, a.username, a.is_admin, s.second_factor,
                   s.last_seen_at < now() - $2::float8 * interval '1 second' AS "stale!"
            FROM sessions s JOIN accounts a ON a.id = s.account_id
-           WHERE s.token_hash = $1 AND s.expires_at > now()"#,
+           WHERE s.token_hash = $1 AND s.expires_at > now() AND a.disabled_at IS NULL"#,
         hash,
         TOUCH_AFTER,
     )
