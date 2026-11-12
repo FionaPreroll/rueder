@@ -205,6 +205,14 @@ Die Abdeckung geht an Codecov, getrennt nach den Flags `web` und `server` (`code
 
 Der Korpus der Fuzz-Targets läuft im Job `server` als gewöhnlicher Test mit, der Soak-Test 20 Sekunden lang; gefuzzt wird in der CI nicht.
 
+Was die CI und das Image von außen holen, ist festgelegt (seit 2026-11-12, auf Fionas Wunsch nach dem [Nachtrag zum Security-Review](architecture.md#nachtrag-app-service-worker-ci-und-deploy)):
+
+- **Actions** stehen mit dem Hash ihres Commits und der Version als Kommentar (`@<hash> # v4.4.0`), `dtolnay/rust-toolchain` mit dem Commit seines Zweigs `stable` und `toolchain: stable`. Dependabot hebt Hash und Kommentar zusammen an. Eine neue Action kommt genauso dazu, nie mit `@v1` oder einem Zweig.
+- **Basis-Images** im `Dockerfile` stehen mit Tag und Digest; Dependabot hebt beide. `postgres:16` in den Diensten der CI und in `deploy/compose.yaml` bleibt beim Tag: In der CI sieht es kein Secret, und Betreiber sollen mit `docker compose pull` die Korrekturen von PostgreSQL bekommen.
+- **Tools über `taiki-e/install-action`** haben eine feste Version (`cargo-audit@0.22.2`, `cargo-deny@0.20.2`, `cargo-llvm-cov@0.9.1`); die Action prüft den Download gegen die Prüfsumme in ihrer Liste. Dependabot hebt diese Versionen nicht. Wer die Action anhebt, sieht in ihrer Liste (`manifests/<tool>.json`) nach, ob es neuere gibt, und nimmt nur Versionen, die dort stehen.
+- **Gradle:** `gradle/actions/wrapper-validation` prüft im Job `app`, dass `gradle-wrapper.jar` eine von Gradle veröffentlichte ist. Eine Prüfsumme der Distribution (`distributionSha256Sum` in `gradle-wrapper.properties`) fehlt noch: Diese Umgebung erreicht `services.gradle.org` nicht, und ein falscher Wert hielte jeden Build an. Wer sie einträgt, nimmt sie von [gradle.org/release-checksums](https://gradle.org/release-checksums/).
+- **Rust** bleibt das neueste `stable`; rustup prüft seine Downloads gegen die signierten Manifeste von rust-lang.org. Abhängigkeiten von npm, Cargo und Gradle sind über die Lockfiles festgelegt.
+
 ## Arbeitsweise
 
 - Jede Änderung kommt als Pull Request auf `main`. Die CI muss grün sein.
