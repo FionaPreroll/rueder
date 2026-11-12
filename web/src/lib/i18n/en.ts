@@ -135,6 +135,51 @@ const en = {
 		note: 'There is no sign-up. Accounts are made by whoever runs this rueder.'
 	},
 
+	register: {
+		title: 'Make an account',
+		invited: 'You were invited to this rueder. Pick a name and a password.',
+		again: 'The password once more',
+		passwordRule: (characters: number) => `At least ${n(characters)} characters.`,
+		mismatch: 'The two passwords differ.',
+		submit: 'Make the account',
+		toRegister: 'Make an account',
+		toLogin: 'Log in to an account you have',
+		closed: 'Nobody can register here without an invitation.',
+		inviteGone: 'This invitation cannot be used any more. Ask for a new one.',
+		full: 'There is no room for another account here.',
+		today: 'Enough accounts were made here for one day. Try again tomorrow.',
+		taken: 'There is an account with this name already.',
+		invalid: (reason: string) => `That cannot be an account. The server says: ${reason}`
+	},
+
+	invites: {
+		intro:
+			'A link lets somebody make an account on this rueder. It is shown once, here, when you make it.',
+		left: (count: number) =>
+			count === 0
+				? 'You have no invitations to give.'
+				: `You can invite ${n(count)} more ${plural(count, { one: 'person', other: 'people' })}.`,
+		admin: 'As an admin you can always invite.',
+		uses: 'For how many accounts',
+		make: 'Make a link',
+		noneLeft: 'You have no invitations left for that many.',
+		failed: 'That did not work. Try again in a moment.',
+		link: 'The link, to pass on now',
+		copy: 'Copy',
+		copied: 'Copied',
+		goodFor: (days: number) =>
+			`A link is good for ${n(days)} ${plural(days, { one: 'day', other: 'days' })}.`,
+		yours: 'Your links',
+		none: 'You have made no links yet.',
+		used: (uses: number, of: number) => `${n(uses)} of ${n(of)} used`,
+		until: (when: string) => `good until ${when}`,
+		ran: (when: string) => `ran out ${when}`,
+		usedUp: 'used up',
+		revoked: 'taken back',
+		revoke: 'Take back',
+		revokeLink: (made: string) => `Take back the link made ${made}`
+	},
+
 	home: {
 		newIn: 'New in your subscriptions',
 		allRead: 'You have read everything. New articles show up here as they arrive.',
@@ -167,6 +212,7 @@ const en = {
 			reading: 'Reading',
 			rules: 'Filter rules',
 			keys: 'Keyboard',
+			invites: 'Invitations',
 			privacy: 'Privacy'
 		},
 		theme: 'Theme',

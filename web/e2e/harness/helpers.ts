@@ -2,6 +2,7 @@
 // server fetch now instead of when a feed is due.
 
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 import { PASSWORD, SITE, database } from './ports.js';
 
@@ -71,6 +72,19 @@ export async function site(change: 'publish' | 'revise' | 'reset', feed = '', te
 export function fetchSoon() {
 	execFileSync('psql', [database(), '--quiet', '-c', 'UPDATE feeds SET next_fetch_at = now()'], {
 		stdio: ['ignore', 'ignore', 'inherit']
+	});
+}
+
+/**
+ * Runs a command of the server's own program against the run's database, as
+ * the operator would: `rueder('registration', 'set', '--open', 'true')`.
+ */
+export function rueder(...args: string[]) {
+	const web = resolve(import.meta.dirname, '../..');
+	const program = resolve(web, process.env.RUEDER_BIN ?? '../server/target/debug/rueder');
+	return execFileSync(program, args, {
+		env: { ...process.env, DATABASE_URL: database() },
+		encoding: 'utf8'
 	});
 }
 

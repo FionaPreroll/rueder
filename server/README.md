@@ -102,13 +102,18 @@ Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
 
 ## Accounts and login
 
-Nobody can register. Accounts are made on the command line, or by an admin
-with `POST /api/accounts`:
+Accounts are made on the command line, or by an admin with `POST /api/accounts`.
+Nobody can register or invite until the operator says so (`registration`,
+below):
 
 ```sh
 cargo run -- account add ada            # asks for the password; --admin for an admin
 cargo run -- account password ada       # a new password, which ends ada's sessions
 cargo run -- account list
+cargo run -- registration show          # who may make an account, the limits, how many there are
+cargo run -- registration set --open true --max-accounts 50 --per-day 5
+cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20
+cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
 ```
 

@@ -78,7 +78,7 @@ Die Tabellen im Überblick. Die genauen Spalten stehen in der ersten Migration, 
 
 | Bereich | Tabellen | Idee |
 |---|---|---|
-| Konten | `accounts`, `account_identities`, `sessions` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON. `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit. |
+| Konten | `accounts`, `account_identities`, `sessions`, `registration`, `invites` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON. `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit. |
 | Feeds | `feeds` | Ein Feed gehört allen seinen Abonnenten gemeinsam. Er kennt seine höchste Artikelnummer (`last_seq`), den Abrufstand (nächster Abruf, Intervall, ETag, Last-Modified, letzter Erfolg, letzter Fehler) und den User-Agent, mit dem er abgerufen wird. |
 | Baum | `folders`, `subscriptions` | Ordner mit Elternordner und Position. Ein Abo verbindet Konto und Feed, liegt in einem Ordner oder auf oberster Ebene, hat eine Position und trägt die Lesemarke. |
 | Artikel | `articles`, `article_content`, `article_versions` | Heiß, warm und kalt getrennt, siehe [Artikelspeicher und Versionen](#artikelspeicher-und-versionen). |
@@ -335,7 +335,7 @@ Abweichungen vom Entwurf:
 
 Gebaut in Paket 2.5 (`server/src/accounts.rs`, `server/src/sessions.rs`, `server/src/login.rs`, `server/src/oidc.rs`).
 
-- **Lokale Konten** mit Passwort-Hash nach Argon2id (19 MiB, 2 Durchläufe, ein Salt je Hash). Es gibt keine offene Registrierung: Konten legt die Kommandozeile an (`rueder account add`, `password`, `link`, `list`). Ein Name ist höchstens 64 Zeichen lang und unterscheidet keine Groß- und Kleinschreibung, ein Passwort hat mindestens 8 Zeichen und höchstens 1024 Byte. Höchstens vier Hashes werden gleichzeitig gerechnet, damit Login-Versuche den Speicher nicht füllen.
+- **Lokale Konten** mit Passwort-Hash nach Argon2id (19 MiB, 2 Durchläufe, ein Salt je Hash). Konten legt die Kommandozeile an (`rueder account add`, `password`, `link`, `list`) oder ein Admin; selbst anlegen kann sich jemand nur ein Konto, wenn der Betreiber es erlaubt, siehe [Registrierung und Einladungen](#registrierung-und-einladungen). Ein Name ist höchstens 64 Zeichen lang und unterscheidet keine Groß- und Kleinschreibung, ein Passwort hat mindestens 8 Zeichen und höchstens 1024 Byte. Höchstens vier Hashes werden gleichzeitig gerechnet, damit Login-Versuche den Speicher nicht füllen.
 - **Sitzung** als zufälliges Token (32 Byte) im Cookie `__Host-rueder` mit `HttpOnly`, `Secure`, `SameSite=Lax` und `Path=/`. In der Datenbank liegt nur der SHA-256 des Tokens. Eine Sitzung endet nach 30 Tagen ohne Nutzung, beim Abmelden und sobald das Konto ein neues Passwort bekommt; ein neuer Login ersetzt die Sitzung, die der Browser noch hatte. Dass eine Sitzung genutzt wurde, schreibt der Server höchstens einmal je Stunde auf. Abgelaufene Sitzungen räumt er stündlich weg.
 - **Wer eingeloggt ist**, sagt der Extraktor `Session` mit der Nummer des Kontos. Jeder Handler, der ihn nimmt, antwortet ohne Sitzung mit 401; an seine Kontonummer binden die Endpunkte aus Paket 2.6 ihre Abfragen. Der Bild-Proxy unter `/img/` nimmt ihn schon.
 - **Login** über `POST /api/login` mit Name und Passwort als JSON, `POST /api/logout`, `GET /api/me`. `GET /api/login/ways` sagt der Login-Seite ohne Sitzung, welche Wege es außer Name und Passwort gibt (`{"oidc": true}`), und sonst nichts. Ein falscher Name, ein falsches Passwort und ein Konto ohne Passwort bekommen dieselbe Antwort nach derselben Arbeit: Für einen Namen, den es nicht gibt, wird gegen einen Hash geprüft, dessen Passwort niemand kennt.
@@ -356,6 +356,27 @@ Abweichungen vom Entwurf, und was offen ist:
 - Die Prüfung des `Origin`-Headers gibt es seit Paket 2.9, siehe [Header, Herkunft und Limits](#header-herkunft-und-limits). Seither hat ein Konto auch höchstens 100 Sitzungen; mit der nächsten endet die, die am längsten nicht genutzt wurde.
 
 Wie die bestehenden Konten umziehen, steht bei den [Detailfragen](plan.md#detailfragen): Der Import führt sie mit den Konten zusammen, die es im neuen rueder schon gibt, und legt nur die übrigen ohne Passwort an.
+
+### Registrierung und Einladungen
+
+Von Fiona am 2026-11-12 entschieden, gebaut in `server/src/registration.rs` und der Migration `0003_registration.sql`. Bis der Betreiber etwas öffnet, ist alles zu: keine Registrierung, kein Kontingent für Einladungen.
+
+- **Zwei Wege zu einem Konto.** Offene Registrierung, wenn der Betreiber sie einschaltet, und Einladungslinks. Beide führen über `POST /api/register` (Name, Passwort, optional das Token der Einladung); die Antwort setzt wie ein Login den Sitzungs-Cookie.
+- **Zwei Kontingente, die sich nicht berühren.** Das allgemeine: Konten vom Betreiber, aus offener Registrierung und aus Einladungen von Usern zählen gegen `max_accounts`, die beiden letzten außerdem gegen `per_day` (neue Konten in 24 Stunden). Das der Admins: Konten aus Einladungen von Admins zählen nur gegen `admin_invite_accounts` und belegen keinen Platz im allgemeinen. Woher ein Konto stammt, steht in `accounts.origin`.
+- **Einladungen von Usern.** Jeder User darf insgesamt so viele Konten einladen, wie sein Kontingent sagt: der Wert für alle (`invites_per_account`) oder ein eigener (`accounts.invite_quota`). Gezählt wird, was seine Links gebracht haben und noch bringen können; ein abgelaufener oder zurückgezogener Link gibt die Plätze zurück, die er nicht gebraucht hat. Die Grenzen für Gesamtzahl und Tag gelten für diese Einladungen wie für die offene Registrierung.
+- **Einladungen von Admins** gehen immer, ohne Kontingent je Admin und unabhängig davon, ob die Registrierung offen ist. Ein Link bleibt der eines Admins, auch wenn sein Konto später keiner mehr ist.
+- **Ein Link** ist `/?invite=<token>`. Das Token sind 32 zufällige Byte wie bei einer Sitzung; gespeichert ist nur sein SHA-256, gezeigt wird der Link genau einmal, beim Erzeugen. Er gilt für 1 bis 1000 Konten (Standard 1) und so viele Tage, wie eingestellt ist (Standard 7); wer ihn erzeugt hat, kann ihn zurückziehen.
+- **Einstellungen in der Datenbank**, gesetzt mit `rueder registration set` (`--open`, `--max-accounts`, `--per-day`, `--invites`, `--invite-days`, `--admin-invite-accounts`) und für ein einzelnes Konto mit `rueder account invites <name> <n|default>`. Eine Änderung gilt sofort, ohne Neustart; `rueder registration show` zeigt Einstellungen und Stand.
+- **Gleichzeitige Registrierungen** laufen nacheinander: Zählen und Anlegen geschehen in einer Transaktion, die die Zeile der Einstellungen sperrt. Es entstehen nie mehr Konten, als Platz ist, und ein Link bringt nie mehr als seine Zahl.
+- **Ablehnungen** sind 403 mit einem Wort, das die Oberfläche in ihre Sprache übersetzt: `closed`, `invite`, `full`, `today`. Ob Platz ist, wird geprüft, bevor der Name angesehen und das Passwort gehasht wird: Wer nicht hineinkann, erfährt nicht, welche Namen vergeben sind, und lässt den Server keine Hashes rechnen. Ein vergebener Name ist 409.
+- **Die Login-Seite** fragt `GET /api/login/ways` (`registration` ist wahr, wenn die Registrierung offen und Platz ist) und, wenn die Adresse eine Einladung trägt, `GET /api/register?invite=…`, ob der Link gilt. Die Einladungen eines Users stehen in den Einstellungen im Reiter „Einladungen“.
+
+Was offen ist:
+
+- Es gibt keine Bestätigung über E-Mail und kein CAPTCHA; rueder kennt keine E-Mail-Adressen. Gegen massenhaftes Registrieren stehen die Grenze je Tag, die Gesamtgrenze und das Rate-Limit je Adresse. Wer die Registrierung öffnet, sollte `--per-day` setzen.
+- Offene Registrierung verrät, welche Namen vergeben sind (409), solange Platz ist. Das liegt in der Sache.
+- Ein Admin sieht nicht, wer wen eingeladen hat; es steht in der Datenbank (`accounts.invite_id`), aber in keiner Ansicht.
+- Das Security-Review (Paket 2.12) kennt diese Fläche noch nicht.
 
 ## Security
 
@@ -501,6 +522,7 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 |---|---|
 | Zustand | `GET /api/health`; für Admins `GET /api/status`, siehe [Status für Admins](#status-für-admins) |
 | Sitzung | `POST /api/login`, `GET /api/login/ways`, `POST /api/logout`, `GET /api/me`, `GET /api/oidc/start`, `GET /api/oidc/callback` |
+| Registrierung | `GET` und `POST /api/register` (ohne Sitzung), `GET` und `POST /api/invites`, `DELETE /api/invites/{id}` |
 | Konto | `GET /api/sessions`, `DELETE /api/sessions`, `DELETE /api/sessions/{id}`, `PUT /api/password`; für Admins `GET` und `POST /api/accounts` |
 | Baum | `GET /api/tree` (Ordner, Abos, Feeds mit `last_seq`, Lesemarken, Ungelesen-Zahlen und dem Fehler des letzten Abrufs, dazu die Zahl der ausgeblendeten Artikel), `POST /api/tree/move`, `POST /api/folders`, `PATCH` und `DELETE /api/folders/{id}` |
 | Abos | `POST /api/feeds/find`, `POST /api/feeds`, `PATCH` und `DELETE /api/feeds/{id}`, `PUT /api/feeds/{id}/agent`, `GET` und `POST /api/opml` |

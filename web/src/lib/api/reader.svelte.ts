@@ -346,6 +346,7 @@ export class ServerReader implements Reader {
 			subscribe: true,
 			opml: true,
 			status: account.admin,
+			invites: true,
 			reports: true
 		};
 		this.session = session;
@@ -1554,6 +1555,37 @@ export class ServerReader implements Reader {
 		} catch (error) {
 			this.refusal(error);
 			return null;
+		}
+	}
+
+	async invites() {
+		try {
+			return await this.api.invites();
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
+
+	async invite(uses: number) {
+		try {
+			const made = await this.api.invite(uses);
+			// The link leads to this rueder's page, which reads the token from it.
+			return { link: `${location.origin}/?invite=${made.token}` };
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 403) return 'none-left' as const;
+			this.refusal(error);
+			return null;
+		}
+	}
+
+	async revokeInvite(id: number) {
+		try {
+			await this.api.revokeInvite(id);
+			return true;
+		} catch (error) {
+			this.refusal(error);
+			return false;
 		}
 	}
 

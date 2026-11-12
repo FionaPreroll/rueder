@@ -16,10 +16,11 @@
 	} from '#lib/settings.svelte.ts';
 	import Choice from './Choice.svelte';
 	import Dialog from './Dialog.svelte';
+	import Invitations from './Invitations.svelte';
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const allTabs = ['look', 'reading', 'rules', 'keys', 'privacy'] as const;
+	const allTabs = ['look', 'reading', 'rules', 'keys', 'invites', 'privacy'] as const;
 	type Tab = (typeof allTabs)[number];
 
 	let {
@@ -28,11 +29,13 @@
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
 
-	// Privacy only says something where the server takes reports of errors.
+	// Privacy only says something where the server takes reports of errors, and
+	// invitations only where there is a server to make an account on.
 	const tabs = $derived(
-		allTabs.filter(
-			(name) => name !== 'privacy' || (reader.can.reports && reader.reportsConsent?.available)
-		)
+		allTabs.filter((name) => {
+			if (name === 'privacy') return reader.can.reports && reader.reportsConsent?.available;
+			return name !== 'invites' || reader.can.invites;
+		})
 	);
 
 	const swatch: Record<(typeof accents)[number], string> = {
@@ -149,6 +152,8 @@
 			</div>
 		{:else if tab === 'rules'}
 			<RulesEditor {reader} book={reader.filters} />
+		{:else if tab === 'invites'}
+			<Invitations {reader} />
 		{:else if tab === 'privacy'}
 			<div class="space-y-3 text-sm">
 				<label class="flex cursor-pointer items-start gap-2 font-medium">

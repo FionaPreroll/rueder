@@ -17,7 +17,9 @@ use std::any::TypeId;
 
 use ts_rs::{Config, TS, TypeVisitor};
 
-use crate::{api, events, filters, labels, login, profile, reports, status, subscribe, tree};
+use crate::{
+    api, events, filters, labels, login, profile, registration, reports, status, subscribe, tree,
+};
 
 /// Where the committed file lies, seen from the crate.
 pub const FILE: &str = "../web/src/lib/api/types.ts";
@@ -124,6 +126,7 @@ pub fn generate() -> anyhow::Result<String> {
     crate::types(&mut types);
     login::types(&mut types);
     profile::types(&mut types);
+    registration::types(&mut types);
     api::types(&mut types);
     tree::types(&mut types);
     subscribe::types(&mut types);

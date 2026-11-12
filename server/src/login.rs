@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AppError, AppState, accounts,
+    AppError, AppState, accounts, registration,
     sessions::{self, Session},
 };
 
@@ -182,6 +182,16 @@ pub struct Me {
     is_admin: bool,
 }
 
+impl Me {
+    pub(crate) fn new(id: i32, username: String, is_admin: bool) -> Self {
+        Self {
+            id,
+            username,
+            is_admin,
+        }
+    }
+}
+
 /// The ways to log in this server has besides name and password.
 ///
 /// `GET /api/login/ways` answers with it, to anybody.
@@ -190,14 +200,17 @@ pub struct Me {
 pub struct Ways {
     /// Through the OpenID Connect provider, at `/api/oidc/start`.
     oidc: bool,
+    /// Anybody can make an account for themselves, at `/api/register`.
+    registration: bool,
 }
 
 /// What the login page asks before anybody is logged in, to know whether to
 /// offer the way through the provider. It says nothing about any account.
-pub async fn ways(State(state): State<AppState>) -> Json<Ways> {
-    Json(Ways {
+pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError> {
+    Ok(Json(Ways {
         oidc: state.oidc.is_some(),
-    })
+        registration: registration::is_open(&state.db).await?,
+    }))
 }
 
 pub async fn login(

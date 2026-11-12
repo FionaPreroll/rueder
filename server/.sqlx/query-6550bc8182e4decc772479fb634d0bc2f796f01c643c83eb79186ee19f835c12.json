@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.invite_quota,\n                  coalesce(sum(CASE WHEN i.revoked OR i.expires_at <= now() THEN i.uses\n                                    ELSE i.max_uses END), 0) AS \"taken!\"\n           FROM accounts a\n           LEFT JOIN invites i ON i.account_id = a.id AND NOT i.by_admin\n           WHERE a.id = $1\n           GROUP BY a.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invite_quota",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "invite_quota"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "taken!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "6550bc8182e4decc772479fb634d0bc2f796f01c643c83eb79186ee19f835c12"
+}
