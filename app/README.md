@@ -54,16 +54,25 @@ unsigned release of `github` and an unsigned release of `play`. That job never
 sees the signing key, because it runs the build scripts of every pull request
 before anybody merged them.
 
-On `main`, once the checks have passed, `app-release` signs the unsigned release
-with `apksigner` from the Android SDK on the runner, without running any of the
-repository's build scripts, and replaces the release `android-latest` with
-`rueder.apk` and a `version.json` of the build number (CI's run number, also the
-APK's `versionCode`), the commit and the size. It also attests the APK, so that
-anybody can check where it comes from:
+On `main`, once the checks have passed and if the app changed, `app-release`
+signs the unsigned release with `apksigner` from the Android SDK on the runner,
+without running any of the repository's build scripts, and replaces the release
+`android-latest` with `rueder.apk` and a `version.json` of the build number (CI's
+run number, also the APK's `versionCode`), the commit and the size. It also
+attests the APK, so that anybody can check where it comes from:
 
 ```sh
 gh attestation verify rueder.apk --repo FionaPreroll/rueder
 ```
+
+The app changed if anything in `app/` differs from the commit the tag
+`android-latest` points at, apart from this README, the tests in `test/` and
+`android/app/src/test/` and Prettier's settings. The job `app-changed` checks
+that; a push that changes nothing else in the app, e.g. only the server or the
+web page, makes no new release, so installed apps are not offered an update
+that brings nothing new, and the environment below does not ask for an
+approval. A change only to how CI builds or signs the app counts as none; it
+reaches the release with the next change in `app/`.
 
 The key is never in the repository. `app-release` takes it from four secrets:
 `ANDROID_KEYSTORE_BASE64` (the keystore, base64-encoded),
@@ -92,8 +101,8 @@ key reachable from that one job only, and only after you agreed:
    that name, if CI has not run since this change).
 2. **Deployment protection rules:** tick **Required reviewers** and add yourself.
    Leave **Prevent self-review** off if you are the only one, or you cannot
-   approve your own merges. Each push to `main` then waits with the app's release
-   until you choose **Review deployments → Approve** in the run; the image and
+   approve your own merges. Each push to `main` that changes the app then waits
+   with the app's release until you choose **Review deployments → Approve** in the run; the image and
    everything else go on without it.
 3. **Deployment branches and tags:** choose **Selected branches and tags** and
    add `main`, so no other branch can run a job in this environment.
