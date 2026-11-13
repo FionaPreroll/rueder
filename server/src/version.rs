@@ -57,7 +57,7 @@ pub fn build() -> Build {
         commit: env!("RUEDER_COMMIT"),
         branch: env!("RUEDER_BRANCH"),
         tag: env!("RUEDER_TAG"),
-        dirty: env!("RUEDER_DIRTY") == "true",
+        dirty: matches!(env!("RUEDER_DIRTY"), "true"),
         built_at: env!("RUEDER_BUILT_AT"),
         target: env!("RUEDER_TARGET"),
         profile: env!("RUEDER_PROFILE"),
