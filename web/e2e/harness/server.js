@@ -59,9 +59,14 @@ const env = {
 	PUBLIC_URL: RUEDER
 };
 
+// The screenshots (screenshots/) name accounts of their own, all of them
+// admins, so that every view an admin has is in them.
+const own = process.env.E2E_ACCOUNTS?.split(',');
+
 // The first command also applies the migrations.
-for (const name of ACCOUNTS) {
-	execFileSync(rueder, ['account', 'add', name, ...(name === 'login' ? ['--admin'] : [])], {
+for (const name of own ?? ACCOUNTS) {
+	const admin = own !== undefined || name === 'login';
+	execFileSync(rueder, ['account', 'add', name, ...(admin ? ['--admin'] : [])], {
 		env,
 		input: `${PASSWORD}\n`,
 		stdio: ['pipe', 'inherit', 'inherit']

@@ -36,6 +36,7 @@ import {
 	type Abilities,
 	type Account,
 	type AppPassword,
+	type Connection,
 	type AppPasswordRefusal,
 	type AppPasswords,
 	type LegalLinks,
@@ -111,8 +112,31 @@ const AHEAD = 5;
 const PREVIEW_AFTER = 250;
 /** Events that come close together ask the server once, after this long. */
 const SETTLE_AFTER = 300;
-/** A connection for live updates that the server ended is opened anew after this long. */
-const RECONNECT_AFTER = 30_000;
+/**
+ * A connection for live updates that the server ended is opened anew after this
+ * long, longer each time it fails again, and then every minute.
+ */
+export const RECONNECT_AFTER = [2_000, 5_000, 15_000, 30_000, 60_000];
+/** A connection that is not up again after this long means the server does not answer. */
+export const UNREACHABLE_AFTER = 10_000;
+/** At most this many changes wait for a server that does not answer; more are refused. */
+export const MAX_UNSENT = 1000;
+/** Changes that wait while the connection stays up are tried again after this long. */
+const RESEND_AFTER = 5_000;
+
+/** A change on its way to the server: what sends it, what says it arrived, and what takes it back. */
+interface Change {
+	send: () => Promise<unknown>;
+	settled: () => boolean;
+	undo: () => void;
+}
+
+/**
+ * Whether the server did not get to answer: no answer at all, or a proxy in front
+ * of it saying that it is not there. A change that met this may be sent again.
+ */
+const unanswered = (error: unknown) =>
+	error instanceof ApiError && [0, 502, 503, 504].includes(error.status);
 /** The longest list the server gives at once, for loading what is shown anew. */
 const MAX_PAGE = 200;
 /** A search is asked for once the typing has paused this long. */
@@ -332,6 +356,9 @@ export class ServerReader implements Reader {
 	private opened = $state<string | null>(null);
 	moved = $state(0);
 	notice = $state<Notice | null>(null);
+	connection = $state.raw<Connection>({ state: 'connecting' });
+	/** How many changes wait for a server that did not answer. */
+	unsentChanges = $state(0);
 
 	/** The words of the search, as typed. */
 	private words = $state('');
@@ -412,6 +439,12 @@ export class ServerReader implements Reader {
 	/** The connection was opened anew and may have missed events. */
 	private reopened = false;
 	private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+	/** How often in a row the connection was opened anew without coming up. */
+	private tries = 0;
+	/** Says the server does not answer, once the connection stayed away too long. */
+	private lostTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Stops listening to the browser for the network and the page coming back. */
+	private unwatch: (() => void) | null = null;
 	/** Asking anew for what events said changed, a moment after the last of them. */
 	private settling = new Map<string, ReturnType<typeof setTimeout>>();
 	/** The settings as the account has them; null until they are loaded, so none are sent before. */
@@ -426,6 +459,18 @@ export class ServerReader implements Reader {
 	private sending: Promise<unknown> = Promise.resolve();
 	/** How many changes of one thing are on their way, by what they change. */
 	private waiting = new Map<string, number>();
+	/**
+	 * Changes the server did not get, in their order, sent once it answers again.
+	 * They live in this tab only and go with it: nothing of an account stays in the browser.
+	 */
+	private unsent: Change[] = [];
+	private resendTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Asks before the tab is closed while changes wait. */
+	private askBeforeLeaving = (event: BeforeUnloadEvent) => {
+		event.preventDefault();
+		// Older browsers want this set, too.
+		event.returnValue = '';
+	};
 	private resyncing = false;
 	private newRules = 0;
 	/** Counts the rules that were tried, so that only the last one typed is asked for. */
@@ -462,6 +507,9 @@ export class ServerReader implements Reader {
 	 */
 	start() {
 		this.stopped = false;
+		this.connection = { state: 'connecting' };
+		this.waitForLive();
+		this.unwatch = this.watchNetwork();
 		this.connect();
 		void this.loadSettings();
 		void this.loadConsent();
@@ -475,6 +523,11 @@ export class ServerReader implements Reader {
 			this.events?.close();
 			this.events = null;
 			clearTimeout(this.reconnectTimer);
+			clearTimeout(this.lostTimer);
+			this.unwatch?.();
+			this.unwatch = null;
+			// What waits is not sent any more, neither as this account nor as the next one.
+			this.dropUnsent();
 			for (const timer of this.settling.values()) clearTimeout(timer);
 			this.settling.clear();
 		};
@@ -733,7 +786,10 @@ export class ServerReader implements Reader {
 	/** Says what went wrong, or ends the session if the server no longer knows it. */
 	private failed(error: unknown, notice: Notice) {
 		if (error instanceof ApiError && error.signedOut) this.session.expired();
-		else this.notice = notice;
+		// While the connection is away, the sign in the top bar says it already.
+		else if (notice === 'unreachable' && unanswered(error) && this.connection.state !== 'live') {
+			this.lost();
+		} else this.notice = notice;
 		// What the server failed at, or a server that did not answer, is worth a
 		// report; what it refused is not an error of the page.
 		if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
@@ -1389,8 +1445,12 @@ export class ServerReader implements Reader {
 
 	// Reading
 
-	/** Sends a change. If the server refuses it, `undo` takes it back, unless a later change of the same thing is on its way. */
-	private write(key: string, send: () => Promise<unknown>, undo: () => void) {
+	/**
+	 * Sends a change. If the server refuses it, `undo` takes it back, unless a
+	 * later change of the same thing is on its way. A change that `waits` is kept
+	 * instead when the server does not answer, and sent once it does again.
+	 */
+	private write(key: string, send: () => Promise<unknown>, undo: () => void, waits = false) {
 		this.waiting.set(key, (this.waiting.get(key) ?? 0) + 1);
 		const settled = () => {
 			const left = (this.waiting.get(key) ?? 1) - 1;
@@ -1398,12 +1458,99 @@ export class ServerReader implements Reader {
 			else this.waiting.delete(key);
 			return left === 0;
 		};
+		const change = { send, settled, undo };
+		if (waits && this.unsent.length > 0) {
+			// Behind those that wait already, so that they arrive in their order.
+			this.keep(change);
+			return;
+		}
 		this.sending = this.sending.then(send).then(settled, (error: unknown) => {
+			if (waits && unanswered(error) && !this.stopped) {
+				this.keep(change);
+				return;
+			}
 			if (settled()) undo();
 			this.failed(error, 'notSaved');
 			// Whatever else the refusal means, the server's counts are the right ones.
 			this.resync();
 		});
+	}
+
+	/** Keeps a change for later, as long as not too many wait already. */
+	private keep(change: Change) {
+		if (this.stopped) return;
+		if (this.unsent.length >= MAX_UNSENT) {
+			if (change.settled()) change.undo();
+			this.notice = 'tooManyUnsent';
+			return;
+		}
+		if (this.unsent.length === 0 && typeof window !== 'undefined') {
+			window.addEventListener('beforeunload', this.askBeforeLeaving);
+		}
+		this.unsent.push(change);
+		this.unsentChanges = this.unsent.length;
+		// Without a break of the connection there is no `hello` to wait for.
+		if (this.connection.state === 'live') this.resendSoon();
+	}
+
+	private resendSoon() {
+		clearTimeout(this.resendTimer);
+		this.resendTimer = setTimeout(() => this.resend(), RESEND_AFTER);
+	}
+
+	/**
+	 * Sends what waits, in its order, until the server does not answer again.
+	 * What it refuses is taken back. Then the server's counts are the right ones.
+	 */
+	private resend() {
+		clearTimeout(this.resendTimer);
+		if (this.unsent.length === 0) return;
+		this.sending = this.sending.then(async () => {
+			let sent = false;
+			while (this.unsent.length > 0 && !this.stopped) {
+				const change = this.unsent[0];
+				try {
+					await change.send();
+				} catch (error) {
+					if (this.stopped) return;
+					if (unanswered(error)) {
+						if (this.connection.state === 'live') this.resendSoon();
+						break;
+					}
+					this.unsent.shift();
+					if (change.settled()) change.undo();
+					this.failed(error, 'notSaved');
+					// The session is over: nothing more goes out.
+					if (error instanceof ApiError && error.signedOut) {
+						this.dropUnsent();
+						return;
+					}
+					sent = true;
+					continue;
+				}
+				if (this.stopped) return;
+				this.unsent.shift();
+				change.settled();
+				sent = true;
+			}
+			this.unsentChanges = this.unsent.length;
+			if (this.unsent.length === 0) this.leaveFreely();
+			if (sent) this.resync();
+		});
+	}
+
+	/** Forgets what waits, as when the reader stops. */
+	private dropUnsent() {
+		clearTimeout(this.resendTimer);
+		this.unsent = [];
+		this.unsentChanges = 0;
+		this.leaveFreely();
+	}
+
+	private leaveFreely() {
+		if (typeof window !== 'undefined') {
+			window.removeEventListener('beforeunload', this.askBeforeLeaving);
+		}
 	}
 
 	/** Notes a change here; the unread count of the feed moves with it. */
@@ -1423,7 +1570,8 @@ export class ServerReader implements Reader {
 		this.write(
 			`${article.id}:${field}`,
 			() => this.api.setState(serverId(article.feedId), article.seq, { [field]: value }),
-			() => this.mark(article, { [field]: !value })
+			() => this.mark(article, { [field]: !value }),
+			true
 		);
 	}
 
@@ -1568,7 +1716,8 @@ export class ServerReader implements Reader {
 				}
 				this.marks = marks;
 				this.counts = countsBefore;
-			}
+			},
+			true
 		);
 	}
 
@@ -1783,7 +1932,8 @@ export class ServerReader implements Reader {
 				const now = this.articleLabels[article.id] ?? [];
 				const back = on ? now.filter((id) => id !== labelId) : [...now, labelId];
 				this.articleLabels = { ...this.articleLabels, [article.id]: back };
-			}
+			},
+			true
 		);
 	}
 
@@ -1879,8 +2029,8 @@ export class ServerReader implements Reader {
 	/**
 	 * Opens the connection. The browser opens it again by itself after a break
 	 * and says the last event it got, so nothing is missed. One that the server
-	 * ended for good, refusing it, is opened anew after a while, and what came
-	 * meanwhile is asked for anew.
+	 * ended for good, refusing it, is opened anew after a while, longer each time,
+	 * and what came meanwhile is asked for anew.
 	 */
 	private connect() {
 		if (this.stopped) return;
@@ -1900,15 +2050,106 @@ export class ServerReader implements Reader {
 			});
 		}
 		events.onerror = () => {
-			if (events.readyState !== CLOSED || this.events !== events) return;
+			if (this.events !== events) return;
+			this.broke();
+			// Not closed, the browser opens it again by itself.
+			if (events.readyState !== CLOSED) return;
 			this.events = null;
 			// The server may have refused it because the session is over.
 			void this.checkSession();
 			clearTimeout(this.reconnectTimer);
+			const after = RECONNECT_AFTER[Math.min(this.tries, RECONNECT_AFTER.length - 1)];
+			this.tries += 1;
 			this.reconnectTimer = setTimeout(() => {
 				this.reopened = true;
 				this.connect();
-			}, RECONNECT_AFTER);
+			}, after);
+		};
+	}
+
+	/** Opens the connection anew at once, as when asked to or when the network is back, and sends what waits. */
+	reconnect() {
+		const state = this.connection.state;
+		if (this.stopped) return;
+		// Up: only what waits is tried again.
+		if (state === 'live') {
+			this.resend();
+			return;
+		}
+		// Still opening for the first time: nothing to try again.
+		if (state === 'connecting') return;
+		clearTimeout(this.reconnectTimer);
+		const old = this.events;
+		// What the old one says from now on is not heard.
+		this.events = null;
+		old?.close();
+		this.reopened = true;
+		this.connect();
+	}
+
+	/** The connection broke off: it is being opened again, and the clock runs. */
+	private broke() {
+		if (this.connection.state !== 'live') return;
+		this.connection = { state: 'reconnecting', since: Date.now() };
+		this.waitForLive();
+	}
+
+	/** If the connection is not up in a while, the server does not answer. */
+	private waitForLive() {
+		clearTimeout(this.lostTimer);
+		this.lostTimer = setTimeout(() => {
+			if (!this.stopped && this.connection.state !== 'live') this.lost();
+		}, UNREACHABLE_AFTER);
+	}
+
+	/** The server does not answer, or the browser has no network. */
+	private lost(offline = typeof navigator !== 'undefined' && navigator.onLine === false) {
+		const was = this.connection;
+		if (was.state === 'live' || this.stopped) return;
+		const since =
+			was.state === 'reconnecting' || was.state === 'unreachable' ? was.since : Date.now();
+		this.connection = { state: 'unreachable', since, offline };
+	}
+
+	/** The connection is up: what was missed while it was away is asked for. */
+	private up() {
+		const back =
+			this.reopened ||
+			this.connection.state === 'reconnecting' ||
+			this.connection.state === 'unreachable';
+		this.reopened = false;
+		this.tries = 0;
+		clearTimeout(this.lostTimer);
+		this.connection = { state: 'live' };
+		// What waits goes first, so that what is loaded anew has it.
+		this.resend();
+		if (back) this.catchUp();
+	}
+
+	/**
+	 * Listens to the browser: without a network the server cannot answer, and
+	 * when the network or the page is back, the connection is tried at once.
+	 */
+	private watchNetwork() {
+		if (typeof window === 'undefined') return () => {};
+		const offline = () => {
+			if (this.connection.state === 'live') {
+				this.connection = { state: 'reconnecting', since: Date.now() };
+			}
+			this.lost(true);
+		};
+		const online = () => this.reconnect();
+		const shown = () => {
+			if (document.visibilityState === 'visible') this.reconnect();
+		};
+		window.addEventListener('offline', offline);
+		window.addEventListener('online', online);
+		document.addEventListener('visibilitychange', shown);
+		if (navigator.onLine === false) offline();
+		return () => {
+			window.removeEventListener('offline', offline);
+			window.removeEventListener('online', online);
+			document.removeEventListener('visibilitychange', shown);
 		};
 	}
 
@@ -1960,10 +2201,7 @@ export class ServerReader implements Reader {
 		const own = 'by' in event.data && event.data.by === this.api.tab;
 		switch (event.event) {
 			case 'hello':
-				if (this.reopened) {
-					this.reopened = false;
-					this.catchUp();
-				}
+				this.up();
 				return;
 			case 'resync':
 				this.catchUp();

@@ -126,6 +126,56 @@ describe('the page with a server', () => {
 		expect(after.filter((r) => r.path.includes('limit=60'))).toHaveLength(0);
 	});
 
+	it('says in the top bar when the server does not answer, and is live again by itself', async () => {
+		await reading();
+		server.down = true;
+		server.breakStreams();
+		expect(await screen.findByRole('button', { name: /^Reconnecting/ })).toBeInTheDocument();
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		const retry = await screen.findByRole('button', {
+			name: /^The server has not answered since .+\. Try again now$/
+		});
+		// The sign says it, not a notice for each load that fails.
+		expect(screen.queryByRole('alert')).toBeNull();
+
+		// Asked to, it tries again at once.
+		const opened = server.streams.length;
+		await userEvent.click(retry);
+		expect(server.streams).toHaveLength(opened);
+		expect(server.streams[0].after).toBe(server.requests.length);
+
+		server.down = false;
+		server.reopenStreams();
+		await vi.waitFor(() =>
+			expect(screen.queryByRole('button', { name: /answered|Reconnecting/ })).toBeNull()
+		);
+		expect(await screen.findByRole('button', { name: /Article 3 of feed/ })).toBeInTheDocument();
+	});
+
+	it('keeps what was read while the server does not answer, and says how much waits', async () => {
+		await reading();
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		const third = await screen.findByRole('button', { name: /Article 3 of feed/ });
+		server.down = true;
+		server.breakStreams();
+		await userEvent.click(third);
+		expect(
+			await screen.findByRole('button', {
+				name: /^The server has not answered since .+\. 1 change is waiting\. Try again now$/
+			})
+		).toBeInTheDocument();
+		expect(unreadInTitle()).toBe(3);
+		expect(screen.queryByRole('alert')).toBeNull();
+
+		server.down = false;
+		server.reopenStreams();
+		await vi.waitFor(() => expect(server.article(tech, 3)!.read).toBe(true));
+		await vi.waitFor(() =>
+			expect(screen.queryByRole('button', { name: /waiting|Reconnecting/ })).toBeNull()
+		);
+		expect(unreadInTitle()).toBe(3);
+	});
+
 	it('puts the unread articles on the icon of the app, and takes them off when logging out', async () => {
 		const badges = {
 			setAppBadge: vi.fn(async (_count?: number) => {}),

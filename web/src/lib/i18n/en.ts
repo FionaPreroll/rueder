@@ -159,9 +159,19 @@ const en = {
 		play: 'Play'
 	},
 
+	connection: {
+		reconnecting: 'Reconnecting …',
+		unreachable: (since: string) => `The server has not answered since ${since}.`,
+		offline: (since: string) => `No network since ${since}.`,
+		retry: 'Try again now',
+		unsent: (count: number) =>
+			plural(count, { one: '1 change is waiting.', other: `${n(count)} changes are waiting.` })
+	},
+
 	notice: {
 		unreachable: 'The server does not answer. What you see may be out of date.',
-		notSaved: 'The server did not take your last change. It was undone here.'
+		notSaved: 'The server did not take your last change. It was undone here.',
+		tooManyUnsent: 'So many changes wait for the server that this one was taken back.'
 	},
 
 	login: {

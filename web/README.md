@@ -95,6 +95,21 @@ Every run makes the database `rueder_e2e` anew, starts the server on
 (`e2e/harness/`). Each spec logs in as an account of its own. `pnpm e2e reading`
 runs one spec, `pnpm e2e --ui` shows the browser.
 
+## Screenshots
+
+`pnpm screenshots` takes a picture of every view, for looking at the design: the
+login, the reader with its lists and views, menus, dialogs, the settings, the
+account's settings and the status of the server, on a desktop and on a phone,
+light and dark, in English and German (`SCREENSHOT_LANGUAGES=de` for one). It
+needs what `pnpm e2e` needs and runs the same way, against the real server, but
+with the made-up feeds of the draft (`src/lib/demo/data.ts`), which a made-up
+website serves as RSS with their pictures (`screenshots/site.ts`). The pictures
+land in `screenshots/out/<language>-<device>-<theme>/`, numbered in the order of
+the walk through the views (`screenshots/views.spec.ts`); a long dialog gives one
+picture per screen. On GitHub the workflow Screenshots does the same when started
+by hand, and for a pull request that changes how the pictures are taken, and
+attaches the pictures to its run as the artifact `screenshots`.
+
 ## Conventions
 
 - Texts live in `src/lib/i18n/` (English and German); components read them as
