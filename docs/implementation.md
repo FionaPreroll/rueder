@@ -264,11 +264,12 @@ Ergebnis: Der neue Server läuft gegen echte Feeds. Die API-Tests und die übern
 - [ ] **2.15 Apps anderer Anbieter (A24).** Feedreader-Apps wie Reeder, NetNewsWire (als Konto „FreshRSS“), ReadKit, Read You oder FeedMe lesen und bedienen ein Konto über die Google-Reader-API, wie sie FreshRSS und Miniflux anbieten; entworfen unter [Apps anderer Anbieter](architecture.md#apps-anderer-anbieter), entschieden in [plan.md](plan.md#entscheidungen). Eingeschaltet als Standard, `APP_API=off` schaltet es ab. Es besteht aus:
   - **App-Passwörtern:** in einem neuen Reiter „Apps“ der Einstellungen erzeugt, mit dem Passwort und, wo eingerichtet, einem Code des zweiten Faktors; einmal gezeigt, nur als Hash gespeichert, mit Name und letzter Nutzung aufgelistet und einzeln widerrufbar. Die API nimmt nur sie an, nie das Passwort des Kontos.
   - **dem Lesen:** Anmeldung (`ClientLogin`), Abos, Ordner und Labels, Ungelesen-Zahlen, Streams mit Fortsetzung, Artikel mit bereinigtem Text und Bildern über den Proxy, signiert für das App-Passwort.
-  - **dem Ändern:** gelesen und ungelesen, Sterne, Labels, alles als gelesen bis zu einer Zeit, abonnieren, abbestellen, umbenennen und verschieben, Ordner umbenennen und entfernen. Alles über dieselben Wege wie `/api`, mit denselben Grenzen, und als Ereignis an die offenen Tabs.
+  - **dem Ändern:** gelesen und ungelesen, Sterne, Labels, alles als gelesen bis zu einer Zeit, abonnieren, abbestellen, umbenennen und verschieben, Ordner umbenennen und entfernen. Alles über dieselben Wege wie `/api`, mit denselben Grenzen, und als Ereignis an die offenen Tabs. Ändernde Anfragen von Apps zählen je Konto gegen eine Grenze in der Zeit; je Anfrage gilt, was NetNewsWire schickt (siehe [Grenzen](architecture.md#apps-anderer-anbieter)).
   - **einem Fuzz-Target** für das Lesen der Anfragen und einem Workflow, der die Fuzz-Targets auf GitHub laufen lässt.
 
   Fertig, wenn:
   - es zu jedem Endpunkt einen Test gibt, auch den, dass ein anderes Konto und ein widerrufenes App-Passwort nichts sehen und nichts ändern;
+  - Tests die Grenzen je Anfrage und in der Zeit prüfen;
   - ein Test an jedem Endpunkt, der Bilder nennt, zeigt, dass keine fremde Adresse hinausgeht, und dass die Bilder eines widerrufenen App-Passworts nicht mehr laden;
   - ein Property-Test zeigt, dass Ordner und ihre Pfade hin und zurück dieselben bleiben;
   - die Abläufe, mit denen Read You und NetNewsWire anmelden, abgleichen und ändern, als Tests nachgestellt sind (beide sind quelloffen, die Form ihrer Anfragen steht in ihrem Code);
