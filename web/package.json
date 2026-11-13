@@ -9,6 +9,7 @@
 		"dev:demo": "RUEDER_DEMO=1 vite dev",
 		"build": "vite build",
 		"build:single": "RUEDER_SINGLE_FILE=1 vite build",
+		"build:docs": "svelte-kit sync && typedoc",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -39,6 +40,7 @@
 		"svelte": "^5.56.7",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",
+		"typedoc": "^0.28.20",
 		"typescript": "^6.0.3",
 		"vite": "^8.3.3",
 		"vitest": "^5.0.5"

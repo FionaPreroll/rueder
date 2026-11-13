@@ -62,6 +62,7 @@ pnpm test:coverage
 pnpm e2e             # end-to-end tests in a browser against the real server
 pnpm build           # the app for the server to serve, in build/
 pnpm build:single    # the whole app as one build/index.html
+pnpm build:docs      # the documentation of src/lib with TypeDoc, in build-docs/
 ```
 
 `pnpm dev` passes `/api` and `/img` on to a rueder server on this machine (`cargo run`
@@ -72,7 +73,10 @@ session cookie for HTTPS and for localhost only.
 
 `pnpm build:single` packs the reader with made-up data into one HTML file that runs
 from any address or straight from the file system, for handing the interface around.
-CI attaches it to every run as the artifact `rueder-ui-draft`.
+CI attaches it to every run as the artifact `rueder-ui-draft`, and it is the demo on
+GitHub Pages, at https://fionapreroll.github.io/rueder/demo/, next to what
+`pnpm build:docs` writes ([pages/README.md](../pages/README.md)). Files from `static/`
+are therefore named with `asset()` from `$app/paths`, never from the top of the site.
 
 ## End-to-end tests
 

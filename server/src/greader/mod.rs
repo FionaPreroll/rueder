@@ -11,7 +11,7 @@
 //!   auth=…`. No cookie counts here, so no page of another site can act for
 //!   anybody. The token `T` the API has for changes is handed out and not
 //!   needed.
-//! - **What:** reading in [`read`], changing in [`write`], what a request
+//! - **What:** reading in [`read`], changing in [`mod@write`], what a request
 //!   says in [`parse`]. Everything goes through the same functions and
 //!   limits as the page's API, and what an app changes reaches the account's
 //!   open tabs as an event, by its address (see `events::changed`).

@@ -34,7 +34,8 @@
 		pause: 'M8 5v14M16 5v14',
 		play: 'M7 5l12 7-12 7z',
 		pulse: 'M3 12h4l3-7 4 14 3-7h4',
-		block: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8'
+		block: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8',
+		install: 'M12 4v10M8 10l4 4 4-4M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2'
 	} as const;
 
 	export type IconName = keyof typeof paths;

@@ -8,12 +8,13 @@
 //!   second report replaces the first.
 //! - **The status page** lists the reported feeds with their address and the
 //!   number of reports by reason, never who reported ([`reported`]).
-//! - **Blocking** is for the operator on the command line (`rueder feed block
-//!   <address>`, [`block`]): the feed is not fetched any more, nobody sees its
-//!   articles, nobody subscribes to it anew, and its images go from the cache
-//!   ([`images_of`]). They are listed in `blocked_images`, so that the proxy
-//!   does not fetch them back for a browser that still knows their addresses.
-//!   `rueder feed unblock` lifts it ([`unblock`]).
+//! - **Blocking** is for the operator on the command line
+//!   (`rueder feed block <address>`, [`block`]): the feed is not fetched any
+//!   more, nobody sees its articles, nobody subscribes to it anew, and its
+//!   images go from the cache ([`images_of`]). They are listed in
+//!   `blocked_images`, so that the proxy does not fetch them back for a
+//!   browser that still knows their addresses. `rueder feed unblock` lifts it
+//!   ([`unblock`]).
 
 use axum::{
     Json, Router,

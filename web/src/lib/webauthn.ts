@@ -55,7 +55,8 @@ export function fromB64url(text: unknown): Uint8Array<ArrayBuffer> {
 	return bytes;
 }
 
-type Json = Record<string, unknown>;
+/** A JSON object, as the server sends it and takes it back. */
+export type Json = Record<string, unknown>;
 
 function object(value: unknown, what: string): Json {
 	if (typeof value !== 'object' || value === null || Array.isArray(value)) {

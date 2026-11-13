@@ -1,0 +1,40 @@
+// A Gradle init script that gives the Android app (app/android) the task
+// javadoc: its Java code as HTML, for its page on GitHub Pages. From
+// app/android:
+//
+//   ./gradlew --init-script ../../pages/javadoc.gradle javadoc
+//
+// It writes app/build/docs/javadoc/: the code of both builds and the GitHub
+// build's own (src/github/), read against the classes it is compiled with. It
+// lives here and not in the app's build.gradle, as CI releases the app anew
+// whenever something in app/ changes (app-changed in ci.yml), and the tools of
+// the documentation are no change to the app. RUEDER_DOCS_FOOTER puts the
+// commit and the day at the foot of every page.
+
+allprojects { project ->
+    project.plugins.withId('com.android.application') {
+        // applicationVariants is the variant API of the Android Gradle plugin 8.
+        project.android.applicationVariants.configureEach { variant ->
+            if (variant.name != 'githubRelease') return
+            def compile = variant.javaCompileProvider
+            project.tasks.register('javadoc', Javadoc) {
+                description = 'Writes the Java code of the GitHub build as HTML.'
+                dependsOn compile
+                def sets = project.android.sourceSets
+                source = sets.main.java.srcDirs + sets.github.java.srcDirs
+                classpath = project.files(project.android.bootClasspath) + compile.get().classpath +
+                    project.files(compile.get().destinationDirectory)
+                destinationDir = project.layout.buildDirectory.dir('docs/javadoc').get().asFile
+                title = 'rueder for Android'
+                options.encoding = 'UTF-8'
+                options.memberLevel = JavadocMemberLevel.PRIVATE
+                if (System.getenv('RUEDER_DOCS_FOOTER')) {
+                    options.bottom = System.getenv('RUEDER_DOCS_FOOTER')
+                }
+                // Every comment that is there has to be right; not every item needs one.
+                options.addBooleanOption('Xdoclint:all,-missing', true)
+                options.addBooleanOption('Werror', true)
+            }
+        }
+    }
+}

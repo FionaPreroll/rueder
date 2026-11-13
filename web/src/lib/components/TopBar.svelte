@@ -6,6 +6,7 @@
 	// what a reader with an account finds in its menu.
 	import { tabsOf } from '#lib/account.ts';
 	import { APP_SETTINGS, inAndroidApp } from '#lib/app.ts';
+	import { install } from '#lib/install.svelte.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import Icon from './Icon.svelte';
@@ -190,6 +191,15 @@
 					<Icon name="pulse" />
 					{m.status.open}
 				</button>
+			{/if}
+			{#if install.offer}
+				<!-- Where the browser would install the page as an app; the dialog is its own. -->
+				<button type="button" role="menuitem" class="menu-item" onclick={() => install.offer?.()}>
+					<Icon name="install" />
+					{m.nav.install}
+				</button>
+			{:else if install.safari}
+				<p class="max-w-64 px-3 py-1.5 text-xs text-soft">{m.nav.installSafari}</p>
 			{/if}
 			<button type="button" role="menuitem" class="menu-item" onclick={() => reader.signOut()}>
 				<Icon name="logout" />
