@@ -510,12 +510,13 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	async switchOffSecondFactor(password: string): Promise<SecondFactorRefusal | null> {
+	async switchOffSecondFactor(password: string, code: string): Promise<SecondFactorRefusal | null> {
 		try {
-			await this.api.switchOffSecondFactor(password);
+			await this.api.switchOffSecondFactor(password, code.trim());
 			return null;
 		} catch (error) {
-			return this.refusalOf(error, 'wrongPassword');
+			const codeWrong = error instanceof ApiError && error.message.trim() === 'the code is wrong';
+			return this.refusalOf(error, codeWrong ? 'wrongCode' : 'wrongPassword');
 		}
 	}
 

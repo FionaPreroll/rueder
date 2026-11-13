@@ -11,8 +11,10 @@
 //!   Without one the answer says that one is needed; a wrong one counts like
 //!   a wrong password. A code counts once: the time step of the last one taken
 //!   is kept. A recovery code goes once it was used.
-//! - **Switching it off** takes the password (`DELETE /api/second-factor`), or
-//!   an admin on the command line (`rueder account second-factor-off`).
+//! - **Switching it off** takes the password and a code, from the app or a
+//!   recovery code (`DELETE /api/second-factor`), so that a password that got
+//!   out together with a session is not enough; or an admin on the command line
+//!   (`rueder account second-factor-off`), for somebody who lost both.
 //! - **Admins** need it where the operator says so (`ADMIN_SECOND_FACTOR=required`):
 //!   then the right of an admin counts only in a session that began with it.
 //!
@@ -71,6 +73,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
     types
         .add::<SecondFactor>()
         .add::<Password>()
+        .add::<SwitchOff>()
         .add::<Setup>()
         .add::<Code>()
         .add::<RecoveryCodes>();
@@ -88,14 +91,26 @@ pub struct SecondFactor {
     required_for_admins: bool,
 }
 
-/// What setting up and switching off read: the password of the account. An
-/// account that has none needs none.
+/// What setting up reads: the password of the account. An account that has
+/// none needs none.
 #[derive(Deserialize, TS)]
 #[ts(rename = "SecondFactorPassword")]
 pub struct Password {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
     password: String,
+}
+
+/// What switching off reads: the password, as for setting up, and a code from
+/// the app or a recovery code.
+#[derive(Deserialize, TS)]
+#[ts(rename = "SecondFactorSwitchOff")]
+pub struct SwitchOff {
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    password: String,
+    #[serde(default)]
+    code: String,
 }
 
 /// A new secret for the app, waiting for a code to confirm it.
@@ -357,7 +372,20 @@ async fn check_password(
     password: &str,
 ) -> Result<(), AppError> {
     let keys = [Key::name(&session.username)];
-    if let Err(wait) = state.logins.attempt(&keys, Instant::now()) {
+    tried_password(state, session, &keys, password).await?;
+    state.logins.succeeded(&keys);
+    Ok(())
+}
+
+/// Counts a try against the limit of the account's name and checks the
+/// password; the caller says when the whole of it succeeded.
+async fn tried_password(
+    state: &AppState,
+    session: &Session,
+    keys: &[Key],
+    password: &str,
+) -> Result<(), AppError> {
+    if let Err(wait) = state.logins.attempt(keys, Instant::now()) {
         let message = "too many wrong tries, try again later";
         return Err(AppError::TooMany(wait, message));
     }
@@ -371,7 +399,6 @@ async fn check_password(
         let message = "the password is wrong";
         return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
     }
-    state.logins.succeeded(&keys);
     Ok(())
 }
 
@@ -472,9 +499,19 @@ async fn confirm(
 async fn switch_off(
     State(state): State<AppState>,
     session: Session,
-    Json(password): Json<Password>,
+    Json(off): Json<SwitchOff>,
 ) -> Result<StatusCode, AppError> {
-    check_password(&state, &session, &password.password).await?;
+    let keys = [Key::name(&session.username)];
+    tried_password(&state, &session, &keys, &off.password).await?;
+    // With the password, a code of the second factor itself; a wrong or
+    // missing one stays counted, like a wrong password.
+    if is_on(&state.db, session.account_id).await?
+        && !take(&state.db, session.account_id, &off.code).await?
+    {
+        let message = "the code is wrong";
+        return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+    }
+    state.logins.succeeded(&keys);
     let mut conn = state.db.acquire().await?;
     switch_off_for(&mut conn, session.account_id).await?;
     Ok(StatusCode::NO_CONTENT)

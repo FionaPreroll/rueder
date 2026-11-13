@@ -41,7 +41,8 @@ async function logInWith(page: Page, code: string) {
 	await page.getByRole('button', { name: 'Log in' }).click();
 }
 
-test('a second factor is set up and then needed to log in', async ({ page }) => {
+test('a second factor is set up, needed to log in and to switch it off', async ({ page }) => {
+	await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 	await logIn(page, 'guarded');
 	await page.getByRole('button', { name: 'Settings' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Settings' });
@@ -54,11 +55,25 @@ test('a second factor is set up and then needed to log in', async ({ page }) => 
 	).toBeVisible();
 	const key = fromBase32(await dialog.locator('code').innerText());
 	expect(key).toHaveLength(20);
+	// The key is copied as apps take it, and the QR code grows with a click.
+	await dialog.getByRole('button', { name: 'Copy the key' }).click();
+	await expect(dialog.getByRole('button', { name: 'Copied' })).toBeVisible();
+	const copied = await page.evaluate(() => navigator.clipboard.readText());
+	expect(fromBase32(copied)).toEqual(key);
+	await dialog.getByRole('button', { name: 'Show the QR code larger' }).click();
+	await expect(dialog.getByRole('button', { name: 'Show the QR code smaller' })).toBeVisible();
+	// A click beside the window does not lose the setup.
+	await page.mouse.click(5, 5);
+	await expect(dialog.getByLabel('The code the app shows now')).toBeVisible();
 	await dialog.getByLabel('The code the app shows now').fill(totp(key));
 	await dialog.getByRole('button', { name: 'Confirm' }).click();
 	const codes = dialog.locator('li');
 	await expect(codes).toHaveCount(10);
 	const recovery = await codes.first().innerText();
+	const others = await codes.allInnerTexts();
+	await dialog.getByRole('button', { name: 'Copy the codes' }).click();
+	const all = await page.evaluate(() => navigator.clipboard.readText());
+	expect(all.split('\n')).toEqual(await codes.allInnerTexts());
 	await dialog.getByRole('button', { name: 'I have kept them' }).click();
 	await expect(dialog.getByText('10 recovery codes left.')).toBeVisible();
 
@@ -74,4 +89,18 @@ test('a second factor is set up and then needed to log in', async ({ page }) => 
 	await page.getByLabel('Code').fill(totp(key, Date.now() + 30_000));
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(sidebar(page)).toBeVisible();
+
+	// Switching it off takes the password and a code; the password alone is not enough.
+	await page.getByRole('button', { name: 'Settings' }).click();
+	await dialog.getByRole('tab', { name: 'Security' }).click();
+	await dialog.getByLabel('Your password').fill(PASSWORD);
+	await dialog.getByLabel('Code of the app, or a recovery code').fill('000000');
+	await dialog.getByRole('button', { name: 'Switch off' }).click();
+	await expect(dialog.getByRole('alert')).toHaveText(
+		'That code is not right. Codes change every 30 seconds.'
+	);
+	await dialog.getByLabel('Your password').fill(PASSWORD);
+	await dialog.getByLabel('Code of the app, or a recovery code').fill(others[1]!);
+	await dialog.getByRole('button', { name: 'Switch off' }).click();
+	await expect(dialog.getByText('Off.')).toBeVisible();
 });

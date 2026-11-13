@@ -189,11 +189,20 @@ export type SecondFactor = {
 };
 
 /**
- * What setting up and switching off read: the password of the account. An
- * account that has none needs none.
+ * What setting up reads: the password of the account. An account that has
+ * none needs none.
  */
 export type SecondFactorPassword = {
 	password?: string,
+};
+
+/**
+ * What switching off reads: the password, as for setting up, and a code from
+ * the app or a recovery code.
+ */
+export type SecondFactorSwitchOff = {
+	password?: string,
+	code: string,
 };
 
 /**

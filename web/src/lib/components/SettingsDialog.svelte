@@ -45,6 +45,9 @@
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
 
+	/** A second factor is being set up: a click beside the window would lose it. */
+	let settingUp = $state(false);
+
 	// Privacy only says something where the server takes reports of errors,
 	// invitations only where there is a server to make an account on, and moving
 	// only where there is a server to move from.
@@ -68,7 +71,7 @@
 	};
 </script>
 
-<Dialog title={m.settings.title} wide {onclose}>
+<Dialog title={m.settings.title} wide holds={settingUp} {onclose}>
 	<div class="-mt-1 flex flex-wrap gap-1 border-b border-line" role="tablist">
 		{#each tabs as name (name)}
 			<button
@@ -211,7 +214,7 @@
 				<p class="text-xs text-soft">{m.settings.reports.off}</p>
 			</div>
 		{:else if tab === 'security'}
-			<SecondFactor {reader} />
+			<SecondFactor {reader} bind:busy={settingUp} />
 		{:else if tab === 'move'}
 			<MoveAccount {reader} />
 		{:else if tab === 'account'}
