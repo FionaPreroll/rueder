@@ -1,7 +1,10 @@
 <script lang="ts">
 	// The bar across the top: the sidebar switch, the name, the search, and on the
-	// right the keyboard help, the settings and who is logged in. With made-up data
-	// there are the draft's own switches instead of an account.
+	// right the keyboard help, the settings and who is logged in. The menu of the
+	// account holds the account's own settings and logging out. With made-up data
+	// there are the draft's own switches instead of an account, and they lead to
+	// what a reader with an account finds in its menu.
+	import { tabsOf } from '#lib/account.ts';
 	import { APP_SETTINGS, inAndroidApp } from '#lib/app.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -13,6 +16,7 @@
 		sidebarOpen,
 		ontogglesidebar,
 		onsettings,
+		onaccount,
 		onhelp,
 		onstatus
 	}: {
@@ -20,12 +24,16 @@
 		sidebarOpen: boolean;
 		ontogglesidebar: () => void;
 		onsettings: () => void;
+		/** Opens the settings of the account itself. */
+		onaccount: () => void;
 		onhelp: () => void;
 		/** Opens the status of the server, for admins. */
 		onstatus: () => void;
 	} = $props();
 
 	const demo = $derived(reader.demo);
+	/** The account's own settings, where this reader has any of them. */
+	const hasAccountSettings = $derived(tabsOf(reader).length > 0);
 
 	/** Searching from the start page searches all articles. */
 	function search(words: string) {
@@ -93,6 +101,12 @@
 				<Icon name="versions" />
 				{m.demo.revise}
 			</button>
+			{#if hasAccountSettings}
+				<button type="button" role="menuitem" class="menu-item" onclick={onaccount}>
+					<Icon name="user" />
+					{m.nav.accountSettings}
+				</button>
+			{/if}
 			{#if reader.can.status}
 				<button type="button" role="menuitem" class="menu-item" onclick={onstatus}>
 					<Icon name="pulse" />
@@ -164,6 +178,12 @@
 					<Icon name="settings" />
 					{m.nav.appSettings}
 				</a>
+			{/if}
+			{#if hasAccountSettings}
+				<button type="button" role="menuitem" class="menu-item" onclick={onaccount}>
+					<Icon name="user" />
+					{m.nav.accountSettings}
+				</button>
 			{/if}
 			{#if reader.can.status}
 				<button type="button" role="menuitem" class="menu-item" onclick={onstatus}>

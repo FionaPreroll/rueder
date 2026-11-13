@@ -454,6 +454,18 @@ export class FakeServer {
 			this.signedIn = null;
 			return empty();
 		}
+		if (method === 'PUT' && path === '/password') {
+			const name = this.signedIn;
+			const password = this.accounts.get(name);
+			// An account that logs in only through single sign-on has none to give.
+			if (password !== undefined && data.current !== password) {
+				return refused(403, 'the current password is wrong');
+			}
+			const fresh = String(data.new ?? '');
+			if (fresh.length < 8) return refused(400, 'the password is shorter than 8 characters');
+			this.accounts.set(name, fresh);
+			return empty();
+		}
 		if (method === 'PUT' && path === '/terms') {
 			if (!this.legal.terms_version) return refused(404);
 			if (data.version !== this.legal.terms_version) return refused(409, 'not these terms');

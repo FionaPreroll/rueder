@@ -20,6 +20,7 @@ import type {
 	ContentReport,
 	Credentials,
 	Farewell,
+	NewPassword,
 	Feed,
 	FindFeeds,
 	Folder,
@@ -265,6 +266,12 @@ export const api = {
 	logout: () => call<void>('POST', '/logout'),
 	/** Deletes the account that is logged in, for good; the password, or the name of one without. */
 	removeAccount: (proof: Farewell) => call<void>('DELETE', '/account', proof),
+	/**
+	 * Gives the account another password. The server ends every other session of
+	 * it and answers with a fresh cookie for this browser.
+	 */
+	changePassword: (current: string, fresh: string) =>
+		call<void>('PUT', '/password', { current, new: fresh } satisfies NewPassword),
 
 	/** Whether anybody can register, and whether an invitation can be used; for anybody. */
 	registering: (invite?: string) =>

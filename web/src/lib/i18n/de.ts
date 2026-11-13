@@ -46,6 +46,7 @@ const de: Messages = {
 		search: 'Suchen',
 		searchPlaceholder: 'In diesen Artikeln suchen',
 		settings: 'Einstellungen',
+		accountSettings: 'Kontoeinstellungen',
 		shortcuts: 'Tastaturkürzel',
 		live: 'Live',
 		liveOn: 'Neue Artikel kommen von selbst an. Klick zum Anhalten.',
@@ -264,20 +265,52 @@ const de: Messages = {
 		same: 'Der Text dieser Version ist derselbe wie der aktuelle.'
 	},
 
+	account: {
+		title: 'Kontoeinstellungen',
+		tabs: {
+			password: 'Passwort',
+			security: 'Sicherheit',
+			apps: 'Apps',
+			invites: 'Einladungen',
+			move: 'Umzug',
+			privacy: 'Datenschutz',
+			remove: 'Konto löschen'
+		},
+		password: {
+			title: 'Passwort ändern',
+			titleFirst: 'Passwort setzen',
+			intro:
+				'Ein neues Passwort meldet jeden anderen Browser und jedes andere Gerät ab und widerruft die App-Passwörter anderer Apps; dieser bleibt angemeldet.',
+			introFirst:
+				'Dieses Konto meldet sich über Single Sign-on an und hat kein eigenes Passwort. Mit einem kann es sich auch mit seinem Namen anmelden.',
+			current: 'Bisheriges Passwort',
+			fresh: 'Neues Passwort',
+			again: 'Neues Passwort wiederholen',
+			submit: 'Passwort ändern',
+			submitFirst: 'Passwort setzen',
+			done: 'Das Passwort ist geändert. Jeder andere Browser und jedes andere Gerät ist abgemeldet, App-Passwörter sind widerrufen.',
+			doneFirst: 'Das Passwort ist gesetzt.',
+			mismatch: 'Die beiden stimmen nicht überein.',
+			wrong: 'Das bisherige Passwort ist nicht richtig.',
+			invalid: (characters) =>
+				`Der Server hat das Passwort nicht angenommen. Mindestens ${n(characters)} Zeichen.`,
+			busy: (minutes) =>
+				`Zu viele Fehlversuche. Versuche es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
+			unreachable: 'Der Server antwortet nicht. Das Passwort ist unverändert.'
+		},
+		settingsNote: 'Aussehen, Lesen, Filterregeln und Tastatur stehen unter Einstellungen.'
+	},
+
 	settings: {
 		title: 'Einstellungen',
 		tabs: {
 			look: 'Aussehen',
 			reading: 'Lesen',
 			rules: 'Filterregeln',
-			keys: 'Tastatur',
-			invites: 'Einladungen',
-			privacy: 'Datenschutz',
-			security: 'Sicherheit',
-			apps: 'Apps',
-			move: 'Umzug',
-			account: 'Konto'
+			keys: 'Tastatur'
 		},
+		accountNote:
+			'Passwort, zweiter Faktor, Apps, Einladungen und das Konto selbst stehen unter Kontoeinstellungen, im Menü des Kontos.',
 		theme: 'Farbschema',
 		themes: { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' },
 		accent: 'Akzentfarbe',

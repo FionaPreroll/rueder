@@ -3,16 +3,19 @@
 
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { article, articles, logIn, node, sidebar, subscribe } from './harness/helpers.ts';
+import {
+	accountSettings,
+	article,
+	articles,
+	logIn,
+	node,
+	sidebar,
+	subscribe
+} from './harness/helpers.ts';
 
 test.describe.configure({ mode: 'serial' });
 
-const openMove = async (page: Page) => {
-	await page.getByRole('button', { name: 'Settings' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Settings' });
-	await dialog.getByRole('tab', { name: 'Move' }).click();
-	return dialog;
-};
+const openMove = (page: Page) => accountSettings(page, 'Move');
 
 let file = '';
 

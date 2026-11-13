@@ -49,6 +49,7 @@ const en = {
 		search: 'Search',
 		searchPlaceholder: 'Search these articles',
 		settings: 'Settings',
+		accountSettings: 'Account settings',
 		shortcuts: 'Keyboard shortcuts',
 		live: 'Live',
 		liveOn: 'New articles arrive by themselves. Click to pause.',
@@ -265,20 +266,54 @@ const en = {
 		same: 'The text of this version is the same as the current one.'
 	},
 
+	/** The account itself: how it logs in, what it holds, and ending it. */
+	account: {
+		title: 'Account settings',
+		tabs: {
+			password: 'Password',
+			security: 'Security',
+			apps: 'Apps',
+			invites: 'Invitations',
+			move: 'Move',
+			privacy: 'Privacy',
+			remove: 'Delete account'
+		},
+		password: {
+			title: 'Change the password',
+			/** For an account that logs in through single sign-on and has none yet. */
+			titleFirst: 'Set a password',
+			intro:
+				'A new password logs out every other browser and device and revokes the app passwords of other apps; this one stays logged in.',
+			introFirst:
+				'This account logs in through single sign-on and has no password of its own. With one it can log in with its name as well.',
+			current: 'Current password',
+			fresh: 'New password',
+			again: 'New password again',
+			submit: 'Change the password',
+			submitFirst: 'Set the password',
+			done: 'The password is changed. Every other browser and device is logged out, and app passwords are revoked.',
+			doneFirst: 'The password is set.',
+			mismatch: 'The two do not match.',
+			wrong: 'The current password is not right.',
+			invalid: (characters: number) =>
+				`The server did not take that password. At least ${n(characters)} characters.`,
+			busy: (minutes: number) =>
+				`Too many wrong tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
+			unreachable: 'The server does not answer. The password is unchanged.'
+		},
+		settingsNote: 'Appearance, reading, filter rules and the keyboard are under Settings.'
+	},
+
 	settings: {
 		title: 'Settings',
 		tabs: {
 			look: 'Appearance',
 			reading: 'Reading',
 			rules: 'Filter rules',
-			keys: 'Keyboard',
-			invites: 'Invitations',
-			privacy: 'Privacy',
-			security: 'Security',
-			apps: 'Apps',
-			move: 'Move',
-			account: 'Account'
+			keys: 'Keyboard'
 		},
+		accountNote:
+			'The password, the second factor, apps, invitations and the account itself are under Account settings, in the menu of your account.',
 		theme: 'Theme',
 		themes: { system: 'Like the system', light: 'Light', dark: 'Dark' },
 		accent: 'Accent color',

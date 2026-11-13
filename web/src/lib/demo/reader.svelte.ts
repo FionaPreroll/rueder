@@ -16,6 +16,7 @@ import type {
 	Fresh,
 	Imported,
 	Moved,
+	PasswordRefusal,
 	Reader,
 	RemoveRefusal,
 	Resumed,
@@ -155,6 +156,7 @@ export class DemoReader implements Reader {
 		invites: false,
 		reports: false,
 		secondFactor: false,
+		password: false,
 		remove: false,
 		reportContent: false,
 		apps: true
@@ -679,6 +681,11 @@ export class DemoReader implements Reader {
 
 	/** Nobody is logged in, so there is no account to delete. */
 	async removeAccount(): Promise<RemoveRefusal | null> {
+		return { problem: 'unreachable' };
+	}
+
+	/** Nobody is logged in, so there is no password to change either. */
+	async changePassword(): Promise<PasswordRefusal> {
 		return { problem: 'unreachable' };
 	}
 
