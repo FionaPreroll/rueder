@@ -124,7 +124,22 @@
 				loading="lazy"
 			/>
 		{/if}
-		<div class="article-body mt-3">{@html article.html}</div>
+		{#if article.textDropped}
+			<!-- The line stayed, the text went: the original may still have it. -->
+			<p class="mt-3 text-sm text-soft">
+				{m.list.textDropped}
+				{#if article.link}
+					<a
+						class="text-link hover:underline"
+						href={article.link}
+						target="_blank"
+						rel="noopener noreferrer">{m.list.textDroppedOriginal}</a
+					>
+				{/if}
+			</p>
+		{:else}
+			<div class="article-body mt-3">{@html article.html}</div>
+		{/if}
 		{#if article.enclosures.length > 0}
 			<Enclosures enclosures={article.enclosures} />
 		{/if}

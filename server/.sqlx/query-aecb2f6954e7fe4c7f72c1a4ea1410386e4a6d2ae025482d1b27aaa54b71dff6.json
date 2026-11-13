@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_tombstones (feed_id, guid_hash)\n         SELECT feed_id, guid_hash FROM article_content WHERE feed_id = $1 AND seq = ANY($2)\n         ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aecb2f6954e7fe4c7f72c1a4ea1410386e4a6d2ae025482d1b27aaa54b71dff6"
+}

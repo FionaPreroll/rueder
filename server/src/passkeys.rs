@@ -8,6 +8,11 @@
 //!   address browsers reach rueder at. The server never takes it from a
 //!   request, so a passkey only ever counts for the site it was made for;
 //!   without the setting, there are no passkeys.
+//! - **In Android apps** that the site names (`PASSKEY_ANDROID_APPS`, without
+//!   it rueder's own): Android gives an app the site's passkeys only where
+//!   `/.well-known/assetlinks.json` says so, and the answer names the app's
+//!   key as its origin, which counts for exactly these apps (see
+//!   [`crate::asset_links`]).
 //! - **Adding one** (`POST /api/passkeys/register`, then `POST
 //!   /api/passkeys`) takes what changes that need it take: the password and,
 //!   where the second factor is on, a code, or a passkey of the account (see
@@ -59,6 +64,7 @@ use webauthn_rs::prelude::{
 
 use crate::{
     AppError, AppState,
+    asset_links::AndroidApp,
     login::{self, Key, Sender},
     second_factor::{self, Proof},
     sessions::{self, Session},
@@ -85,6 +91,8 @@ pub const FRESH: Duration = Duration::from_secs(10 * 60);
 /// ceremonies under way.
 pub struct Passkeys {
     webauthn: Webauthn,
+    /// The Android apps that may use them too, see [`crate::asset_links`].
+    android_apps: Vec<AndroidApp>,
     ceremonies: Mutex<HashMap<String, Ceremony>>,
 }
 
@@ -120,6 +128,13 @@ impl Passkeys {
     /// browsers allow for trying things out. A passkey belongs to the host;
     /// the address has no path.
     pub fn new(public_url: &str) -> anyhow::Result<Self> {
+        Self::for_apps(public_url, Vec::new())
+    }
+
+    /// The passkeys of the site at `public_url`, which these Android apps may
+    /// use as well: an answer that comes from one of them names it as its
+    /// origin rather than the site (see [`crate::asset_links`]).
+    pub fn for_apps(public_url: &str, android_apps: Vec<AndroidApp>) -> anyhow::Result<Self> {
         let url = Url::parse(public_url.trim())
             .map_err(|err| anyhow::anyhow!("PUBLIC_URL is no address: {err}"))?;
         let Some(host) = url.domain() else {
@@ -140,16 +155,29 @@ impl Passkeys {
             );
         }
         let host = host.to_owned();
-        let webauthn = WebauthnBuilder::new(&host, &url)
-            .map_err(|err| anyhow::anyhow!("PUBLIC_URL: {err}"))?
+        let mut builder = WebauthnBuilder::new(&host, &url)
+            .map_err(|err| anyhow::anyhow!("PUBLIC_URL: {err}"))?;
+        // An app's origin is opaque, and webauthn-rs takes it only as it is.
+        for app in &android_apps {
+            let origin = Url::parse(&app.origin())
+                .map_err(|err| anyhow::anyhow!("PASSKEY_ANDROID_APPS: {err}"))?;
+            builder = builder.append_allowed_origin(&origin);
+        }
+        let webauthn = builder
             .rp_name("rueder")
             .timeout(CEREMONY_TIME)
             .build()
             .map_err(|err| anyhow::anyhow!("PUBLIC_URL: {err}"))?;
         Ok(Self {
             webauthn,
+            android_apps,
             ceremonies: Mutex::default(),
         })
+    }
+
+    /// The Android apps that may use the passkeys.
+    pub fn android_apps(&self) -> &[AndroidApp] {
+        &self.android_apps
     }
 
     /// Keeps a ceremony and returns its name, or refuses when too many are

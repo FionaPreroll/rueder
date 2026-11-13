@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM article_states WHERE account_id = ANY($1) AND feed_id = $2 AND seq = ANY($3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0bdbab3733362ae437d390d6955f0b9e2adcb6954abd9b572ce1bf972aa4003b"
+}

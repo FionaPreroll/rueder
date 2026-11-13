@@ -150,6 +150,7 @@ interface Text {
 	enclosures: Enclosure[];
 	image: Picture | null;
 	hiddenBy: string | null;
+	textDropped: boolean;
 }
 
 /** What a session does for its reader. */
@@ -1348,7 +1349,8 @@ export class ServerReader implements Reader {
 					({ url, type, length }) => ({ url, type, length })
 				),
 				image: opened.image_url ? { url: opened.image_url, title: opened.image_title ?? '' } : null,
-				hiddenBy: opened.hidden_by === null ? null : ruleKey(opened.hidden_by)
+				hiddenBy: opened.hidden_by === null ? null : ruleKey(opened.hidden_by),
+				textDropped: opened.text_dropped
 			};
 			this.texts.set(article.id, text);
 			// The oldest go first; a Map keeps the order they were put in.

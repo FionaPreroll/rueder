@@ -26,6 +26,7 @@ use sqlx::{
     Connection, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
+use time::OffsetDateTime;
 use tokio::{
     net::TcpListener,
     signal::unix::{SignalKind, signal},
@@ -79,8 +80,9 @@ enum Command {
     /// and how many. Nothing is open until it is said here.
     #[command(subcommand)]
     Registration(RegistrationCommand),
-    /// Say how long the server keeps what it keeps for a time: the counts of
-    /// its status page and the problems of its log.
+    /// Say how long the server keeps what it keeps: the counts of its status
+    /// page and the problems of its log, and old articles, versions and feeds
+    /// without subscribers, which stay until it is said here.
     #[command(subcommand)]
     Retention(RetentionCommand),
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
@@ -218,7 +220,7 @@ enum RegistrationCommand {
 
 #[derive(Subcommand)]
 enum RetentionCommand {
-    /// Show what is set.
+    /// Show what is set and what the retention of articles looks after.
     Show,
     /// Change what is set. What is not named stays as it is, and a change
     /// counts at once, without a restart: what is older goes within the hour.
@@ -227,7 +229,45 @@ enum RetentionCommand {
         /// log are kept. The status page counts over as many days at most.
         #[arg(long, value_name = "DAYS", value_parser = clap::value_parser!(i32).range(1..=3650))]
         status_days: Option<i32>,
+        /// After how many months since rueder first fetched them articles go;
+        /// `never` keeps them. Those a reader starred or labelled stay.
+        #[arg(long, value_name = "MONTHS|never")]
+        articles: Option<Keep>,
+        /// What goes of an old article, which has to be said: `article` takes
+        /// it from the lists, the unread counts and the search; `text` takes
+        /// only its text and leaves its line in the lists.
+        #[arg(long, value_name = "article|text")]
+        remove: Option<retention::Remove>,
+        /// After how many months versions go, by whole months; `never` keeps
+        /// them.
+        #[arg(long, value_name = "MONTHS|never")]
+        versions: Option<Keep>,
+        /// After how many days without subscribers a feed goes, with its
+        /// articles; `never` keeps it. A blocked feed keeps its block.
+        #[arg(long, value_name = "DAYS|never")]
+        orphans: Option<Keep>,
     },
+    /// Clear now all that is old of the articles, instead of waiting for the
+    /// server's hourly runs. Open tabs see it when they next load.
+    Run,
+}
+
+/// How long something is kept: a number, or `never` for no end.
+#[derive(Clone, Copy)]
+struct Keep(Option<i32>);
+
+impl std::str::FromStr for Keep {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "never" => Ok(Self(None)),
+            _ => match text.parse::<i32>() {
+                Ok(number) if number >= 1 => Ok(Self(Some(number))),
+                _ => Err("a number from 1 on, or `never`".into()),
+            },
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -500,19 +540,6 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()> {
-    let mut settings = retention::settings(db).await?;
-    if let RetentionCommand::Set { status_days } = command {
-        settings.status_days = status_days.unwrap_or(settings.status_days);
-        retention::set(db, &settings).await?;
-    }
-    println!(
-        "The status page and the problems of the log: kept for {} days",
-        settings.status_days
-    );
-    Ok(())
-}
-
 async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Result<()> {
     let mut settings = registration::settings(db).await?;
     if let RegistrationCommand::Set {
@@ -562,6 +589,99 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
         counts.by_admins,
         limit(settings.admin_invite_accounts)
     );
+    Ok(())
+}
+
+async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()> {
+    let mut status = retention::settings(db).await?;
+    let mut settings = retention::articles(db).await?;
+    match command {
+        RetentionCommand::Show => {}
+        RetentionCommand::Set {
+            status_days,
+            articles,
+            remove,
+            versions,
+            orphans,
+        } => {
+            if let Some(days) = status_days {
+                status.status_days = days;
+                retention::set(db, &status).await?;
+            }
+            if let Some(Keep(months)) = articles {
+                settings.articles_months = months;
+                if months.is_none() {
+                    settings.articles_what = None;
+                }
+            }
+            if remove.is_some() {
+                settings.articles_what = remove;
+            }
+            if let Some(Keep(months)) = versions {
+                settings.versions_months = months;
+            }
+            if let Some(Keep(days)) = orphans {
+                settings.orphans_days = days;
+            }
+            retention::set_articles(db, &settings).await?;
+        }
+        RetentionCommand::Run => {
+            let swept = retention::sweep(db, None, OffsetDateTime::now_utc(), None).await?;
+            println!("Articles that went: {}", swept.articles);
+            println!("Articles whose text went: {}", swept.texts);
+            let months = if swept.months.is_empty() {
+                "none".to_owned()
+            } else {
+                swept.months.join(", ")
+            };
+            println!("Months of versions that went: {months}");
+            println!(
+                "Feeds without subscribers that went: {}, with {} articles",
+                swept.feeds, swept.feed_articles
+            );
+            if swept.more {
+                println!(
+                    "Some is left: a month of versions had to wait for the table. Run it again."
+                );
+            }
+            println!();
+        }
+    }
+    println!(
+        "The status page and the problems of the log: kept for {} days",
+        status.status_days
+    );
+    let after = |value: Option<i32>, unit: &str| {
+        value.map_or("never".to_owned(), |value| format!("after {value} {unit}"))
+    };
+    let what = match settings.articles_what {
+        Some(retention::Remove::Article) => " (whole)",
+        Some(retention::Remove::Text) => " (only the text)",
+        None => "",
+    };
+    println!(
+        "Articles go: {}{what}",
+        after(settings.articles_months, "months since they arrived")
+    );
+    println!("Versions go: {}", after(settings.versions_months, "months"));
+    println!(
+        "Feeds without subscribers go: {}",
+        after(settings.orphans_days, "days")
+    );
+    println!("Starred and labelled articles stay.");
+    let kept = retention::kept(db).await?;
+    println!();
+    println!(
+        "Ids of articles that went, kept so they do not come back: {}",
+        kept.tombstones
+    );
+    println!("Articles whose text went: {}", kept.dropped_texts);
+    println!("Feeds without subscribers: {}", kept.orphans);
+    let months = match (kept.months.first(), kept.months.last()) {
+        (Some(first), Some(last)) => format!("{first} to {last}"),
+        _ => "none".to_owned(),
+    };
+    println!("Months of versions: {months}");
     Ok(())
 }
 
@@ -784,6 +904,32 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     });
     let (saving, counted, served) = (db.clone(), monitor.clone(), images.clone());
 
+    // Once an hour, what the retention says is old goes, for five minutes at
+    // most, in portions that each hold up fetching only for a moment.
+    let retained = db.clone();
+    let retention_events = events.clone();
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            every.tick().await;
+            let until = std::time::Instant::now() + Duration::from_secs(5 * 60);
+            let now = OffsetDateTime::now_utc();
+            match retention::sweep(&retained, Some(&retention_events), now, Some(until)).await {
+                Ok(swept) if !swept.is_empty() => tracing::info!(
+                    articles = swept.articles,
+                    texts = swept.texts,
+                    months = swept.months.join(", "),
+                    feeds = swept.feeds,
+                    feed_articles = swept.feed_articles,
+                    more = swept.more,
+                    "the retention cleared what is old"
+                ),
+                Ok(_) => {}
+                Err(err) => tracing::error!("clearing what is old: {err:#}"),
+            }
+        }
+    });
+
     let mut state = AppState::new(db)
         .with_images(images)
         .with_rules(rules)
@@ -836,11 +982,20 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     // PUBLIC_URL: the address browsers reach rueder at. Passkeys belong to
     // it, and there are none without it. One that is no such address stops
     // the start rather than turning passkeys off unnoticed.
+    // PASSKEY_ANDROID_APPS: the Android apps that may use them too; without
+    // it rueder's own app from GitHub, with "none" no app.
     if let Ok(url) = env::var("PUBLIC_URL")
         && !url.trim().is_empty()
     {
-        let passkeys = rueder::passkeys::Passkeys::new(&url)?;
-        tracing::info!("passkeys for {}", url.trim());
+        let apps = rueder::asset_links::AndroidApp::from_setting(
+            env::var("PASSKEY_ANDROID_APPS").ok().as_deref(),
+        )?;
+        let packages: Vec<_> = apps.iter().map(|app| app.package().to_owned()).collect();
+        let passkeys = rueder::passkeys::Passkeys::for_apps(&url, apps)?;
+        tracing::info!(
+            "passkeys for {}, also in the Android apps {packages:?}",
+            url.trim()
+        );
         state = state.with_passkeys(passkeys);
     }
     // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:

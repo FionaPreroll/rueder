@@ -4,13 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Mondays at 05:17 UTC: a new advisory about a dependency shows up even
-  # in a week without a change. Only the job `dependencies` runs then.
+  # Mondays at 05:17 UTC: a new advisory about a dependency, an action or
+  # the published image shows up even in a week without a change. Only the
+  # jobs dependencies, workflows and image-scan run then.
   schedule:
     - cron: "17 5 * * 1"
 
 # What every job may do with the repository's token unless it says more: read.
-# Only app-release and publish write, each to what it releases.
+# Only app-release and publish write, each to what it releases. No checkout
+# keeps the token in .git/config (persist-credentials), so the code a job
+# runs after it cannot read it from there.
 permissions:
   contents: read
 
@@ -41,6 +44,8 @@ jobs:
       DATABASE_URL: postgres://postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # Pinned to a commit, the action no longer takes the toolchain from its
       # branch name. Rust itself stays the newest stable; rustup checks what it
       # downloads against rust-lang.org's signed manifests.
@@ -53,11 +58,12 @@ jobs:
           workspaces: server
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
+      # The newest version in the action's own list at the pinned commit, its
+      # download checked against the checksum there; Dependabot raises it with
+      # the action (see docs/implementation.md).
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        # A fixed version, whose download the action checks against the checksum
-        # in its own list; Dependabot does not raise these, see docs/implementation.md.
         with:
-          tool: cargo-llvm-cov@0.9.1
+          tool: cargo-llvm-cov
       # Runs the tests (like cargo test) with coverage instrumentation, for Codecov.
       - run: cargo llvm-cov --lcov --output-path lcov.info
       - uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
@@ -75,14 +81,52 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        # Fixed versions, checked against the action's checksums, as above.
         with:
-          tool: cargo-audit@0.22.2,cargo-deny@0.20.2
+          persist-credentials: false
+      # Versions and checksums from the action's list, as above.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-audit,cargo-deny
       # Reads Cargo.lock; its exceptions are in server/.cargo/audit.toml.
       - run: cargo audit
       # Reads what is really built: advisories again, licenses, banned crates, sources.
       - run: cargo deny check
+
+  # What a pull request adds to everything else rueder is built from: npm in
+  # web/ and app/, the actions, and Cargo again. A new or raised dependency
+  # with a known vulnerability fails it, whether it ends up in the build or
+  # only runs while building. Gradle shows up only as far as GitHub can read
+  # it from the build files.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          fail-on-scopes: runtime, development, unknown
+          # deepmerge 4.3.1, which @sveltejs/vite-plugin-svelte needs and for
+          # which there is no fix; see docs/implementation.md.
+          allow-ghsas: GHSA-gcqx-w48m-w2h4
+
+  # The workflows themselves: zizmor looks for what makes a workflow unsafe,
+  # such as text from outside in a script, a token that may do more than it
+  # needs or stays behind for later steps, an action that is not pinned or
+  # has a known vulnerability. It also runs on schedule, for the advisories.
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # Version and checksum from the action's list, as in the job server.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: zizmor
+      # The token lets zizmor ask GitHub about the pinned actions (read only).
+      - run: zizmor --format github .github
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   web:
     if: github.event_name != 'schedule'
@@ -92,11 +136,15 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       # The pnpm version pinned in package.json (packageManager).
-      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: web/package.json
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm run check
@@ -141,6 +189,8 @@ jobs:
       DATABASE_URL: postgres://postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # branch stable
         with:
           toolchain: stable
@@ -152,8 +202,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
-        working-directory: web
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: web/package.json
       - run: pnpm install --frozen-lockfile
         working-directory: web
       - run: pnpm run build
@@ -179,18 +230,19 @@ jobs:
   app:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    # It only reads the repository; releasing is the job app-release's.
-    permissions:
-      contents: read
     defaults:
       run:
         working-directory: app
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - run: npm install --global "$(node -p 'require("./package.json").packageManager')"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: app/package.json
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm test
@@ -237,6 +289,8 @@ jobs:
       changed: ${{ steps.diff.outputs.changed }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - id: diff
         run: |
           changed=true
@@ -274,6 +328,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: rueder-android
@@ -316,7 +372,12 @@ jobs:
 
           **Installing:** download \`rueder.apk\` below and open it on the phone; Android asks once to allow installing apps from that source. At the first start the app asks for the address of your rueder. A newer APK installs over an older one, and the app can look for one itself if you agree (on its start page, or with a long press on its icon: Server and updates).
           NOTES
-          git push -f origin "HEAD:refs/tags/$TAG"
+          # The tag through the API, with the token of this step alone.
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            gh api --silent -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true
+          else
+            gh api --silent -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA"
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" out/rueder.apk out/version.json --clobber
             gh release edit "$TAG" --title "rueder for Android" --notes-file notes.md --latest=false
@@ -334,8 +395,9 @@ jobs:
   # The container image as deploy/compose.yaml runs it: built, started next to
   # PostgreSQL and asked whether it works. Both architectures are built on a
   # runner of their own, each for the machine it runs on: building arm64 under
-  # emulation would take far longer than all other jobs together. Published
-  # only by the job below.
+  # emulation would take far longer than all other jobs together. On main the
+  # very image that was tested goes on to the job publish, as an OCI archive;
+  # nothing is built again for publishing.
   image:
     if: github.event_name != 'schedule'
     strategy:
@@ -349,15 +411,22 @@ jobs:
     runs-on: ${{ matrix.on }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       # The layers go to the cache of GitHub Actions, one scope per
-      # architecture, so that an unchanged stage is not built again and the job
-      # publish finds this build there.
+      # architecture, so that an unchanged stage is not built again.
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          tags: rueder:ci
-          load: true
+          # One build, written out twice: into Docker for the smoke test below
+          # and as an OCI archive, which publish pushes byte for byte.
+          outputs: |
+            type=docker,name=rueder:ci
+            type=oci,dest=${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+          # Where the image comes from is attested by publish (actions/attest),
+          # signed; the archive holds the image alone.
+          provenance: false
           # The commit checked out above: for a pull request that is the merge
           # of the branch into main (github.sha), not the branch's head, and the
           # image is built from it. The branch is still the pull request's.
@@ -375,65 +444,50 @@ jobs:
       - run: RUEDER_COMMIT="$(git rev-parse HEAD)" deploy/smoke-test.sh
         env:
           RUEDER_IMAGE: rueder:ci
+      # The archive holds one image, the one the smoke test started: its
+      # configuration has the digest Docker knows that image by.
+      - name: Check the archive
+        env:
+          ARCHIVE: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+        run: |
+          tar -xOf "$ARCHIVE" index.json | jq -e '.manifests | length == 1' > /dev/null
+          manifest=$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')
+          config=$(tar -xOf "$ARCHIVE" "blobs/sha256/${manifest#sha256:}" | jq -r '.config.digest')
+          tested=$(docker image inspect rueder:ci --format '{{.Id}}')
+          echo "archive: $config, tested: $tested"
+          [ "$config" = "$tested" ]
+      # What publish does with the archive, tried against a registry on this
+      # runner, so that a change to it shows up before it reaches main. Only
+      # the amd64 runner has skopeo; publish runs there too.
+      - name: Rehearse publishing
+        if: matrix.platform == 'amd64'
+        env:
+          ARCHIVE: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+        run: |
+          docker run --detach --name registry --publish 127.0.0.1:5000:5000 registry:3
+          for _ in $(seq 30); do curl -fs http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
+          digest=$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')
+          skopeo copy --preserve-digests --dest-tls-verify=false "oci-archive:$ARCHIVE" "docker://127.0.0.1:5000/rueder@$digest"
+          skopeo inspect --tls-verify=false --raw "docker://127.0.0.1:5000/rueder@$digest" | sha256sum | grep -q "^${digest#sha256:} "
+      # Only a push to main publishes, and only what got this far.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-${{ matrix.platform }}
+          path: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+          if-no-files-found: error
+          retention-days: 1
+          # The layers are compressed already.
+          compression-level: 0
 
   # Every push to main that passed the jobs above becomes
   # ghcr.io/fionapreroll/rueder:latest and :sha-<commit>, for both
-  # architectures. Each is pushed by its own runner without a tag, by its
-  # digest alone; the job below ties the two together under the tags.
+  # architectures: the two archives the job image tested are pushed as they
+  # are, by their digests, then tied together under the tags by an index that
+  # says which of them fits the machine that pulls it.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [server, dependencies, web, e2e, image]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: amd64
-            on: ubuntu-latest
-          - platform: arm64
-            on: ubuntu-24.04-arm
-    runs-on: ${{ matrix.on }}
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # Same Dockerfile and commit as the job image, so the layers come from
-      # its cache and what is published is what the smoke test started.
-      - id: push
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          build-args: |
-            RUEDER_COMMIT=${{ github.sha }}
-            RUEDER_BRANCH=${{ github.ref_name }}
-            RUEDER_DIRTY=false
-            RUEDER_CI_RUN=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          cache-from: type=gha,scope=image-${{ matrix.platform }}
-          outputs: type=image,name=ghcr.io/fionapreroll/rueder,push-by-digest=true,name-canonical=true,push=true
-      # The digest is the whole answer; the file is empty and its name is it.
-      - run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${DIGEST#sha256:}"
-        env:
-          DIGEST: ${{ steps.push.outputs.digest }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: digest-${{ matrix.platform }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  # The two images of the job above under one name: an index that says which
-  # of them fits the machine that pulls it.
-  tag:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -450,6 +504,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # :latest only for the commit main points at now. When two merges land
       # close together, the checks of the older one can finish last; it still
       # gets its :sha-<commit> tag but leaves :latest to the newer one.
@@ -459,15 +515,29 @@ jobs:
           echo "latest=$([ "$head" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          path: /tmp/digests
-          pattern: digest-*
+          path: ${{ runner.temp }}/images
+          pattern: image-*
           merge-multiple: true
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      # skopeo below reads the login from Docker's settings too.
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Each archive holds one image. skopeo (on the runner) pushes it without
+      # changing a byte, to the address of its digest, and refuses if what it
+      # pushes would not have that digest.
+      - name: Push
+        working-directory: ${{ runner.temp }}/images
+        run: |
+          for platform in amd64 arm64; do
+            archive="rueder-$platform.tar"
+            tar -xOf "$archive" index.json | jq -e '.manifests | length == 1' > /dev/null
+            digest=$(tar -xOf "$archive" index.json | jq -r '.manifests[0].digest')
+            skopeo copy --preserve-digests "oci-archive:$archive" "docker://ghcr.io/fionapreroll/rueder@$digest"
+            echo "ghcr.io/fionapreroll/rueder@$digest" >> sources
+          done
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
@@ -476,13 +546,14 @@ jobs:
             type=raw,value=latest,enable=${{ steps.head.outputs.latest }}
             type=sha
       - id: index
-        working-directory: /tmp/digests
+        working-directory: ${{ runner.temp }}/images
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/fionapreroll/rueder@sha256:%s ' *)
-          digest=$(docker buildx imagetools inspect \
-            "ghcr.io/fionapreroll/rueder:${{ steps.meta.outputs.version }}" \
+            $(cat sources)
+          digest=$(docker buildx imagetools inspect "ghcr.io/fionapreroll/rueder:$VERSION" \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       # A signed statement that this image, by its digest, was built by this
@@ -493,3 +564,30 @@ jobs:
           subject-name: ghcr.io/fionapreroll/rueder
           subject-digest: ${{ steps.index.outputs.digest }}
           push-to-registry: true
+
+  # Every Monday (see schedule above): the published image against the known
+  # vulnerabilities of what it holds besides rueder (glibc, libgcc, the
+  # certificates of distroless). Only what has a fix fails the run: then
+  # Dependabot's update of the base image, or any push to main, brings it.
+  image-scan:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      # Version and checksum from the action's list, as in the job server.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: trivy
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          failed=0
+          for platform in linux/amd64 linux/arm64; do
+            trivy image --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL \
+              --exit-code 1 --platform "$platform" ghcr.io/fionapreroll/rueder:latest || failed=1
+          done
+          exit "$failed"

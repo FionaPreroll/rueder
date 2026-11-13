@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT articles_months, articles_what AS \"articles_what: Remove\", versions_months,\n                  orphans_days\n           FROM retention",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "articles_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "retention",
+            "name": "articles_months"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "articles_what: Remove",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "retention",
+            "name": "articles_what"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "versions_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "retention",
+            "name": "versions_months"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "orphans_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "retention",
+            "name": "orphans_days"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2e05454b259fa8b6606df581904f53379725f156dff8bdefce84c22c9917b4f0"
+}

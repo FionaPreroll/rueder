@@ -92,6 +92,11 @@ export interface Article {
 	thumbnail?: string | null;
 	/** The rule that hides the article, where the server names it; it comes with the text. */
 	hiddenBy?: string | null;
+	/**
+	 * The server keeps the article's line but no longer its text, as its
+	 * operator chose for old articles; it comes with the text.
+	 */
+	textDropped?: boolean;
 	/** How many earlier versions there are; 0 for an article that never changed. */
 	changes: number;
 	/**

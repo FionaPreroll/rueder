@@ -19,11 +19,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The server (rust), the web page and the app (javascript-typescript)
-        # and the workflows themselves (actions).
-        language: [actions, javascript-typescript, rust]
+        # The server (rust), the web page and the app's start page
+        # (javascript-typescript), the app's native part (java-kotlin) and
+        # the workflows themselves (actions).
+        language: [actions, java-kotlin, javascript-typescript, rust]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # Every language here is analysed from its source, without a build.
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:

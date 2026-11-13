@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT guid_hash, seq, checksum FROM article_content WHERE feed_id = $1 AND guid_hash = ANY($2)",
+  "query": "SELECT guid_hash, seq, checksum, text_dropped FROM article_content\n         WHERE feed_id = $1 AND guid_hash = ANY($2)",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,17 @@
             "name": "checksum"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "text_dropped",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "text_dropped"
+          }
+        }
       }
     ],
     "parameters": {
@@ -46,8 +57,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "9fe07b1d1a881408547650318ccf0756e8773d054b476afc74a66969a6d60411"
+  "hash": "1d23e8f9e63c37820a870b0dc7f7d8232a7185081b124272ef6c46f29de92cf7"
 }

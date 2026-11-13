@@ -306,15 +306,28 @@ pub async fn store(
         .iter()
         .map(|article| guid_hash(&article.guid))
         .collect();
-    let known: HashMap<Vec<u8>, (i32, Vec<u8>)> = sqlx::query!(
-        "SELECT guid_hash, seq, checksum FROM article_content WHERE feed_id = $1 AND guid_hash = ANY($2)",
+    let known: HashMap<Vec<u8>, (i32, Vec<u8>, bool)> = sqlx::query!(
+        "SELECT guid_hash, seq, checksum, text_dropped FROM article_content
+         WHERE feed_id = $1 AND guid_hash = ANY($2)",
         feed_id,
         &hashes,
     )
     .fetch_all(&mut *conn)
     .await?
     .into_iter()
-    .map(|row| (row.guid_hash, (row.seq, row.checksum)))
+    .map(|row| (row.guid_hash, (row.seq, row.checksum, row.text_dropped)))
+    .collect();
+    // Articles the retention deleted whole (`crate::retention`). A feed that
+    // still lists one, as podcasts list all their episodes, does not bring it
+    // back as new.
+    let gone: HashSet<Vec<u8>> = sqlx::query_scalar!(
+        "SELECT guid_hash FROM article_tombstones WHERE feed_id = $1 AND guid_hash = ANY($2)",
+        feed_id,
+        &hashes,
+    )
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
     .collect();
 
     let mut stored = Stored::default();
@@ -322,20 +335,31 @@ pub async fn store(
     let mut seen = HashSet::new();
     for (article, hash) in articles.iter().zip(&hashes) {
         // A feed that lists an id twice means one article.
-        if !seen.insert(hash) {
+        if !seen.insert(hash) || gone.contains(hash) {
             continue;
         }
         match known.get(hash) {
             None => new.push(article.clone()),
-            Some((seq, checksum)) if *checksum != article.checksum() => {
+            // Its text went with the retention: it stays as the list has it.
+            Some((_, _, true)) => {}
+            Some((seq, checksum, false)) if *checksum != article.checksum() => {
                 // It reads differently. If it was sent as before, only the
                 // rules of the cleaning have changed since, and the text is
                 // put in place again without a new version.
-                let before = articles::current_original(conn, feed_id, *seq).await?;
-                let as_before = before.is_some_and(|before| {
-                    before.title == article.original.title
-                        && before.content == article.original.content
-                });
+                let as_before = match articles::current_original(conn, feed_id, *seq).await? {
+                    Some(before) => {
+                        before.title == article.original.title
+                            && before.content == article.original.content
+                    }
+                    // The retention took its versions, so what was sent before
+                    // is not known. A new headline is a change; a text that
+                    // reads differently may be the rules alike, and is put in
+                    // place without claiming the article changed.
+                    None => {
+                        articles::title_of(conn, feed_id, *seq).await?.as_deref()
+                            == Some(article.original.title.as_str())
+                    }
+                };
                 if as_before {
                     articles::recleaned(conn, feed_id, *seq, article).await?;
                 } else if articles::add_version(conn, feed_id, *seq, article)

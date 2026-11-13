@@ -114,6 +114,9 @@ const en = {
 			`Its headline was rewritten, its text is as it was; ${n(count)} earlier ${plural(count, { one: 'version', other: 'versions' })}`,
 		compare: 'Compare versions',
 		hiddenBy: (rule: string) => `Hidden by the rule: ${rule}`,
+		/** This rueder keeps the article's line, but its text only for so long. */
+		textDropped: 'This server no longer keeps the text of this article, as it is old.',
+		textDroppedOriginal: 'Read it at its source',
 		loading: 'Loading the text …',
 		loadingList: 'Loading …',
 		toTop: 'Back to the top',

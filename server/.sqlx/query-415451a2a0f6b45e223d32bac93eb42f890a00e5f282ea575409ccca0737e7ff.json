@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM subscriptions WHERE feed_id = $1) AS \"read!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "read!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "415451a2a0f6b45e223d32bac93eb42f890a00e5f282ea575409ccca0737e7ff"
+}

@@ -47,6 +47,8 @@ jobs:
       SECONDS_TO_RUN: ${{ github.event.inputs.seconds || '1800' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # rustup checks what it downloads, as in ci.yml.
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # branch stable
         with:

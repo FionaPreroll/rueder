@@ -21,7 +21,8 @@
 //!   [`tree`], [`subscribe`], [`search`], [`filters`] and [`labels`];
 //!   [`events`] brings what changes to every open tab.
 //! - **Accounts:** [`accounts`], [`login`], [`sessions`], [`second_factor`],
-//!   [`passkeys`], [`oidc`], [`registration`], [`profile`] and [`transfer`].
+//!   [`passkeys`] (with [`asset_links`] for the Android app), [`oidc`],
+//!   [`registration`], [`profile`] and [`transfer`].
 //! - **Apps of other makers:** [`greader`] and [`app_passwords`].
 //! - **Safety:** [`hardening`] for every answer and every changing request,
 //!   [`rate`] for how much one sender and one account may ask.
@@ -34,6 +35,7 @@ pub mod accounts;
 pub mod api;
 pub mod app_passwords;
 pub mod articles;
+pub mod asset_links;
 pub mod bench;
 pub mod cleaning;
 pub mod events;
@@ -276,6 +278,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .nest("/api", api(&state))
         .nest("/greader", greader::router(&state))
         .route("/img/{signature}/{size}/{address}", get(image))
+        .route("/.well-known/assetlinks.json", get(asset_links::serve))
         .fallback_service(spa)
         // Around everything, from the inside out: a change asked for by a
         // page of another site is refused, every request counts for its

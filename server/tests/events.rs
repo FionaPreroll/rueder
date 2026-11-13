@@ -1277,3 +1277,34 @@ async fn what_an_app_does_reaches_the_tabs(db: PgPool) {
     assert_eq!(kinds, ["labels", "reading"]);
     assert!(tab.next_within(Duration::from_millis(300)).await.is_none());
 }
+
+#[sqlx::test]
+async fn articles_that_went_with_the_retention_are_told(db: PgPool) {
+    use rueder::retention::{self, Articles, Remove};
+
+    let (ada, feed_id) = common::reader(&db, "ada", 3).await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let mut tab = listening(&state, &cookie).await;
+    retention::set_articles(
+        &db,
+        &Articles {
+            articles_months: Some(1),
+            articles_what: Some(Remove::Article),
+            ..Articles::default()
+        },
+    )
+    .await
+    .unwrap();
+    let later = common::START + time::Duration::days(400);
+    let swept = retention::sweep(&db, Some(&state.events), later, None)
+        .await
+        .unwrap();
+    assert_eq!(swept.articles, 3);
+    let told = tab.next().await.unwrap();
+    assert_eq!(
+        (told.kind.as_str(), &told.data),
+        ("reading", &json!({ "feed": null, "seq": null, "by": null }))
+    );
+    let _ = feed_id;
+}
