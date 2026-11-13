@@ -8,7 +8,13 @@ test('installs as an app, keeps its own files and nothing of the reader’s', as
 	await logIn(page, 'login');
 	const manifest = await page.request.get('/manifest.webmanifest');
 	expect(manifest.headers()['content-type']).toContain('application/manifest+json');
-	expect(await manifest.json()).toMatchObject({ name: 'rueder', display: 'standalone' });
+	// A link to rueder takes the open window of the app instead of a second one.
+	const focus = { client_mode: ['focus-existing', 'auto'] };
+	expect(await manifest.json()).toMatchObject({
+		name: 'rueder',
+		display: 'standalone',
+		launch_handler: focus
+	});
 
 	// The worker takes over the page and keeps the files of this version.
 	await page.evaluate(() => navigator.serviceWorker.ready);
@@ -68,6 +74,10 @@ test('colors the bars of the app as the dark theme, within the page’s policy',
 	});
 	const manifest = await page.request.get('/manifest-dark.webmanifest');
 	expect(manifest.headers()['content-type']).toContain('application/manifest+json');
-	expect(await manifest.json()).toMatchObject({ name: 'rueder', theme_color: '#1c1f25' });
+	expect(await manifest.json()).toMatchObject({
+		name: 'rueder',
+		theme_color: '#1c1f25',
+		launch_handler: { client_mode: ['focus-existing', 'auto'] }
+	});
 	await context.close();
 });

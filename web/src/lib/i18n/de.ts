@@ -56,6 +56,9 @@ const de: Messages = {
 		account: (name) => `Angemeldet als ${name}`,
 		logout: 'Abmelden',
 		appSettings: 'Server und App-Updates',
+		install: 'Als App installieren',
+		installSafari:
+			'So wird rueder zur App: Ablage › Zum Dock hinzufügen auf dem Mac, Teilen › Zum Home-Bildschirm auf iPhone und iPad.',
 		unread: (count) => `${n(count)} ungelesen`,
 		fetchFailed: (reason) => `Der letzte Abruf ist fehlgeschlagen: ${reason}`,
 		waiting: 'Noch nicht abgerufen',
