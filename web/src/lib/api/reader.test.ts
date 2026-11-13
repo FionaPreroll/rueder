@@ -8,7 +8,7 @@ import type { TreeNode } from '#lib/model.ts';
 import { MAX_ACCOUNT_FILE, MAX_OPML, type Resumed } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { TAB } from './client.ts';
-import { PAGE, ServerReader, UNREACHABLE_AFTER, toTree } from './reader.svelte.ts';
+import { MAX_UNSENT, PAGE, ServerReader, UNREACHABLE_AFTER, toTree } from './reader.svelte.ts';
 import { FakeServer } from './test/fake-server.ts';
 
 let server: FakeServer;
@@ -2425,4 +2425,290 @@ describe('reports of feeds and articles', () => {
 			new Set([`feed-${blog}`])
 		);
 	});
+});
+
+describe('changes without a connection', () => {
+	/** The reader on the feed Tech, with its three articles, live. */
+	async function onTech() {
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		return reader;
+	}
+
+	/** The server goes away, and the connection with it. */
+	function goAway() {
+		server.down = true;
+		server.breakStreams();
+	}
+
+	/** The server is back, and the browser opened the connection again. */
+	async function comeBack() {
+		server.down = false;
+		server.reopenStreams();
+		await settle();
+	}
+
+	const unreadOf = (reader: ServerReader) => reader.unreadIn({ kind: 'feed', id: `feed-${tech}` });
+
+	const onServer = (seq: number) => {
+		const article = server.article(tech, seq)!;
+		return { read: article.read, starred: article.starred };
+	};
+
+	it('keep what was read and starred, and send it once the server answers again', async () => {
+		const reader = await onTech();
+		goAway();
+		const [third, second] = reader.visible;
+		reader.setRead(third, true);
+		reader.toggleStar(third);
+		reader.setRead(second, true);
+		await settle();
+		// Nothing was taken back, and the sign says what waits.
+		expect([reader.isRead(third), reader.isStarred(third), reader.isRead(second)]).toEqual([
+			true,
+			true,
+			true
+		]);
+		expect(reader.unsentChanges).toBe(3);
+		expect(reader.notice).toBeNull();
+		expect(unreadOf(reader)).toBe(1);
+
+		await comeBack();
+		expect(reader.unsentChanges).toBe(0);
+		expect([onServer(3), onServer(2)]).toEqual([
+			{ read: true, starred: true },
+			{ read: true, starred: false }
+		]);
+		expect(unreadOf(reader)).toBe(1);
+		expect(reader.isRead(third)).toBe(true);
+	});
+
+	it('send what waits in its order, a later change of the same thing last', async () => {
+		const reader = await onTech();
+		goAway();
+		const [third] = reader.visible;
+		reader.setRead(third, true);
+		await settle();
+		reader.setRead(third, false);
+		reader.setRead(third, true);
+		reader.setRead(third, false);
+		await settle();
+		expect(reader.unsentChanges).toBe(4);
+		const before = server.requests.length;
+		await comeBack();
+		const sent = server.requests
+			.slice(before)
+			.filter((request) => request.method === 'PUT' && request.path.endsWith('/state'))
+			.map((request) => request.body);
+		expect(sent).toEqual([{ read: true }, { read: false }, { read: true }, { read: false }]);
+		expect(onServer(3).read).toBe(false);
+		expect(reader.isRead(third)).toBe(false);
+	});
+
+	it('take back only what the server refuses once it answers', async () => {
+		const reader = await onTech();
+		goAway();
+		const [third, second] = reader.visible;
+		reader.setRead(third, true);
+		reader.setRead(second, true);
+		await settle();
+		server.refuse('PUT', new RegExp(`/feeds/${tech}/articles/3/state$`), 400);
+		await comeBack();
+		expect(reader.notice).toBe('notSaved');
+		expect([reader.isRead(third), reader.isRead(second)]).toEqual([false, true]);
+		expect([onServer(3).read, onServer(2).read]).toEqual([false, true]);
+		expect(unreadOf(reader)).toBe(2);
+	});
+
+	it('wait for a server behind a proxy that says it is not there', async () => {
+		const reader = await onTech();
+		server.refuse('PUT', /\/state$/, 502);
+		reader.setRead(reader.visible[0], true);
+		await settle();
+		expect(reader.unsentChanges).toBe(1);
+		expect(reader.notice).toBeNull();
+		// The connection stayed up: there is no hello to wait for, so it is tried again.
+		reader.reconnect();
+		await settle();
+		expect(reader.unsentChanges).toBe(0);
+		expect(onServer(3).read).toBe(true);
+	});
+
+	it('try again by themselves while the connection stays up', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		try {
+			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+			reader.start();
+			reader.show({ kind: 'feed', id: `feed-${tech}` });
+			await vi.advanceTimersByTimeAsync(10);
+			server.refuse('PUT', /\/state$/, 503, 2);
+			reader.toggleStar(reader.visible[0]);
+			await vi.advanceTimersByTimeAsync(10);
+			expect(reader.unsentChanges).toBe(1);
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(reader.unsentChanges).toBe(1);
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(reader.unsentChanges).toBe(0);
+			expect(onServer(3).starred).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('take back a change that cannot wait, as before', async () => {
+		const reader = await onTech();
+		goAway();
+		reader.nudge(`feed-${lone}`, 'up');
+		await settle();
+		expect(reader.unsentChanges).toBe(0);
+		expect(reader.notice).toBe('notSaved');
+	});
+
+	it('mark all as read while away, and the server counts once it answers', async () => {
+		const reader = await onTech();
+		goAway();
+		reader.markAllRead();
+		await settle();
+		expect(unreadOf(reader)).toBe(0);
+		expect(reader.unsentChanges).toBe(1);
+		await comeBack();
+		expect(server.unread(tech)).toBe(0);
+		expect(unreadOf(reader)).toBe(0);
+	});
+
+	it('ask before the tab is closed while changes wait, and not after', async () => {
+		const reader = await onTech();
+		const leave = () => {
+			const event = new Event('beforeunload', { cancelable: true });
+			window.dispatchEvent(event);
+			return event.defaultPrevented;
+		};
+		expect(leave()).toBe(false);
+		goAway();
+		reader.setRead(reader.visible[0], true);
+		await settle();
+		expect(leave()).toBe(true);
+		await comeBack();
+		expect(leave()).toBe(false);
+	});
+
+	it('are dropped when the reader stops, and never go out as the next account', async () => {
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		const stop = reader.start();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		goAway();
+		reader.setRead(reader.visible[0], true);
+		reader.toggleStar(reader.visible[0]);
+		await settle();
+		expect(reader.unsentChanges).toBe(2);
+		// Logging out, or the session running out, stops the reader.
+		stop();
+		expect(reader.unsentChanges).toBe(0);
+		const next = new ServerReader({ name: 'grace', admin: false }, session);
+		next.start();
+		const before = server.requests.length;
+		await comeBack();
+		expect(server.requests.slice(before).filter((request) => request.method === 'PUT')).toEqual([]);
+		expect(onServer(3)).toEqual({ read: false, starred: false });
+	});
+
+	it('end with the session, if the server says it is over', async () => {
+		const reader = await onTech();
+		goAway();
+		reader.setRead(reader.visible[0], true);
+		reader.setRead(reader.visible[1], true);
+		await settle();
+		server.signedIn = null;
+		await comeBack();
+		expect(session.expired).toHaveBeenCalled();
+		expect(reader.unsentChanges).toBe(0);
+		expect(
+			server.requests.filter((r) => r.method === 'PUT' && r.path.endsWith('/state'))
+		).toHaveLength(3);
+	});
+
+	it(`refuse more than ${MAX_UNSENT} and say so`, async () => {
+		const reader = await onTech();
+		goAway();
+		const [third] = reader.visible;
+		// Starring and taking it back again counts twice.
+		for (let i = 0; i <= MAX_UNSENT / 2; i++) {
+			reader.toggleStar(third);
+			reader.toggleStar(third);
+		}
+		await settle();
+		expect(reader.unsentChanges).toBe(MAX_UNSENT);
+		expect(reader.notice).toBe('tooManyUnsent');
+		expect(reader.isStarred(third)).toBe(false);
+	});
+
+	it('end as a simple model says, for random breaks and refusals', async () => {
+		for (const seed of [1, 2, 3, 4, 5, 6]) {
+			let state = seed;
+			const random = (below: number) => {
+				state = (state * 1103515245 + 12345) % 2 ** 31;
+				return state % below;
+			};
+			server = new FakeServer();
+			const feed = server.addFeed('Model');
+			server.addArticles(feed, 4);
+			vi.stubGlobal('fetch', server.fetch);
+			vi.stubGlobal('EventSource', server.EventSource);
+			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+			const stop = reader.start();
+			reader.show({ kind: 'feed', id: `feed-${feed}` });
+			await settle();
+			const articles = [...reader.visible];
+			/** The changes made, in their order: each one should reach the server once. */
+			const made: { seq: number; read?: boolean; starred?: boolean }[] = [];
+			let refused = 0;
+			for (let step = 0; step < 30; step++) {
+				const roll = random(10);
+				if (roll === 0 && !server.down) goAway();
+				else if (roll === 1 && server.down) await comeBack();
+				else if (roll === 2 && !server.down && refused === 0) {
+					// The next change that reaches the server is refused.
+					server.refuse('PUT', /\/state$/, 400);
+					refused = 1;
+				} else {
+					const article = articles[random(articles.length)];
+					if (random(2) === 0) {
+						const read = !reader.isRead(article);
+						reader.setRead(article, read);
+						made.push({ seq: article.seq, read });
+					} else {
+						const starred = !reader.isStarred(article);
+						reader.toggleStar(article);
+						made.push({ seq: article.seq, starred });
+					}
+				}
+				await settle();
+			}
+			await comeBack();
+			await settle();
+			expect(reader.unsentChanges).toBe(0);
+			// Each change reached the server once and in its order, but for a refused one.
+			const taken = server.stateChanges;
+			if (taken.length === made.length) expect(taken, `seed ${seed}`).toEqual(made);
+			else {
+				// The refused one is missing, and only it.
+				expect(refused, `seed ${seed}`).toBe(1);
+				const gone = made.findIndex(
+					(change, i) => JSON.stringify(change) !== JSON.stringify(taken[i])
+				);
+				expect(taken, `seed ${seed}`).toEqual(made.filter((_, i) => i !== gone));
+			}
+			// What the reader shows is what the server has.
+			for (const article of articles) {
+				const kept = server.article(feed, article.seq)!;
+				expect([reader.isRead(article), reader.isStarred(article)], `seed ${seed}`).toEqual([
+					kept.read,
+					kept.starred
+				]);
+			}
+			stop();
+		}
+	}, 30_000);
 });

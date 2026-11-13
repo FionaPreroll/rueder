@@ -174,6 +174,7 @@ export class DemoReader implements Reader {
 	/** The made-up articles are here, always. */
 	readonly connection = { state: 'live' } as const;
 	reconnect() {}
+	readonly unsentChanges = 0;
 	signOut() {}
 	/** The draft has no operator, so no legal texts and no terms. */
 	readonly legal = null;

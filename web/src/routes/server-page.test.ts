@@ -152,6 +152,30 @@ describe('the page with a server', () => {
 		expect(await screen.findByRole('button', { name: /Article 3 of feed/ })).toBeInTheDocument();
 	});
 
+	it('keeps what was read while the server does not answer, and says how much waits', async () => {
+		await reading();
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		const third = await screen.findByRole('button', { name: /Article 3 of feed/ });
+		server.down = true;
+		server.breakStreams();
+		await userEvent.click(third);
+		expect(
+			await screen.findByRole('button', {
+				name: /^The server has not answered since .+\. 1 change is waiting\. Try again now$/
+			})
+		).toBeInTheDocument();
+		expect(unreadInTitle()).toBe(3);
+		expect(screen.queryByRole('alert')).toBeNull();
+
+		server.down = false;
+		server.reopenStreams();
+		await vi.waitFor(() => expect(server.article(tech, 3)!.read).toBe(true));
+		await vi.waitFor(() =>
+			expect(screen.queryByRole('button', { name: /waiting|Reconnecting/ })).toBeNull()
+		);
+		expect(unreadInTitle()).toBe(3);
+	});
+
 	it('goes back to the login when the session runs out', async () => {
 		render(Page);
 		expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();
