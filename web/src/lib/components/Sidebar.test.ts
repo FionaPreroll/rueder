@@ -27,6 +27,14 @@ describe('Sidebar', () => {
 		expect(within(nav).getByRole('button', { name: /^All items/ })).toHaveTextContent(
 			`(${reader.totalUnread})`
 		);
+		// Unread items sit below all items, with the same count.
+		const unread = within(nav).getByRole('button', { name: /^Unread items/ });
+		expect(unread).toHaveTextContent(`(${reader.totalUnread})`);
+		const entries = within(nav)
+			.getAllByRole('button')
+			.map((button) => (button.textContent ?? '').trim());
+		const all = entries.findIndex((text) => text.startsWith('All items'));
+		expect(entries[all + 1]).toMatch(/^Unread items/);
 		expect(within(nav).getByRole('button', { name: /^Hidden by filters/ })).toHaveTextContent(
 			String(reader.hiddenCount)
 		);
@@ -52,7 +60,13 @@ describe('Sidebar', () => {
 		expect(reader.stream).toEqual({ kind: 'folder', id: 'folder-news' });
 		await userEvent.click(screen.getByRole('button', { name: /^Starred items/ }));
 		expect(reader.stream).toEqual({ kind: 'starred' });
-		expect(onpick).toHaveBeenCalledTimes(3);
+		await userEvent.click(screen.getByRole('button', { name: /^Unread items/ }));
+		expect(reader.stream).toEqual({ kind: 'unread' });
+		expect(screen.getByRole('button', { name: /^Unread items/ })).toHaveAttribute(
+			'aria-current',
+			'page'
+		);
+		expect(onpick).toHaveBeenCalledTimes(4);
 	});
 
 	it('counts down as articles are read', async () => {

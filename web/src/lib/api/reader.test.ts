@@ -331,6 +331,67 @@ describe('the lists', () => {
 		expect(reader.totalUnread).toBe(unread);
 	});
 
+	it('show the unread items, where what was read goes once the reader leaves it', async () => {
+		server.article(tech, 2)!.read = true;
+		const reader = await started();
+		reader.show({ kind: 'unread' });
+		await settle();
+		expect(server.requests.at(-1)?.path).toBe(`/articles?limit=${PAGE}&unread=true`);
+		const ids = reader.visible.map((article) => article.id);
+		expect(ids).toHaveLength(5);
+		const [first, second, third, fourth] = reader.visible;
+		const shown = () => reader.visible.map((article) => article.id);
+
+		// Read, it stays while the reader is on it; opening another leaves it.
+		reader.step(1);
+		expect(reader.open).toBe(first.id);
+		expect(reader.isRead(first)).toBe(true);
+		expect(shown()).toEqual(ids);
+		reader.step(1);
+		expect(reader.open).toBe(second.id);
+		expect(shown()).toEqual(ids.slice(1));
+		// Closing it leaves it too; the next step opens the one that took its
+		// place, as if it were still there.
+		reader.toggleOpen(second);
+		expect(reader.open).toBeNull();
+		expect(shown()).toEqual(ids.slice(2));
+		reader.step(1);
+		expect(reader.open).toBe(third.id);
+		// Set back to unread by hand, it stays.
+		reader.setRead(third, false);
+		reader.step(1);
+		expect(reader.open).toBe(fourth.id);
+		expect(shown()).toEqual(ids.slice(2));
+
+		// Loaded anew because something changed, the list keeps what the reader is on.
+		await settle();
+		server.emit({ event: 'updated', data: { feed_id: Number(fourth.feedId.slice(5)), count: 1 } });
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		await settle();
+		expect(shown()).toContain(fourth.id);
+		expect(reader.current?.id).toBe(fourth.id);
+
+		// Marking all as read leaves the open one only, and closing it nothing.
+		reader.markAllRead();
+		await settle();
+		expect(shown()).toEqual([fourth.id]);
+		reader.open = null;
+		expect(reader.visible).toEqual([]);
+		reader.refresh();
+		await settle();
+		expect(reader.visible).toEqual([]);
+		expect(reader.totalUnread).toBe(0);
+	});
+
+	it('search the unread items within what is unread', async () => {
+		const reader = await started();
+		reader.show({ kind: 'unread' });
+		await settle();
+		reader.query = 'Tech';
+		await searched();
+		expect(server.requests.at(-1)?.path).toMatch(/^\/search\?.*unread=true/);
+	});
+
 	it('start with the oldest when asked to, page by page, and still know the newest', async () => {
 		server.addArticles(lone, PAGE);
 		const reader = await started();

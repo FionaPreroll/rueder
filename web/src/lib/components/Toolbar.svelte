@@ -9,6 +9,9 @@
 
 	let { reader, title }: { reader: Reader; title: string } = $props();
 
+	/** Whether the list leaves out what was read: by choice, or as the unread items always do. */
+	const onlyUnread = $derived(reader.unreadOnly || reader.stream.kind === 'unread');
+
 	const DAY = 86_400_000;
 
 	/** The icon of each view, as its button has it. */
@@ -46,18 +49,23 @@
 	</button>
 
 	<!-- On a phone only its icon, so the row does not break differently for each choice. -->
-	<Menu title={m.toolbar.show} label={reader.unreadOnly ? m.toolbar.showUnread : m.toolbar.showAll}>
+	<Menu title={m.toolbar.show} label={onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll}>
 		{#snippet button()}
 			<span class="max-sm:hidden">
-				{reader.unreadOnly ? m.toolbar.showUnread : m.toolbar.showAll}
+				{onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll}
 			</span>
-			<Icon name={reader.unreadOnly ? 'unread' : 'filter'} class="size-4 sm:hidden" />
+			<Icon name={onlyUnread ? 'unread' : 'filter'} class="size-4 sm:hidden" />
 			<Icon name="down" class="size-3.5" />
 		{/snippet}
-		{@render option(m.toolbar.showAll, !reader.unreadOnly, () => (reader.unreadOnly = false))}
-		{@render option(m.toolbar.showUnread, reader.unreadOnly, () => (reader.unreadOnly = true))}
+		<!-- The unread items are unread whatever this says. -->
+		{#if reader.stream.kind !== 'unread'}
+			{@render option(m.toolbar.showAll, !reader.unreadOnly, () => (reader.unreadOnly = false))}
+			{@render option(m.toolbar.showUnread, reader.unreadOnly, () => (reader.unreadOnly = true))}
+		{/if}
 		{#if reader.can.oldestFirst}
-			<hr class="my-1 border-line" />
+			{#if reader.stream.kind !== 'unread'}
+				<hr class="my-1 border-line" />
+			{/if}
 			{@render option(m.toolbar.newestFirst, reader.newestFirst, () => (reader.newestFirst = true))}
 			{@render option(
 				m.toolbar.oldestFirst,

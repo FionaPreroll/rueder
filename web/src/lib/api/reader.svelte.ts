@@ -328,7 +328,7 @@ export class ServerReader implements Reader {
 
 	stream = $state.raw<Stream>({ kind: 'home' });
 	cursor = $state<string | null>(null);
-	open = $state<string | null>(null);
+	private opened = $state<string | null>(null);
 	moved = $state(0);
 	notice = $state<Notice | null>(null);
 
@@ -392,6 +392,13 @@ export class ServerReader implements Reader {
 	private loadingMore = false;
 	/** Set back to unread by hand; scrolling past does not mark these as read again. */
 	private pinned = new Set<string>();
+	/**
+	 * In the unread items: articles read while the list is shown. They stay
+	 * while the reader is on them and go once the reader leaves them.
+	 */
+	private kept = $state.raw<ReadonlySet<string>>(new Set());
+	/** Where the article the cursor was on was, after it went from the unread items. */
+	private hole: number | null = null;
 	/** A step with the keyboard that waits for the list to arrive. */
 	private waitingStep: { by: 1 | -1; open: boolean } | null = null;
 	/** What `resume` looks for once the list is there; null once found or given up. */
@@ -905,16 +912,49 @@ export class ServerReader implements Reader {
 	 * part of the list that has the words.
 	 */
 	visible = $derived.by(() => {
-		if (this.searchScope) return this.found ?? [];
+		const listed = this.searchScope ? (this.found ?? []) : this.matching(this.items);
+		// The unread items leave out what was read, but for what the reader is on.
+		if (this.stream.kind !== 'unread') return listed;
+		return listed.filter((article) => !this.isRead(article) || this.kept.has(article.id));
+	});
+
+	/** The articles that have the words of the search, or all of them without words. */
+	private matching(articles: Article[]) {
 		const query = this.words.trim().toLowerCase();
-		if (!query) return this.items;
-		return this.items.filter(
+		if (!query) return articles;
+		return articles.filter(
 			(article) =>
 				article.title.toLowerCase().includes(query) ||
 				article.teaser.toLowerCase().includes(query) ||
 				article.author.toLowerCase().includes(query)
 		);
-	});
+	}
+
+	/** The article that is open in the list view. Closing it, or opening another, leaves it. */
+	get open() {
+		return this.opened;
+	}
+
+	set open(id: string | null) {
+		const was = this.opened;
+		this.opened = id;
+		if (was !== null && was !== id) this.leave(was, id === null);
+	}
+
+	/**
+	 * In the unread items, the reader left an article: read, it goes from the
+	 * list. Where it was closed, the cursor keeps its place in the list.
+	 */
+	private leave(id: string | null, closed: boolean) {
+		if (id === null || this.stream.kind !== 'unread' || !this.kept.has(id)) return;
+		const at = this.visible.findIndex((article) => article.id === id);
+		const kept = new Set(this.kept);
+		kept.delete(id);
+		this.kept = kept;
+		// The cursor stays where the article was: the next step opens the one
+		// that took its place, a step back the one before.
+		if (closed && this.cursor === id && at !== -1) this.hole = at;
+	}
 
 	get current() {
 		return this.cursor
@@ -994,13 +1034,15 @@ export class ServerReader implements Reader {
 					this.api.list(stream, {
 						...page,
 						limit: length,
-						unread: this.onlyUnread && stream.kind !== 'starred' && stream.kind !== 'hidden'
+						unread:
+							stream.kind === 'unread' ||
+							(this.onlyUnread && stream.kind !== 'starred' && stream.kind !== 'hidden')
 					}),
 					oldestFirst && !more ? this.api.list(stream, { limit: 1 }) : null
 				]);
 				if (run !== this.listRun) return;
 				const articles = this.take(rows, stream.kind === 'hidden');
-				this.items = more ? [...this.items, ...articles] : articles;
+				this.items = more ? [...this.items, ...articles] : this.keeping(articles, oldestFirst);
 				this.listHasMore = rows.length === length;
 				if (!more) {
 					this.newest = (newest ?? rows)[0]?.id ?? null;
@@ -1031,10 +1073,25 @@ export class ServerReader implements Reader {
 		}
 	}
 
+	/**
+	 * A list loaded anew in the unread items no longer has what was read since;
+	 * what the reader is still on stays in it, where it was.
+	 */
+	private keeping(articles: Article[], oldestFirst: boolean): Article[] {
+		if (this.stream.kind !== 'unread' || this.kept.size === 0) return articles;
+		const have = new Set(articles.map((article) => article.id));
+		const stay = this.items.filter((article) => this.kept.has(article.id) && !have.has(article.id));
+		if (stay.length === 0) return articles;
+		const order = oldestFirst ? 1 : -1;
+		return [...articles, ...stay].sort((a, b) => order * (Number(a.id) - Number(b.id)));
+	}
+
 	/** Loads what is shown anew, from its start, and the search with it. */
 	private reload() {
 		this.stopSeeking();
 		this.pinned.clear();
+		this.kept = new Set();
+		this.hole = null;
 		void this.loadList();
 		if (this.searchScope) void this.search();
 	}
@@ -1065,6 +1122,7 @@ export class ServerReader implements Reader {
 		switch (stream.kind) {
 			case 'home':
 			case 'all':
+			case 'unread':
 				return { kind: 'all' };
 			case 'feed':
 			case 'folder':
@@ -1089,7 +1147,7 @@ export class ServerReader implements Reader {
 				const hits = await this.api.search(words, scope, {
 					before,
 					limit: PAGE - articles.length,
-					unread: this.onlyUnread
+					unread: this.onlyUnread || this.stream.kind === 'unread'
 				});
 				if (run !== this.searchRun) return;
 				articles.push(...this.take(hits.articles, false));
@@ -1120,6 +1178,8 @@ export class ServerReader implements Reader {
 
 	show(stream: Stream) {
 		this.stopSeeking();
+		this.kept = new Set();
+		this.hole = null;
 		this.stream = stream;
 		this.waitingStep = null;
 		this.pending = 0;
@@ -1176,6 +1236,8 @@ export class ServerReader implements Reader {
 				if (view.cursor && has(Number(view.cursor))) this.cursor = view.cursor;
 				const opened = this.items.find((article) => article.id === view.open);
 				if (opened) {
+					// Read, it stays among the unread items while it is open, as before.
+					if (this.stream.kind === 'unread') this.kept = new Set(this.kept).add(opened.id);
 					this.open = opened.id;
 					this.loadAhead(opened, 1);
 				}
@@ -1365,6 +1427,9 @@ export class ServerReader implements Reader {
 
 	setRead(article: Article, read: boolean) {
 		if (!read) this.pinned.add(article.id);
+		else if (this.stream.kind === 'unread' && !this.isRead(article)) {
+			this.kept = new Set(this.kept).add(article.id);
+		}
 		this.change(article, 'read', read);
 	}
 
@@ -1382,12 +1447,15 @@ export class ServerReader implements Reader {
 
 	/** Puts the cursor on an article, and opens it unless told not to. */
 	private pick(article: Article, open: boolean, by: 1 | -1) {
+		const left = this.cursor;
+		this.hole = null;
 		this.cursor = article.id;
 		if (open) {
 			this.open = article.id;
 			this.setRead(article, true);
 			this.loadAhead(article, by);
 		}
+		if (left !== article.id) this.leave(left, false);
 	}
 
 	/**
@@ -1423,7 +1491,8 @@ export class ServerReader implements Reader {
 			return;
 		}
 		const at = list.findIndex((article) => article.id === this.cursor);
-		const next = at === -1 ? 0 : at + by;
+		const next =
+			at !== -1 ? at + by : this.hole === null ? 0 : by === 1 ? this.hole : this.hole - 1;
 		const article = list[next];
 		if (!article) {
 			// Past the end of the page: the step goes on once the next page is there.

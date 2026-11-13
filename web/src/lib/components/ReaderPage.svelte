@@ -61,6 +61,8 @@
 				return m.nav.home;
 			case 'all':
 				return m.nav.all;
+			case 'unread':
+				return m.nav.unreadItems;
 			case 'starred':
 				return m.nav.starred;
 			case 'hidden':
@@ -261,9 +263,11 @@
 					? { kind: 'home' }
 					: action === 'goAll'
 						? { kind: 'all' }
-						: action === 'goStarred'
-							? { kind: 'starred' }
-							: null;
+						: action === 'goUnread'
+							? { kind: 'unread' }
+							: action === 'goStarred'
+								? { kind: 'starred' }
+								: null;
 			if (target) {
 				event.preventDefault();
 				go(target);
