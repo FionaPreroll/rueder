@@ -1023,7 +1023,7 @@ describe('Apps in the account settings', () => {
 		expect(site).toHaveAttribute('rel', 'noopener noreferrer');
 		expect(screen.getByRole('link', { name: 'Website of Read You' })).toHaveAttribute(
 			'href',
-			'https://github.com/ReadYouApp/ReadYou/releases'
+			'https://f-droid.org/packages/me.ash.reader/'
 		);
 		await userEvent.click(screen.getByRole('button', { name: 'Read You' }));
 
@@ -1042,6 +1042,15 @@ describe('Apps in the account settings', () => {
 		expect(screen.getByText(`${location.origin}/greader/`)).toBeInTheDocument();
 		expect(screen.getByText('fiona')).toBeInTheDocument();
 		expect(screen.getByText('abcd-efgh-ijkl-mnop-qrst-uvwx')).toBeInTheDocument();
+		// Read You loads nothing from the feeds' websites itself.
+		expect(screen.queryByText(/^Privacy:/)).toBeNull();
+		// The way in Read You, in pictures from the app itself.
+		await userEvent.click(screen.getByText('Step by step, with pictures'));
+		const pictures = screen.getAllByRole('img', { name: /^Read You, step / });
+		expect(pictures.map((picture) => picture.getAttribute('src'))).toEqual(
+			[1, 2, 3, 4, 5].map((n) => `/apps/readyou-${n}.webp`)
+		);
+		expect(screen.getByText(/^5\. Enter the server address as Server URL/)).toBeInTheDocument();
 		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
 		await userEvent.click(screen.getByRole('button', { name: 'Copy App password' }));
 		expect(writeText).toHaveBeenLastCalledWith('abcd-efgh-ijkl-mnop-qrst-uvwx');
@@ -1056,6 +1065,30 @@ describe('Apps in the account settings', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Revoke the app password Read You' }));
 		expect(await screen.findByText('No app is set up yet.')).toBeInTheDocument();
 		expect(server.appPasswords).toEqual([]);
+	});
+
+	it('shows the way in NetNewsWire on the Mac in pictures, and what it loads itself', async () => {
+		open();
+		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
+		await userEvent.click(screen.getByRole('button', { name: 'NetNewsWire' }));
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+
+		// Its fields by their names, and the address without a slash.
+		expect(await screen.findByText(/^In NetNewsWire, open Settings/)).toBeInTheDocument();
+		expect(screen.getByText(`${location.origin}/greader`)).toBeInTheDocument();
+		// What it means that it loads the feeds' icons from their websites.
+		expect(
+			screen.getByText(/^Privacy: NetNewsWire loads the icons of your feeds itself/)
+		).toHaveTextContent('which see your IP address');
+		await userEvent.click(screen.getByText('Step by step, with pictures'));
+		const pictures = screen.getAllByRole('img', { name: /^NetNewsWire, step / });
+		const files = [1, 2, 3].map((n) => `/apps/netnewswire-${n}.webp`);
+		expect(pictures.map((picture) => picture.getAttribute('src'))).toEqual(files);
+		// Each opens large, and is shown at half its size in pixels.
+		expect(pictures.map((picture) => picture.closest('a')?.getAttribute('href'))).toEqual(files);
+		expect(pictures[0].closest('li')).toHaveStyle({ width: '320px' });
+		expect(screen.getByText(/^3\. Enter the name as Login/)).toBeInTheDocument();
 	});
 
 	it('asks for a code where the account has a second factor', async () => {

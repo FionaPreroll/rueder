@@ -595,6 +595,15 @@ async fn what_is_no_image_or_too_large_or_out_of_reach_is_refused(db: PgPool) {
         assert!(body.is_empty(), "{name}");
     }
     assert_eq!(images.cache().used(), 0);
+    // None of it is an error of the server: what the sources did not deliver
+    // the status page counts with the proxy, as refused.
+    let requests = state.monitor.requests(std::time::Instant::now());
+    let (_, img) = requests
+        .iter()
+        .find(|(route, _)| route.starts_with("GET /img/"))
+        .unwrap();
+    assert_eq!(img.answers, [0, 0, 0, 5, 0]);
+    assert_eq!(images.served(std::time::Instant::now()).source_failed, 2);
 
     // A source that failed is left alone for a while.
     for name in ["page.png", "gone.png"] {

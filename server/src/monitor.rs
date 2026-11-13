@@ -21,13 +21,17 @@ use axum::{
     response::Response,
 };
 use time::OffsetDateTime;
+use tower_http::classify::{
+    ClassifiedResponse, ClassifyResponse, NeverClassifyEos, ServerErrorsAsFailures,
+    ServerErrorsFailureClass,
+};
 use tracing::{
     Event, Level, Subscriber,
     field::{Field, Visit},
 };
 use tracing_subscriber::layer::{Context, Layer};
 
-use crate::{AppState, fetch::Pace};
+use crate::{AppState, fetch::Pace, images::SourceFailed};
 
 /// How long one part of the hour is.
 const SLOT: Duration = Duration::from_secs(10 * 60);
@@ -180,7 +184,8 @@ impl Timing {
 #[derive(Clone, Default, Debug)]
 pub struct Requests {
     pub timing: Timing,
-    /// Answers by their first digit: 1xx to 5xx.
+    /// Answers by their first digit: 1xx to 5xx. An image whose source did
+    /// not deliver it counts as refused (see `counted`).
     pub answers: [u64; 5],
     /// Answers that said "too many requests".
     pub limited: u64,
@@ -462,8 +467,48 @@ pub async fn time(State(state): State<AppState>, request: Request, next: Next) -
     let now = Instant::now();
     state
         .monitor
-        .request(&route, response.status(), now - started, now);
+        .request(&route, counted(&response), now - started, now);
     response
+}
+
+/// What an answer counts as: its status, but an image whose source did not
+/// deliver it, answered 502, counts as refused, not as an error of the
+/// server. The fault is the source's, and the image proxy counts it as
+/// "source failed".
+fn counted(response: &Response) -> StatusCode {
+    if response.extensions().get::<SourceFailed>().is_some() {
+        StatusCode::NOT_FOUND
+    } else {
+        response.status()
+    }
+}
+
+/// Which answers the log takes for failures: those with an error of the
+/// server, as `tower_http` has it, but not an image whose source did not
+/// deliver it, as with [`counted`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Failures;
+
+impl ClassifyResponse for Failures {
+    type FailureClass = ServerErrorsFailureClass;
+    type ClassifyEos = NeverClassifyEos<ServerErrorsFailureClass>;
+
+    fn classify_response<B>(
+        self,
+        response: &axum::http::Response<B>,
+    ) -> ClassifiedResponse<Self::FailureClass, Self::ClassifyEos> {
+        if response.extensions().get::<SourceFailed>().is_some() {
+            return ClassifiedResponse::Ready(Ok(()));
+        }
+        ServerErrorsAsFailures::new().classify_response(response)
+    }
+
+    fn classify_error<E>(self, error: &E) -> Self::FailureClass
+    where
+        E: fmt::Display + 'static,
+    {
+        ServerErrorsAsFailures::new().classify_error(error)
+    }
 }
 
 /// How serious a problem is.
@@ -644,6 +689,7 @@ impl Visit for Text {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::response::IntoResponse;
 
     #[test]
     fn a_window_forgets_what_is_older_than_an_hour() {
@@ -765,6 +811,27 @@ mod tests {
         assert_eq!(list[0].count, 2);
         assert_eq!(list[1].text, "fetching: the site is slow (feed_id=7)");
         assert_eq!(list[1].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn an_image_whose_source_failed_is_no_error_of_the_server() {
+        let failed = (
+            StatusCode::BAD_GATEWAY,
+            axum::Extension(crate::images::SourceFailed),
+        )
+            .into_response();
+        let other = StatusCode::BAD_GATEWAY.into_response();
+        assert_eq!(counted(&failed), StatusCode::NOT_FOUND);
+        assert_eq!(counted(&other), StatusCode::BAD_GATEWAY);
+        let classified = |response: &Response| {
+            matches!(
+                Failures.classify_response(response),
+                ClassifiedResponse::Ready(Err(_))
+            )
+        };
+        assert!(!classified(&failed));
+        assert!(classified(&other));
+        assert!(!classified(&StatusCode::OK.into_response()));
     }
 
     #[test]

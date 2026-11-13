@@ -191,6 +191,58 @@ async fn an_app_logs_in_with_an_app_password_only(db: PgPool) {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+/// An app password that is revoked: NetNewsWire then logs in again with it
+/// and, when that fails too, sends every request as a form with the name and
+/// the app password (`readerBasic` in its `URLRequest+ReaderAPI.swift`).
+/// Whatever it sends, it is told to log in again, not that the method is
+/// wrong.
+#[sqlx::test]
+async fn a_revoked_app_password_is_told_to_log_in_again(db: PgPool) {
+    let (ada, _) = common::reader(&db, "ada", 2).await;
+    let state = AppState::new(db.clone());
+    let auth = logged_in(&state, ada, "ada").await;
+    get(&state, "/reader/api/0/subscription/list?output=json", &auth).await;
+    let cookie = common::session(&db, ada).await;
+    let (_, list) = common::call(
+        &state,
+        Method::GET,
+        "/api/app-passwords",
+        Some(&cookie),
+        None,
+    )
+    .await;
+    let path = format!("/api/app-passwords/{}", list["app_passwords"][0]["id"]);
+    let (status, _) = common::call(&state, Method::DELETE, &path, Some(&cookie), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let reads = [
+        "/reader/api/0/token",
+        "/reader/api/0/user-info",
+        "/reader/api/0/subscription/list?output=json",
+        "/reader/api/0/tag/list?output=json",
+        "/reader/api/0/unread-count?output=json",
+        "/reader/api/0/stream/items/ids?output=json&s=user/-/state/com.google/reading-list",
+        "/reader/api/0/stream/contents/user/-/state/com.google/reading-list",
+        "/reader/api/0/stream/contents?s=user/-/state/com.google/reading-list",
+        "/reader/api/0/preference/stream/list",
+    ];
+    let basic = format!("Email=ada&Passwd={auth}");
+    for path in reads {
+        for (method, token, form) in [
+            (Method::GET, Some(auth.as_str()), ""),
+            (Method::POST, Some(auth.as_str()), ""),
+            (Method::POST, None, basic.as_str()),
+        ] {
+            let (status, headers, _) = ask(&state, method.clone(), path, token, form).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
+            assert_eq!(headers["x-reader-google-bad-token"], "true");
+        }
+    }
+    let (status, _, body) = ask(&state, Method::POST, "/accounts/ClientLogin", None, &basic).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(body.contains("BadAuthentication"));
+}
+
 #[sqlx::test]
 async fn an_app_syncs_feeds_folders_counts_and_items(db: PgPool) {
     let (ada, feed) = common::reader(&db, "ada", 3).await;

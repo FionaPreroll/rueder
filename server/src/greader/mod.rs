@@ -40,7 +40,6 @@ use crate::{
     AppError, AppState, MAX_BODY,
     app_passwords::{self, AppLogin},
     events::{self, Area, Change},
-    images::Refused,
     login::{Key, Sender},
 };
 use parse::Params;
@@ -51,11 +50,20 @@ pub const API: &str = "/reader/api/0";
 pub fn router(state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/accounts/ClientLogin", post(client_login))
-        .route("/reader/api/0/token", get(token))
-        .route("/reader/api/0/user-info", get(user_info))
-        .route("/reader/api/0/subscription/list", get(read::subscriptions))
-        .route("/reader/api/0/tag/list", get(read::tags))
-        .route("/reader/api/0/unread-count", get(read::unread_counts))
+        // What only reads takes GET and POST: an app that sends a read as a
+        // form, as NetNewsWire does with an app password that no longer
+        // counts, is told to log in again (401), not 405.
+        .route("/reader/api/0/token", get(token).post(token))
+        .route("/reader/api/0/user-info", get(user_info).post(user_info))
+        .route(
+            "/reader/api/0/subscription/list",
+            get(read::subscriptions).post(read::subscriptions),
+        )
+        .route("/reader/api/0/tag/list", get(read::tags).post(read::tags))
+        .route(
+            "/reader/api/0/unread-count",
+            get(read::unread_counts).post(read::unread_counts),
+        )
         .route(
             "/reader/api/0/stream/items/ids",
             get(read::item_ids).post(read::item_ids),
@@ -64,10 +72,13 @@ pub fn router(state: &AppState) -> Router<AppState> {
             "/reader/api/0/stream/items/contents",
             get(read::item_contents).post(read::item_contents),
         )
-        .route("/reader/api/0/stream/contents", get(read::stream_contents))
+        .route(
+            "/reader/api/0/stream/contents",
+            get(read::stream_contents).post(read::stream_contents),
+        )
         .route(
             "/reader/api/0/stream/contents/{*stream}",
-            get(read::stream_contents_of),
+            get(read::stream_contents_of).post(read::stream_contents_of),
         )
         .route("/reader/api/0/edit-tag", post(write::edit_tag))
         .route("/reader/api/0/mark-all-as-read", post(write::mark_all_read))
@@ -354,13 +365,7 @@ async fn image(
             .into_response(),
         Err(refused) => {
             tracing::debug!("image for an app refused: {refused}");
-            let status = match refused {
-                Refused::NotFound => StatusCode::NOT_FOUND,
-                Refused::Source(_) => StatusCode::BAD_GATEWAY,
-                Refused::NotAnImage => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                Refused::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            };
-            status.into_response()
+            refused.into_response()
         }
     }
 }

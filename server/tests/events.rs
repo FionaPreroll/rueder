@@ -212,7 +212,15 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/greader/reader/api/0/disable-tag", Some(Changed::Names)),
         ("/greader/reader/api/0/stream/items/contents", None),
         ("/greader/reader/api/0/stream/items/ids", None),
+        ("/greader/reader/api/0/stream/contents/feed/7", None),
+        ("/greader/reader/api/0/subscription/list", None),
+        ("/greader/reader/api/0/tag/list", None),
+        ("/greader/reader/api/0/unread-count", None),
         ("/greader/reader/api/0/token", None),
+        ("/greader/reader/api/0/user-info", None),
+        // What the API does not have it answers with `[]`, and changes nothing.
+        ("/greader/reader/api/0/something/new", None),
+        ("/greader/somewhere", None),
         ("/greader/accounts/ClientLogin", None),
         ("/greader/img/1/a/image/b", None),
         // What nobody has thought of yet makes browsers load the tree anew.
@@ -1230,6 +1238,22 @@ async fn what_an_app_does_reaches_the_tabs(db: PgPool) {
         format!("Email=ada&Passwd={secret}"),
     )
     .await;
+
+    // Asking, as apps do every few minutes, and in a form, as some send it,
+    // makes the tabs load nothing anew.
+    for path in [
+        "/reader/api/0/subscription/list",
+        "/reader/api/0/tag/list",
+        "/reader/api/0/unread-count",
+        "/reader/api/0/stream/items/ids",
+        "/reader/api/0/stream/contents",
+        "/reader/api/0/something/new",
+    ] {
+        let form = "output=json&s=user/-/state/com.google/reading-list&n=5".to_owned();
+        let (status, _) = app(path, Some(auth), form).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+    }
+    assert!(tab.next_within(Duration::from_millis(300)).await.is_none());
 
     let all: Vec<i64> = sqlx::query_scalar("SELECT (feed_id::int8 << 32) | seq FROM articles")
         .fetch_all(&db)

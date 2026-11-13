@@ -368,12 +368,30 @@ const de: Messages = {
 			back: 'Zurück',
 			how: {
 				netnewswire:
-					'Füge in NetNewsWire ein Konto hinzu (Einstellungen, Accounts, dann +) und wähle FreshRSS. Trage Serveradresse, Name und App-Passwort von unten ein.',
+					'Öffne in NetNewsWire die Einstellungen (Settings), dann Accounts, füge ein Konto hinzu (auf dem Mac mit +) und wähle FreshRSS. Trage unten den Namen als Login ein (auf iPhone und iPad: Username or Email), das App-Passwort als Password und die Serveradresse als API URL.',
 				readyou:
-					'Öffne in Read You Einstellungen, Konten, Konten hinzufügen, und wähle Google Reader. Trage Serveradresse, Name und App-Passwort von unten ein.',
+					'Öffne in Read You Settings, Accounts, Add accounts, und wähle Google Reader. Trage die Serveradresse von unten als Server URL ein, den Namen als Username und das App-Passwort als Password.',
 				other:
 					'Füge in deiner App ein Konto der Art „Google Reader API“ hinzu oder, wo es das nicht gibt, „FreshRSS“. Trage Serveradresse, Name und App-Passwort von unten ein.'
 			},
+			ownIcons: (app) =>
+				`Datenschutz: ${app} lädt die Symbole deiner Feeds selbst, von den Websites der Feeds, und die sehen dabei deine IP-Adresse. Artikel und ihre Bilder kommen nur über rueder.`,
+			shotsTitle: 'Schritt für Schritt, mit Bildern',
+			shots: {
+				readyou: [
+					'Tippe oben links auf das Zahnrad.',
+					'Öffne Accounts.',
+					'Tippe auf Add accounts.',
+					'Wähle Google Reader.',
+					'Trage die Serveradresse als Server URL ein, den Namen als Username und das App-Passwort als Password, dann tippe auf Add.'
+				],
+				netnewswire: [
+					'Auf dem Mac: Öffne die Einstellungen (⌘,), dann Accounts, und klicke unten links auf +.',
+					'Wähle FreshRSS und klicke auf Continue.',
+					'Trage den Namen als Login, das App-Passwort als Password und die Serveradresse als API URL ein und klicke auf Create.'
+				]
+			},
+			shotAlt: (app, step) => `${app}, Schritt ${n(step)}`,
 			server: 'Serveradresse',
 			user: 'Name',
 			secret: 'App-Passwort',

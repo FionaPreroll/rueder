@@ -51,19 +51,12 @@ use sqlx::PgPool;
 use ts_rs::TS;
 
 use crate::{
-    cleaning::Rules,
-    events::Events,
-    hardening::Policies,
-    http_client::HttpClient,
-    images::{ImageProxy, Refused},
-    legal::Legal,
-    login::Limiter,
-    monitor::Monitor,
-    oidc::Oidc,
-    rate::Rates,
+    cleaning::Rules, events::Events, hardening::Policies, http_client::HttpClient,
+    images::ImageProxy, legal::Legal, login::Limiter, monitor::Monitor, oidc::Oidc, rate::Rates,
     sessions::Session,
 };
 use tower_http::{
+    classify::SharedClassifier,
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
@@ -246,7 +239,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), rate::limit))
         .layer(middleware::from_fn_with_state(policies, hardening::headers))
         .layer(middleware::from_fn_with_state(state.clone(), monitor::time))
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new(SharedClassifier::new(monitor::Failures)))
         .with_state(state)
 }
 
@@ -346,13 +339,7 @@ async fn image(
             .into_response(),
         Err(refused) => {
             tracing::debug!("image refused: {refused}");
-            let status = match refused {
-                Refused::NotFound => StatusCode::NOT_FOUND,
-                Refused::Source(_) => StatusCode::BAD_GATEWAY,
-                Refused::NotAnImage => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                Refused::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            };
-            status.into_response()
+            refused.into_response()
         }
     }
 }

@@ -5,6 +5,12 @@
 
 export type Platform = 'apple' | 'android';
 
+/** A picture of a step in an app: its size in pixels. */
+export interface Shot {
+	width: number;
+	height: number;
+}
+
 export interface KnownApp {
 	id: 'netnewswire' | 'readyou';
 	name: string;
@@ -15,7 +21,23 @@ export interface KnownApp {
 	 * address it is given ends with a slash (Read You does this).
 	 */
 	slash: boolean;
+	/**
+	 * The app loads the icons of the feeds itself, from their websites, so
+	 * that those see the reader's address (NetNewsWire does this); the setup
+	 * says so.
+	 */
+	ownIcons: boolean;
+	/**
+	 * The pictures that show the way in the app, step by step: screenshots in
+	 * `static/apps/<id>-<n>.webp`, from 1 on, each with its caption in the
+	 * texts. None where there are none yet. They are made at twice the size
+	 * they are shown at.
+	 */
+	shots: Shot[];
 }
+
+/** Where the picture of a step of an app is, from 1 on. */
+export const shot = (app: KnownApp, n: number) => `/apps/${app.id}-${n}.webp`;
 
 export const knownApps: KnownApp[] = [
 	{
@@ -23,14 +45,25 @@ export const knownApps: KnownApp[] = [
 		name: 'NetNewsWire',
 		platforms: ['apple'],
 		url: 'https://netnewswire.com/',
-		slash: false
+		slash: false,
+		// It reads no `iconUrl` and looks for each feed's icon on its home
+		// page (FaviconDownloader.swift).
+		ownIcons: true,
+		// On the Mac.
+		shots: [
+			{ width: 640, height: 585 },
+			{ width: 640, height: 775 },
+			{ width: 640, height: 406 }
+		]
 	},
 	{
 		id: 'readyou',
 		name: 'Read You',
 		platforms: ['android'],
-		url: 'https://github.com/ReadYouApp/ReadYou/releases',
-		slash: true
+		url: 'https://f-droid.org/packages/me.ash.reader/',
+		slash: true,
+		ownIcons: false,
+		shots: Array.from({ length: 5 }, () => ({ width: 360, height: 718 }))
 	}
 ];
 

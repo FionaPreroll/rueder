@@ -371,12 +371,30 @@ const en = {
 			back: 'Back',
 			how: {
 				netnewswire:
-					'In NetNewsWire, add an account (Settings, Accounts, then +) and choose FreshRSS. Enter the server address, name and app password below.',
+					'In NetNewsWire, open Settings, then Accounts, add an account (on the Mac with +) and choose FreshRSS. Enter the name below as Login (on iPhone and iPad: Username or Email), the app password as Password and the server address as API URL.',
 				readyou:
-					'In Read You, open Settings, Accounts, Add accounts, and choose Google Reader. Enter the server address, name and app password below.',
+					'In Read You, open Settings, Accounts, Add accounts, and choose Google Reader. Enter the server address below as Server URL, the name as Username and the app password as Password.',
 				other:
 					'In your app, add an account of the kind “Google Reader API” or, where there is none, “FreshRSS”. Enter the server address, name and app password below.'
 			},
+			ownIcons: (app: string) =>
+				`Privacy: ${app} loads the icons of your feeds itself, from the feeds’ websites, which see your IP address when it does. Articles and their images come only through rueder.`,
+			shotsTitle: 'Step by step, with pictures',
+			shots: {
+				readyou: [
+					'Tap the gear at the top left.',
+					'Open Accounts.',
+					'Tap Add accounts.',
+					'Choose Google Reader.',
+					'Enter the server address as Server URL, the name as Username and the app password as Password, then tap Add.'
+				],
+				netnewswire: [
+					'On the Mac: open Settings (⌘,), then Accounts, and click + at the bottom left.',
+					'Choose FreshRSS and click Continue.',
+					'Enter the name as Login, the app password as Password and the server address as API URL, then click Create.'
+				]
+			},
+			shotAlt: (app: string, step: number) => `${app}, step ${n(step)}`,
 			server: 'Server address',
 			user: 'Name',
 			secret: 'App password',
