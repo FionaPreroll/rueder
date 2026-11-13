@@ -10,6 +10,7 @@ use std::{io::Cursor, sync::LazyLock};
 use image::{ImageFormat, ImageReader};
 use rueder::{
     cleaning::{self, Base, Rules},
+    greader::parse::{self, FeedRef, Params, Stream},
     feeds::{self, MAX_ARTICLES, MAX_CONTENT},
     images::{self, Format, MAX_PIXELS, Refused, Signer, Size},
 };
@@ -119,6 +120,64 @@ pub fn image(data: &[u8]) {
         Err(Refused::NotAnImage | Refused::TooLarge) => {}
         Err(other) => panic!("refused for another reason: {other}"),
     }
+}
+
+/// Reading a request of the Google Reader API, with any bytes: the first byte
+/// says where the query ends and the form body begins. The limits of count and
+/// length hold, nothing panics, and every stream ID, item ID and path of
+/// folders that is read is read back as itself once it is written.
+pub fn greader(data: &[u8]) {
+    let Some((split, rest)) = data.split_first() else {
+        return;
+    };
+    let at = usize::from(*split) * rest.len() / 255;
+    let (query, body) = rest.split_at(at);
+    let Ok(params) = Params::parse(&String::from_utf8_lossy(query), body) else {
+        return;
+    };
+    assert!(params.pairs().len() <= parse::MAX_PAIRS);
+    for (name, value) in params.pairs() {
+        assert!(name.len() <= parse::MAX_VALUE && value.len() <= parse::MAX_VALUE);
+        assert!(params.one(name).is_some());
+        greader_value(value);
+    }
+}
+
+/// What one value of a request is read as.
+fn greader_value(value: &str) {
+    if let Some(stream) = parse::stream(value) {
+        let written = match &stream {
+            Stream::Feed(FeedRef::Id(id)) => Some(parse::feed_id(*id)),
+            Stream::Feed(FeedRef::Url(_)) => None,
+            Stream::Label(name) => Some(parse::label_id(name)),
+            Stream::State(state) => state.id().map(str::to_owned),
+        };
+        if let Some(written) = written {
+            assert_eq!(parse::stream(&written), Some(stream), "{written}");
+        }
+    }
+    if let Some((feed, seq)) = parse::item(value) {
+        assert!(feed > 0 && seq > 0);
+        let number = parse::item_number(feed, seq).expect("a feed and a number fit");
+        assert!(number > 0);
+        assert_eq!(parse::item(&parse::long_item_id(number)), Some((feed, seq)));
+        assert_eq!(parse::item(&number.to_string()), Some((feed, seq)));
+    }
+    if let Some(path) = parse::path(value) {
+        assert!((1..=parse::MAX_DEPTH).contains(&path.len()));
+        for part in &path {
+            assert!(!part.trim().is_empty() && part.chars().count() <= parse::MAX_NAME);
+            assert_eq!(part.trim(), part);
+        }
+        assert_eq!(parse::path(&parse::path_name(&path)), Some(path));
+    }
+    if let Some(after) = parse::continuation(value) {
+        assert!(after > 0);
+        assert_eq!(parse::continuation(&after.to_string()), Some(after));
+    }
+    let _ = parse::time(value);
+    let n = parse::count(Some(value), 20, 1000);
+    assert!((1..=1000).contains(&n));
 }
 
 /// The width and height the head of an image says it has.

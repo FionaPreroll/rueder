@@ -53,6 +53,11 @@ impl Params {
         Ok(Self(pairs))
     }
 
+    /// Every parameter, name and value, in order.
+    pub fn pairs(&self) -> &[(String, String)] {
+        &self.0
+    }
+
     /// The first value of a name.
     pub fn one(&self, name: &str) -> Option<&str> {
         self.0
