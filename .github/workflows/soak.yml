@@ -1,0 +1,60 @@
+name: Soak
+
+on:
+  # Mondays at 04:21 UTC.
+  schedule:
+    - cron: "21 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: How long each target runs, in seconds
+        default: "1800"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Where the run makes its own database.
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+      # Three minutes on a pull request, half an hour on schedule.
+      SECONDS_TO_RUN: ${{ github.event.inputs.seconds || '1800' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # rustup checks what it downloads, as in ci.yml.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # branch stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server
+      # The time comes in as a shell variable and has to be a number: what is
+      # typed when starting by hand never becomes part of the command.
+      - run: |
+          case "$SECONDS_TO_RUN" in
+            ''|*[!0-9]*) echo "seconds is not a number" >&2; exit 1 ;;
+          esac
+          SOAK_SECONDS="$SECONDS_TO_RUN" cargo test --release --test soak 
