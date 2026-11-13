@@ -374,6 +374,8 @@ const de: Messages = {
 				other:
 					'Füge in deiner App ein Konto der Art „Google Reader API“ hinzu oder, wo es das nicht gibt, „FreshRSS“. Trage Serveradresse, Name und App-Passwort von unten ein.'
 			},
+			ownIcons: (app) =>
+				`Datenschutz: ${app} lädt die Symbole deiner Feeds selbst, von den Websites der Feeds, und die sehen dabei deine IP-Adresse. Artikel und ihre Bilder kommen nur über rueder.`,
 			shotsTitle: 'Schritt für Schritt, mit Bildern',
 			shots: {
 				readyou: [

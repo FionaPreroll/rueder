@@ -377,6 +377,8 @@ const en = {
 				other:
 					'In your app, add an account of the kind “Google Reader API” or, where there is none, “FreshRSS”. Enter the server address, name and app password below.'
 			},
+			ownIcons: (app: string) =>
+				`Privacy: ${app} loads the icons of your feeds itself, from the feeds’ websites, which see your IP address when it does. Articles and their images come only through rueder.`,
 			shotsTitle: 'Step by step, with pictures',
 			shots: {
 				readyou: [

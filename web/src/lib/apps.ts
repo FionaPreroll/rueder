@@ -22,6 +22,12 @@ export interface KnownApp {
 	 */
 	slash: boolean;
 	/**
+	 * The app loads the icons of the feeds itself, from their websites, so
+	 * that those see the reader's address (NetNewsWire does this); the setup
+	 * says so.
+	 */
+	ownIcons: boolean;
+	/**
 	 * The pictures that show the way in the app, step by step: screenshots in
 	 * `static/apps/<id>-<n>.webp`, from 1 on, each with its caption in the
 	 * texts. None where there are none yet. They are made at twice the size
@@ -40,6 +46,9 @@ export const knownApps: KnownApp[] = [
 		platforms: ['apple'],
 		url: 'https://netnewswire.com/',
 		slash: false,
+		// It reads no `iconUrl` and looks for each feed's icon on its home
+		// page (FaviconDownloader.swift).
+		ownIcons: true,
 		// On the Mac.
 		shots: [
 			{ width: 640, height: 585 },
@@ -53,6 +62,7 @@ export const knownApps: KnownApp[] = [
 		platforms: ['android'],
 		url: 'https://f-droid.org/packages/me.ash.reader/',
 		slash: true,
+		ownIcons: false,
 		shots: Array.from({ length: 5 }, () => ({ width: 360, height: 718 }))
 	}
 ];

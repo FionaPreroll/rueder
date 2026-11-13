@@ -1042,6 +1042,8 @@ describe('Apps in the account settings', () => {
 		expect(screen.getByText(`${location.origin}/greader/`)).toBeInTheDocument();
 		expect(screen.getByText('fiona')).toBeInTheDocument();
 		expect(screen.getByText('abcd-efgh-ijkl-mnop-qrst-uvwx')).toBeInTheDocument();
+		// Read You loads nothing from the feeds' websites itself.
+		expect(screen.queryByText(/^Privacy:/)).toBeNull();
 		// The way in Read You, in pictures from the app itself.
 		await userEvent.click(screen.getByText('Step by step, with pictures'));
 		const pictures = screen.getAllByRole('img', { name: /^Read You, step / });
@@ -1065,7 +1067,7 @@ describe('Apps in the account settings', () => {
 		expect(server.appPasswords).toEqual([]);
 	});
 
-	it('shows the way in NetNewsWire on the Mac in pictures', async () => {
+	it('shows the way in NetNewsWire on the Mac in pictures, and what it loads itself', async () => {
 		open();
 		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
 		await userEvent.click(screen.getByRole('button', { name: 'NetNewsWire' }));
@@ -1075,6 +1077,10 @@ describe('Apps in the account settings', () => {
 		// Its fields by their names, and the address without a slash.
 		expect(await screen.findByText(/^In NetNewsWire, open Settings/)).toBeInTheDocument();
 		expect(screen.getByText(`${location.origin}/greader`)).toBeInTheDocument();
+		// What it means that it loads the feeds' icons from their websites.
+		expect(
+			screen.getByText(/^Privacy: NetNewsWire loads the icons of your feeds itself/)
+		).toHaveTextContent('which see your IP address');
 		await userEvent.click(screen.getByText('Step by step, with pictures'));
 		const pictures = screen.getAllByRole('img', { name: /^NetNewsWire, step / });
 		const files = [1, 2, 3].map((n) => `/apps/netnewswire-${n}.webp`);

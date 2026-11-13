@@ -242,6 +242,9 @@
 	{:else if made}
 		<h3 class="font-semibold">{appName(chosen)}</h3>
 		<p>{how(chosen)}</p>
+		{#if chosen !== null && chosen !== 'other' && chosen.ownIcons}
+			<p class="text-xs text-soft">{texts.ownIcons(chosen.name)}</p>
+		{/if}
 		{#if chosen !== null && chosen !== 'other' && chosen.shots.length > 0}
 			{@const app = chosen}
 			<details class="rounded border border-line">
