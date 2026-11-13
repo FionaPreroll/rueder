@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_labels (label_id, feed_id, seq)\n             SELECT $2, a.feed_id, a.seq\n             FROM unnest($3::int4[], $4::int4[]) AS n (feed_id, seq)\n             JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = n.feed_id\n             JOIN articles a ON a.feed_id = n.feed_id AND a.seq = n.seq\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8672761f5ef474157adb5506b7b3d05c171e35f7a9c4bf7039abe185392fb7f1"
+}

@@ -85,19 +85,19 @@ async fn labels(
 
 /// What `POST /api/labels` reads. It answers with `Created`.
 #[derive(Deserialize, TS)]
-struct NewLabel {
-    title: String,
-    color: String,
+pub(crate) struct NewLabel {
+    pub(crate) title: String,
+    pub(crate) color: String,
 }
 
 /// The answer to making something: the number it got.
 #[derive(Serialize, TS)]
-struct Created {
-    id: i32,
+pub(crate) struct Created {
+    pub(crate) id: i32,
 }
 
 /// A new label, after the ones that are there.
-async fn add(
+pub(crate) async fn add(
     State(state): State<AppState>,
     session: Session,
     Json(new): Json<NewLabel>,
@@ -125,12 +125,12 @@ async fn add(
 /// What `PATCH /api/labels/{id}` reads.
 #[derive(Deserialize, TS)]
 #[ts(rename = "LabelChange", optional_fields = nullable)]
-struct Change {
-    title: Option<String>,
-    color: Option<String>,
+pub(crate) struct Change {
+    pub(crate) title: Option<String>,
+    pub(crate) color: Option<String>,
 }
 
-async fn change(
+pub(crate) async fn change(
     State(state): State<AppState>,
     session: Session,
     Path(id): Path<i32>,
@@ -159,7 +159,7 @@ async fn change(
 }
 
 /// Takes a label away, from every article that had it too.
-async fn remove(
+pub(crate) async fn remove(
     State(state): State<AppState>,
     session: Session,
     Path(id): Path<i32>,

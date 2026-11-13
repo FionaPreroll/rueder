@@ -55,7 +55,10 @@ impl Params {
 
     /// The first value of a name.
     pub fn one(&self, name: &str) -> Option<&str> {
-        self.all(name).next()
+        self.0
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
     }
 
     /// Every value of a name, in order.
@@ -304,7 +307,9 @@ mod tests {
         assert_eq!(stream("feed/12"), Some(Stream::Feed(FeedRef::Id(12))));
         assert_eq!(
             stream("feed/https://site.example/feed.xml"),
-            Some(Stream::Feed(FeedRef::Url("https://site.example/feed.xml".into())))
+            Some(Stream::Feed(FeedRef::Url(
+                "https://site.example/feed.xml".into()
+            )))
         );
         assert_eq!(stream("feed/0"), None);
         assert_eq!(stream("feed/"), None);
@@ -320,10 +325,21 @@ mod tests {
             stream("user/-/state/com.google/broadcast"),
             Some(Stream::State(State::Other))
         );
-        for wrong in ["", "user/-", "user/-/label/", "user/-/state/x", "pop/topic/1"] {
+        for wrong in [
+            "",
+            "user/-",
+            "user/-/label/",
+            "user/-/state/x",
+            "pop/topic/1",
+        ] {
             assert_eq!(stream(wrong), None, "{wrong}");
         }
-        for state in [State::ReadingList, State::Read, State::Starred, State::KeptUnread] {
+        for state in [
+            State::ReadingList,
+            State::Read,
+            State::Starred,
+            State::KeptUnread,
+        ] {
             assert_eq!(stream(state.id().unwrap()), Some(Stream::State(state)));
         }
     }
@@ -334,7 +350,10 @@ mod tests {
         let name = path_name(&parts);
         assert_eq!(name, "News/A\u{2215}B");
         assert_eq!(path(&name), Some(parts));
-        assert_eq!(path(" News / Tech "), Some(vec!["News".into(), "Tech".into()]));
+        assert_eq!(
+            path(" News / Tech "),
+            Some(vec!["News".into(), "Tech".into()])
+        );
         assert_eq!(path("a//b"), None);
         assert_eq!(path("a/b/c/d/e/f"), None);
         assert_eq!(path(&"x".repeat(101)), None);

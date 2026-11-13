@@ -115,6 +115,12 @@ fn normal(secret: &str) -> String {
         .collect()
 }
 
+/// The token an app gets for an app password: the app password as it is
+/// compared, without dashes, which apps read up to an `=`.
+pub fn token(secret: &str) -> String {
+    normal(secret)
+}
+
 /// The hash an app password is kept and found by, if it can be one at all.
 pub(crate) fn hash_of(secret: &str) -> Option<Vec<u8>> {
     let secret = normal(secret);
@@ -319,7 +325,10 @@ mod tests {
         let hash = hash_of(&secret).unwrap();
         assert_eq!(hash_of(&secret.to_uppercase()), Some(hash.clone()));
         assert_eq!(hash_of(&secret.replace('-', " ")), Some(hash.clone()));
-        assert_eq!(hash_of(&format!(" {} ", secret.replace('-', ""))), Some(hash));
+        assert_eq!(
+            hash_of(&format!(" {} ", secret.replace('-', ""))),
+            Some(hash)
+        );
         assert_ne!(new_secret().unwrap(), secret);
         // Too short, too long, or with letters base32 has not: no app password.
         assert_eq!(hash_of(&secret[..10]), None);

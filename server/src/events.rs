@@ -632,34 +632,45 @@ pub async fn announce(State(state): State<AppState>, mut request: Request, next:
         && let Some(session) = session
         && let Some(what) = changed(&path)
     {
-        let change = match what {
-            Changed::Everything => {
-                for area in [Area::Labels, Area::Settings, Area::Rules] {
-                    let by = by.clone();
-                    state
-                        .events
-                        .publish(vec![session.account_id], Change::Area { area, by });
-                }
-                Change::Area {
-                    area: Area::Tree,
-                    by,
-                }
-            }
-            Changed::Area(area) => Change::Area { area, by },
-            Changed::Reading { feed_id, seq } => {
-                let feed = match feed_id {
-                    Some(feed_id) => reading::unread_of(&state.db, session.account_id, feed_id)
-                        .await
-                        .ok()
-                        .flatten(),
-                    None => None,
-                };
-                Change::Reading { feed, seq, by }
-            }
-        };
-        state.events.publish(vec![session.account_id], change);
+        publish(&state, session.account_id, what, by).await;
     }
     response
+}
+
+/// Tells the account's open tabs what a request changed. `by` is the tab
+/// that asked, if it named itself.
+pub async fn publish(state: &AppState, account_id: i32, what: Changed, by: Option<String>) {
+    let areas: &[Area] = match what {
+        Changed::Everything => &[Area::Labels, Area::Settings, Area::Rules, Area::Tree],
+        Changed::Area(area) => {
+            let change = Change::Area { area, by };
+            state.events.publish(vec![account_id], change);
+            return;
+        }
+        Changed::Names => &[Area::Tree, Area::Labels],
+        Changed::Articles => &[Area::Labels],
+        Changed::Reading { .. } => &[],
+    };
+    for area in areas {
+        let by = by.clone();
+        let change = Change::Area { area: *area, by };
+        state.events.publish(vec![account_id], change);
+    }
+    let (feed_id, seq) = match what {
+        Changed::Reading { feed_id, seq } => (feed_id, seq),
+        Changed::Articles => (None, None),
+        _ => return,
+    };
+    let feed = match feed_id {
+        Some(feed_id) => reading::unread_of(&state.db, account_id, feed_id)
+            .await
+            .ok()
+            .flatten(),
+        None => None,
+    };
+    state
+        .events
+        .publish(vec![account_id], Change::Reading { feed, seq, by });
 }
 
 /// What a request to an address of the API changes.
@@ -673,6 +684,12 @@ pub enum Changed {
         feed_id: Option<i32>,
         seq: Option<i32>,
     },
+    /// What was read, starred and labelled, in several feeds at once: what an
+    /// app sends.
+    Articles,
+    /// The names of folders and labels, which an app tells apart only by
+    /// what they hold.
+    Names,
 }
 
 /// What a request that is not a mere question changes, by its address, or
@@ -683,6 +700,9 @@ pub enum Changed {
 /// browsers load folders, subscriptions and counts anew: too much is safe, too
 /// little would leave a tab showing what is no longer so.
 pub fn changed(path: &str) -> Option<Changed> {
+    if let Some(path) = path.strip_prefix("/greader") {
+        return changed_by_app(path);
+    }
     let path = path.strip_prefix("/api").unwrap_or(path);
     let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
     let number = |part: &str| part.parse::<i32>().ok();
@@ -729,6 +749,30 @@ pub fn changed(path: &str) -> Option<Changed> {
         ["feeds", feed, "articles", seq, "state"] => Changed::Reading {
             feed_id: number(feed),
             seq: number(seq),
+        },
+        _ => Changed::Area(Area::Tree),
+    })
+}
+
+/// What a request of an app changes, by its address under `/greader` (see
+/// `greader`). Logging in and asking for texts change nothing; whatever else
+/// is not known counts as a change of the tree, as above.
+fn changed_by_app(path: &str) -> Option<Changed> {
+    let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    Some(match parts.as_slice() {
+        ["accounts", ..] | ["img", ..] => return None,
+        ["reader", "api", "0", rest @ ..] => match rest {
+            ["edit-tag"] => Changed::Articles,
+            ["mark-all-as-read"] => Changed::Reading {
+                feed_id: None,
+                seq: None,
+            },
+            ["rename-tag"] | ["disable-tag"] => Changed::Names,
+            ["subscription", ..] => Changed::Area(Area::Tree),
+            ["stream", ..] | ["token"] | ["user-info"] | ["tag", "list"] | ["unread-count"] => {
+                return None;
+            }
+            _ => Changed::Area(Area::Tree),
         },
         _ => Changed::Area(Area::Tree),
     })

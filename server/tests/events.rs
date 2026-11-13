@@ -197,6 +197,24 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/feeds", area(Area::Tree)),
         ("/api/opml", area(Area::Tree)),
         ("/api/import", Some(Changed::Everything)),
+        // What apps of other makers change, under /greader.
+        ("/greader/reader/api/0/edit-tag", Some(Changed::Articles)),
+        (
+            "/greader/reader/api/0/mark-all-as-read",
+            reading(None, None),
+        ),
+        ("/greader/reader/api/0/subscription/edit", area(Area::Tree)),
+        (
+            "/greader/reader/api/0/subscription/quickadd",
+            area(Area::Tree),
+        ),
+        ("/greader/reader/api/0/rename-tag", Some(Changed::Names)),
+        ("/greader/reader/api/0/disable-tag", Some(Changed::Names)),
+        ("/greader/reader/api/0/stream/items/contents", None),
+        ("/greader/reader/api/0/stream/items/ids", None),
+        ("/greader/reader/api/0/token", None),
+        ("/greader/accounts/ClientLogin", None),
+        ("/greader/img/1/a/image/b", None),
         // What nobody has thought of yet makes browsers load the tree anew.
         ("/api/something/new", area(Area::Tree)),
         // Questions that are sent like changes, and what only admins see.
@@ -1150,4 +1168,80 @@ async fn a_question_that_is_sent_like_a_change_is_not_told(db: PgPool) {
         ("rules", &json!({ "by": "t" }))
     );
     assert!(tab.is_quiet().await);
+}
+
+/// What an app of another maker does reaches the account's open tabs: that it
+/// logged in for the first time, and what it changed.
+#[sqlx::test]
+async fn what_an_app_does_reaches_the_tabs(db: PgPool) {
+    let (ada, _) = common::reader(&db, "ada", 2).await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let (_, mut tab) = open(&state, Some(&cookie), None).await;
+    assert_eq!(tab.next().await.unwrap().kind, "hello");
+
+    let (_, made) = common::call(
+        &state,
+        Method::POST,
+        "/api/app-passwords",
+        Some(&cookie),
+        Some(json!({ "name": "Reeder" })),
+    )
+    .await;
+    assert_eq!(tab.next().await.unwrap().kind, "apps");
+    let app = |path: &str, auth: Option<&str>, form: String| {
+        let mut request = Request::post(format!("/greader{path}"))
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+        if let Some(auth) = auth {
+            request = request.header(header::AUTHORIZATION, format!("GoogleLogin auth={auth}"));
+        }
+        let app = router(state.clone(), "missing".as_ref());
+        async move {
+            let response = app
+                .oneshot(request.body(Body::from(form)).unwrap())
+                .await
+                .unwrap();
+            let status = response.status();
+            let bytes = http_body_util::BodyExt::collect(response.into_body())
+                .await
+                .unwrap()
+                .to_bytes();
+            (status, String::from_utf8_lossy(&bytes).into_owned())
+        }
+    };
+    let secret = made["secret"].as_str().unwrap();
+    let (status, body) = app(
+        "/accounts/ClientLogin",
+        None,
+        format!("Email=ada&Passwd={secret}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let auth = body
+        .lines()
+        .find_map(|line| line.strip_prefix("Auth="))
+        .unwrap();
+    // The first login, which the page that set the app up waits for.
+    assert_eq!(tab.next().await.unwrap().kind, "apps");
+    // A second one is nothing new.
+    app(
+        "/accounts/ClientLogin",
+        None,
+        format!("Email=ada&Passwd={secret}"),
+    )
+    .await;
+
+    let all: Vec<i64> = sqlx::query_scalar("SELECT (feed_id::int8 << 32) | seq FROM articles")
+        .fetch_all(&db)
+        .await
+        .unwrap();
+    let form = format!("i={}&a=user/-/state/com.google/read", all[0]);
+    let (status, _) = app("/reader/api/0/edit-tag", Some(auth), form).await;
+    assert_eq!(status, StatusCode::OK);
+    let kinds = [
+        tab.next().await.unwrap().kind,
+        tab.next().await.unwrap().kind,
+    ];
+    assert_eq!(kinds, ["labels", "reading"]);
+    assert!(tab.next_within(Duration::from_millis(300)).await.is_none());
 }

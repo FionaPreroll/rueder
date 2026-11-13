@@ -35,7 +35,10 @@ async fn an_app_password_is_made_with_the_password_and_shown_once(db: PgPool) {
     let reeder = json!({ "name": "Reeder", "password": "wrong" });
     assert_eq!(make(&state, &cookie, reeder).await.0, StatusCode::FORBIDDEN);
     let unnamed = json!({ "name": " ", "password": PASSWORD });
-    assert_eq!(make(&state, &cookie, unnamed).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        make(&state, &cookie, unnamed).await.0,
+        StatusCode::BAD_REQUEST
+    );
 
     let (status, made) = make(
         &state,
@@ -50,7 +53,14 @@ async fn an_app_password_is_made_with_the_password_and_shown_once(db: PgPool) {
     assert_eq!(secret.len(), 29);
 
     // The list never shows it again.
-    let (status, list) = call(&state, Method::GET, "/api/app-passwords", Some(&cookie), None).await;
+    let (status, list) = call(
+        &state,
+        Method::GET,
+        "/api/app-passwords",
+        Some(&cookie),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(list["max"], 20);
     assert_eq!(list["app_passwords"].as_array().unwrap().len(), 1);
@@ -76,7 +86,14 @@ async fn an_app_password_is_made_with_the_password_and_shown_once(db: PgPool) {
         .unwrap();
     assert!(!again.first_use);
     assert!(app_passwords::counts(&db, found.id).await.unwrap());
-    let (_, list) = call(&state, Method::GET, "/api/app-passwords", Some(&cookie), None).await;
+    let (_, list) = call(
+        &state,
+        Method::GET,
+        "/api/app-passwords",
+        Some(&cookie),
+        None,
+    )
+    .await;
     assert!(list["app_passwords"][0]["used_at"].is_string());
     // The account's password is no app password.
     assert!(app_passwords::find(&db, PASSWORD).await.unwrap().is_none());
@@ -106,10 +123,22 @@ async fn others_see_nothing_and_revoke_nothing(db: PgPool) {
         common::session(&db, ada).await,
         common::session(&db, grace).await,
     );
-    let (_, made) = make(&state, &ours, json!({ "name": "Reeder", "password": PASSWORD })).await;
+    let (_, made) = make(
+        &state,
+        &ours,
+        json!({ "name": "Reeder", "password": PASSWORD }),
+    )
+    .await;
     let id = made["id"].as_i64().unwrap();
 
-    let (_, list) = call(&state, Method::GET, "/api/app-passwords", Some(&theirs), None).await;
+    let (_, list) = call(
+        &state,
+        Method::GET,
+        "/api/app-passwords",
+        Some(&theirs),
+        None,
+    )
+    .await;
     assert_eq!(list["app_passwords"], json!([]));
     let path = format!("/api/app-passwords/{id}");
     let (status, _) = call(&state, Method::DELETE, &path, Some(&theirs), None).await;
@@ -254,7 +283,14 @@ async fn without_the_app_api_there_are_none(db: PgPool) {
     let cookie = common::session(&db, ada).await;
     let body = json!({ "name": "Reeder", "password": PASSWORD });
     assert_eq!(make(&state, &cookie, body).await.0, StatusCode::NOT_FOUND);
-    let (status, _) = call(&state, Method::GET, "/api/app-passwords", Some(&cookie), None).await;
+    let (status, _) = call(
+        &state,
+        Method::GET,
+        "/api/app-passwords",
+        Some(&cookie),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     // And the page knows.
     let (_, me) = call(&state, Method::GET, "/api/me", Some(&cookie), None).await;

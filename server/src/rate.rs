@@ -63,6 +63,10 @@ pub const REPORTS: Rate = Rate::new(100, Duration::from_secs(864));
 /// How many feeds and articles an account may report: 20 at once, and about
 /// 20 more a day, as a reader reports now and then.
 pub const CONTENT_REPORTS: Rate = Rate::new(20, Duration::from_secs(4320));
+/// How many changes apps of other makers may send for an account: 60 at
+/// once, and one more every second. A sync sends a handful; NetNewsWire sends
+/// read states in pieces of 1000, which are one request each.
+pub const APP_CHANGES: Rate = Rate::new(60, Duration::from_secs(1));
 /// How many moves from another rueder an account may bring in: 3 at once, and
 /// one more every two hours. Each can bring a lot (see `transfer`), and a
 /// move is done once.
@@ -195,6 +199,7 @@ pub struct Rates {
     reports: Limiter<i32>,
     content_reports: Limiter<i32>,
     imports: Limiter<i32>,
+    app_changes: Limiter<i32>,
     heavy: Heavy,
 }
 
@@ -207,6 +212,7 @@ impl Rates {
             reports: Limiter::new(REPORTS),
             content_reports: Limiter::new(CONTENT_REPORTS),
             imports: Limiter::new(IMPORTS),
+            app_changes: Limiter::new(APP_CHANGES),
             heavy: Heavy {
                 running: Semaphore::new(HEAVY_AT_ONCE),
                 accounts: Mutex::default(),
@@ -294,6 +300,21 @@ impl Rates {
         self.content_reports
             .take(&account_id, now)
             .map_err(|wait| AppError::TooMany(wait, "too many reports, try again later"))
+    }
+
+    /// Other limits for the changes of apps than [`APP_CHANGES`].
+    pub fn with_app_changes(self, changes: Rate) -> Self {
+        Self {
+            app_changes: Limiter::new(changes),
+            ..self
+        }
+    }
+
+    /// Counts a change an app of another maker sends for the account.
+    pub fn app_change(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
+        self.app_changes
+            .take(&account_id, now)
+            .map_err(|wait| AppError::TooMany(wait, "too many changes, try again later"))
     }
 
     /// Counts a report of an error the account's browser sends.

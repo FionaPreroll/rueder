@@ -180,12 +180,15 @@ impl Signer {
         let signature = self.app_signature(app, size, url)?.finalize().into_bytes();
         let signature = URL_SAFE_NO_PAD.encode(signature.get(..16)?);
         let address = URL_SAFE_NO_PAD.encode(url);
-        Some(format!("/greader/img/{app}/{signature}/{}/{address}", size.name()))
+        Some(format!(
+            "/greader/img/{app}/{signature}/{}/{address}",
+            size.name()
+        ))
     }
 
     /// What an app's address of the proxy stands for, if the server made it
     /// for this app password.
-    fn open_for_app(
+    pub fn open_for_app(
         &self,
         app: i32,
         signature: &str,

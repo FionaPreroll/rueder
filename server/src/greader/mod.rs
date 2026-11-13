@@ -71,8 +71,14 @@ pub fn router(state: &AppState) -> Router<AppState> {
         )
         .route("/reader/api/0/edit-tag", post(write::edit_tag))
         .route("/reader/api/0/mark-all-as-read", post(write::mark_all_read))
-        .route("/reader/api/0/subscription/edit", post(write::edit_subscription))
-        .route("/reader/api/0/subscription/quickadd", post(write::quick_add))
+        .route(
+            "/reader/api/0/subscription/edit",
+            post(write::edit_subscription),
+        )
+        .route(
+            "/reader/api/0/subscription/quickadd",
+            post(write::quick_add),
+        )
         .route("/reader/api/0/rename-tag", post(write::rename_tag))
         .route("/reader/api/0/disable-tag", post(write::disable_tag))
         .route("/reader/api/0/{*rest}", any(unknown))
@@ -90,10 +96,7 @@ pub struct App(pub AppLogin);
 fn unauthorized() -> Response {
     (
         StatusCode::UNAUTHORIZED,
-        [(
-            HeaderName::from_static("x-reader-google-bad-token"),
-            "true",
-        )],
+        [(HeaderName::from_static("x-reader-google-bad-token"), "true")],
         "Unauthorized",
     )
         .into_response()
@@ -104,7 +107,11 @@ impl FromRequestParts<AppState> for App {
 
     async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Response> {
         // What wraps the API has looked the app password up already.
-        parts.extensions.get::<Self>().cloned().ok_or_else(unauthorized)
+        parts
+            .extensions
+            .get::<Self>()
+            .cloned()
+            .ok_or_else(unauthorized)
     }
 }
 
@@ -205,7 +212,8 @@ pub(crate) fn origin(headers: &HeaderMap) -> Option<String> {
         .get(HeaderName::from_static("x-forwarded-proto"))
         .and_then(|value| value.to_str().ok())
         .map(str::trim);
-    let local = host.starts_with("localhost") || host.starts_with("127.") || host.starts_with("[::1]");
+    let local =
+        host.starts_with("localhost") || host.starts_with("127.") || host.starts_with("[::1]");
     let scheme = match forwarded {
         Some("http") => "http",
         Some("https") => "https",
@@ -309,9 +317,11 @@ async fn image(
         return StatusCode::NOT_FOUND.into_response();
     };
     // The cheap check first: an address the server did not make costs no
-    // query.
-    let picture = images.get_for_app(app, &signature, &size, &address).await;
-    if matches!(picture, Err(Refused::NotFound)) {
+    // query. Then the app password, before anything is fetched.
+    let made = images
+        .signer()
+        .open_for_app(app, &signature, &size, &address);
+    if made.is_none() {
         return StatusCode::NOT_FOUND.into_response();
     }
     match app_passwords::counts(&state.db, app).await {
@@ -319,11 +329,14 @@ async fn image(
         Ok(false) => return StatusCode::NOT_FOUND.into_response(),
         Err(err) => return AppError::Internal(err).into_response(),
     }
-    match picture {
+    match images.get_for_app(app, &signature, &size, &address).await {
         Ok(picture) => (
             [
                 (header::CONTENT_TYPE, picture.format.mime()),
-                (header::CACHE_CONTROL, "private, max-age=31536000, immutable"),
+                (
+                    header::CACHE_CONTROL,
+                    "private, max-age=31536000, immutable",
+                ),
                 (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
                 (
                     header::CONTENT_SECURITY_POLICY,

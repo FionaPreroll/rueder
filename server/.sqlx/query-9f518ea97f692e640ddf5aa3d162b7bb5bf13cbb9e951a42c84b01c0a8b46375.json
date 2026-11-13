@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO arrivals (at, first_id)\n         SELECT date_trunc('minute', now()), min(a.id)\n         FROM unnest($1::integer[], $2::integer[]) AS n (feed_id, seq)\n         JOIN articles a ON a.feed_id = n.feed_id AND a.seq = n.seq\n         ON CONFLICT (at) DO UPDATE SET first_id = least(arrivals.first_id, EXCLUDED.first_id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f518ea97f692e640ddf5aa3d162b7bb5bf13cbb9e951a42c84b01c0a8b46375"
+}

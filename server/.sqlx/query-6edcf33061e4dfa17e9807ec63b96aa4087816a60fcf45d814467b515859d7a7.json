@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM arrivals WHERE at <= $1) AS \"known!\",\n                  (SELECT min(first_id) FROM arrivals WHERE at >= date_trunc('minute', $1::timestamptz))\n                      AS first",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "known!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "first",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "6edcf33061e4dfa17e9807ec63b96aa4087816a60fcf45d814467b515859d7a7"
+}

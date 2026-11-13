@@ -8,6 +8,7 @@ pub mod events;
 pub mod feeds;
 pub mod fetch;
 pub mod filters;
+pub mod greader;
 pub mod hardening;
 pub mod health;
 pub mod http_client;
@@ -233,6 +234,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
 
     Router::new()
         .nest("/api", api(&state))
+        .nest("/greader", greader::router(&state))
         .route("/img/{signature}/{size}/{address}", get(image))
         .fallback_service(spa)
         // Around everything, from the inside out: a change asked for by a

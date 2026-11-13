@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_states (account_id, feed_id, seq, read, kept_unread, hidden, starred)\n             SELECT $1, $2, n.seq, coalesce($4, false), coalesce($5, false), coalesce($6, false),\n                    coalesce($7, false)\n             FROM unnest($3::int4[]) AS n (seq)\n             ON CONFLICT (account_id, feed_id, seq) DO UPDATE\n             SET read = coalesce($4, article_states.read),\n                 kept_unread = coalesce($5, article_states.kept_unread),\n                 hidden = coalesce($6, article_states.hidden),\n                 starred = coalesce($7, article_states.starred)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4Array",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ae7458ed34dd1e8c26279ec200aa00bd46a5ba5ed91ec9d21d529937bc61870"
+}

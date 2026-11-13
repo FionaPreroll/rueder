@@ -18,8 +18,8 @@ use std::any::TypeId;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use crate::{
-    api, app_passwords, events, filters, labels, legal, login, moderation, profile, registration, reports,
-    second_factor, status, subscribe, transfer, tree,
+    api, app_passwords, events, filters, labels, legal, login, moderation, profile, registration,
+    reports, second_factor, status, subscribe, transfer, tree,
 };
 
 /// Where the committed file lies, seen from the crate.
