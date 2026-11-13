@@ -947,13 +947,13 @@ mod tests {
         window.at(start).found += 1;
         window.at(start + SLOT).found += 2;
         let changed = window.take_changed();
-        assert_eq!(
-            changed
-                .iter()
-                .map(|(number, lookups)| (*number - slot(start), lookups.found))
-                .collect::<Vec<_>>(),
-            [(0, 1), (1, 2)]
-        );
+        // In the order of the ring, which wraps around: by number it is.
+        let mut parts: Vec<_> = changed
+            .iter()
+            .map(|(number, lookups)| (*number - slot(start), lookups.found))
+            .collect();
+        parts.sort_unstable();
+        assert_eq!(parts, [(0, 1), (1, 2)]);
         assert!(window.take_changed().is_empty());
 
         // After a restart: what was saved comes back, and what was counted
