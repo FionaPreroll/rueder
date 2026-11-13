@@ -8,7 +8,7 @@ import type { TreeNode } from '#lib/model.ts';
 import { MAX_ACCOUNT_FILE, MAX_OPML, type Resumed } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { TAB } from './client.ts';
-import { PAGE, ServerReader, toTree } from './reader.svelte.ts';
+import { PAGE, ServerReader, UNREACHABLE_AFTER, toTree } from './reader.svelte.ts';
 import { FakeServer } from './test/fake-server.ts';
 
 let server: FakeServer;
@@ -35,7 +35,17 @@ beforeEach(() => {
 	localStorage.clear();
 });
 
+/** Every reader a test started: they listen to the window, so each test stops its own. */
+const running: (() => void)[] = [];
+const start = ServerReader.prototype.start;
+ServerReader.prototype.start = function (this: ServerReader) {
+	const stop = start.call(this);
+	running.push(stop);
+	return stop;
+};
+
 afterEach(() => {
+	for (const stop of running.splice(0)) stop();
 	vi.unstubAllGlobals();
 });
 
@@ -1935,21 +1945,154 @@ describe('live updates', () => {
 			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
 			reader.start();
 			await vi.advanceTimersByTimeAsync(10);
+			expect(reader.connection).toEqual({ state: 'live' });
 			server.dropStreams();
 			expect(server.streams).toHaveLength(0);
+			expect(reader.connection.state).toBe('reconnecting');
 			server.addArticles(lone, 2);
-			await vi.advanceTimersByTimeAsync(29_000);
+			await vi.advanceTimersByTimeAsync(1_900);
 			expect(server.streams).toHaveLength(0);
-			await vi.advanceTimersByTimeAsync(1_000);
+			await vi.advanceTimersByTimeAsync(100);
 			expect(server.streams).toHaveLength(1);
 			// The new connection starts afresh, so what came meanwhile is asked for.
-			server.emit({ event: 'hello', data: {} });
 			await vi.advanceTimersByTimeAsync(400);
+			expect(reader.connection).toEqual({ state: 'live' });
 			expect(unread(reader, lone)).toBe(3);
 			expect(session.expired).not.toHaveBeenCalled();
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	it('waits longer each time the server ends it again, up to a minute', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		try {
+			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+			reader.start();
+			await vi.advanceTimersByTimeAsync(10);
+			server.silent = true;
+			const waited: number[] = [];
+			for (let round = 0; round < 6; round++) {
+				server.dropStreams();
+				let ms = 0;
+				while (server.streams.length === 0) {
+					await vi.advanceTimersByTimeAsync(500);
+					ms += 500;
+				}
+				waited.push(ms);
+			}
+			expect(waited).toEqual([2_000, 5_000, 15_000, 30_000, 60_000, 60_000]);
+			expect(reader.connection.state).toBe('unreachable');
+			// Once it is up, the next break starts short again.
+			server.silent = false;
+			server.reopenStreams();
+			expect(reader.connection).toEqual({ state: 'live' });
+			server.dropStreams();
+			await vi.advanceTimersByTimeAsync(2_000);
+			expect(server.streams).toHaveLength(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('says the server does not answer once the connection stays away, and not for each load', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+		try {
+			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+			reader.start();
+			await vi.advanceTimersByTimeAsync(10);
+			const broke = Date.now();
+			server.down = true;
+			server.breakStreams();
+			expect(reader.connection).toEqual({ state: 'reconnecting', since: broke });
+			await vi.advanceTimersByTimeAsync(9_000);
+			expect(reader.connection.state).toBe('reconnecting');
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(reader.connection).toEqual({ state: 'unreachable', since: broke, offline: false });
+			reader.show({ kind: 'all' });
+			await vi.advanceTimersByTimeAsync(10);
+			expect(reader.notice).toBeNull();
+			expect(reader.visible).toEqual([]);
+
+			// The browser opens it again by itself; what failed meanwhile is loaded anew.
+			server.down = false;
+			server.reopenStreams();
+			expect(reader.connection).toEqual({ state: 'live' });
+			await vi.advanceTimersByTimeAsync(400);
+			expect(reader.visible.length).toBe(6);
+			expect(reader.notice).toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('says so when a load fails at once, before the connection is missed', async () => {
+		const reader = await started();
+		server.down = true;
+		server.breakStreams();
+		reader.show({ kind: 'all' });
+		await settle();
+		expect(reader.connection).toMatchObject({ state: 'unreachable', offline: false });
+		expect(reader.notice).toBeNull();
+	});
+
+	it('is not live at the start while the server does not answer', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		try {
+			server.silent = true;
+			const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+			reader.start();
+			await vi.advanceTimersByTimeAsync(10);
+			expect(reader.connection).toEqual({ state: 'connecting' });
+			await vi.advanceTimersByTimeAsync(UNREACHABLE_AFTER);
+			expect(reader.connection.state).toBe('unreachable');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('tries at once when the network is back, the page is shown again, or when asked', async () => {
+		const reader = await started();
+		const opened = () => server.streams.length;
+		window.dispatchEvent(new Event('offline'));
+		expect(reader.connection).toMatchObject({ state: 'unreachable', offline: true });
+
+		server.silent = true;
+		window.dispatchEvent(new Event('online'));
+		expect(opened()).toBe(1);
+		const [first] = server.streams;
+		Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+		document.dispatchEvent(new Event('visibilitychange'));
+		expect(server.streams).toHaveLength(1);
+		expect(server.streams[0]).not.toBe(first);
+		const [second] = server.streams;
+		reader.reconnect();
+		expect(server.streams).toHaveLength(1);
+		expect(server.streams[0]).not.toBe(second);
+
+		// What the old connections say is not heard any more.
+		server.silent = false;
+		reader.reconnect();
+		await settle();
+		expect(reader.connection).toEqual({ state: 'live' });
+		const requests = server.requests.length;
+		reader.reconnect();
+		document.dispatchEvent(new Event('visibilitychange'));
+		window.dispatchEvent(new Event('online'));
+		await settle();
+		// Live already: nothing is opened anew, nothing loaded.
+		expect(server.requests.length).toBe(requests);
+	});
+
+	it('stops listening to the browser once it is stopped', async () => {
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		const stop = reader.start();
+		await settle();
+		stop();
+		window.dispatchEvent(new Event('offline'));
+		window.dispatchEvent(new Event('online'));
+		expect(reader.connection).toEqual({ state: 'live' });
+		expect(server.streams).toHaveLength(0);
 	});
 
 	it('ends the session when the server refused the connection for want of one', async () => {

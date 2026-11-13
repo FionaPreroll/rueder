@@ -210,6 +210,13 @@ export class FakeServer {
 			listeners = new Map<string, Listener[]>();
 			constructor(readonly url: string) {
 				server.streams.push({ stream: this, after: server.requests.length });
+				// Like the server, it says first that the connection is up, unless it is not there.
+				queueMicrotask(() => {
+					if (server.down || server.silent) return;
+					for (const listener of this.listeners.get('hello') ?? []) {
+						listener(new MessageEvent('hello', { data: '{}' }));
+					}
+				});
 			}
 			addEventListener(type: string, listener: Listener) {
 				this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
@@ -224,6 +231,8 @@ export class FakeServer {
 	now = () => Date.now();
 	/** The server is not there at all: `fetch` fails. */
 	down = false;
+	/** Connections for live updates open, but the server says nothing on them, not even `hello`. */
+	silent = false;
 	private refusals: Refusal[] = [];
 	private held: { path: RegExp; wait: Promise<void> }[] = [];
 	private nextId = 1;
@@ -347,6 +356,23 @@ export class FakeServer {
 				listener(new MessageEvent(event.event, { data }));
 			}
 		}
+	}
+
+	/**
+	 * Breaks every connection off, as a network that goes away does: the browser
+	 * keeps them and opens them again by itself, which `hello` then says.
+	 */
+	breakStreams() {
+		for (const { stream } of [...this.streams]) {
+			(stream as { readyState: number }).readyState = 0;
+			stream.onerror?.(new Event('error'));
+		}
+	}
+
+	/** Says `hello` on every connection, as one the browser opened again does. */
+	reopenStreams() {
+		for (const { stream } of this.streams) (stream as { readyState: number }).readyState = 1;
+		this.emit({ event: 'hello', data: {} });
 	}
 
 	/** Ends every connection for good, as a server that refuses it does. */

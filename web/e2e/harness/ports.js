@@ -46,5 +46,6 @@ export const ACCOUNTS = [
 	'secrets',
 	'keyholder',
 	'unverified',
-	'unreader'
+	'unreader',
+	'cutoff'
 ];

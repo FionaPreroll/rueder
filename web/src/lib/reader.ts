@@ -183,6 +183,19 @@ export type SecondFactorRefusal =
 	| 'unreachable';
 
 /** What went wrong, for a line the reader can close. The page has the words. */
+/**
+ * Whether what the reader shows is live: the connection for live updates is
+ * open, it is being opened again, or the server does not answer.
+ */
+export type Connection =
+	/** Opening for the first time; nothing to say yet. */
+	| { state: 'connecting' }
+	| { state: 'live' }
+	/** It broke off a moment ago (`since`, in ms) and is being opened again. */
+	| { state: 'reconnecting'; since: number }
+	/** The server does not answer since then; `offline` where the browser has no network. */
+	| { state: 'unreachable'; since: number; offline: boolean };
+
 export type Notice =
 	/** The server did not answer, or not with what was asked for. */
 	| 'unreachable'
@@ -390,6 +403,11 @@ export interface Reader {
 	/** What went wrong last, until it is closed. */
 	readonly notice: Notice | null;
 	dismissNotice(): void;
+
+	/** Whether what is shown is live, for the sign in the top bar. */
+	readonly connection: Connection;
+	/** Tries to reach the server again now, instead of after a while. */
+	reconnect(): void;
 
 	readonly can: Abilities;
 	/** Who is logged in; null where there is nobody to log in. */
