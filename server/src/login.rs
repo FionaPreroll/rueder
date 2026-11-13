@@ -271,6 +271,8 @@ pub struct Me {
     /// Whether apps of other makers may log in to this server with app
     /// passwords.
     app_api: bool,
+    /// Whether this server has passkeys (see `PUBLIC_URL`).
+    passkeys: bool,
 }
 
 impl Me {
@@ -284,6 +286,7 @@ impl Me {
             terms_to_accept: None,
             content_reports: false,
             app_api: false,
+            passkeys: false,
         }
     }
 
@@ -299,6 +302,7 @@ impl Me {
             terms_to_accept: legal.to_accept(session.terms_version.as_deref()),
             content_reports: false,
             app_api: false,
+            passkeys: false,
         }
     }
 
@@ -311,10 +315,11 @@ impl Me {
     }
 
     /// Says what this server lets in besides the page: reports of feeds and
-    /// articles, and apps of other makers.
+    /// articles, apps of other makers, and passkeys.
     pub(crate) fn offering(self, state: &crate::AppState) -> Self {
         Self {
             app_api: state.app_api,
+            passkeys: state.passkeys.is_some(),
             ..self.reporting(state.content_reports)
         }
     }
@@ -330,6 +335,8 @@ pub struct Ways {
     oidc: bool,
     /// Anybody can make an account for themselves, at `/api/register`.
     registration: bool,
+    /// With a passkey, at `/api/login/passkey`.
+    passkeys: bool,
     /// The operator's legal texts, for the login page to link to.
     legal: Legal,
 }
@@ -340,6 +347,7 @@ pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError>
     Ok(Json(Ways {
         oidc: state.oidc.is_some(),
         registration: registration::is_open(&state.db).await?,
+        passkeys: state.passkeys.is_some(),
         legal: (*state.legal).clone(),
     }))
 }
@@ -392,33 +400,43 @@ pub async fn login(
         }
     }
     state.logins.succeeded(&keys);
+    start_session(&state, &headers, account.id, second_factor).await
+}
 
-    // A session the browser still had ends here, so a login always starts a
-    // fresh one.
-    if let Some(old) = sessions::token(&headers) {
+/// Starts a session for an account that just logged in, and answers with who
+/// it is and the session's cookie. A session the browser still had ends here,
+/// so a login always starts a fresh one.
+pub(crate) async fn start_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    account_id: i32,
+    second_factor: bool,
+) -> Result<Response, AppError> {
+    if let Some(old) = sessions::token(headers) {
         sessions::end(&state.db, old).await?;
     }
-    let token = sessions::start(&state.db, account.id, second_factor).await?;
-    let terms_version = sqlx::query_scalar!(
-        "SELECT terms_version FROM accounts WHERE id = $1",
-        account.id
+    let token = sessions::start(&state.db, account_id, second_factor).await?;
+    let account = sqlx::query!(
+        r#"SELECT username, is_admin, terms_version, password_hash IS NOT NULL AS "has_password!"
+           FROM accounts WHERE id = $1"#,
+        account_id
     )
     .fetch_one(&state.db)
     .await?;
     let session = Session {
-        account_id: account.id,
+        account_id,
         username: account.username,
         is_admin: account.is_admin,
         second_factor,
         admin_needs_second_factor: false,
-        terms_version,
+        terms_version: account.terms_version,
     };
     let me = Me::of(
         session.for_admins(state.admin_second_factor),
-        true,
+        account.has_password,
         &state.legal,
     )
-    .offering(&state);
+    .offering(state);
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 

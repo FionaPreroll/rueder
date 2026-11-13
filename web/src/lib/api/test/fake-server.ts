@@ -129,6 +129,19 @@ export class FakeServer {
 	 */
 	secondFactor: { code: string; recovery: string[] } | null = null;
 	pendingSecondFactor = false;
+	/** Whether the server has passkeys, and the passkeys of the accounts, by the device's key id. */
+	passkeysOn = false;
+	passkeys: {
+		id: number;
+		owner: string;
+		key: string;
+		name: string;
+		created_at: string;
+		used_at: string | null;
+	}[] = [];
+	/** The recovery codes a first passkey gives where the second factor was off. */
+	recoveryOfPasskeys: string[] = [];
+	private ceremonies = 0;
 	/** The code the made-up app shows, and the recovery codes a confirmation gives. */
 	readonly appCode = '246810';
 	readonly recoveryCodes = ['AAAAA-BBBBB', 'CCCCC-DDDDD'];
@@ -378,8 +391,22 @@ export class FakeServer {
 			return json({
 				oidc: this.oidc,
 				registration: this.registrationOpen && !this.noRoom,
+				passkeys: this.passkeysOn,
 				legal: this.legal
 			});
+		}
+		if (method === 'POST' && path === '/login/passkey') {
+			if (!this.passkeysOn) return refused(404);
+			return json(this.challenge('login', 'get'));
+		}
+		if (method === 'POST' && path === '/login/passkey/finish') {
+			if (!this.passkeysOn) return refused(404);
+			const key = this.answered(data, 'login');
+			if (!key) return refused(401, 'the passkey is wrong');
+			if (this.disabled.has(key.owner)) return refused(403, 'disabled');
+			key.used_at = new Date().toISOString();
+			this.signedIn = key.owner;
+			return json(this.me());
 		}
 		if (method === 'GET' && path === '/register') {
 			const token = query.get('invite');
@@ -435,6 +462,13 @@ export class FakeServer {
 		if (method === 'DELETE' && path === '/account') {
 			const name = this.signedIn;
 			const password = this.accounts.get(name);
+			if (data.passkey !== undefined) {
+				if (!this.answered(data.passkey, 'proof', name))
+					return refused(403, 'the passkey is wrong');
+				this.accounts.delete(name);
+				this.signedIn = null;
+				return empty();
+			}
 			// An account that logs in only through single sign-on sends its name.
 			const proven =
 				password === undefined
@@ -476,6 +510,8 @@ export class FakeServer {
 		if (secondFactor) return secondFactor;
 		const apps = this.answerAppPasswords(method, path, data);
 		if (apps) return apps;
+		const passkeys = this.answerPasskeys(method, path, data);
+		if (passkeys) return passkeys;
 		if (method === 'GET' && path === '/tree') return json(this.tree());
 		if (path === '/reports/consent') {
 			if (method === 'GET')
@@ -719,6 +755,7 @@ export class FakeServer {
 			admin_needs_second_factor: this.adminNeedsSecondFactor,
 			content_reports: this.contentReports,
 			app_api: this.appApi,
+			passkeys: this.passkeysOn,
 			terms_to_accept:
 				this.legal.terms_version && this.agreedTerms !== this.legal.terms_version
 					? this.legal.terms_version
@@ -741,16 +778,8 @@ export class FakeServer {
 			return json({ app_passwords: this.appPasswords, max: 20 });
 		}
 		if (method === 'POST' && path === '/app-passwords') {
-			if (this.accounts.get(this.signedIn ?? '') !== (data.password ?? '')) {
-				return refused(403, 'the password is wrong');
-			}
-			if (this.secondFactor) {
-				const code = String(data.code ?? '');
-				if (!code) return refused(403, 'second factor needed');
-				if (code !== this.secondFactor.code && !this.secondFactor.recovery.includes(code)) {
-					return refused(403, 'the code is wrong');
-				}
-			}
+			const refusal = this.proven(data);
+			if (refusal) return refusal;
 			if (this.appPasswords.length >= 20) return refused(400, 'at most 20');
 			const made = {
 				id: this.appPasswords.length + 1,
@@ -775,14 +804,18 @@ export class FakeServer {
 		if (!path.startsWith('/second-factor')) return null;
 		const passwordRight = () => this.accounts.get(this.signedIn ?? '') === (data.password ?? '');
 		if (method === 'GET' && path === '/second-factor') {
+			const keys = this.ownPasskeys().length;
 			return json({
-				on: this.secondFactor !== null,
-				recovery_codes_left: this.secondFactor?.recovery.length ?? 0,
+				on: this.secondFactor !== null || keys > 0,
+				app: this.secondFactor !== null,
+				passkeys: keys,
+				recovery_codes_left: this.secondFactor?.recovery.length ?? this.recoveryOfPasskeys.length,
 				required_for_admins: this.adminNeedsSecondFactor
 			});
 		}
 		if (method === 'POST' && path === '/second-factor/setup') {
-			if (!passwordRight()) return refused(403, 'the password is wrong');
+			const refusal = this.proven(data);
+			if (refusal) return refusal;
 			this.pendingSecondFactor = true;
 			return json({
 				secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
@@ -799,16 +832,157 @@ export class FakeServer {
 			return json({ codes: [...this.recoveryCodes] });
 		}
 		if (method === 'DELETE' && path === '/second-factor') {
-			if (!passwordRight()) return refused(403, 'the password is wrong');
-			const code = String(data.code ?? '');
-			const known = this.secondFactor;
-			if (known && code !== known.code && !known.recovery.includes(code))
-				return refused(403, 'the code is wrong');
+			if (data.passkey === undefined) {
+				if (!passwordRight()) return refused(403, 'the password is wrong');
+				const code = String(data.code ?? '');
+				const known = this.secondFactor;
+				if (known && code !== known.code && !known.recovery.includes(code))
+					return refused(403, 'the code is wrong');
+			} else if (!this.answered(data.passkey, 'proof', this.signedIn ?? '')) {
+				return refused(403, 'the passkey is wrong');
+			}
+			if (this.ownPasskeys().length > 0)
+				this.recoveryOfPasskeys = this.secondFactor?.recovery ?? [];
 			this.secondFactor = null;
 			return empty();
 		}
 		return null;
 	}
+
+	private ownPasskeys() {
+		return this.passkeys.filter((key) => key.owner === this.signedIn);
+	}
+
+	/** A ceremony of a kind, with what the device is asked, as the server writes it. */
+	private challenge(kind: string, ask: 'create' | 'get') {
+		const ceremony = `${kind}-${++this.ceremonies}`;
+		const publicKey =
+			ask === 'create'
+				? {
+						rp: { id: 'localhost', name: 'rueder' },
+						user: { id: 'dXNlcg', name: this.signedIn, displayName: this.signedIn },
+						challenge: 'Y2hhbGxlbmdl',
+						pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+						timeout: 300000,
+						excludeCredentials: this.ownPasskeys().map((key) => ({
+							type: 'public-key',
+							id: key.key
+						})),
+						authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+						attestation: 'none'
+					}
+				: {
+						challenge: 'Y2hhbGxlbmdl',
+						rpId: 'localhost',
+						timeout: 300000,
+						userVerification: 'required',
+						allowCredentials:
+							kind === 'proof'
+								? this.ownPasskeys().map((key) => ({ type: 'public-key', id: key.key }))
+								: []
+					};
+		return { ceremony, options: { publicKey } };
+	}
+
+	/** The passkey a device's answer to a ceremony of this kind is, if it is one of `owner`'s. */
+	private answered(answer: unknown, kind: string, owner?: string) {
+		const { ceremony, credential } = (answer ?? {}) as {
+			ceremony?: string;
+			credential?: { id?: string };
+		};
+		if (!ceremony?.startsWith(`${kind}-`)) return undefined;
+		return this.passkeys.find(
+			(key) => key.key === credential?.id && (owner === undefined || key.owner === owner)
+		);
+	}
+
+	/** Whether a change that asks for it is shown to come from the owner; else the refusal. */
+	private proven(data: Record<string, unknown>) {
+		if (data.passkey !== undefined) {
+			return this.answered(data.passkey, 'proof', this.signedIn ?? '')
+				? null
+				: refused(403, 'the passkey is wrong');
+		}
+		if (this.accounts.get(this.signedIn ?? '') !== (data.password ?? '')) {
+			return refused(403, 'the password is wrong');
+		}
+		if (this.secondFactor || this.ownPasskeys().length > 0) {
+			const code = String(data.code ?? '')
+				.trim()
+				.toUpperCase();
+			if (!code) return refused(403, 'second factor needed');
+			const codes = [...(this.secondFactor?.recovery ?? []), ...this.recoveryOfPasskeys];
+			if (code !== this.secondFactor?.code && !codes.includes(code)) {
+				return refused(403, 'the code is wrong');
+			}
+		}
+		return null;
+	}
+
+	private answerPasskeys(method: string, path: string, data: Record<string, unknown>) {
+		if (!path.startsWith('/passkeys')) return null;
+		if (!this.passkeysOn) return refused(404);
+		const listed = (key: (typeof this.passkeys)[number]) => ({
+			id: key.id,
+			name: key.name,
+			created_at: key.created_at,
+			used_at: key.used_at
+		});
+		if (method === 'GET' && path === '/passkeys') {
+			return json({ passkeys: this.ownPasskeys().map(listed), max: 10 });
+		}
+		if (method === 'POST' && path === '/passkeys/register') {
+			const refusal = this.proven(data);
+			if (refusal) return refusal;
+			if (this.ownPasskeys().length >= 10)
+				return refused(400, 'an account has at most 10 passkeys');
+			this.pendingPasskey = String(data.name ?? '').trim();
+			return json(this.challenge('register', 'create'));
+		}
+		if (method === 'POST' && path === '/passkeys/proof') {
+			if (this.ownPasskeys().length === 0) return refused(409, 'the account has no passkey');
+			return json(this.challenge('proof', 'get'));
+		}
+		if (method === 'POST' && path === '/passkeys') {
+			const { ceremony, credential } = data as { ceremony?: string; credential?: { id?: string } };
+			if (!ceremony?.startsWith('register-') || this.pendingPasskey === null) {
+				return refused(409, 'the passkey ceremony is over, start again');
+			}
+			const key = String(credential?.id ?? '');
+			if (this.passkeys.some((known) => known.key === key)) {
+				return refused(409, 'this passkey is known already');
+			}
+			const first = this.ownPasskeys().length === 0 && this.secondFactor === null;
+			const made = {
+				id: this.passkeys.length + 1,
+				owner: this.signedIn ?? '',
+				key,
+				name: this.pendingPasskey,
+				created_at: new Date().toISOString(),
+				used_at: null
+			};
+			this.pendingPasskey = null;
+			this.passkeys = [...this.passkeys, made];
+			if (first) this.recoveryOfPasskeys = [...this.recoveryCodes];
+			return json(
+				{ passkey: listed(made), ...(first ? { recovery_codes: [...this.recoveryCodes] } : {}) },
+				201
+			);
+		}
+		const one = /^\/passkeys\/(\d+)$/.exec(path);
+		if (method === 'DELETE' && one) {
+			const refusal = this.proven(data);
+			if (refusal) return refusal;
+			const id = Number(one[1]);
+			if (!this.ownPasskeys().some((key) => key.id === id)) return refused(404);
+			this.passkeys = this.passkeys.filter((key) => key.id !== id);
+			if (this.ownPasskeys().length === 0 && !this.secondFactor) this.recoveryOfPasskeys = [];
+			return empty();
+		}
+		return refused(404);
+	}
+
+	private pendingPasskey: string | null = null;
 
 	private tree(): { folders: ApiFolder[]; feeds: ApiFeed[]; hidden: number } {
 		return {

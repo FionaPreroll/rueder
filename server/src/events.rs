@@ -708,7 +708,7 @@ pub fn changed(path: &str) -> Option<Changed> {
     let number = |part: &str| part.parse::<i32>().ok();
     Some(match parts.as_slice() {
         // Logging in changes nothing for those who already are.
-        ["login"] | ["oidc", ..] => return None,
+        ["login", ..] | ["oidc", ..] => return None,
         // Nor does making an account, and invitations are shown where they
         // are made.
         ["register"] | ["invites", ..] => return None,
@@ -724,6 +724,11 @@ pub fn changed(path: &str) -> Option<Changed> {
         // A secret that waits for its code changes nothing yet; switching the
         // second factor on or off changes what the sessions may.
         ["second-factor", "setup"] => return None,
+        // Starting to add a passkey or to show it is the owner changes
+        // nothing yet; a passkey that comes or goes changes what the
+        // sessions may, as the second factor does.
+        ["passkeys", "register" | "proof"] => return None,
+        ["passkeys", ..] => Changed::Area(Area::Session),
         ["second-factor", ..] => Changed::Area(Area::Session),
         // Agreeing to the terms ends the question in the other tabs.
         ["terms"] => Changed::Area(Area::Session),

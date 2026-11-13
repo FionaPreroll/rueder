@@ -20,6 +20,7 @@ pub mod login;
 pub mod moderation;
 pub mod monitor;
 pub mod oidc;
+pub mod passkeys;
 pub mod profile;
 pub mod rate;
 pub mod reading;
@@ -101,6 +102,8 @@ pub struct AppState {
     /// Whether apps of other makers may log in with app passwords, through
     /// the Google Reader API (on unless `APP_API=off`).
     pub app_api: bool,
+    /// Passkeys, for the site at `PUBLIC_URL`; none without it.
+    pub passkeys: Option<Arc<passkeys::Passkeys>>,
 }
 
 impl AppState {
@@ -121,6 +124,15 @@ impl AppState {
             legal: Arc::default(),
             content_reports: false,
             app_api: true,
+            passkeys: None,
+        }
+    }
+
+    /// Has passkeys, for the site at this address (see `PUBLIC_URL`).
+    pub fn with_passkeys(self, passkeys: passkeys::Passkeys) -> Self {
+        Self {
+            passkeys: Some(Arc::new(passkeys)),
+            ..self
         }
     }
 
@@ -252,6 +264,8 @@ fn api(state: &AppState) -> Router<AppState> {
         .route("/me", get(login::me))
         // What the login page asks before anybody is logged in.
         .route("/login/ways", get(login::ways))
+        .route("/login/passkey", post(passkeys::start_login))
+        .route("/login/passkey/finish", post(passkeys::finish_login))
         .route("/oidc/start", get(oidc::start))
         .route("/oidc/callback", get(oidc::callback))
         .merge(api::routes())
@@ -264,6 +278,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(legal::routes())
         .merge(moderation::routes())
         .merge(app_passwords::routes())
+        .merge(passkeys::routes())
         .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())

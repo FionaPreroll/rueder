@@ -18,7 +18,7 @@ use ts_rs::TS;
 use crate::{
     AppError, AppState, accounts,
     login::{CODE_NEEDED, Key},
-    second_factor,
+    passkeys, second_factor,
     sessions::{self, Session},
 };
 
@@ -179,6 +179,10 @@ struct Farewell {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
     code: String,
+    /// A passkey of the account, instead of all the above.
+    #[serde(default)]
+    #[ts(optional)]
+    passkey: Option<passkeys::Answer>,
 }
 
 /// Deletes the reader's own account and everything that is its own (see
@@ -186,12 +190,18 @@ struct Farewell {
 /// and so do its connections for live updates, as `events::changed` counts
 /// this address as a session that ended. Where the second factor is on, it
 /// takes a code as well, as at login: without one the answer is 403 with
-/// `second factor needed`, and a wrong one counts like a wrong password.
+/// `second factor needed`, and a wrong one counts like a wrong password. A
+/// passkey of the account stands for all of it.
 async fn remove_account(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Json(farewell): Json<Farewell>,
 ) -> Result<Response, AppError> {
+    if let Some(answer) = &farewell.passkey {
+        passkeys::check_proof(&state, &session, &headers, answer).await?;
+        return remove_proven(&state, &session).await;
+    }
     // As for a new password: a stolen session must not be a way to try
     // passwords without end.
     let keys = [Key::name(&session.username)];
@@ -229,6 +239,11 @@ async fn remove_account(
         }
     }
     state.logins.succeeded(&keys);
+    remove_proven(&state, &session).await
+}
+
+/// Deletes the session's account, once its owner showed they are there.
+async fn remove_proven(state: &AppState, session: &Session) -> Result<Response, AppError> {
     if !accounts::remove(&state.db, session.account_id).await? {
         return Err(AppError::NotFound);
     }

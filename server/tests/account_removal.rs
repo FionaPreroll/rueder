@@ -195,12 +195,25 @@ async fn fill(db: &PgPool, account_id: i32, name: &str, shared: i32) -> i32 {
     .execute(db)
     .await
     .unwrap();
-    // A recovery code of a second factor.
-    sqlx::query("INSERT INTO recovery_codes (account_id, code_hash) VALUES ($1, '\\x03')")
-        .bind(account_id)
-        .execute(db)
-        .await
-        .unwrap();
+    // A passkey.
+    sqlx::query(
+        "INSERT INTO passkeys (account_id, name, credential_id, credential)
+         VALUES ($1, 'Phone', sha256($1::text::bytea), '{}')",
+    )
+    .bind(account_id)
+    .execute(db)
+    .await
+    .unwrap();
+    // A recovery code of a second factor, which the passkey turned on:
+    // `ABCDE-FGHJK`.
+    sqlx::query(
+        "INSERT INTO recovery_codes (account_id, code_hash)
+         VALUES ($1, sha256('ABCDEFGHJK'::bytea))",
+    )
+    .bind(account_id)
+    .execute(db)
+    .await
+    .unwrap();
     assert!(
         oidc::link(db, name, "https://id.example", &format!("{name}-subject"))
             .await
@@ -350,7 +363,9 @@ async fn a_deleted_account_leaves_nothing_and_the_others_keep_everything(db: PgP
         Some(&ada_cookie),
         Some((
             "application/json",
-            json!({ "password": PASSWORD }).to_string().into_bytes(),
+            json!({ "password": PASSWORD, "code": "ABCDE-FGHJK" })
+                .to_string()
+                .into_bytes(),
         )),
     )
     .await;
@@ -393,7 +408,13 @@ async fn a_deleted_account_leaves_nothing_and_the_others_keep_everything(db: PgP
         .unwrap();
     assert_eq!(invite, None);
     assert!(logged_in(&state, &grace_cookie).await);
-    assert_eq!(log_in(&state, "grace", PASSWORD).await.0, StatusCode::OK);
+    // Her password still counts; with her passkey it asks for the second
+    // factor.
+    let (status, said) = log_in(&state, "grace", PASSWORD).await;
+    assert_eq!(
+        (status, said.as_str()),
+        (StatusCode::UNAUTHORIZED, "second factor needed")
+    );
 }
 
 #[sqlx::test]

@@ -59,6 +59,10 @@ export type Me = {
 	 * passwords.
 	 */
 	app_api: boolean,
+	/**
+	 * Whether this server has passkeys (see `PUBLIC_URL`).
+	 */
+	passkeys: boolean,
 };
 
 /**
@@ -75,6 +79,10 @@ export type LoginWays = {
 	 * Anybody can make an account for themselves, at `/api/register`.
 	 */
 	registration: boolean,
+	/**
+	 * With a passkey, at `/api/login/passkey`.
+	 */
+	passkeys: boolean,
 	/**
 	 * The operator's legal texts, for the login page to link to.
 	 */
@@ -140,6 +148,19 @@ export type Farewell = {
 	 * A code of the app or a recovery code, where the second factor is on.
 	 */
 	code?: string,
+	/**
+	 * A passkey of the account, instead of all the above.
+	 */
+	passkey?: PasskeyAnswer,
+};
+
+/**
+ * The device's answer to a ceremony that asked for a passkey, which logs in
+ * or shows that the owner is there.
+ */
+export type PasskeyAnswer = {
+	ceremony: string,
+	credential: unknown,
 };
 
 /**
@@ -179,13 +200,24 @@ export type Created = {
 };
 
 /**
- * Whether an account has the second factor, and how many recovery codes it
- * has left.
+ * Whether an account has the second factor, by the app or by passkeys, and
+ * how many recovery codes it has left.
  *
  * `GET /api/second-factor` answers with it.
  */
 export type SecondFactor = {
+	/**
+	 * Whether the second factor is on: the app or a passkey.
+	 */
 	on: boolean,
+	/**
+	 * Whether the authenticator app is set up.
+	 */
+	app: boolean,
+	/**
+	 * How many passkeys the account has.
+	 */
+	passkeys: number,
 	recovery_codes_left: number,
 	/**
 	 * Whether this server lets admins be admins only with it.
@@ -194,20 +226,25 @@ export type SecondFactor = {
 };
 
 /**
- * What setting up reads: the password of the account. An account that has
- * none needs none.
+ * What setting up reads: the password of the account, which an account that
+ * has none does without, and where the second factor is on already through
+ * passkeys, a recovery code; or a passkey instead of both. Otherwise a
+ * password that got out with a session could add an app of its own.
  */
 export type SecondFactorPassword = {
 	password?: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
 };
 
 /**
  * What switching off reads: the password, as for setting up, and a code from
- * the app or a recovery code.
+ * the app or a recovery code; or a passkey instead of both.
  */
 export type SecondFactorSwitchOff = {
 	password?: string,
-	code: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
 };
 
 /**
@@ -323,12 +360,14 @@ export type AppPassword = {
 
 /**
  * What `POST /api/app-passwords` reads: a name for it, and the account's
- * password and, where the second factor is on, one of its codes.
+ * password and, where the second factor is on, one of its codes; or a
+ * passkey instead of both.
  */
 export type NewAppPassword = {
 	name: string,
 	password?: string,
 	code?: string,
+	passkey?: PasskeyAnswer,
 };
 
 /**
@@ -346,6 +385,79 @@ export type CreatedAppPassword = {
 	 * When an app last logged in with it, to the hour; null until one did.
 	 */
 	used_at: string | null,
+};
+
+/**
+ * What `GET /api/passkeys` answers.
+ */
+export type Passkeys = {
+	passkeys: Array<Passkey>,
+	/**
+	 * How many the account can have.
+	 */
+	max: number,
+};
+
+/**
+ * A passkey as the list shows it.
+ */
+export type Passkey = {
+	id: number,
+	name: string,
+	created_at: string,
+	/**
+	 * When it last logged in or showed it was the owner; null until then.
+	 */
+	used_at: string | null,
+};
+
+/**
+ * What `POST /api/passkeys/register` reads: a name for the passkey, and what
+ * shows that the owner is there (see [`second_factor::prove`]).
+ */
+export type NewPasskey = {
+	name: string,
+	password?: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
+};
+
+/**
+ * What a ceremony asks the device: the options for
+ * `navigator.credentials.create()` or `.get()`, in WebAuthn's JSON, with the
+ * name of the ceremony to send the answer back with.
+ */
+export type PasskeyChallenge = {
+	ceremony: string,
+	options: unknown,
+};
+
+/**
+ * What `POST /api/passkeys` answers: the new passkey, and the recovery codes
+ * where it turned the second factor on.
+ */
+export type RegisteredPasskey = {
+	passkey: Passkey,
+	recovery_codes?: Array<string>,
+};
+
+/**
+ * The device's answer to a ceremony that made a new passkey.
+ *
+ * `POST /api/passkeys` reads it.
+ */
+export type PasskeyRegistration = {
+	ceremony: string,
+	credential: unknown,
+};
+
+/**
+ * What `DELETE /api/passkeys/{id}` reads: what shows that the owner is there.
+ */
+export type RemovePasskey = {
+	password?: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
 };
 
 /**

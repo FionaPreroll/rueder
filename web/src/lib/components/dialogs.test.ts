@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServerReader } from '#lib/api/reader.svelte.ts';
+import { fakeDevice, noDevice } from '#lib/api/test/fake-device.ts';
 import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { demoStatus } from '#lib/demo/status.ts';
@@ -802,6 +803,153 @@ describe('Errors in browsers on the status page', () => {
 		expect(screen.getByText(/^3 times in 2 accounts, last/)).toBeInTheDocument();
 		expect(screen.getByText('Version 1762899600000 · Chrome 141, Firefox 140')).toBeInTheDocument();
 		expect(screen.getByText('Browsers reported 1 error in the last day.')).toBeInTheDocument();
+	});
+});
+
+describe('passkeys in the account settings', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+	const onclose = vi.fn();
+
+	beforeEach(() => {
+		server = new FakeServer();
+		server.passkeysOn = true;
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		noDevice();
+	});
+
+	function open() {
+		onclose.mockClear();
+		const reader = new ServerReader({ name: 'fiona', admin: false, passkeys: true }, session);
+		render(AccountDialog, { reader, tab: 'security', onclose });
+		return reader;
+	}
+
+	it('adds one with the password, shows the recovery codes once, and removes it with itself', async () => {
+		const device = fakeDevice('a2V5MQ');
+		open();
+		expect(await screen.findByText('No passkey yet.')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Add a passkey' }));
+		expect(screen.getByLabelText('Name, such as the device')).toHaveValue('Passkey');
+		const name = screen.getByLabelText('Name, such as the device');
+		await userEvent.clear(name);
+		await userEvent.type(name, 'Phone');
+		// The second factor is off: the password is all it takes, and no code.
+		const form = name.closest('form')!;
+		expect(form.querySelector('[autocomplete="one-time-code"]')).toBeNull();
+		const password = form.querySelector('input[type="password"]') as HTMLInputElement;
+		await userEvent.type(password, 'wrong');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the passkey' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('The password is not right.');
+		expect(password).toHaveValue('');
+		expect(device.create).not.toHaveBeenCalled();
+
+		await userEvent.type(password, 'correct horse');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the passkey' }));
+		// The device was asked for a passkey it keeps, with its PIN or biometrics.
+		const asked = device.create.mock.calls[0][0] as CredentialCreationOptions;
+		expect(asked.publicKey!.authenticatorSelection).toMatchObject({
+			residentKey: 'required',
+			userVerification: 'required'
+		});
+		expect(await screen.findByText('Your recovery codes')).toBeInTheDocument();
+		expect(screen.getByText('AAAAA-BBBBB')).toBeInTheDocument();
+		// Neither a click beside the window nor Escape loses the codes.
+		await userEvent.click(screen.getByRole('dialog', { name: 'Account settings' }).parentElement!);
+		await userEvent.keyboard('{Escape}');
+		expect(onclose).not.toHaveBeenCalled();
+		await userEvent.click(screen.getByRole('button', { name: 'I have kept them' }));
+		expect(await screen.findByText('Phone')).toBeInTheDocument();
+		expect(screen.getByText('not used yet')).toBeInTheDocument();
+		// The app is not set up; the passkey keeps the second factor on.
+		expect(
+			await screen.findByText(/Not set up\. Your passkeys keep the second factor on\./)
+		).toBeInTheDocument();
+		expect(server.passkeys.map((key) => key.name)).toEqual(['Phone']);
+
+		// Removing it: the password alone is not enough any more, the passkey is.
+		await userEvent.click(screen.getByRole('button', { name: 'Remove the passkey Phone' }));
+		const removing = screen.getByRole('button', { name: 'Remove the passkey' }).closest('form')!;
+		await userEvent.type(
+			removing.querySelector('input[type="password"]') as HTMLInputElement,
+			'correct horse'
+		);
+		await userEvent.click(screen.getByRole('button', { name: 'Remove the passkey' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('Your account has a second factor.');
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm with a passkey' }));
+		expect(await screen.findByText('No passkey yet.')).toBeInTheDocument();
+		expect(server.passkeys).toEqual([]);
+		expect(await screen.findByText('Off.')).toBeInTheDocument();
+	});
+
+	it('adds another with a passkey instead of password and code', async () => {
+		server.passkeys = [
+			{
+				id: 1,
+				owner: 'fiona',
+				key: 'a2V5MQ',
+				name: 'Phone',
+				created_at: '2026-11-01T10:00:00Z',
+				used_at: null
+			}
+		];
+		server.recoveryOfPasskeys = ['AAAAA-BBBBB'];
+		const device = fakeDevice('a2V5MQ', 'a2V5Mg');
+		open();
+		await userEvent.click(await screen.findByRole('button', { name: 'Add a passkey' }));
+		await userEvent.type(screen.getByLabelText('Name, such as the device'), ' 2');
+		await userEvent.click(await screen.findByRole('button', { name: 'Confirm with a passkey' }));
+		expect(await screen.findByText('Passkey 2')).toBeInTheDocument();
+		expect(device.get).toHaveBeenCalledTimes(1);
+		expect(device.create).toHaveBeenCalledTimes(1);
+		// No new codes: the second factor was on already.
+		expect(screen.queryByText('Your recovery codes')).toBeNull();
+		expect(server.passkeys.map((key) => key.key)).toEqual(['a2V5MQ', 'a2V5Mg']);
+	});
+
+	it('says when the browser’s window was closed, or the device has one already', async () => {
+		const device = fakeDevice('a2V5MQ');
+		server.passkeys = [
+			{
+				id: 1,
+				owner: 'fiona',
+				key: 'a2V5MQ',
+				name: 'Phone',
+				created_at: '2026-11-01T10:00:00Z',
+				used_at: null
+			}
+		];
+		server.recoveryOfPasskeys = ['AAAAA-BBBBB'];
+		open();
+		await userEvent.click(await screen.findByRole('button', { name: 'Add a passkey' }));
+		device.refuse('NotAllowedError');
+		await userEvent.click(await screen.findByRole('button', { name: 'Confirm with a passkey' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('was closed before');
+		device.refuse('InvalidStateError', 'create');
+		await userEvent.click(screen.getByRole('button', { name: 'Confirm with a passkey' }));
+		await vi.waitFor(() => expect(device.create).toHaveBeenCalled());
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'This device has a passkey for your account already.'
+		);
+		expect(server.passkeys).toHaveLength(1);
+	});
+
+	it('is not there where the server or the browser has no passkeys', async () => {
+		fakeDevice();
+		server.passkeysOn = false;
+		const reader = new ServerReader({ name: 'fiona', admin: false, passkeys: false }, session);
+		render(AccountDialog, { reader, tab: 'security', onclose });
+		expect(await screen.findByText('Off.')).toBeInTheDocument();
+		expect(screen.queryByText('Passkeys')).toBeNull();
+		cleanup();
+		noDevice();
+		open();
+		expect(await screen.findByText('Off.')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Add a passkey' })).toBeNull();
 	});
 });
 

@@ -12,7 +12,15 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { ACCOUNTS, DATABASE, PASSWORD, RUEDER_LISTEN, database, postgres } from './ports.js';
+import {
+	ACCOUNTS,
+	DATABASE,
+	PASSWORD,
+	RUEDER,
+	RUEDER_LISTEN,
+	database,
+	postgres
+} from './ports.js';
 
 const web = resolve(import.meta.dirname, '../..');
 const rueder = resolve(web, process.env.RUEDER_BIN ?? '../server/target/debug/rueder');
@@ -45,7 +53,10 @@ const env = {
 	OIDC_ISSUER: '',
 	CLIENT_IP_HEADER: '',
 	// Readers may report feeds and articles (reporting.spec.ts).
-	CONTENT_REPORTS: 'on'
+	CONTENT_REPORTS: 'on',
+	// Passkeys, for the address the browser reaches the server at
+	// (passkeys.spec.ts); browsers allow them over HTTP for localhost.
+	PUBLIC_URL: RUEDER
 };
 
 // The first command also applies the migrations.

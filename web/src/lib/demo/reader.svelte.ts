@@ -23,6 +23,8 @@ import type {
 	RulePreview,
 	ReportOutcome,
 	SecondFactorRefusal,
+	PasskeyList,
+	PasskeyRefusal,
 	ServerStatus,
 	Subscribed
 } from '#lib/reader.ts';
@@ -159,7 +161,9 @@ export class DemoReader implements Reader {
 		password: false,
 		remove: false,
 		reportContent: false,
-		apps: true
+		apps: true,
+		// Without a server there is nobody to check a passkey.
+		passkeys: false
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -213,6 +217,18 @@ export class DemoReader implements Reader {
 		return 'unreachable';
 	}
 	async confirmSecondFactor(): Promise<SecondFactorRefusal> {
+		return 'unreachable';
+	}
+	async passkeys(): Promise<PasskeyList | null> {
+		return null;
+	}
+	async provePasskey(): Promise<PasskeyRefusal> {
+		return 'unreachable';
+	}
+	async addPasskey(): Promise<PasskeyRefusal> {
+		return 'unreachable';
+	}
+	async removePasskey(): Promise<PasskeyRefusal> {
 		return 'unreachable';
 	}
 	async switchOffSecondFactor(): Promise<SecondFactorRefusal> {

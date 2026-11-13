@@ -30,7 +30,8 @@ describe('Session', () => {
 			adminNeedsSecondFactor: false,
 			termsToAccept: null,
 			contentReports: false,
-			appApi: true
+			appApi: true,
+			passkeys: false
 		});
 	});
 
@@ -210,7 +211,8 @@ describe('registering', () => {
 			adminNeedsSecondFactor: false,
 			termsToAccept: null,
 			contentReports: false,
-			appApi: true
+			appApi: true,
+			passkeys: false
 		});
 		expect(server.requests.find((request) => request.method === 'POST')).toMatchObject({
 			method: 'POST',

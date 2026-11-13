@@ -161,7 +161,8 @@ const de: Messages = {
 		submit: 'Anmelden',
 		checking: 'Einen Moment …',
 		wrong: 'Name oder Passwort stimmt nicht.',
-		codeNeeded: 'Dieses Konto hat einen zweiten Faktor. Gib den Code ein, den deine App zeigt.',
+		codeNeeded:
+			'Dieses Konto hat einen zweiten Faktor. Gib den Code ein, den deine App zeigt, oder einen Wiederherstellungscode, oder melde dich mit einem Passkey an.',
 		wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
 		code: 'Code',
 		codeNote:
@@ -172,6 +173,11 @@ const de: Messages = {
 		retry: 'Noch einmal versuchen',
 		or: 'oder',
 		oidc: 'Mit Single Sign-on anmelden',
+		passkey: 'Mit Passkey anmelden',
+		passkeyCancelled:
+			'Es wurde kein Passkey benutzt. Versuch es noch einmal oder melde dich mit Name und Passwort an.',
+		passkeyFailed: 'Dieser Browser oder dieses Gerät kann hier keinen Passkey benutzen.',
+		passkeyWrong: 'Dieser Passkey gehört zu keinem Konto hier.',
 		oidcFailed: 'Die Anmeldung über Single Sign-on hat nicht geklappt. Versuch es noch einmal.',
 		oidcDenied: 'Die Anmeldung über Single Sign-on wurde abgebrochen.',
 		oidcUnknown:
@@ -403,7 +409,8 @@ const de: Messages = {
 			done: 'Fertig',
 			refusals: {
 				wrongPassword: 'Das Passwort stimmt nicht.',
-				codeNeeded: 'Gib auch einen Code deiner Authenticator-App ein.',
+				codeNeeded:
+					'Gib auch einen Code deiner Authenticator-App oder einen Wiederherstellungscode ein, oder bestätige mit einem Passkey.',
 				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
 				tooManyApps: 'Ein Konto hat höchstens 20 App-Passwörter.',
 				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
@@ -413,11 +420,13 @@ const de: Messages = {
 		secondFactor: {
 			title: 'Zweiter Faktor',
 			intro:
-				'Mit einem zweiten Faktor braucht der Login neben dem Passwort einen Code aus einer Authenticator-App auf deinem Handy. Ein Passwort, das bekannt geworden ist, reicht dann nicht.',
+				'Mit einem zweiten Faktor braucht der Login mehr als das Passwort: einen Code aus einer Authenticator-App auf deinem Handy oder einen Passkey. Ein Passwort, das bekannt geworden ist, reicht dann nicht.',
+			app: 'Authenticator-App',
 			on: 'An.',
 			left: (count) =>
 				`${n(count)} ${plural(count, { one: 'Wiederherstellungscode', other: 'Wiederherstellungscodes' })} übrig.`,
 			off: 'Aus.',
+			byPasskeys: 'Nicht eingerichtet. Deine Passkeys halten den zweiten Faktor an.',
 			adminNeeds:
 				'Auf diesem Server sind Admins nur mit zweitem Faktor Admins. Richte ihn ein oder melde dich mit seinem Code neu an, um den Serverstatus zu sehen.',
 			password: 'Dein Passwort',
@@ -440,9 +449,59 @@ const de: Messages = {
 			codesDone: 'Ich habe sie aufbewahrt',
 			switchOff: 'Ausschalten',
 			switchOffNote: 'Der Login braucht dann wieder nur das Passwort.',
+			switchOffNoteKeys: 'Deine Passkeys halten den zweiten Faktor an.',
+			startWithPasskey: 'Mit Passkey einrichten',
+			switchOffWithPasskey: 'Mit Passkey ausschalten',
 			refusals: {
 				wrongPassword: 'Das Passwort stimmt nicht.',
+				codeNeeded:
+					'Deine Passkeys halten den zweiten Faktor an. Gib dazu einen Wiederherstellungscode ein.',
 				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
+				unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
+			}
+		},
+		passkeys: {
+			title: 'Passkeys',
+			intro:
+				'Mit einem Passkey meldest du dich ohne Name und Passwort an: Dein Gerät fragt nach seiner PIN, deinem Fingerabdruck oder Gesicht. Er zählt als zweiter Faktor, gilt nur für diesen rueder und lässt sich von keiner gefälschten Seite abgreifen.',
+			once: 'Sobald du einen Passkey hast, öffnet dein Passwort allein dein Konto nicht mehr: Dazu braucht es einen Passkey, einen Code deiner Authenticator-App oder einen Wiederherstellungscode.',
+			none: 'Noch kein Passkey.',
+			made: (when) => `hinzugefügt ${when}`,
+			used: (when) => `zuletzt benutzt ${when}`,
+			unused: 'noch nicht benutzt',
+			add: 'Passkey hinzufügen',
+			name: 'Name, etwa das Gerät',
+			defaultName: 'Passkey',
+			password: 'Dein Passwort',
+			code: 'Code deiner Authenticator-App oder ein Wiederherstellungscode',
+			create: 'Passkey anlegen',
+			working: 'Folge deinem Browser …',
+			cancel: 'Abbrechen',
+			remove: 'Entfernen',
+			removeName: (name) => `Den Passkey ${name} entfernen`,
+			confirmRemove: 'Passkey entfernen',
+			full: (max) => `Ein Konto hat höchstens ${n(max)} Passkeys.`,
+			or: 'oder',
+			confirmWith: 'Mit Passkey bestätigen',
+			codesTitle: 'Deine Wiederherstellungscodes',
+			codesIntro:
+				'Dein erster Passkey hat den zweiten Faktor eingeschaltet. Jeder dieser Codes bringt dich einmal ohne ihn hinein, falls du dein Gerät verlierst. Bewahre sie sicher auf: Sie werden nur jetzt gezeigt.',
+			copyCodes: 'Codes kopieren',
+			copied: 'Kopiert',
+			codesDone: 'Ich habe sie aufbewahrt',
+			refusals: {
+				cancelled: 'Das Fenster des Browsers wurde geschlossen, bevor der Passkey benutzt wurde.',
+				known: 'Dieses Gerät hat schon einen Passkey für dein Konto.',
+				failed: 'Dieser Browser oder dieses Gerät konnte keinen Passkey anlegen oder benutzen.',
+				wrong: 'Der Passkey wurde nicht angenommen. Versuch es noch einmal.',
+				wrongPassword: 'Das Passwort stimmt nicht.',
+				codeNeeded:
+					'Dein Konto hat einen zweiten Faktor. Gib dazu einen Code deiner App oder einen Wiederherstellungscode ein, oder bestätige mit einem Passkey.',
+				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+				tooManyPasskeys: 'Ein Konto hat höchstens 10 Passkeys.',
+				loginAgain:
+					'Dein Konto hat noch kein Passwort und keinen zweiten Faktor. Melde dich neu an und füge deinen ersten Passkey innerhalb von zehn Minuten hinzu.',
 				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
 				unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
 			}
@@ -600,7 +659,8 @@ const de: Messages = {
 		code: 'Code aus deiner App oder ein Wiederherstellungscode',
 		submit: 'Mein Konto endgültig löschen',
 		wrong: 'Das stimmt nicht. Gelöscht wurde nichts.',
-		codeNeeded: 'Dein Konto hat einen zweiten Faktor. Gib dazu einen Code aus deiner App ein.',
+		codeNeeded:
+			'Dein Konto hat einen zweiten Faktor. Gib dazu einen Code aus deiner App oder einen Wiederherstellungscode ein, oder bestätige mit einem Passkey.',
 		busy: (minutes) =>
 			`Zu viele falsche Versuche. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
 		unreachable: 'Der Server antwortet nicht. Gelöscht wurde nichts.'

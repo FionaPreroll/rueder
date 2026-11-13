@@ -95,6 +95,12 @@
 				return m.login.tooMany(failure.minutes);
 			case 'disabled':
 				return m.login.disabled;
+			case 'passkeyCancelled':
+				return m.login.passkeyCancelled;
+			case 'passkeyFailed':
+				return m.login.passkeyFailed;
+			case 'passkeyWrong':
+				return m.login.passkeyWrong;
 			case 'unreachable':
 				return m.login.unreachable;
 			default:
@@ -115,6 +121,18 @@
 			} else if (failure) {
 				password = '';
 			}
+		} finally {
+			busy = false;
+		}
+	}
+
+	/** Logs in with a passkey: no name, no password, the device says whose it is. */
+	async function withPasskey() {
+		if (busy) return;
+		busy = true;
+		failure = null;
+		try {
+			failure = await session.loginWithPasskey();
 		} finally {
 			busy = false;
 		}
@@ -320,6 +338,18 @@
 					{m.login.submit}
 				</button>
 			</form>
+
+			{#if session.passkeys}
+				<p class="my-3 text-center text-xs text-soft">{m.login.or}</p>
+				<button
+					type="button"
+					class="tool w-full justify-center"
+					disabled={busy}
+					onclick={withPasskey}
+				>
+					{m.login.passkey}
+				</button>
+			{/if}
 
 			{#if session.ways.oidc}
 				<p class="my-3 text-center text-xs text-soft">{m.login.or}</p>

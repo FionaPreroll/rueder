@@ -70,6 +70,14 @@ What is here:
   logged in with app passwords that readers make under Settings, Apps
   (`/api/app-passwords`), never with the account's password. `APP_API=off`
   switches it off.
+- Passkeys (`src/passkeys.rs`): with `PUBLIC_URL` set to the address browsers
+  reach rueder at, readers add passkeys under Account settings, Security
+  (`/api/passkeys`) and log in with them without name or password
+  (`/api/login/passkey`). A passkey counts as a second factor: once an account
+  has one, its password alone opens nothing, and wherever a change asks for the
+  password and a code, a passkey stands in for both. The checking is
+  `webauthn-rs`'s; `.cargo/audit.toml` says why `rsa`'s advisory does not
+  touch rueder.
 - Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
   readers report a feed or an article with a reason and a note, at most 20 a
   day; the status page lists the reported feeds with their address, never who

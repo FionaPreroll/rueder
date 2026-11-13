@@ -12,6 +12,7 @@
 	import Dialog from './Dialog.svelte';
 	import Invitations from './Invitations.svelte';
 	import MoveAccount from './MoveAccount.svelte';
+	import Passkeys from './Passkeys.svelte';
 	import RemoveAccount from './RemoveAccount.svelte';
 	import SecondFactor from './SecondFactor.svelte';
 
@@ -23,13 +24,17 @@
 
 	/** A second factor or an app password is being set up: a click beside would lose it. */
 	let busy = $state(false);
+	/** The same for a passkey, which sits next to the second factor. */
+	let addingKey = $state(false);
+	/** Counts changes to the second factor, so that both parts of the tab show them. */
+	let security = $state(0);
 
 	const tabs = $derived(tabsOf(reader));
 	/** The tab that is open, or the first one this reader has. */
 	const open = $derived(tabs.includes(tab) ? tab : (tabs[0] ?? 'password'));
 </script>
 
-<Dialog title={m.account.title} wide holds={busy} {onclose}>
+<Dialog title={m.account.title} wide holds={busy || addingKey} {onclose}>
 	<div class="-mt-1 flex flex-wrap gap-1 border-b border-line" role="tablist">
 		{#each tabs as name (name)}
 			<button
@@ -53,7 +58,12 @@
 		{#if open === 'password'}
 			<ChangePassword {reader} />
 		{:else if open === 'security'}
-			<SecondFactor {reader} bind:busy />
+			<SecondFactor {reader} bind:busy version={security} onchange={() => security++} />
+			{#if reader.can.passkeys}
+				<div class="mt-6 border-t border-line pt-4">
+					<Passkeys {reader} bind:busy={addingKey} version={security} onchange={() => security++} />
+				</div>
+			{/if}
 		{:else if open === 'apps'}
 			<Apps {reader} bind:busy />
 		{:else if open === 'invites'}

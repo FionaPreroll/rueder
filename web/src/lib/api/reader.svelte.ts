@@ -40,6 +40,11 @@ import {
 	type AppPasswords,
 	type LegalLinks,
 	type NewAppPassword,
+	type AddedPasskey,
+	type PasskeyItem,
+	type PasskeyList,
+	type PasskeyProof,
+	type PasskeyRefusal,
 	type ReportOutcome,
 	type ReportReason,
 	type Found,
@@ -58,6 +63,7 @@ import {
 	type SecondFactorState,
 	type Subscribed
 } from '#lib/reader.ts';
+import { createPasskey, passkeysWork, usePasskey } from '#lib/webauthn.ts';
 import {
 	ancestorIds,
 	canGroup,
@@ -286,6 +292,20 @@ function readClosed(): ReadonlySet<string> {
 }
 
 /** An app password as the page keeps it. */
+function passkeyItem(stored: {
+	id: number;
+	name: string;
+	created_at: string;
+	used_at: string | null;
+}): PasskeyItem {
+	return {
+		id: stored.id,
+		name: stored.name,
+		createdAt: Date.parse(stored.created_at),
+		usedAt: stored.used_at === null ? null : Date.parse(stored.used_at)
+	};
+}
+
 function appPassword(stored: {
 	id: number;
 	name: string;
@@ -421,7 +441,8 @@ export class ServerReader implements Reader {
 			password: true,
 			remove: true,
 			reportContent: account.contentReports === true,
-			apps: account.appApi === true
+			apps: account.appApi === true,
+			passkeys: account.passkeys === true && passkeysWork()
 		};
 		this.session = session;
 		this.api = api;
@@ -520,13 +541,15 @@ export class ServerReader implements Reader {
 	async createAppPassword(
 		name: string,
 		password: string,
-		code: string
+		code: string,
+		passkey?: PasskeyProof
 	): Promise<NewAppPassword | AppPasswordRefusal> {
 		try {
 			const made = await this.api.createAppPassword({
 				name: name.trim(),
 				password,
-				code: code.trim()
+				code: code.trim(),
+				passkey
 			});
 			return { ...appPassword(made), secret: made.secret };
 		} catch (error) {
@@ -537,6 +560,7 @@ export class ServerReader implements Reader {
 			if (error.status === 400) return 'tooManyApps';
 			if (error.status === 403 && said === 'second factor needed') return 'codeNeeded';
 			if (error.status === 403 && said === 'the code is wrong') return 'wrongCode';
+			if (error.status === 403 && said === 'the passkey is wrong') return 'wrongCode';
 			if (error.status === 403) return 'wrongPassword';
 			return 'unreachable';
 		}
@@ -557,6 +581,8 @@ export class ServerReader implements Reader {
 			const state = await this.api.secondFactor();
 			return {
 				on: state.on,
+				app: state.app,
+				passkeys: state.passkeys,
 				recoveryCodesLeft: state.recovery_codes_left,
 				requiredForAdmins: state.required_for_admins
 			};
@@ -566,12 +592,19 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	async setUpSecondFactor(password: string): Promise<SecondFactorSetup | SecondFactorRefusal> {
+	async setUpSecondFactor(
+		password: string,
+		code = '',
+		passkey?: PasskeyProof
+	): Promise<SecondFactorSetup | SecondFactorRefusal> {
 		try {
-			const setup = await this.api.setUpSecondFactor(password);
+			const setup = await this.api.setUpSecondFactor({ password, code: code.trim(), passkey });
 			return { secret: setup.secret, qrSvg: setup.qr_svg };
 		} catch (error) {
-			return this.refusalOf(error, 'wrongPassword');
+			const said = error instanceof ApiError ? error.message.trim() : '';
+			if (said === 'second factor needed') return 'codeNeeded';
+			const codeWrong = said === 'the code is wrong' || said === 'the passkey is wrong';
+			return this.refusalOf(error, codeWrong ? 'wrongCode' : 'wrongPassword');
 		}
 	}
 
@@ -583,13 +616,105 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	async switchOffSecondFactor(password: string, code: string): Promise<SecondFactorRefusal | null> {
+	async switchOffSecondFactor(
+		password: string,
+		code: string,
+		passkey?: PasskeyProof
+	): Promise<SecondFactorRefusal | null> {
 		try {
-			await this.api.switchOffSecondFactor(password, code.trim());
+			await this.api.switchOffSecondFactor({ password, code: code.trim(), passkey });
 			return null;
 		} catch (error) {
-			const codeWrong = error instanceof ApiError && error.message.trim() === 'the code is wrong';
+			const said = error instanceof ApiError ? error.message.trim() : '';
+			const codeWrong = said === 'the code is wrong' || said === 'the passkey is wrong';
 			return this.refusalOf(error, codeWrong ? 'wrongCode' : 'wrongPassword');
+		}
+	}
+
+	// Passkeys
+
+	async passkeys(): Promise<PasskeyList | null> {
+		try {
+			const answer = await this.api.passkeys();
+			return { list: answer.passkeys.map(passkeyItem), max: answer.max };
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			return null;
+		}
+	}
+
+	/** Why the server refused something about passkeys. */
+	private passkeyRefusal(error: unknown): PasskeyRefusal {
+		if (!(error instanceof ApiError)) return 'unreachable';
+		if (error.signedOut) this.session.expired();
+		const said = error.message.trim();
+		if (error.status === 429) return 'tooMany';
+		if (error.status === 400 && said.startsWith('an account has at most')) {
+			return 'tooManyPasskeys';
+		}
+		if (error.status === 400) return 'failed';
+		if (error.status === 409 && said === 'this passkey is known already') return 'known';
+		if (error.status === 409) return 'wrong';
+		if (error.status === 403) {
+			if (said === 'second factor needed') return 'codeNeeded';
+			if (said === 'the code is wrong') return 'wrongCode';
+			if (said === 'the passkey is wrong') return 'wrong';
+			if (said === 'log in again first') return 'loginAgain';
+			return 'wrongPassword';
+		}
+		return 'unreachable';
+	}
+
+	async provePasskey(): Promise<PasskeyProof | PasskeyRefusal> {
+		let challenge;
+		try {
+			challenge = await this.api.startPasskeyProof();
+		} catch (error) {
+			return this.passkeyRefusal(error);
+		}
+		const credential = await usePasskey(challenge.options);
+		if (typeof credential === 'string') return credential;
+		return { ceremony: challenge.ceremony, credential };
+	}
+
+	async addPasskey(
+		name: string,
+		password: string,
+		code: string,
+		passkey?: PasskeyProof
+	): Promise<AddedPasskey | PasskeyRefusal> {
+		let challenge;
+		try {
+			challenge = await this.api.startPasskey({
+				name: name.trim(),
+				password,
+				code: code.trim(),
+				passkey
+			});
+		} catch (error) {
+			return this.passkeyRefusal(error);
+		}
+		const credential = await createPasskey(challenge.options);
+		if (typeof credential === 'string') return credential;
+		try {
+			const added = await this.api.finishPasskey({ ceremony: challenge.ceremony, credential });
+			return { passkey: passkeyItem(added.passkey), recoveryCodes: added.recovery_codes ?? null };
+		} catch (error) {
+			return this.passkeyRefusal(error);
+		}
+	}
+
+	async removePasskey(
+		id: number,
+		password: string,
+		code: string,
+		passkey?: PasskeyProof
+	): Promise<PasskeyRefusal | null> {
+		try {
+			await this.api.removePasskey(id, { password, code: code.trim(), passkey });
+			return null;
+		} catch (error) {
+			return this.passkeyRefusal(error);
 		}
 	}
 
@@ -2008,14 +2133,18 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	async removeAccount(proof: string, code?: string): Promise<RemoveRefusal | null> {
+	async removeAccount(
+		proof: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<RemoveRefusal | null> {
 		const farewell = this.account.password === false ? { name: proof } : { password: proof };
 		try {
-			await this.api.removeAccount(code ? { ...farewell, code } : farewell);
+			await this.api.removeAccount(passkey ? { passkey } : code ? { ...farewell, code } : farewell);
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 403) {
 				const missing = error.message.trim() === 'second factor needed';
-				return { problem: missing && !code ? 'code' : 'wrong' };
+				return { problem: missing && !code && !passkey ? 'code' : 'wrong' };
 			}
 			if (error instanceof ApiError && error.status === 429) {
 				return { problem: 'busy', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };

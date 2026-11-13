@@ -38,7 +38,60 @@ export interface Account {
 	contentReports?: boolean;
 	/** The server lets apps of other makers in, with app passwords. */
 	appApi?: boolean;
+	/** The server has passkeys. */
+	passkeys?: boolean;
 }
+
+/** A passkey, as the list shows it. */
+export interface PasskeyItem {
+	id: number;
+	name: string;
+	/** When it was made, and when it last logged in or confirmed something, in ms. */
+	createdAt: number;
+	usedAt: number | null;
+}
+
+/** The account's passkeys, and how many it can have. */
+export interface PasskeyList {
+	list: PasskeyItem[];
+	max: number;
+}
+
+/** A new passkey, with the recovery codes where it turned the second factor on. */
+export interface AddedPasskey {
+	passkey: PasskeyItem;
+	recoveryCodes: string[] | null;
+}
+
+/**
+ * A passkey's answer that the owner of the account is at the device, for one
+ * change that asks for it (from `provePasskey`). The page passes it on as it is.
+ */
+export interface PasskeyProof {
+	readonly ceremony: string;
+	readonly credential: unknown;
+}
+
+/** Why a passkey was not added, removed or used. The page has the words. */
+export type PasskeyRefusal =
+	/** The reader closed the browser's window, or it timed out. */
+	| 'cancelled'
+	/** This device has a passkey for the account already. */
+	| 'known'
+	/** The device or the browser could not make or use one. */
+	| 'failed'
+	/** The passkey was not the account's, or the server did not take its answer. */
+	| 'wrong'
+	| 'wrongPassword'
+	/** The password was right; the second factor is on, and its code is missing. */
+	| 'codeNeeded'
+	| 'wrongCode'
+	/** The account has as many passkeys as it can have. */
+	| 'tooManyPasskeys'
+	/** Without a password and a second factor, only a fresh login adds the first. */
+	| 'loginAgain'
+	| 'tooMany'
+	| 'unreachable';
 
 /** An app password, as the list shows it: never the password itself. */
 export interface AppPassword {
@@ -101,7 +154,12 @@ export type PasswordRefusal =
 
 /** Whether the account has a second factor, and what the server wants of it. */
 export interface SecondFactorState {
+	/** Whether the second factor is on: an authenticator app or a passkey. */
 	on: boolean;
+	/** Whether the authenticator app is set up. */
+	app: boolean;
+	/** How many passkeys the account has. */
+	passkeys: number;
 	recoveryCodesLeft: number;
 	/** Admins are admins only in a session that began with it. */
 	requiredForAdmins: boolean;
@@ -116,7 +174,13 @@ export interface SecondFactorSetup {
 }
 
 /** Why a change to the second factor did not work. The page has the words. */
-export type SecondFactorRefusal = 'wrongPassword' | 'wrongCode' | 'tooMany' | 'unreachable';
+export type SecondFactorRefusal =
+	| 'wrongPassword'
+	/** Passkeys have the second factor on: setting up the app takes a code too. */
+	| 'codeNeeded'
+	| 'wrongCode'
+	| 'tooMany'
+	| 'unreachable';
 
 /** What went wrong, for a line the reader can close. The page has the words. */
 export type Notice =
@@ -156,6 +220,8 @@ export interface Abilities {
 	reportContent: boolean;
 	/** Apps of other makers can be let in with app passwords. */
 	apps: boolean;
+	/** The account can log in and confirm changes with passkeys: the server has them, and so does the browser. */
+	passkeys: boolean;
 }
 
 /** A feed found at an address. */
@@ -342,11 +408,15 @@ export interface Reader {
 
 	/** The account's app passwords (`can.apps`); null if the server does not answer. */
 	appPasswords(): Promise<AppPasswords | null>;
-	/** Makes an app password, with the account's password and, if it has one, a code. */
+	/**
+	 * Makes an app password, with the account's password and, if it has one, a
+	 * code; or with a passkey's proof instead of both.
+	 */
 	createAppPassword(
 		name: string,
 		password: string,
-		code: string
+		code: string,
+		passkey?: PasskeyProof
 	): Promise<NewAppPassword | AppPasswordRefusal>;
 	/** Revokes an app password; false if that did not work. */
 	revokeAppPassword(id: number): Promise<boolean>;
@@ -357,15 +427,47 @@ export interface Reader {
 	readonly appsVersion: number;
 	/** The account's second factor, where the reader has one (`can.secondFactor`). */
 	secondFactor(): Promise<SecondFactorState | null>;
-	/** Starts setting it up, with the account's password. */
-	setUpSecondFactor(password: string): Promise<SecondFactorSetup | SecondFactorRefusal>;
+	/**
+	 * Starts setting the app up, with the account's password and, where passkeys
+	 * have the second factor on already, a recovery code; or a passkey's proof.
+	 */
+	setUpSecondFactor(
+		password: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<SecondFactorSetup | SecondFactorRefusal>;
 	/** Confirms it with a code of the app: the recovery codes, shown this once. */
 	confirmSecondFactor(code: string): Promise<string[] | SecondFactorRefusal>;
 	/**
-	 * Switches it off, with the account's password and a code of the app or a
-	 * recovery code; null when it worked.
+	 * Switches the app off, with the account's password and a code of the app or
+	 * a recovery code, or a passkey's proof; null when it worked.
 	 */
-	switchOffSecondFactor(password: string, code: string): Promise<SecondFactorRefusal | null>;
+	switchOffSecondFactor(
+		password: string,
+		code: string,
+		passkey?: PasskeyProof
+	): Promise<SecondFactorRefusal | null>;
+	/** The account's passkeys (`can.passkeys`); null if the server does not answer. */
+	passkeys(): Promise<PasskeyList | null>;
+	/** Asks a passkey of the account that its owner is there, for one change. */
+	provePasskey(): Promise<PasskeyProof | PasskeyRefusal>;
+	/**
+	 * Makes a passkey on this device, with the account's password and, where the
+	 * second factor is on, a code; or a passkey's proof instead of both.
+	 */
+	addPasskey(
+		name: string,
+		password: string,
+		code: string,
+		passkey?: PasskeyProof
+	): Promise<AddedPasskey | PasskeyRefusal>;
+	/** Removes a passkey, with the same proof as adding one; null when it worked. */
+	removePasskey(
+		id: number,
+		password: string,
+		code: string,
+		passkey?: PasskeyProof
+	): Promise<PasskeyRefusal | null>;
 	/** The filter rules. */
 	readonly filters: RuleBook;
 	/** Only the reader with made-up data has these. */
@@ -484,9 +586,14 @@ export interface Reader {
 	/**
 	 * Deletes the account for good (`can.remove`), with the password, or the
 	 * account's name where it has none, and the code of its second factor where
-	 * it has one. Null when it is gone: then the page is logged out.
+	 * it has one; or with a passkey's proof instead of all of that. Null when it
+	 * is gone: then the page is logged out.
 	 */
-	removeAccount(proof: string, code?: string): Promise<RemoveRefusal | null>;
+	removeAccount(
+		proof: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<RemoveRefusal | null>;
 
 	/**
 	 * Gives the account another password, with the one so far; an account that

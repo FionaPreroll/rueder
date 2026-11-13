@@ -1,7 +1,11 @@
 //! The second factor: codes of an authenticator app after RFC 6238 (TOTP), and
-//! ten recovery codes for when the app is gone.
+//! ten recovery codes for when the app is gone. Passkeys count as a second
+//! factor too (see [`crate::passkeys`]): an account has it on when it has the
+//! app or a passkey, and then a password alone opens nothing.
 //!
 //! - **Setting it up** takes the password (`POST /api/second-factor/setup`),
+//!   and where passkeys have the second factor on already, a recovery code
+//!   or a passkey,
 //!   which answers with a new secret, as text and as a QR code, and keeps it
 //!   aside. A code from the app confirms it (`POST /api/second-factor/confirm`);
 //!   only then does it count, and the answer has the recovery codes, shown
@@ -11,10 +15,12 @@
 //!   Without one the answer says that one is needed; a wrong one counts like
 //!   a wrong password. A code counts once: the time step of the last one taken
 //!   is kept. A recovery code goes once it was used.
-//! - **Switching it off** takes the password and a code, from the app or a
-//!   recovery code (`DELETE /api/second-factor`), so that a password that got
-//!   out together with a session is not enough; or an admin on the command line
-//!   (`rueder account second-factor-off`), for somebody who lost both.
+//! - **Switching the app off** takes the password and a code, from the app or
+//!   a recovery code, or a passkey (`DELETE /api/second-factor`), so that a
+//!   password that got out together with a session is not enough. The
+//!   recovery codes stay while there are passkeys. An admin on the command line
+//!   (`rueder account second-factor-off`) takes all of it, passkeys included,
+//!   for somebody who lost everything.
 //! - **Admins** need it where the operator says so (`ADMIN_SECOND_FACTOR=required`):
 //!   then the right of an admin counts only in a session that began with it.
 //!
@@ -38,7 +44,8 @@ use ts_rs::TS;
 
 use crate::{
     AppError, AppState, accounts,
-    login::Key,
+    login::{CODE_NEEDED, Key},
+    passkeys,
     sessions::{self, Session},
 };
 
@@ -79,30 +86,43 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<RecoveryCodes>();
 }
 
-/// Whether an account has the second factor, and how many recovery codes it
-/// has left.
+/// Whether an account has the second factor, by the app or by passkeys, and
+/// how many recovery codes it has left.
 ///
 /// `GET /api/second-factor` answers with it.
 #[derive(Serialize, TS)]
 pub struct SecondFactor {
+    /// Whether the second factor is on: the app or a passkey.
     on: bool,
+    /// Whether the authenticator app is set up.
+    app: bool,
+    /// How many passkeys the account has.
+    passkeys: i64,
     recovery_codes_left: i64,
     /// Whether this server lets admins be admins only with it.
     required_for_admins: bool,
 }
 
-/// What setting up reads: the password of the account. An account that has
-/// none needs none.
+/// What setting up reads: the password of the account, which an account that
+/// has none does without, and where the second factor is on already through
+/// passkeys, a recovery code; or a passkey instead of both. Otherwise a
+/// password that got out with a session could add an app of its own.
 #[derive(Deserialize, TS)]
 #[ts(rename = "SecondFactorPassword")]
 pub struct Password {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
     password: String,
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    code: String,
+    #[serde(default)]
+    #[ts(optional)]
+    passkey: Option<passkeys::Answer>,
 }
 
 /// What switching off reads: the password, as for setting up, and a code from
-/// the app or a recovery code.
+/// the app or a recovery code; or a passkey instead of both.
 #[derive(Deserialize, TS)]
 #[ts(rename = "SecondFactorSwitchOff")]
 pub struct SwitchOff {
@@ -110,7 +130,11 @@ pub struct SwitchOff {
     #[ts(as = "Option<String>", optional)]
     password: String,
     #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
     code: String,
+    #[serde(default)]
+    #[ts(optional)]
+    passkey: Option<passkeys::Answer>,
 }
 
 /// A new secret for the app, waiting for a code to confirm it.
@@ -250,10 +274,12 @@ fn qr_svg(uri: &str) -> anyhow::Result<String> {
         .build())
 }
 
-/// Whether the account has the second factor on.
+/// Whether the account has the second factor on: the app or a passkey.
 pub async fn is_on(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
     Ok(sqlx::query_scalar!(
-        r#"SELECT totp_secret IS NOT NULL AS "on!" FROM accounts WHERE id = $1"#,
+        r#"SELECT totp_secret IS NOT NULL
+                  OR EXISTS (SELECT 1 FROM passkeys p WHERE p.account_id = a.id) AS "on!"
+           FROM accounts a WHERE a.id = $1"#,
         account_id
     )
     .fetch_optional(db)
@@ -261,8 +287,112 @@ pub async fn is_on(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
     .unwrap_or(false))
 }
 
+/// What shows, for a change that needs it, that the owner of the account is
+/// at the keyboard and not only somebody with the session.
+pub(crate) enum Proof<'a> {
+    /// The password, which an account without one does without, and where
+    /// the second factor is on, a code from the app or a recovery code.
+    Password { password: &'a str, code: &'a str },
+    /// A passkey of the account, just now: both factors at once.
+    Passkey(&'a passkeys::Answer),
+}
+
+/// Checks that the owner of the session's account is there. Every try counts
+/// like one at login: a stolen session must not be a way to try passwords or
+/// codes without end. Without a code where one is needed, the answer is 403
+/// with `second factor needed`.
+pub(crate) async fn prove(
+    state: &AppState,
+    session: &Session,
+    headers: &HeaderMap,
+    proof: Proof<'_>,
+) -> Result<(), AppError> {
+    let (password, code) = match proof {
+        Proof::Passkey(answer) => {
+            return passkeys::check_proof(state, session, headers, answer).await;
+        }
+        Proof::Password { password, code } => (password, code),
+    };
+    let keys = [Key::name(&session.username)];
+    tried_password(state, session, &keys, password).await?;
+    if is_on(&state.db, session.account_id).await? {
+        let code = code.trim();
+        if code.is_empty() {
+            // The password was right; the code is what is missing.
+            state.logins.succeeded(&keys);
+            return Err(AppError::Status(StatusCode::FORBIDDEN, CODE_NEEDED.into()));
+        }
+        // A wrong code stays counted, like a wrong password.
+        if !take(&state.db, session.account_id, code).await? {
+            let message = "the code is wrong";
+            return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+        }
+    }
+    state.logins.succeeded(&keys);
+    Ok(())
+}
+
+/// Gives the account ten new recovery codes in place of any it had, and
+/// returns them to be shown this once.
+pub(crate) async fn new_recovery_codes(
+    conn: &mut PgConnection,
+    account_id: i32,
+) -> anyhow::Result<Vec<String>> {
+    let codes = new_codes()?;
+    sqlx::query!(
+        "DELETE FROM recovery_codes WHERE account_id = $1",
+        account_id
+    )
+    .execute(&mut *conn)
+    .await?;
+    let hashes: Vec<Vec<u8>> = codes.iter().map(|code| code_hash(code)).collect();
+    sqlx::query!(
+        "INSERT INTO recovery_codes (account_id, code_hash) SELECT $1, unnest($2::bytea[])",
+        account_id,
+        &hashes
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(codes)
+}
+
+/// Where the account has neither the app nor a passkey left, the second
+/// factor is off: its recovery codes go, and its sessions no longer count as
+/// ones with it.
+pub(crate) async fn off_if_nothing_left(
+    conn: &mut PgConnection,
+    account_id: i32,
+) -> anyhow::Result<()> {
+    let left = sqlx::query_scalar!(
+        r#"SELECT totp_secret IS NOT NULL
+                  OR EXISTS (SELECT 1 FROM passkeys p WHERE p.account_id = a.id) AS "left!"
+           FROM accounts a WHERE a.id = $1"#,
+        account_id
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    .unwrap_or(false);
+    if left {
+        return Ok(());
+    }
+    sqlx::query!(
+        "DELETE FROM recovery_codes WHERE account_id = $1",
+        account_id
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!(
+        "UPDATE sessions SET second_factor = false WHERE account_id = $1",
+        account_id
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// Takes a code at login, from the app or a recovery code. A code from the app
-/// counts once; a recovery code goes once it was used.
+/// counts once; a recovery code goes once it was used. An account with
+/// passkeys and no app has only recovery codes.
 pub async fn take(db: &PgPool, account_id: i32, code: &str) -> anyhow::Result<bool> {
     if code.len() > MAX_CODE {
         return Ok(false);
@@ -277,10 +407,12 @@ pub async fn take(db: &PgPool, account_id: i32, code: &str) -> anyhow::Result<bo
     let Some(found) = found else {
         return Ok(false);
     };
-    let Some(secret) = found.totp_secret else {
-        return Ok(false);
-    };
-    if let Some(step) = matching_step(&secret, code, now_unix(), found.totp_last_step) {
+    // A code of the app, where there is one; a recovery code also where the
+    // second factor is passkeys alone.
+    let step = found
+        .totp_secret
+        .and_then(|secret| matching_step(&secret, code, now_unix(), found.totp_last_step));
+    if let Some(step) = step {
         sqlx::query!(
             "UPDATE accounts SET totp_last_step = $2 WHERE id = $1",
             account_id,
@@ -302,10 +434,10 @@ pub async fn take(db: &PgPool, account_id: i32, code: &str) -> anyhow::Result<bo
     Ok(used.rows_affected() == 1)
 }
 
-/// Switches the second factor off for an account, with its recovery codes,
-/// and takes it from the account's sessions. False if there is no such
-/// account.
-pub async fn switch_off_for(conn: &mut PgConnection, account_id: i32) -> anyhow::Result<bool> {
+/// Switches the authenticator app off for an account. Where it has no passkey
+/// either, the second factor is off with it (see [`off_if_nothing_left`]).
+/// False if there is no such account.
+pub async fn switch_off_app(conn: &mut PgConnection, account_id: i32) -> anyhow::Result<bool> {
     let done = sqlx::query!(
         "UPDATE accounts SET totp_secret = NULL, totp_pending = NULL, totp_last_step = NULL
          WHERE id = $1",
@@ -313,22 +445,22 @@ pub async fn switch_off_for(conn: &mut PgConnection, account_id: i32) -> anyhow:
     )
     .execute(&mut *conn)
     .await?;
-    sqlx::query!(
-        "DELETE FROM recovery_codes WHERE account_id = $1",
-        account_id
-    )
-    .execute(&mut *conn)
-    .await?;
-    sqlx::query!(
-        "UPDATE sessions SET second_factor = false WHERE account_id = $1",
-        account_id
-    )
-    .execute(&mut *conn)
-    .await?;
+    off_if_nothing_left(conn, account_id).await?;
     Ok(done.rows_affected() == 1)
 }
 
-/// For the command line: switches it off for the account of this name.
+/// Switches the whole second factor off for an account: the app, its
+/// passkeys and its recovery codes, and takes it from its sessions. False if
+/// there is no such account.
+pub async fn switch_off_for(conn: &mut PgConnection, account_id: i32) -> anyhow::Result<bool> {
+    sqlx::query!("DELETE FROM passkeys WHERE account_id = $1", account_id)
+        .execute(&mut *conn)
+        .await?;
+    switch_off_app(conn, account_id).await
+}
+
+/// For the command line: switches all of it off for the account of this
+/// name, passkeys included.
 pub async fn switch_off_named(db: &PgPool, name: &str) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
@@ -350,7 +482,8 @@ async fn status(
     session: Session,
 ) -> Result<Json<SecondFactor>, AppError> {
     let found = sqlx::query!(
-        r#"SELECT a.totp_secret IS NOT NULL AS "on!",
+        r#"SELECT a.totp_secret IS NOT NULL AS "app!",
+                  (SELECT count(*) FROM passkeys p WHERE p.account_id = a.id) AS "passkeys!",
                   (SELECT count(*) FROM recovery_codes r WHERE r.account_id = a.id) AS "left!"
            FROM accounts a WHERE a.id = $1"#,
         session.account_id
@@ -358,23 +491,12 @@ async fn status(
     .fetch_one(&state.db)
     .await?;
     Ok(Json(SecondFactor {
-        on: found.on,
+        on: found.app || found.passkeys > 0,
+        app: found.app,
+        passkeys: found.passkeys,
         recovery_codes_left: found.left,
         required_for_admins: state.admin_second_factor,
     }))
-}
-
-/// Checks the password of the session's account, counted like one at login: a
-/// stolen session must not be a way to try passwords without end.
-async fn check_password(
-    state: &AppState,
-    session: &Session,
-    password: &str,
-) -> Result<(), AppError> {
-    let keys = [Key::name(&session.username)];
-    tried_password(state, session, &keys, password).await?;
-    state.logins.succeeded(&keys);
-    Ok(())
 }
 
 /// Counts a try against the limit of the account's name and checks the
@@ -405,9 +527,15 @@ pub(crate) async fn tried_password(
 async fn set_up(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Json(password): Json<Password>,
 ) -> Result<Json<Setup>, AppError> {
-    check_password(&state, &session, &password.password).await?;
+    let proof = passkeys::proof(
+        &password.password,
+        &password.code,
+        password.passkey.as_ref(),
+    );
+    prove(&state, &session, &headers, proof).await?;
     let secret = random::<SECRET_LEN>()?;
     sqlx::query!(
         "UPDATE accounts SET totp_pending = $2 WHERE id = $1",
@@ -468,21 +596,7 @@ async fn confirm(
     )
     .execute(&mut *tx)
     .await?;
-    let codes = new_codes()?;
-    sqlx::query!(
-        "DELETE FROM recovery_codes WHERE account_id = $1",
-        session.account_id
-    )
-    .execute(&mut *tx)
-    .await?;
-    let hashes: Vec<Vec<u8>> = codes.iter().map(|code| code_hash(code)).collect();
-    sqlx::query!(
-        "INSERT INTO recovery_codes (account_id, code_hash) SELECT $1, unnest($2::bytea[])",
-        session.account_id,
-        &hashes
-    )
-    .execute(&mut *tx)
-    .await?;
+    let codes = new_recovery_codes(&mut tx, session.account_id).await?;
     // The session that showed a code is one with the second factor.
     if let Some(token) = sessions::token(&headers) {
         sqlx::query!(
@@ -499,21 +613,22 @@ async fn confirm(
 async fn switch_off(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Json(off): Json<SwitchOff>,
 ) -> Result<StatusCode, AppError> {
-    let keys = [Key::name(&session.username)];
-    tried_password(&state, &session, &keys, &off.password).await?;
-    // With the password, a code of the second factor itself; a wrong or
-    // missing one stays counted, like a wrong password.
-    if is_on(&state.db, session.account_id).await?
-        && !take(&state.db, session.account_id, &off.code).await?
-    {
-        let message = "the code is wrong";
-        return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+    // With the password, a code of the second factor itself, or a passkey;
+    // a wrong or missing code stays counted, like a wrong password.
+    let proof = passkeys::proof(&off.password, &off.code, off.passkey.as_ref());
+    match prove(&state, &session, &headers, proof).await {
+        Err(AppError::Status(StatusCode::FORBIDDEN, message)) if message == CODE_NEEDED => {
+            let message = "the code is wrong";
+            return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
+        }
+        other => other?,
     }
-    state.logins.succeeded(&keys);
-    let mut conn = state.db.acquire().await?;
-    switch_off_for(&mut conn, session.account_id).await?;
+    let mut tx = state.db.begin().await?;
+    switch_off_app(&mut tx, session.account_id).await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

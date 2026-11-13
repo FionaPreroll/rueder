@@ -26,7 +26,7 @@ const tryLogIn = async (page: Page, name: string, password: string) => {
 	await page.goto('/');
 	await page.getByLabel('Name').fill(name);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 };
 
 test('an account deletes itself, and its other tabs are logged out', async ({ browser }) => {
@@ -50,9 +50,9 @@ test('an account deletes itself, and its other tabs are logged out', async ({ br
 	await expect(page.getByRole('status')).toHaveText(
 		'Your account is deleted, with everything that was yours.'
 	);
-	await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeVisible();
 	// The other tab hears of it over its live connection and shows the login.
-	await expect(other.getByRole('button', { name: 'Log in' })).toBeVisible();
+	await expect(other.getByRole('button', { name: 'Log in', exact: true })).toBeVisible();
 	expect((await other.request.get('/api/me')).status()).toBe(401);
 
 	await tryLogIn(page, 'leaving', PASSWORD);
@@ -64,7 +64,7 @@ test('a disabled account is told so after the right password', async ({ page }) 
 	await logIn(page, 'barred');
 	rueder('account', 'disable', 'barred');
 	await page.reload();
-	await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeVisible();
 
 	await tryLogIn(page, 'barred', 'not the password');
 	await expect(page.getByRole('alert')).toHaveText('Wrong name or password.');

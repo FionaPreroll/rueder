@@ -8,7 +8,14 @@
 	import { knownApps, serverAddress, shot, type KnownApp } from '#lib/apps.ts';
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import type { AppPasswordRefusal, AppPasswords, NewAppPassword, Reader } from '#lib/reader.ts';
+	import type {
+		AppPasswordRefusal,
+		AppPasswords,
+		NewAppPassword,
+		PasskeyProof as PasskeyProofAnswer,
+		Reader
+	} from '#lib/reader.ts';
+	import PasskeyProof from './PasskeyProof.svelte';
 
 	let { reader, busy: settingUp = $bindable(false) }: { reader: Reader; busy?: boolean } = $props();
 
@@ -74,10 +81,15 @@
 
 	async function create(event: SubmitEvent) {
 		event.preventDefault();
+		await createWith();
+	}
+
+	/** Makes the app password, with password and code, or with a passkey's proof. */
+	async function createWith(passkey?: PasskeyProofAnswer) {
 		if (sending) return;
 		sending = true;
 		refusal = null;
-		const answer = await reader.createAppPassword(name, password, code);
+		const answer = await reader.createAppPassword(name, password, code, passkey);
 		sending = false;
 		password = '';
 		code = '';
@@ -239,6 +251,7 @@
 				<button type="button" class="tool" onclick={() => (step = 'choose')}>{texts.back}</button>
 			</div>
 		</form>
+		<PasskeyProof {reader} disabled={sending || name.trim() === ''} onproof={createWith} />
 	{:else if made}
 		<h3 class="font-semibold">{appName(chosen)}</h3>
 		<p>{how(chosen)}</p>
