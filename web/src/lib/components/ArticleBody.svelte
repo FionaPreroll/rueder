@@ -88,14 +88,17 @@
 				{formatFull(article.publishedAt)} ({formatAgo(article.publishedAt, now)})
 			</time>
 			{#if article.changes > 0}
+				{@const headline = article.changed === 'title'}
 				<button
 					type="button"
 					class="inline-flex cursor-pointer items-center gap-1 rounded border border-line px-1.5 text-xs hover:bg-hover hover:text-ink"
-					title={m.list.updatedTitle(article.changes)}
+					title={headline
+						? m.list.updatedHeadlineTitle(article.changes)
+						: m.list.updatedTitle(article.changes)}
 					onclick={() => onversions(article)}
 				>
 					<Icon name="versions" class="size-3.5" />
-					{m.list.updated}
+					{headline ? m.list.updatedHeadline : m.list.updated}
 				</button>
 			{/if}
 		</p>

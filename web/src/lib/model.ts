@@ -2,6 +2,12 @@
 // They come from the server (api/), or from made-up data (demo/) in tests and
 // in the build that runs without a server.
 
+/**
+ * What was different when an article last changed. A feed that only rewrites a
+ * headline leaves nothing to see in the text, and the list says so.
+ */
+export type Changed = 'title' | 'text' | 'both';
+
 /** Folders nest this deep at most; feeds may sit in a folder of the last level. */
 export const MAX_FOLDER_DEPTH = 5;
 
@@ -88,6 +94,12 @@ export interface Article {
 	hiddenBy?: string | null;
 	/** How many earlier versions there are; 0 for an article that never changed. */
 	changes: number;
+	/**
+	 * What was different when it last changed, where the server noted it: a feed
+	 * that only rewrites a headline leaves nothing to see in the text. Null for a
+	 * change from before rueder noted it.
+	 */
+	changed?: Changed | null;
 	/** When the current version replaced the one before, or null. */
 	updatedAt: number | null;
 }

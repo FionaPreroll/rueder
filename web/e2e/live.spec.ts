@@ -59,6 +59,23 @@ test('an article that changed says so, and its versions can be compared', async 
 	await expect(versions.locator('ins')).toContainText(['Correction: it was the fourth.']);
 });
 
+test('a headline that was rewritten says so, and the text is left alone', async ({ page }) => {
+	await logIn(page, 'live');
+	await node(page, 'Live Wire').click();
+	await site('rename', 'live', 'Wire news 3, corrected');
+	fetchSoon();
+	const row = article(page, 'Wire news 3, corrected');
+	await expect(row.getByText('new headline')).toBeVisible({ timeout: AFTER_FETCH });
+	await expect(row.getByText('updated')).toHaveCount(0);
+
+	await row.getByRole('button', { name: /Wire news 3, corrected/ }).click();
+	await page.getByRole('button', { name: 'Compare versions' }).click();
+	const versions = page.getByRole('dialog', { name: 'Versions of this article' });
+	// The first `del` is the old headline; the one after it is the legend.
+	await expect(versions.locator('del').first()).toHaveText('Wire news 3');
+	await expect(versions).toContainText('The text of this version is the same as the current one.');
+});
+
 test('what is read in one tab is read in the other', async ({ page, context }) => {
 	await logIn(page, 'live');
 	await expect(node(page, 'Live Wire')).toContainText('(2)');

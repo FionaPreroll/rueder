@@ -31,6 +31,11 @@ async function open(page: Page) {
 	await node(page, 'Long Story').click();
 	await expect(articles(page)).toHaveCount(4);
 	await page.keyboard.press('3');
+	// The view belongs to the account and reaches the server after a moment. A
+	// reload before that would find the old one and go back to the plain list.
+	await expect
+		.poll(async () => (await (await page.request.get('/api/settings')).json()).view)
+		.toBe('split');
 	await articles(page)
 		.first()
 		.getByRole('button', { name: /Story news 4/ })

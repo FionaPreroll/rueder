@@ -61,11 +61,14 @@
 		></span>
 	{/each}
 	{#if article.changes > 0}
+		{@const headline = article.changed === 'title'}
 		<span
 			class="shrink-0 rounded border border-line px-1 text-xs text-soft"
-			title={m.list.updatedTitle(article.changes)}
+			title={headline
+				? m.list.updatedHeadlineTitle(article.changes)
+				: m.list.updatedTitle(article.changes)}
 		>
-			{m.list.updated}
+			{headline ? m.list.updatedHeadline : m.list.updated}
 		</span>
 	{/if}
 {/snippet}

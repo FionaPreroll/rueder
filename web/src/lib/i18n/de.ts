@@ -101,8 +101,11 @@ const de: Messages = {
 		from: 'aus',
 		by: (author) => `von ${author}`,
 		updated: 'aktualisiert',
+		updatedHeadline: 'neue Überschrift',
 		updatedTitle: (count) =>
 			`Seit dem ersten Abruf geändert; ${n(count)} ${plural(count, { one: 'frühere Version', other: 'frühere Versionen' })}`,
+		updatedHeadlineTitle: (count) =>
+			`Die Überschrift wurde neu geschrieben, der Text ist wie er war; ${n(count)} ${plural(count, { one: 'frühere Version', other: 'frühere Versionen' })}`,
 		compare: 'Versionen vergleichen',
 		hiddenBy: (rule) => `Ausgeblendet von der Regel: ${rule}`,
 		loading: 'Der Text wird geladen …',
@@ -621,6 +624,23 @@ const de: Messages = {
 				`Browser haben am letzten Tag ${n(count)} ${plural(count, { one: 'Fehler', other: 'verschiedene Fehler' })} gemeldet.`,
 			reportedFeeds: (count) =>
 				`Leser haben ${n(count)} ${plural(count, { one: 'Feed', other: 'Feeds' })} gemeldet, ${plural(count, { one: 'der', other: 'die' })} nicht gesperrt ${plural(count, { one: 'ist', other: 'sind' })}.`
+		},
+		build: {
+			title: 'Build',
+			commit: 'Commit',
+			dirty: (commit) => `${commit}, mit eigenen Änderungen`,
+			branch: 'Branch',
+			tag: 'Tag',
+			built: 'Gebaut',
+			where: 'Läuft',
+			container: 'in einem Container',
+			host: 'direkt auf der Maschine',
+			target: 'Für',
+			profile: 'Kompiliert',
+			profileValue: (profile, level) => `${profile}, Optimierung ${level}`,
+			ci: 'Gebaut von',
+			ciValue: 'einem Lauf der CI',
+			byHand: 'Hand'
 		},
 		server: {
 			title: 'Server',

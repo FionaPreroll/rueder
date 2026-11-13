@@ -118,6 +118,20 @@ esac
 # The server made its key for the image proxy, so it can write where it must.
 compose logs rueder | grep -q 'listening on' || fail "the server did not say it listens"
 
+say "It says what it is"
+# The admin's status page carries what this build is. The commit comes from the
+# build, which only whoever builds knows, so it is only looked at when it was
+# given (CI always gives it).
+status=$(curl --fail --silent --show-error --header "Cookie: $cookie" "$at/api/status")
+printf '%s' "$status" | grep -q '"container":true' ||
+	fail "the status does not say that it runs in a container"
+if [ -n "${RUEDER_COMMIT:-}" ]; then
+	printf '%s' "$status" | grep -q "\"commit\":\"$RUEDER_COMMIT\"" ||
+		fail "the status does not name the commit it was built from"
+fi
+printf '%s' "$status" | grep -q '"profile":"release"' ||
+	fail "the image was not built as a release"
+
 say "Data outlives the containers"
 compose down
 compose up --detach --wait

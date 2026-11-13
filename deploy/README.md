@@ -52,7 +52,8 @@ docker compose up --detach
 
 `:latest` is the newest change on `main`; every change also has a tag of its
 own, `:sha-` and the first seven characters of its commit, for staying on one
-version. The image is for amd64 machines only.
+version. Both tags carry an image for amd64 and one for arm64, and docker takes
+the one for the machine.
 
 rueder now listens on `127.0.0.1:3000` and applies its database migrations on
 every start. `docker compose ps` shows both containers as `healthy` once they

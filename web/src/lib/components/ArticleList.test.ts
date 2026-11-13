@@ -80,7 +80,9 @@ describe('the list view', () => {
 
 	it('marks updated articles and offers to compare the versions', async () => {
 		const { reader, onversions, row } = setup();
-		const article = reader.list.find((entry) => entry.versions.length > 0)!;
+		const article = reader.list.find(
+			(entry) => entry.versions.length > 0 && entry.changed !== 'title'
+		)!;
 		expect(within(row(article.id)).getByText('updated')).toHaveAttribute(
 			'title',
 			expect.stringMatching(/^Changed since it was first fetched; \d earlier version/)
@@ -91,6 +93,16 @@ describe('the list view', () => {
 		);
 		await userEvent.click(compare);
 		expect(onversions).toHaveBeenCalledWith(article);
+	});
+
+	it('says when a feed rewrote nothing but the headline', () => {
+		const { reader, row } = setup({ kind: 'all' });
+		const article = reader.list.find((entry) => entry.changed === 'title')!;
+		expect(article).toBeDefined();
+		expect(within(row(article.id)).getByText('new headline')).toHaveAttribute(
+			'title',
+			expect.stringMatching(/^Its headline was rewritten, its text is as it was/)
+		);
 	});
 
 	it('holds new articles back behind a button', async () => {

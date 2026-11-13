@@ -1,0 +1,181 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH marks AS (\n            SELECT x.feed_id, x.seq FROM article_states x\n            WHERE $2 = 'starred' AND x.account_id = $1 AND x.starred\n          UNION ALL\n            SELECT x.feed_id, x.seq FROM article_states x\n            WHERE $2 = 'hidden' AND x.account_id = $1 AND x.hidden\n          UNION ALL\n            SELECT al.feed_id, al.seq\n            FROM labels l JOIN article_labels al ON al.label_id = l.id\n            WHERE $2 = 'label' AND l.account_id = $1 AND l.id = $3\n        )\n        SELECT a.feed_id AS \"feed_id!\", a.seq AS \"seq!\", a.id AS \"id!\",\n               a.published_at AS \"published_at!\", a.updated_at,\n               a.updated_what AS \"updated_what: Changed\", a.version AS \"version!\",\n               a.title AS \"title!\", a.teaser AS \"teaser!\", a.author AS \"author!\", a.url,\n               a.thumbnail_url,\n               CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                    ELSE coalesce(st.read, false) END AS \"read!\",\n               coalesce(st.starred, false) AS \"starred!\"\n        FROM marks m\n        JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = m.feed_id\n        JOIN feeds bf ON bf.id = m.feed_id AND bf.blocked_at IS NULL\n        JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq\n        LEFT JOIN article_states st\n            ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n        WHERE a.id < $4 AND a.id > $7 AND ($2 = 'hidden' OR NOT coalesce(st.hidden, false))\n              AND ($5::boolean IS NOT TRUE\n                   OR NOT CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                               ELSE coalesce(st.read, false) END)\n        ORDER BY CASE WHEN $8 THEN a.id END, a.id DESC\n        LIMIT $6\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "published_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_what: Changed",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_what"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "version!",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "teaser!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "teaser"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "author!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "thumbnail_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "thumbnail_url"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "read!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "starred!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4",
+        "Int8",
+        "Bool",
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "ece246b33c5b2efb0c3c45c6d2ad40998f7c9444014245f139cb283641257133"
+}

@@ -270,6 +270,7 @@ function toArticle(item: ApiListItem): Article {
 		image: null,
 		thumbnail: item.thumbnail_url,
 		changes: Math.max(0, item.version - 1),
+		changed: item.updated_what,
 		updatedAt: item.updated_at ? Date.parse(item.updated_at) : null
 	};
 }

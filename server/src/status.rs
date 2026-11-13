@@ -23,11 +23,12 @@ use crate::{
     monitor::{self, Severity, Timing},
     profile, reports,
     sessions::Session,
+    version,
 };
 
 /// The types this module sends, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
-    types.add::<Status>();
+    types.add::<version::Build>().add::<Status>();
 }
 
 pub fn routes() -> Router<AppState> {
@@ -51,6 +52,8 @@ const OVERDUE_S: f64 = 10.0 * 60.0;
 struct Status {
     /// The version of the server.
     version: &'static str,
+    /// What this build is: commit, branch, when and how it was built.
+    build: version::Build,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
     started_at: OffsetDateTime,
@@ -552,7 +555,8 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         last: problem.last,
     });
     Ok(Json(Status {
-        version: env!("CARGO_PKG_VERSION"),
+        version: version::VERSION,
+        build: version::build(),
         started_at: monitor.started_at,
         uptime_s: monitor.started.elapsed().as_secs(),
         memory_bytes: memory(),
