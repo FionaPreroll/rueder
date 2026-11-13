@@ -38,9 +38,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # The build uses the committed .sqlx cache, as in ci.yml: without it the
+      # query macros check against the empty database and nothing compiles.
+      SQLX_OFFLINE: "true"
       # Where the run makes its own database.
       DATABASE_URL: postgres://postgres@localhost:5432/postgres
-      # Three minutes on a pull request, half an hour on schedule.
+      # Half an hour unless another time is typed when starting by hand.
       SECONDS_TO_RUN: ${{ github.event.inputs.seconds || '1800' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -57,4 +60,4 @@ jobs:
           case "$SECONDS_TO_RUN" in
             ''|*[!0-9]*) echo "seconds is not a number" >&2; exit 1 ;;
           esac
-          SOAK_SECONDS="$SECONDS_TO_RUN" cargo test --release --test soak 
+          SOAK_SECONDS="$SECONDS_TO_RUN" cargo test --release --test soak
