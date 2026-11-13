@@ -149,6 +149,18 @@ describe('an empty list', () => {
 		reader.show({ kind: 'hidden' });
 		await vi.waitFor(() => expect(screen.getByText('No articles here.')).toBeInTheDocument());
 	});
+
+	it('says when the operator blocked the feed', async () => {
+		const { reader } = setup({ kind: 'feed', id: 'feed-borrow' });
+		reader.feeds = {
+			...reader.feeds,
+			'feed-borrow': { ...reader.feeds['feed-borrow']!, blocked: true }
+		};
+		reader.query = 'nothing says this';
+		await vi.waitFor(() =>
+			expect(screen.getByRole('status')).toHaveTextContent('The operator of this rueder blocked')
+		);
+	});
 });
 
 describe('the stacked rows beside the article', () => {
@@ -316,6 +328,29 @@ describe('a long list', () => {
 });
 
 describe('an open article', () => {
+	it('is reported from its menu where the server takes reports', async () => {
+		const reader = new DemoReader(() => now);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		const article = reader.list[0]!;
+		const { unmount } = render(ArticleBody, { reader, article, now, onversions: vi.fn() });
+		expect(screen.queryByRole('button', { name: 'More actions for the article' })).toBeNull();
+		unmount();
+
+		Object.assign(reader.can, { reportContent: true });
+		const reportContent = vi.spyOn(reader, 'reportContent').mockResolvedValue('sent');
+		render(ArticleBody, { reader, article, now, onversions: vi.fn() });
+		await userEvent.click(screen.getByRole('button', { name: 'More actions for the article' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Report the article …' }));
+		const dialog = screen.getByRole('dialog', { name: 'Report the article' });
+		await userEvent.type(within(dialog).getByRole('textbox'), 'Ads');
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Send the report' }));
+		expect(reportContent).toHaveBeenCalledWith(
+			{ feedId: article.feedId, seq: article.seq },
+			'spam',
+			'Ads'
+		);
+	});
+
 	it('offers labels when the account has none yet, and makes the first on the spot', async () => {
 		const reader = new DemoReader(() => now);
 		for (const label of [...reader.labels]) reader.removeLabel(label.id);

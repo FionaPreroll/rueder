@@ -860,6 +860,34 @@ pub fn with_images(html: &str, address: impl Fn(&str) -> Option<String>) -> Stri
     written(root)
 }
 
+/// The most image addresses [`images_in`] gives of one text.
+pub const MAX_IMAGES: usize = 1000;
+
+/// The addresses of the images in a cleaned text, in its order, each once and
+/// at most [`MAX_IMAGES`]: for taking a blocked feed's images out of the cache.
+///
+/// This is for a text as [`clean`] left it.
+pub fn images_in(html: &str) -> Vec<String> {
+    // The root stays held, as in `first_image`.
+    let root = read(html);
+    let mut found: Vec<String> = Vec::new();
+    let mut waiting = vec![root.clone()];
+    while let Some(node) = waiting.pop() {
+        if found.len() >= MAX_IMAGES {
+            break;
+        }
+        if let NodeData::Element { name, attrs, .. } = &node.data
+            && &*name.local == "img"
+            && let Some(src) = attribute(&attrs.borrow(), "src")
+            && !found.contains(&src)
+        {
+            found.push(src);
+        }
+        waiting.extend(node.children.borrow().iter().rev().cloned());
+    }
+    found
+}
+
 /// Below this many pixels wide or high, as a text says, an image is an icon or
 /// a smiley, not a picture to show an article by.
 const SMALLEST_PICTURE: u32 = 100;

@@ -39,5 +39,6 @@ export const ACCOUNTS = [
 	'darkbars',
 	'guarded',
 	'leaving',
-	'barred'
+	'barred',
+	'reporting'
 ];

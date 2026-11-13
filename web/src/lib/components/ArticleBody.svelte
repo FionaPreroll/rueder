@@ -9,6 +9,7 @@
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
+	import ReportDialog from './ReportDialog.svelte';
 
 	let {
 		reader,
@@ -36,6 +37,7 @@
 	// A new label, named in a field beside the menu, goes on this article at once.
 	let naming = $state(false);
 	let name = $state('');
+	let reporting = $state(false);
 
 	function addLabel(event: SubmitEvent) {
 		event.preventDefault();
@@ -230,5 +232,28 @@
 				<span class="rounded bg-panel px-1.5 py-0.5 text-xs">{tag}</span>
 			{/each}
 		</span>
+		{#if reader.can.reportContent}
+			<Menu
+				class="inline-flex cursor-pointer items-center hover:text-ink"
+				align="right"
+				label={m.list.articleActions}
+			>
+				{#snippet button()}
+					<Icon name="more" />
+				{/snippet}
+				<button type="button" role="menuitem" class="menu-item" onclick={() => (reporting = true)}>
+					{m.list.reportArticle}
+				</button>
+			</Menu>
+		{/if}
 	</footer>
+	{#if reporting}
+		<ReportDialog
+			{reader}
+			feedId={article.feedId}
+			seq={article.seq}
+			title={article.title}
+			onclose={() => (reporting = false)}
+		/>
+	{/if}
 </div>

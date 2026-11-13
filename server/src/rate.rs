@@ -60,6 +60,9 @@ pub const NEW_FEEDS: Rate = Rate::new(
 /// How many reports of errors in its browsers an account may send: 100 at
 /// once, and about 100 more a day.
 pub const REPORTS: Rate = Rate::new(100, Duration::from_secs(864));
+/// How many feeds and articles an account may report: 20 at once, and about
+/// 20 more a day, as a reader reports now and then.
+pub const CONTENT_REPORTS: Rate = Rate::new(20, Duration::from_secs(4320));
 /// How many moves from another rueder an account may bring in: 3 at once, and
 /// one more every two hours. Each can bring a lot (see `transfer`), and a
 /// move is done once.
@@ -190,6 +193,7 @@ pub struct Rates {
     lookups: Limiter<i32>,
     new_feeds: Limiter<i32>,
     reports: Limiter<i32>,
+    content_reports: Limiter<i32>,
     imports: Limiter<i32>,
     heavy: Heavy,
 }
@@ -201,6 +205,7 @@ impl Rates {
             lookups: Limiter::new(lookups),
             new_feeds: Limiter::new(NEW_FEEDS),
             reports: Limiter::new(REPORTS),
+            content_reports: Limiter::new(CONTENT_REPORTS),
             imports: Limiter::new(IMPORTS),
             heavy: Heavy {
                 running: Semaphore::new(HEAVY_AT_ONCE),
@@ -274,6 +279,21 @@ impl Rates {
             reports: Limiter::new(reports),
             ..self
         }
+    }
+
+    /// Other limits for reports of feeds and articles than [`CONTENT_REPORTS`].
+    pub fn with_content_reports(self, reports: Rate) -> Self {
+        Self {
+            content_reports: Limiter::new(reports),
+            ..self
+        }
+    }
+
+    /// Counts a report of a feed or an article the account sends.
+    pub fn content_report(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
+        self.content_reports
+            .take(&account_id, now)
+            .map_err(|wait| AppError::TooMany(wait, "too many reports, try again later"))
     }
 
     /// Counts a report of an error the account's browser sends.

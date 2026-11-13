@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT true AS \"known!\" FROM subscriptions s\n               JOIN articles a ON a.feed_id = s.feed_id AND a.seq = $3\n               WHERE s.account_id = $1 AND s.feed_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "known!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "334784a95ab7cd059cc3b4c5acfbcab9038d31f43cf1a942019235237c2f122e"
+}

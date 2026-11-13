@@ -696,6 +696,8 @@ pub fn changed(path: &str) -> Option<Changed> {
         ["second-factor", ..] => Changed::Area(Area::Session),
         // Agreeing to the terms ends the question in the other tabs.
         ["terms"] => Changed::Area(Area::Session),
+        // A report changes nothing a reader's tabs show.
+        ["feeds", _, "report"] | ["feeds", _, "articles", _, "report"] => return None,
         ["settings", ..] => Changed::Area(Area::Settings),
         // Whether the account sends reports of errors is one of its settings;
         // the reports themselves are nothing its tabs show.

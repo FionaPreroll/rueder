@@ -266,6 +266,8 @@ pub struct Me {
     /// The version of the terms of use the account has yet to agree to, where
     /// the server names one; the page asks before anything else.
     terms_to_accept: Option<String>,
+    /// Whether the account may report feeds and articles on this server.
+    content_reports: bool,
 }
 
 impl Me {
@@ -277,6 +279,7 @@ impl Me {
             has_password,
             admin_needs_second_factor: false,
             terms_to_accept: None,
+            content_reports: false,
         }
     }
 
@@ -290,6 +293,15 @@ impl Me {
             has_password,
             admin_needs_second_factor: session.admin_needs_second_factor,
             terms_to_accept: legal.to_accept(session.terms_version.as_deref()),
+            content_reports: false,
+        }
+    }
+
+    /// With whether the server takes reports of feeds and articles.
+    pub(crate) fn reporting(self, content_reports: bool) -> Self {
+        Self {
+            content_reports,
+            ..self
         }
     }
 }
@@ -391,7 +403,8 @@ pub async fn login(
         session.for_admins(state.admin_second_factor),
         true,
         &state.legal,
-    );
+    )
+    .reporting(state.content_reports);
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -417,7 +430,9 @@ pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<
     .fetch_optional(&state.db)
     .await?
     .unwrap_or(false);
-    Ok(Json(Me::of(session, has_password, &state.legal)))
+    Ok(Json(
+        Me::of(session, has_password, &state.legal).reporting(state.content_reports),
+    ))
 }
 
 #[cfg(test)]

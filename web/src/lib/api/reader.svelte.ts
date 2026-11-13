@@ -36,6 +36,8 @@ import {
 	type Abilities,
 	type Account,
 	type LegalLinks,
+	type ReportOutcome,
+	type ReportReason,
 	type Found,
 	type Fresh,
 	type Imported,
@@ -394,7 +396,8 @@ export class ServerReader implements Reader {
 			invites: true,
 			reports: true,
 			secondFactor: true,
-			remove: true
+			remove: true,
+			reportContent: account.contentReports === true
 		};
 		this.session = session;
 		this.api = api;
@@ -426,6 +429,26 @@ export class ServerReader implements Reader {
 
 	signOut() {
 		this.session.signOut();
+	}
+
+	// Reports of feeds and articles
+
+	async reportContent(
+		target: { feedId: string; seq?: number },
+		reason: ReportReason,
+		note: string
+	): Promise<ReportOutcome> {
+		try {
+			await this.api.reportContent(serverId(target.feedId), target.seq, {
+				reason,
+				note: note.trim()
+			});
+			return 'sent';
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			if (error instanceof ApiError && error.status === 429) return 'tooMany';
+			return 'unreachable';
+		}
 	}
 
 	// The terms of use
@@ -648,7 +671,8 @@ export class ServerReader implements Reader {
 				icon: feed.icon_url,
 				lastSeq: feed.last_seq,
 				error: feed.error,
-				waiting: !feed.fetched
+				waiting: !feed.fetched,
+				blocked: feed.blocked
 			};
 			counts[id] = feed.unread;
 		}

@@ -105,6 +105,7 @@ describe('the tree', () => {
 				icon_url: null,
 				fetch_agent: 'rueder',
 				fetched: true,
+				blocked: false,
 				error: null,
 				last_seq: 0,
 				read_upto: 0,
@@ -934,7 +935,8 @@ describe('reading', () => {
 			invites: true,
 			reports: true,
 			secondFactor: true,
-			remove: true
+			remove: true,
+			reportContent: false
 		});
 	});
 });
@@ -2130,5 +2132,62 @@ describe('labels', () => {
 		server.emit({ event: 'labels', data: { by: 'another-tab' } });
 		await settle();
 		expect(reader.labels.map((label) => label.title)).toContain('Elsewhere');
+	});
+});
+
+describe('reports of feeds and articles', () => {
+	async function reporting(on: boolean) {
+		server.contentReports = on;
+		const reader = new ServerReader({ name: 'fiona', admin: false, contentReports: on }, session);
+		reader.start();
+		await settle();
+		return reader;
+	}
+
+	it('send a reason and a note, and a second report replaces the first', async () => {
+		const reader = await reporting(true);
+		expect(reader.can.reportContent).toBe(true);
+		const feedId = `feed-${tech}`;
+		expect(await reader.reportContent({ feedId }, 'spam', '  ads only \n')).toBe('sent');
+		expect(await reader.reportContent({ feedId, seq: 2 }, 'illegal', '')).toBe('sent');
+		expect(await reader.reportContent({ feedId }, 'malicious', 'phishing')).toBe('sent');
+		expect(server.contentReported).toEqual([
+			{ feed_id: tech, seq: 2, reason: 'illegal', note: '' },
+			{ feed_id: tech, seq: null, reason: 'malicious', note: 'phishing' }
+		]);
+		expect(server.requests.filter((r) => r.path.endsWith('/report')).map((r) => r.path)).toEqual([
+			`/feeds/${tech}/report`,
+			`/feeds/${tech}/articles/2/report`,
+			`/feeds/${tech}/report`
+		]);
+	});
+
+	it('say when there were too many or the server did not take them', async () => {
+		const reader = await reporting(true);
+		server.refuse('POST', /\/report$/, 429);
+		expect(await reader.reportContent({ feedId: `feed-${lone}` }, 'other', '')).toBe('tooMany');
+		server.refuse('POST', /\/report$/, 502);
+		expect(await reader.reportContent({ feedId: `feed-${lone}` }, 'other', '')).toBe('unreachable');
+		expect(server.contentReported).toEqual([]);
+	});
+
+	it('are offered only where the server takes them', async () => {
+		const reader = await reporting(false);
+		expect(reader.can.reportContent).toBe(false);
+		expect(await reader.reportContent({ feedId: `feed-${lone}` }, 'spam', '')).toBe('unreachable');
+	});
+
+	it('leave a blocked feed without articles and unread ones', async () => {
+		server.feeds.find((feed) => feed.id === tech)!.blocked = true;
+		const reader = await started();
+		expect(reader.feeds[`feed-${tech}`]?.blocked).toBe(true);
+		expect(reader.feeds[`feed-${blog}`]?.blocked).toBe(false);
+		expect(reader.unreadIn({ kind: 'feed', id: `feed-${tech}` } as TreeNode)).toBe(0);
+		reader.show({ kind: 'folder', id: `folder-${news}` });
+		await settle();
+		expect(titles(reader).length).toBe(2);
+		expect(new Set(reader.visible.map((article) => article.feedId))).toEqual(
+			new Set([`feed-${blog}`])
+		);
 	});
 });

@@ -177,6 +177,15 @@ async fn fill(db: &PgPool, account_id: i32, name: &str, shared: i32) -> i32 {
     .execute(db)
     .await
     .unwrap();
+    // A report of one of its feeds.
+    sqlx::query(
+        "INSERT INTO content_reports (account_id, feed_id, reason)
+         SELECT $1, feed_id, 'spam' FROM subscriptions WHERE account_id = $1 LIMIT 1",
+    )
+    .bind(account_id)
+    .execute(db)
+    .await
+    .unwrap();
     // A recovery code of a second factor.
     sqlx::query("INSERT INTO recovery_codes (account_id, code_hash) VALUES ($1, '\\x03')")
         .bind(account_id)

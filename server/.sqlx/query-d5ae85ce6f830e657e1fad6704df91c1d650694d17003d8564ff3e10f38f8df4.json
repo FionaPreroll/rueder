@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n                a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title\n         FROM subscriptions s\n         JOIN articles a ON a.feed_id = s.feed_id\n         JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
+  "query": "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n                a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title\n         FROM subscriptions s\n         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL\n         JOIN articles a ON a.feed_id = s.feed_id\n         JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
   "describe": {
     "columns": [
       {
@@ -182,5 +182,5 @@
       true
     ]
   },
-  "hash": "854fcf06246afcddcfef2251b481a0c803cb92ba6cf5bac487858d84b4cee67c"
+  "hash": "d5ae85ce6f830e657e1fad6704df91c1d650694d17003d8564ff3e10f38f8df4"
 }

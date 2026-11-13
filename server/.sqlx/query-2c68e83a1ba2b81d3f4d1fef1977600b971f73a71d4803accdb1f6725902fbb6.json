@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.blocked_at IS NOT NULL AS \"blocked!\"\n           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n           WHERE s.account_id = $1 AND s.feed_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blocked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2c68e83a1ba2b81d3f4d1fef1977600b971f73a71d4803accdb1f6725902fbb6"
+}

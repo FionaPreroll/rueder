@@ -80,6 +80,8 @@
 				return hints.limited(h.count);
 			case 'browser_errors':
 				return hints.browserErrors(h.errors);
+			case 'reported_feeds':
+				return hints.reportedFeeds(h.feeds);
 		}
 	}
 
@@ -139,6 +141,39 @@
 						<li class="flex items-start gap-2">
 							<Icon name="warning" class="mt-0.5 size-4 shrink-0 text-warn" />
 							<span>{hint(h)}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+
+		<section class="mt-4" aria-labelledby="status-reported">
+			<h3 id="status-reported" class="text-sm font-semibold">{m.status.reported.title}</h3>
+			<p class="mt-1 text-sm text-soft">{m.status.reported.text}</p>
+			{#if s.reported.length === 0}
+				<p class="mt-2 text-sm text-soft">{m.status.reported.none}</p>
+			{:else}
+				<ul class="mt-2 divide-y divide-line rounded border border-line">
+					{#each s.reported as feed (feed.feed_id)}
+						<li class="px-3 py-2 text-sm">
+							<p class="flex flex-wrap items-baseline gap-x-2">
+								<span class="font-semibold">{feed.title}</span>
+								{#if feed.blocked}
+									<span class="text-xs font-semibold text-warn">{m.status.reported.blocked}</span>
+								{/if}
+								<span
+									class="ml-auto text-xs text-soft"
+									title={formatFull(Date.parse(feed.last_at))}
+								>
+									{m.status.reported.reports(feed.reports, ago(feed.last_at))}
+								</span>
+							</p>
+							<p class="mt-1 font-mono text-xs break-all">{feed.url}</p>
+							<p class="mt-1 text-xs text-soft">
+								{feed.reasons
+									.map((r) => `${m.report.reasons[r.reason]} ${formatNumber(r.reports)}`)
+									.join(' · ')}
+							</p>
 						</li>
 					{/each}
 				</ul>

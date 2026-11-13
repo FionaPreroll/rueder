@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,\n                  f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message,\n                  f.fetched_at IS NOT NULL AS \"fetched!\"\n           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n           WHERE s.account_id = $1 ORDER BY s.position, s.feed_id",
+  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,\n                  f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message,\n                  f.fetched_at IS NOT NULL AS \"fetched!\", f.blocked_at IS NOT NULL AS \"blocked!\"\n           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n           WHERE s.account_id = $1 ORDER BY s.position, s.feed_id",
   "describe": {
     "columns": [
       {
@@ -118,6 +118,12 @@
         "name": "fetched!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "blocked!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -136,8 +142,9 @@
       true,
       false,
       true,
+      null,
       null
     ]
   },
-  "hash": "b8ee98763f4dcdb41d978605e914f4529b47798392279c01252a2f8941e4f299"
+  "hash": "8c012b17f15b0ba81a4d1d0bfeaadb206805f19a4012296bb39504c652d5bcdd"
 }

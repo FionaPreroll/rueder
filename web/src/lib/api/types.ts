@@ -50,6 +50,10 @@ export type Me = {
 	 * the server names one; the page asks before anything else.
 	 */
 	terms_to_accept: string | null,
+	/**
+	 * Whether the account may report feeds and articles on this server.
+	 */
+	content_reports: boolean,
 };
 
 /**
@@ -240,6 +244,46 @@ export type TermsAgreement = {
 };
 
 /**
+ * A report of a feed or an article.
+ *
+ * `POST /api/feeds/{id}/report` and `POST /api/feeds/{id}/articles/{seq}/report`
+ * read it and answer 204.
+ */
+export type ContentReport = {
+	reason: ReportReason,
+	/**
+	 * What the reader adds, at most 500 characters.
+	 */
+	note?: string,
+};
+
+/**
+ * Why something is reported.
+ */
+export type ReportReason = "illegal" | "copyright" | "malicious" | "spam" | "other";
+
+/**
+ * A feed readers reported, for the status page: its address, never who.
+ */
+export type ReportedFeed = {
+	feed_id: number,
+	url: string,
+	title: string,
+	reports: number,
+	/**
+	 * How many reports gave each reason, the most first.
+	 */
+	reasons: Array<ReportReasonCount>,
+	last_at: string,
+	blocked: boolean,
+};
+
+export type ReportReasonCount = {
+	reason: ReportReason,
+	reports: number,
+};
+
+/**
  * The query of `GET /api/register`.
  */
 export type AskedInvite = {
@@ -394,6 +438,11 @@ export type Feed = {
 	 * file waits for the next round.
 	 */
 	fetched: boolean,
+	/**
+	 * The operator blocked the feed: nobody sees its articles, and it is not
+	 * fetched.
+	 */
+	blocked: boolean,
 	last_seq: number,
 	read_upto: number,
 	unread: number,
@@ -1040,6 +1089,11 @@ export type ServerStatus = {
 	 * Errors in the browsers of readers who agreed to send them.
 	 */
 	browsers: StatusBrowserErrors,
+	/**
+	 * Feeds readers reported, with their address: the one place the status
+	 * names feeds, as the admins have to look at them. Never who reported.
+	 */
+	reported: Array<ReportedFeed>,
 };
 
 /**
@@ -1296,6 +1350,10 @@ export type StatusHint =
 	| {
 		"kind": "browser_errors",
 		errors: number,
+	}
+	| {
+		"kind": "reported_feeds",
+		feeds: number,
 	};
 
 /**

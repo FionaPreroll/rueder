@@ -65,6 +65,12 @@ What is here:
   account's own goes with it, the feeds stay for their other readers.
   `rueder account disable <name>` keeps a misused account from logging in and
   ends its sessions; `enable` undoes it.
+- Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
+  readers report a feed or an article with a reason and a note, at most 20 a
+  day; the status page lists the reported feeds with their address, never who
+  reported. `rueder feed block <address>` stops fetching the feed, hides its
+  articles from everybody, refuses new subscriptions and removes its images
+  from the cache; `rueder feed unblock <address>` lifts it.
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
 - The API's types for the frontend (`src/typescript.rs`): every type that is
@@ -138,6 +144,7 @@ cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accoun
 cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
 cargo run -- account second-factor-off ada   # ada lost the app and the recovery codes
+cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
 ```
 
 Admins see the status of the server in the account menu of the page

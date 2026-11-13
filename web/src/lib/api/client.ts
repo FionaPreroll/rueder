@@ -14,6 +14,7 @@ import type {
 	ClientReport,
 	ClientReports,
 	Created,
+	ContentReport,
 	Credentials,
 	Farewell,
 	Feed,
@@ -374,6 +375,12 @@ export const api = {
 	/** For admins only. */
 	status: () => call<ServerStatus>('GET', '/status'),
 
+	reportContent: (feedId: number, seq: number | undefined, report: ContentReport) =>
+		call<void>(
+			'POST',
+			seq === undefined ? `/feeds/${feedId}/report` : `/feeds/${feedId}/articles/${seq}/report`,
+			report
+		),
 	acceptTerms: (version: string) =>
 		call<void>('PUT', '/terms', { version } satisfies TermsAgreement),
 

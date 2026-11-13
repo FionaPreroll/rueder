@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.feed_id FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n             WHERE s.account_id = $1 AND f.blocked_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "feed_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b4e8e8cad2af2723e730e1138ceff9724e7d231274f6267449b95902c7a57e9d"
+}

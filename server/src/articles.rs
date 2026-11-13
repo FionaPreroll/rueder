@@ -697,6 +697,7 @@ pub async fn marked(
                coalesce(st.starred, false) AS "starred!"
         FROM marks m
         JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = m.feed_id
+        JOIN feeds bf ON bf.id = m.feed_id AND bf.blocked_at IS NULL
         JOIN articles a ON a.feed_id = m.feed_id AND a.seq = m.seq
         LEFT JOIN article_states st
             ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq
@@ -764,6 +765,7 @@ pub async fn open(
         "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
                 a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title
          FROM subscriptions s
+         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          JOIN articles a ON a.feed_id = s.feed_id
          JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
          WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
@@ -796,6 +798,7 @@ pub async fn versions(
     let rows = sqlx::query!(
         "SELECT v.version, v.fetched_at, v.raw
          FROM subscriptions s
+         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          JOIN article_versions v ON v.feed_id = s.feed_id
          WHERE s.account_id = $1 AND s.feed_id = $2 AND v.seq = $3
          ORDER BY v.version",

@@ -324,6 +324,17 @@ async fn known(
     .await
 }
 
+/// Whether the operator blocked the feed: nobody subscribes to it anew.
+async fn blocked(conn: &mut PgConnection, feed_id: i32) -> sqlx::Result<bool> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT blocked_at IS NOT NULL AS "blocked!" FROM feeds WHERE id = $1"#,
+        feed_id
+    )
+    .fetch_optional(conn)
+    .await?
+    .unwrap_or(false))
+}
+
 /// Makes a feed of an address: fetches it, and keeps it only if that worked.
 async fn create(state: &AppState, url: &Url) -> Result<i32, AppError> {
     let (client, rules) = (client(state)?, rules(state)?);
@@ -435,6 +446,12 @@ async fn subscribe(
     let mut feed = known(&mut conn, url.as_str(), None).await?;
     if feed.is_none() && new.url.trim() != url.as_str() {
         feed = known(&mut conn, new.url.trim(), None).await?;
+    }
+    if let Some(id) = feed
+        && blocked(&mut conn, id).await?
+    {
+        let message = "the operator of this rueder blocked this feed";
+        return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
     }
     drop(conn);
     let (id, fresh) = match feed {
@@ -839,6 +856,8 @@ pub(crate) async fn take(
                     continue;
                 };
                 let (feed_id, created) = match known(&mut *tx, url.as_str(), None).await? {
+                    // A blocked feed comes in neither with a file nor with a move.
+                    Some(id) if blocked(&mut *tx, id).await? => continue,
                     Some(id) => (id, false),
                     None => {
                         let id = sqlx::query_scalar!(

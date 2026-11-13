@@ -200,6 +200,8 @@ fn what_a_request_changes_is_told_by_its_address() {
         // Questions that are sent like changes, and what only admins see.
         ("/api/rules/preview", None),
         ("/api/second-factor/setup", None),
+        ("/api/feeds/7/report", None),
+        ("/api/feeds/7/articles/3/report", None),
         ("/api/feeds/find", None),
         ("/api/accounts", None),
         ("/api/register", None),

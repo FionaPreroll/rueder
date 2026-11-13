@@ -99,7 +99,8 @@ export class Session {
 				admin: account.is_admin,
 				password: account.has_password,
 				adminNeedsSecondFactor: account.admin_needs_second_factor,
-				termsToAccept: account.terms_to_accept
+				termsToAccept: account.terms_to_accept,
+				contentReports: account.content_reports
 			},
 			{
 				signOut: () => void this.signOut(),
