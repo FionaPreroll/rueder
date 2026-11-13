@@ -65,7 +65,7 @@ const pixels = (value: unknown) =>
 		? Math.min(MAX_PIXELS, Math.max(0, Math.round(value)))
 		: 0;
 
-function streamOf(value: unknown): Stream | null {
+export function streamOf(value: unknown): Stream | null {
 	if (!value || typeof value !== 'object') return null;
 	const { kind, id } = value as Record<string, unknown>;
 	switch (kind) {
