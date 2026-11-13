@@ -270,6 +270,17 @@ jobs:
           mv app/build/outputs/apk/github/debug/app-github-debug.apk ../out/rueder-debug.apk
           mv app/build/outputs/apk/github/release/app-github-release-unsigned.apk ../out/rueder-unsigned.apk
           mv app/build/outputs/apk/play/release/app-play-release-unsigned.apk ../out/rueder-play-unsigned.apk
+      # TEMPORARY: writes the first gradle/verification-metadata.xml for the
+      # pull request that adds it; removed again before it is merged.
+      - name: Write verification metadata
+        working-directory: app/android
+        run: |
+          ./gradlew --no-daemon --write-verification-metadata sha256 testGithubDebugUnitTest testPlayDebugUnitTest assembleGithubDebug assembleGithubRelease assemblePlayRelease
+          wc -c gradle/verification-metadata.xml
+          echo "BEGIN-METADATA"
+          gzip -9c gradle/verification-metadata.xml | base64 -w 0 | fold -w 3000
+          echo
+          echo "END-METADATA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rueder-android
