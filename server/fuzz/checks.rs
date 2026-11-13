@@ -10,8 +10,8 @@ use std::{io::Cursor, sync::LazyLock};
 use image::{ImageFormat, ImageReader};
 use rueder::{
     cleaning::{self, Base, Rules},
-    greader::parse::{self, FeedRef, Params, Stream},
     feeds::{self, MAX_ARTICLES, MAX_CONTENT},
+    greader::parse::{self, FeedRef, Params, Stream},
     images::{self, Format, MAX_PIXELS, Refused, Signer, Size},
 };
 use time::{OffsetDateTime, macros::datetime};
