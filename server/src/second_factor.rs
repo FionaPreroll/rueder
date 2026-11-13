@@ -379,7 +379,7 @@ async fn check_password(
 
 /// Counts a try against the limit of the account's name and checks the
 /// password; the caller says when the whole of it succeeded.
-async fn tried_password(
+pub(crate) async fn tried_password(
     state: &AppState,
     session: &Session,
     keys: &[Key],

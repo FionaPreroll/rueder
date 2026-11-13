@@ -275,6 +275,7 @@ const en = {
 			invites: 'Invitations',
 			privacy: 'Privacy',
 			security: 'Security',
+			apps: 'Apps',
 			move: 'Move',
 			account: 'Account'
 		},
@@ -307,6 +308,58 @@ const en = {
 		wakeLockMissing: 'This browser cannot keep the screen on.',
 		note: 'Changes apply at once and are saved with your account, so they follow you to every device.',
 		noteDemo: 'Changes apply at once and stay in this browser.',
+		apps: {
+			intro:
+				'Feed reader apps of other makers can read and change what you read here, through the Google Reader API. Each app gets an app password of its own, which you can revoke at any time; your own password stays yours.',
+			none: 'No app is set up yet.',
+			made: (when: string) => `set up ${when}`,
+			used: (when: string) => `last used ${when}`,
+			unused: 'not used yet',
+			revoke: 'Revoke',
+			revokeName: (name: string) => `Revoke the app password ${name}`,
+			add: 'Set up an app',
+			full: (max: number) =>
+				`An account has at most ${n(max)} app passwords. Revoke one to set up another app.`,
+			choose: 'Which app do you want to use?',
+			website: (app: string) => `Website of ${app}`,
+			other: 'Another app',
+			otherHint: 'Any app that offers the Google Reader API or FreshRSS.',
+			platforms: {
+				apple: 'Mac, iPhone and iPad',
+				android: 'Android'
+			},
+			name: 'Name of the app password',
+			password: 'Your password',
+			code: 'Code of your authenticator app, or a recovery code',
+			create: 'Create the app password',
+			creating: 'One moment …',
+			back: 'Back',
+			how: {
+				netnewswire:
+					'In NetNewsWire, add an account (Settings, Accounts, then +) and choose FreshRSS. Enter the server address, name and app password below.',
+				readyou:
+					'In Read You, open Settings, Accounts, Add accounts, and choose Google Reader. Enter the server address, name and app password below.',
+				other:
+					'In your app, add an account of the kind “Google Reader API” or, where there is none, “FreshRSS”. Enter the server address, name and app password below.'
+			},
+			server: 'Server address',
+			user: 'Name',
+			secret: 'App password',
+			copy: (what: string) => `Copy ${what}`,
+			copied: 'Copied',
+			once: 'The app password is shown only now. Should you lose it, revoke it and make a new one.',
+			waiting: 'Waiting for the app to log in …',
+			connected: 'Connected: the app has logged in.',
+			done: 'Done',
+			refusals: {
+				wrongPassword: 'The password is not right.',
+				codeNeeded: 'Enter a code of your authenticator app as well.',
+				wrongCode: 'That code is not right. Codes change every 30 seconds.',
+				tooManyApps: 'An account has at most 20 app passwords.',
+				tooMany: 'Too many wrong tries. Try again in a few minutes.',
+				unreachable: 'The server does not answer. Try again in a moment.'
+			}
+		},
 		secondFactor: {
 			title: 'Second factor',
 			intro:

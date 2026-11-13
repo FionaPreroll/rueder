@@ -188,6 +188,125 @@ enum Change {
     Starred(bool),
 }
 
+/// What apps change about many articles of a feed at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Many {
+    Read(bool),
+    Starred(bool),
+}
+
+/// Changes many articles of one feed at once, as apps send them, in a few
+/// statements whatever their number; the same as one [`set_read_on`] or
+/// [`set_starred`] after the other. Numbers the feed does not have are left
+/// out. Returns false if the account does not subscribe to the feed.
+pub async fn set_many_on(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    seqs: &[i32],
+    change: Many,
+) -> anyhow::Result<bool> {
+    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
+        return Ok(false);
+    };
+    let mut seqs: Vec<i32> = seqs
+        .iter()
+        .copied()
+        .filter(|seq| (1..=last).contains(seq))
+        .collect();
+    seqs.sort_unstable();
+    seqs.dedup();
+    match change {
+        Many::Starred(on) => {
+            set_flags_many(conn, account_id, feed_id, &seqs, Change::Starred(on)).await?;
+        }
+        Many::Read(read) => {
+            let (below, above): (Vec<i32>, Vec<i32>) = seqs.iter().partition(|seq| **seq <= mark);
+            set_flags_many(conn, account_id, feed_id, &below, Change::KeptUnread(!read)).await?;
+            set_flags_many(conn, account_id, feed_id, &above, Change::Read(read)).await?;
+            if read && !above.is_empty() {
+                compact(conn, account_id, feed_id, mark).await?;
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// [`set_flags`] for many articles of a feed at once.
+async fn set_flags_many(
+    conn: &mut PgConnection,
+    account_id: i32,
+    feed_id: i32,
+    seqs: &[i32],
+    change: Change,
+) -> anyhow::Result<()> {
+    if seqs.is_empty() {
+        return Ok(());
+    }
+    let (read, kept_unread, hidden, starred) = match change {
+        Change::Read(on) => (Some(on), None, None, None),
+        Change::KeptUnread(on) => (None, Some(on), None, None),
+        Change::Hidden(on) => (None, None, Some(on), None),
+        Change::Starred(on) => (None, None, None, Some(on)),
+    };
+    if [read, kept_unread, hidden, starred].contains(&Some(true)) {
+        // A flag is set: no row ends up empty.
+        sqlx::query!(
+            "INSERT INTO article_states (account_id, feed_id, seq, read, kept_unread, hidden, starred)
+             SELECT $1, $2, n.seq, coalesce($4, false), coalesce($5, false), coalesce($6, false),
+                    coalesce($7, false)
+             FROM unnest($3::int4[]) AS n (seq)
+             ON CONFLICT (account_id, feed_id, seq) DO UPDATE
+             SET read = coalesce($4, article_states.read),
+                 kept_unread = coalesce($5, article_states.kept_unread),
+                 hidden = coalesce($6, article_states.hidden),
+                 starred = coalesce($7, article_states.starred)",
+            account_id,
+            feed_id,
+            seqs,
+            read,
+            kept_unread,
+            hidden,
+            starred,
+        )
+        .execute(&mut *conn)
+        .await?;
+        return Ok(());
+    }
+    // A flag is cleared: rows left with none go, the others lose it.
+    sqlx::query!(
+        "DELETE FROM article_states
+         WHERE account_id = $1 AND feed_id = $2 AND seq = ANY($3)
+           AND NOT (coalesce($4, read) OR coalesce($5, kept_unread)
+                    OR coalesce($6, hidden) OR coalesce($7, starred))",
+        account_id,
+        feed_id,
+        seqs,
+        read,
+        kept_unread,
+        hidden,
+        starred,
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!(
+        "UPDATE article_states
+         SET read = coalesce($4, read), kept_unread = coalesce($5, kept_unread),
+             hidden = coalesce($6, hidden), starred = coalesce($7, starred)
+         WHERE account_id = $1 AND feed_id = $2 AND seq = ANY($3)",
+        account_id,
+        feed_id,
+        seqs,
+        read,
+        kept_unread,
+        hidden,
+        starred,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// Moves the mark up over the articles right above it that are read or hidden,
 /// so the exceptions stay few however long somebody reads article by article.
 /// A hidden article the mark passes without it being read is kept unread, so it

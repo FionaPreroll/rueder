@@ -24,6 +24,7 @@ function reaction(event: ServerEvent): string {
 		case 'settings':
 		case 'rules':
 		case 'session':
+		case 'apps':
 			return `${event.event} by ${event.data.by ?? 'somebody else'}`;
 		default: {
 			const unknown: never = event;

@@ -9,6 +9,9 @@ import type { Stream } from '#lib/model.ts';
 import type { DropPosition } from '#lib/tree.ts';
 import type {
 	AccountImported,
+	AppPasswords as AppPasswordsJson,
+	CreatedAppPassword,
+	NewAppPassword as NewAppPasswordJson,
 	Article,
 	ArticleVersion,
 	ClientReport,
@@ -385,6 +388,10 @@ export const api = {
 	acceptTerms: (version: string) =>
 		call<void>('PUT', '/terms', { version } satisfies TermsAgreement),
 
+	appPasswords: () => call<AppPasswordsJson>('GET', '/app-passwords'),
+	createAppPassword: (body: NewAppPasswordJson) =>
+		call<CreatedAppPassword>('POST', '/app-passwords', body),
+	revokeAppPassword: (id: number) => call<void>('DELETE', `/app-passwords/${id}`),
 	secondFactor: () => call<SecondFactor>('GET', '/second-factor'),
 	setUpSecondFactor: (password: string) =>
 		call<SecondFactorSetup>('POST', '/second-factor/setup', {

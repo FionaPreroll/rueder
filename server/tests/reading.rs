@@ -479,3 +479,85 @@ async fn reading_matches_the_obvious_model(db: PgPool) {
         }
     }
 }
+
+/// What apps send, many articles at once, ends where one after the other
+/// ends: two accounts read the same feed, one in batches, one an article at a
+/// time, and their states are the same after every step.
+#[sqlx::test]
+async fn many_at_once_is_one_after_the_other(db: PgPool) {
+    use reading::Many;
+    for seed in 1..=20 {
+        let mut random = Random::new(seed);
+        let (batched, feed_id) = reader(&db, &format!("batched-{seed}"), 30).await;
+        let single = account(&db, &format!("single-{seed}")).await;
+        common::subscribe(&db, single, feed_id).await;
+        for _ in 0..25 {
+            let last: i32 = sqlx::query_scalar("SELECT last_seq FROM feeds WHERE id = $1")
+                .bind(feed_id)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+            // Numbers the feed has, some twice, and some it has not.
+            let seqs: Vec<i32> = (0..random.below(12))
+                .map(|_| 1 + random.below(last as usize + 3) as i32)
+                .collect();
+            let change = match random.below(5) {
+                0 | 1 => Many::Read(true),
+                2 => Many::Read(false),
+                3 => Many::Starred(true),
+                _ => Many::Starred(false),
+            };
+            if random.below(6) == 0 {
+                let seq = 1 + random.below(last as usize) as i32;
+                for account in [batched, single] {
+                    reading::set_hidden(&db, account, feed_id, seq, true)
+                        .await
+                        .unwrap();
+                }
+            }
+            if random.below(8) == 0 {
+                add(&db, feed_id, 1 + random.below(3)).await;
+            }
+            let mut tx = db.begin().await.unwrap();
+            assert!(
+                reading::set_many_on(&mut tx, batched, feed_id, &seqs, change)
+                    .await
+                    .unwrap()
+            );
+            tx.commit().await.unwrap();
+            for seq in &seqs {
+                match change {
+                    Many::Read(read) => {
+                        reading::set_read(&db, single, feed_id, *seq, read)
+                            .await
+                            .unwrap();
+                    }
+                    Many::Starred(on) => {
+                        reading::set_starred(&db, single, feed_id, *seq, on)
+                            .await
+                            .unwrap();
+                    }
+                }
+            }
+            let (a, b) = (unread(&db, batched).await, unread(&db, single).await);
+            assert_eq!(
+                (a.read_upto, a.unread),
+                (b.read_upto, b.unread),
+                "seed {seed}, {change:?} {seqs:?}"
+            );
+            assert_eq!(
+                states(&db, batched).await,
+                states(&db, single).await,
+                "seed {seed}, {change:?} {seqs:?}"
+            );
+        }
+        // Not the account's feed: nothing.
+        let stranger = account(&db, &format!("stranger-{seed}")).await;
+        let mut tx = db.begin().await.unwrap();
+        assert!(
+            !reading::set_many_on(&mut tx, stranger, feed_id, &[1], Many::Read(true))
+                .await
+                .unwrap()
+        );
+    }
+}

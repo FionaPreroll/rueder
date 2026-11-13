@@ -140,7 +140,7 @@ struct Tree {
 
 /// The name a subscription goes by: the reader's own, the feed's, or, where the
 /// feed has none, the host of its address, so that no row is without a name.
-fn shown_title(own: Option<String>, feed: &str, url: &str) -> String {
+pub(crate) fn shown_title(own: Option<String>, feed: &str, url: &str) -> String {
     let named = |title: &str| !title.trim().is_empty();
     match own {
         Some(own) if named(&own) => own,
@@ -272,7 +272,7 @@ impl ListQuery {
 }
 
 /// The account's labels on these articles, by feed and number.
-async fn labels_of(
+pub(crate) async fn labels_of(
     state: &AppState,
     session: &Session,
     articles: &[(i32, i32)],
@@ -385,7 +385,7 @@ async fn label_articles(
 
 /// The feeds the account subscribes to: all of them, or the ones in a folder
 /// and the folders inside it. `None` if the folder is not the account's.
-async fn feeds_of(
+pub(crate) async fn feeds_of(
     state: &AppState,
     session: &Session,
     folder_id: Option<i32>,
@@ -431,7 +431,7 @@ async fn feeds_of(
 
 /// The feed as the account reads it: 404 if it does not read it, and nothing
 /// if the operator blocked it, so that its reader sees an empty list.
-async fn subscribed(
+pub(crate) async fn subscribed(
     state: &AppState,
     session: &Session,
     feed_id: i32,
@@ -562,13 +562,13 @@ struct Article {
 
 /// A file that comes with an article, like the episode of a podcast.
 #[derive(Debug, PartialEq, Eq, Serialize, TS)]
-struct Enclosure {
-    url: String,
+pub(crate) struct Enclosure {
+    pub(crate) url: String,
     /// Its media type, such as `audio/mpeg`, if the feed says.
     #[serde(rename = "type")]
-    kind: Option<String>,
+    pub(crate) kind: Option<String>,
     /// Its size in bytes, if the feed says.
-    length: Option<u64>,
+    pub(crate) length: Option<u64>,
     /// It stood in the article's text and not in the feed's own list.
     inline: bool,
 }
@@ -580,7 +580,7 @@ const MAX_ENCLOSURES: usize = 100;
 /// stored as they came: the feed's own with a size as a number, those of the
 /// old rueder with a size as text, and nothing has looked at their addresses.
 /// Whatever is no web address stays behind.
-fn enclosures(stored: &serde_json::Value) -> Vec<Enclosure> {
+pub(crate) fn enclosures(stored: &serde_json::Value) -> Vec<Enclosure> {
     let stored = stored.as_array().map(Vec::as_slice).unwrap_or_default();
     let enclosure = |stored: &serde_json::Value| {
         let url = stored.get("url")?.as_str()?.trim();
@@ -787,7 +787,7 @@ async fn read_upto(
 /// Marks as read, in each of these feeds, what arrived up to the article of
 /// this id. Articles that came in after the reader's list was loaded stay
 /// unread.
-async fn read_upto_id(
+pub(crate) async fn read_upto_id(
     state: &AppState,
     session: &Session,
     feed_ids: &[i32],

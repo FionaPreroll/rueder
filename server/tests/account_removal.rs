@@ -186,6 +186,15 @@ async fn fill(db: &PgPool, account_id: i32, name: &str, shared: i32) -> i32 {
     .execute(db)
     .await
     .unwrap();
+    // An app password for an app of another maker.
+    sqlx::query(
+        "INSERT INTO app_passwords (account_id, name, secret_hash)
+         VALUES ($1, 'Reeder', sha256($1::text::bytea))",
+    )
+    .bind(account_id)
+    .execute(db)
+    .await
+    .unwrap();
     // A recovery code of a second factor.
     sqlx::query("INSERT INTO recovery_codes (account_id, code_hash) VALUES ($1, '\\x03')")
         .bind(account_id)

@@ -54,6 +54,11 @@ export type Me = {
 	 * Whether the account may report feeds and articles on this server.
 	 */
 	content_reports: boolean,
+	/**
+	 * Whether apps of other makers may log in to this server with app
+	 * passwords.
+	 */
+	app_api: boolean,
 };
 
 /**
@@ -290,6 +295,57 @@ export type ReportedFeed = {
 export type ReportReasonCount = {
 	reason: ReportReason,
 	reports: number,
+};
+
+/**
+ * What `GET /api/app-passwords` answers.
+ */
+export type AppPasswords = {
+	app_passwords: Array<AppPassword>,
+	/**
+	 * How many the account can have.
+	 */
+	max: number,
+};
+
+/**
+ * An app password as the list shows it: never the password itself.
+ */
+export type AppPassword = {
+	id: number,
+	name: string,
+	created_at: string,
+	/**
+	 * When an app last logged in with it, to the hour; null until one did.
+	 */
+	used_at: string | null,
+};
+
+/**
+ * What `POST /api/app-passwords` reads: a name for it, and the account's
+ * password and, where the second factor is on, one of its codes.
+ */
+export type NewAppPassword = {
+	name: string,
+	password?: string,
+	code?: string,
+};
+
+/**
+ * What `POST /api/app-passwords` answers: the app password, this once.
+ */
+export type CreatedAppPassword = {
+	/**
+	 * In groups of four letters, as it is shown to be typed.
+	 */
+	secret: string,
+	id: number,
+	name: string,
+	created_at: string,
+	/**
+	 * When an app last logged in with it, to the hour; null until one did.
+	 */
+	used_at: string | null,
 };
 
 /**
@@ -984,6 +1040,8 @@ export type RuleHits = {
  * - `rules`: filter rules changed. They hide articles and mark them as read,
  *   so the unread counts may have changed with them.
  * - `session`: a session of the account ended.
+ * - `apps`: app passwords were made or revoked, or an app logged in with one
+ *   for the first time.
  *
  * `by` is the name the tab that made the change gave itself in the header
  * `X-Rueder-Tab`, if it did, so that a tab knows its own change when it
@@ -1066,6 +1124,12 @@ export type ServerEvent =
 	}
 	| {
 		"event": "session",
+		"data": {
+			by: string | null,
+		},
+	}
+	| {
+		"event": "apps",
 		"data": {
 			by: string | null,
 		},

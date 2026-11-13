@@ -41,5 +41,6 @@ export const ACCOUNTS = [
 	'leaving',
 	'barred',
 	'reporting',
-	'panes'
+	'panes',
+	'apps'
 ];

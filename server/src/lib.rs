@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod api;
+pub mod app_passwords;
 pub mod articles;
 pub mod bench;
 pub mod cleaning;
@@ -7,6 +8,7 @@ pub mod events;
 pub mod feeds;
 pub mod fetch;
 pub mod filters;
+pub mod greader;
 pub mod hardening;
 pub mod health;
 pub mod http_client;
@@ -103,6 +105,9 @@ pub struct AppState {
     pub legal: Arc<Legal>,
     /// Whether readers may report feeds and articles (`CONTENT_REPORTS=on`).
     pub content_reports: bool,
+    /// Whether apps of other makers may log in with app passwords, through
+    /// the Google Reader API (on unless `APP_API=off`).
+    pub app_api: bool,
 }
 
 impl AppState {
@@ -122,6 +127,15 @@ impl AppState {
             admin_second_factor: false,
             legal: Arc::default(),
             content_reports: false,
+            app_api: true,
+        }
+    }
+
+    /// Lets no app of another maker in, as with `APP_API=off`.
+    pub fn without_app_api(self) -> Self {
+        Self {
+            app_api: false,
+            ..self
         }
     }
 
@@ -221,6 +235,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
 
     Router::new()
         .nest("/api", api(&state))
+        .nest("/greader", greader::router(&state))
         .route("/img/{signature}/{size}/{address}", get(image))
         .fallback_service(spa)
         // Around everything, from the inside out: a change asked for by a
@@ -255,6 +270,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(second_factor::routes())
         .merge(legal::routes())
         .merge(moderation::routes())
+        .merge(app_passwords::routes())
         .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())

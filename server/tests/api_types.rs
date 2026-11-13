@@ -65,14 +65,19 @@ fn the_types_stand_in_a_fixed_order() {
     assert_eq!(sorted.len(), names.len(), "every name once");
 }
 
-/// JSON that is not the API's: what is stored of an article, what the old
-/// database holds and what an OpenID provider says. Everything else that is
-/// written or read as JSON has to be in the file.
-const NOT_THE_API: [(&str, &str); 4] = [
+/// JSON that is not the page's API: what is stored of an article, what the
+/// old database holds, what an OpenID provider says and what the Google Reader
+/// API answers apps. Everything else that is written or read as JSON has to
+/// be in the file.
+const NOT_THE_API: [(&str, &str); 6] = [
     ("articles.rs", "Original"),
     ("articles.rs", "Version"),
     ("import.rs", "*"),
     ("oidc.rs", "*"),
+    // The Google Reader API (`greader/`) answers apps of other makers, never
+    // the page.
+    ("mod.rs", "Tokens"),
+    ("mod.rs", "UserInfo"),
 ];
 /// Types that are only ever part of another, which spells their fields out.
 const ONLY_INSIDE_ANOTHER: [(&str, &str); 1] = [("articles.rs", "Opened")];

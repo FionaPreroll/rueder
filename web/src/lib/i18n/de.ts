@@ -274,6 +274,7 @@ const de: Messages = {
 			invites: 'Einladungen',
 			privacy: 'Datenschutz',
 			security: 'Sicherheit',
+			apps: 'Apps',
 			move: 'Umzug',
 			account: 'Konto'
 		},
@@ -306,6 +307,58 @@ const de: Messages = {
 		wakeLockMissing: 'Dieser Browser kann den Bildschirm nicht anlassen.',
 		note: 'Änderungen gelten sofort, liegen bei deinem Konto und gelten auf jedem Gerät.',
 		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.',
+		apps: {
+			intro:
+				'Feedreader-Apps anderer Anbieter können über die Google-Reader-API lesen und ändern, was du hier liest. Jede App bekommt ein eigenes App-Passwort, das du jederzeit widerrufen kannst; dein eigenes Passwort bleibt bei dir.',
+			none: 'Noch ist keine App eingerichtet.',
+			made: (when) => `eingerichtet ${when}`,
+			used: (when) => `zuletzt benutzt ${when}`,
+			unused: 'noch nicht benutzt',
+			revoke: 'Widerrufen',
+			revokeName: (name) => `App-Passwort ${name} widerrufen`,
+			add: 'App einrichten',
+			full: (max) =>
+				`Ein Konto hat höchstens ${n(max)} App-Passwörter. Widerrufe eines, um eine weitere App einzurichten.`,
+			choose: 'Welche App möchtest du nutzen?',
+			website: (app) => `Website von ${app}`,
+			other: 'Eine andere App',
+			otherHint: 'Jede App, die die Google-Reader-API oder FreshRSS anbietet.',
+			platforms: {
+				apple: 'Mac, iPhone und iPad',
+				android: 'Android'
+			},
+			name: 'Name des App-Passworts',
+			password: 'Dein Passwort',
+			code: 'Code deiner Authenticator-App oder ein Wiederherstellungscode',
+			create: 'App-Passwort erstellen',
+			creating: 'Einen Moment …',
+			back: 'Zurück',
+			how: {
+				netnewswire:
+					'Füge in NetNewsWire ein Konto hinzu (Einstellungen, Accounts, dann +) und wähle FreshRSS. Trage Serveradresse, Name und App-Passwort von unten ein.',
+				readyou:
+					'Öffne in Read You Einstellungen, Konten, Konten hinzufügen, und wähle Google Reader. Trage Serveradresse, Name und App-Passwort von unten ein.',
+				other:
+					'Füge in deiner App ein Konto der Art „Google Reader API“ hinzu oder, wo es das nicht gibt, „FreshRSS“. Trage Serveradresse, Name und App-Passwort von unten ein.'
+			},
+			server: 'Serveradresse',
+			user: 'Name',
+			secret: 'App-Passwort',
+			copy: (what) => `${what} kopieren`,
+			copied: 'Kopiert',
+			once: 'Das App-Passwort wird nur jetzt gezeigt. Geht es verloren, widerrufe es und erstelle ein neues.',
+			waiting: 'Warte darauf, dass sich die App anmeldet …',
+			connected: 'Verbunden: Die App hat sich angemeldet.',
+			done: 'Fertig',
+			refusals: {
+				wrongPassword: 'Das Passwort stimmt nicht.',
+				codeNeeded: 'Gib auch einen Code deiner Authenticator-App ein.',
+				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+				tooManyApps: 'Ein Konto hat höchstens 20 App-Passwörter.',
+				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
+				unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
+			}
+		},
 		secondFactor: {
 			title: 'Zweiter Faktor',
 			intro:

@@ -49,3 +49,8 @@ fn feeds_keep_to_their_properties() {
 fn the_image_proxy_keeps_to_its_properties() {
     play("image", checks::image);
 }
+
+#[test]
+fn requests_of_apps_keep_to_their_properties() {
+    play("greader", checks::greader);
+}

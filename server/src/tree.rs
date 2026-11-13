@@ -355,19 +355,19 @@ async fn move_node(
 /// What `POST /api/folders` reads. It answers with `Created`.
 #[derive(Deserialize, TS)]
 #[ts(optional_fields = nullable)]
-struct NewFolder {
-    title: String,
-    parent_id: Option<i32>,
+pub(crate) struct NewFolder {
+    pub(crate) title: String,
+    pub(crate) parent_id: Option<i32>,
 }
 
 /// The answer to making something: the number it got.
 #[derive(Serialize, TS)]
-struct Created {
-    id: i32,
+pub(crate) struct Created {
+    pub(crate) id: i32,
 }
 
 /// A new, empty folder at the end of its level.
-async fn add_folder(
+pub(crate) async fn add_folder(
     State(state): State<AppState>,
     session: Session,
     Json(new): Json<NewFolder>,
@@ -414,11 +414,11 @@ async fn add_folder(
 /// subscription without a title of its own goes by its feed's.
 #[derive(Deserialize, TS)]
 #[ts(optional_fields = nullable)]
-struct Rename {
-    title: Option<String>,
+pub(crate) struct Rename {
+    pub(crate) title: Option<String>,
 }
 
-async fn rename_folder(
+pub(crate) async fn rename_folder(
     State(state): State<AppState>,
     session: Session,
     Path(id): Path<i32>,
@@ -440,7 +440,7 @@ async fn rename_folder(
 }
 
 /// Takes a folder out. What was in it moves to where the folder was.
-async fn remove_folder(
+pub(crate) async fn remove_folder(
     State(state): State<AppState>,
     session: Session,
     Path(id): Path<i32>,
@@ -488,7 +488,7 @@ async fn remove_folder(
 
 /// Gives a subscription a name of the reader's own, or, without one, the
 /// feed's name back.
-async fn rename_feed(
+pub(crate) async fn rename_feed(
     State(state): State<AppState>,
     session: Session,
     Path(feed_id): Path<i32>,
@@ -559,7 +559,7 @@ async fn set_agent(
 /// Ends a subscription, and with it what the reader read, starred and
 /// labelled there.
 /// The feed and its articles stay for whoever else reads it.
-async fn unsubscribe(
+pub(crate) async fn unsubscribe(
     State(state): State<AppState>,
     session: Session,
     Path(feed_id): Path<i32>,

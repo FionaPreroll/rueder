@@ -186,6 +186,19 @@ pub(crate) async fn write(conn: &mut PgConnection, placed: &[Placed<'_>]) -> any
     )
     .execute(&mut *conn)
     .await?;
+    // When they arrived, to the minute, for apps that ask what arrived since
+    // a time (see `greader`).
+    sqlx::query!(
+        "INSERT INTO arrivals (at, first_id)
+         SELECT date_trunc('minute', now()), min(a.id)
+         FROM unnest($1::integer[], $2::integer[]) AS n (feed_id, seq)
+         JOIN articles a ON a.feed_id = n.feed_id AND a.seq = n.seq
+         ON CONFLICT (at) DO UPDATE SET first_id = least(arrivals.first_id, EXCLUDED.first_id)",
+        &feed_ids,
+        &seqs,
+    )
+    .execute(&mut *conn)
+    .await?;
 
     let guids: Vec<_> = articles().map(|a| a.guid.clone()).collect();
     let guid_hashes: Vec<_> = articles().map(|a| guid_hash(&a.guid)).collect();

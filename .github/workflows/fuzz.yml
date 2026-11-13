@@ -1,0 +1,78 @@
+name: Fuzz
+
+# The fuzz targets in server/fuzz run here, not on a developer's machine:
+# a while on a pull request that touches what they look at, half an hour each
+# every week, and as long as asked when started by hand. A finding fails the
+# run and comes with the input that broke a property, as an artifact; whoever
+# fixes it puts the input into server/fuzz/corpus/<target>/ as `found-…`, where
+# server/tests/fuzz_corpus.rs plays it in every `cargo test`.
+on:
+  pull_request:
+    paths:
+      - "server/fuzz/**"
+      - "server/src/cleaning.rs"
+      - "server/src/feeds.rs"
+      - "server/src/images.rs"
+      - "server/src/greader/**"
+      - ".github/workflows/fuzz.yml"
+  # Mondays at 03:41 UTC.
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: How long each target runs, in seconds
+        default: "1800"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [greader, cleaning, feed, image]
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SQLX_OFFLINE: "true"
+      # Five minutes on a pull request, half an hour on schedule.
+      SECONDS_TO_RUN: ${{ github.event.inputs.seconds || (github.event_name == 'pull_request' && '300') || '1800' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # cargo-fuzz needs nightly Rust; rustup checks what it downloads, as in
+      # ci.yml.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # branch stable
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server/fuzz
+      - run: cargo install cargo-fuzz --locked
+      # From the stored corpus on, with the limits of the manual runs in
+      # docs/implementation.md.
+      # The time comes in as a shell variable and has to be a number: what is
+      # typed when starting by hand never becomes part of the command.
+      - run: |
+          case "$SECONDS_TO_RUN" in
+            ''|*[!0-9]*) echo "seconds is not a number" >&2; exit 1 ;;
+          esac
+          cargo +nightly fuzz run -O "$TARGET" -- \
+            -max_total_time="$SECONDS_TO_RUN" \
+            -timeout=10 -rss_limit_mb=2048 -max_len=131072
+        env:
+          TARGET: ${{ matrix.target }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: fuzz-found-${{ matrix.target }}
+          path: server/fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM article_labels\n             WHERE label_id = $1\n               AND (feed_id, seq) IN (SELECT * FROM unnest($2::int4[], $3::int4[]))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e3d95521f6b8a28818373a0caaaa726a450a110e6205a8f298d01055e8e4c356"
+}

@@ -95,6 +95,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
         # Live updates are one long answer; do not collect it before passing it on.
         proxy_buffering off;
         proxy_read_timeout 1h;
@@ -169,6 +170,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
+| `APP_API` | `off` lets no feed reader app of another maker in. On if not set: readers set up apps such as NetNewsWire and Read You under Settings, Apps, with an app password each, and the apps reach rueder at `https://<your rueder>/greader`. |
 | `CONTENT_REPORTS` | `on` lets readers report a feed or an article to you, with a reason and a short note. The status page lists the reported feeds with their address, never who reported; `rueder feed block` blocks one. Off if not set. |
 | `LEGAL_IMPRINT_URL`, `LEGAL_PRIVACY_URL`, `LEGAL_TERMS_URL` | Where your imprint, privacy policy and terms of use are, on your own website. rueder links to them on the login page, in the account menu and in the app; without them it shows none. |
 | `TERMS_VERSION` | A name for the version of your terms of use, such as `2026-11`. Registering then takes the agreement to it, and every account is asked to agree to a new one at its next visit. Needs `LEGAL_TERMS_URL`. |

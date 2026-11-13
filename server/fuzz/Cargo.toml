@@ -36,6 +36,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "greader"
+path = "fuzz_targets/greader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "image"
 path = "fuzz_targets/image.rs"
 test = false

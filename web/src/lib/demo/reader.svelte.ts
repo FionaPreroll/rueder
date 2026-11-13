@@ -8,6 +8,9 @@
 import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from '#lib/model.ts';
 import type {
+	AppPassword,
+	AppPasswords,
+	NewAppPassword,
 	Abilities,
 	Found,
 	Fresh,
@@ -153,7 +156,8 @@ export class DemoReader implements Reader {
 		reports: false,
 		secondFactor: false,
 		remove: false,
-		reportContent: false
+		reportContent: false,
+		apps: true
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -170,6 +174,34 @@ export class DemoReader implements Reader {
 	/** The draft has nobody to report to. */
 	async reportContent(): Promise<ReportOutcome> {
 		return 'unreachable';
+	}
+	/**
+	 * The draft makes app passwords to show how apps are set up; they open
+	 * nothing, as there is no server for an app to reach.
+	 */
+	private apps = $state.raw<AppPassword[]>([]);
+	appsVersion = $state(0);
+	async appPasswords(): Promise<AppPasswords> {
+		return { list: this.apps, max: 20 };
+	}
+	async createAppPassword(name: string): Promise<NewAppPassword> {
+		const letters = 'abcdefghijklmnopqrstuvwxyz234567';
+		const random = crypto.getRandomValues(new Uint8Array(24));
+		const groups = [0, 4, 8, 12, 16, 20].map((at) =>
+			[...random.slice(at, at + 4)].map((byte) => letters[byte & 31]).join('')
+		);
+		const made = {
+			id: Math.max(0, ...this.apps.map((app) => app.id)) + 1,
+			name: name.trim(),
+			createdAt: this.now(),
+			usedAt: null
+		};
+		this.apps = [...this.apps, made];
+		return { ...made, secret: groups.join('-') };
+	}
+	async revokeAppPassword(id: number) {
+		this.apps = this.apps.filter((app) => app.id !== id);
+		return true;
 	}
 	/** The draft has no accounts, so nothing to secure. */
 	async secondFactor() {

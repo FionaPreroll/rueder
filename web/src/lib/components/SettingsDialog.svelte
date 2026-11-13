@@ -17,6 +17,7 @@
 		views
 	} from '#lib/settings.svelte.ts';
 	import { canKeepAwake } from '#lib/wakelock.ts';
+	import Apps from './Apps.svelte';
 	import Choice from './Choice.svelte';
 	import Dialog from './Dialog.svelte';
 	import Invitations from './Invitations.svelte';
@@ -34,6 +35,7 @@
 		'invites',
 		'privacy',
 		'security',
+		'apps',
 		'move',
 		'account'
 	] as const;
@@ -47,6 +49,8 @@
 
 	/** A second factor is being set up: a click beside the window would lose it. */
 	let settingUp = $state(false);
+	/** An app is being set up: the same. */
+	let addingApp = $state(false);
 
 	// Privacy only says something where the server takes reports of errors,
 	// invitations only where there is a server to make an account on, and moving
@@ -57,6 +61,7 @@
 			if (name === 'move') return reader.can.move;
 			if (name === 'account') return reader.can.remove && reader.account !== null;
 			if (name === 'security') return reader.can.secondFactor;
+			if (name === 'apps') return reader.can.apps;
 			return name !== 'invites' || reader.can.invites;
 		})
 	);
@@ -71,7 +76,7 @@
 	};
 </script>
 
-<Dialog title={m.settings.title} wide holds={settingUp} {onclose}>
+<Dialog title={m.settings.title} wide holds={settingUp || addingApp} {onclose}>
 	<div class="-mt-1 flex flex-wrap gap-1 border-b border-line" role="tablist">
 		{#each tabs as name (name)}
 			<button
@@ -215,6 +220,8 @@
 			</div>
 		{:else if tab === 'security'}
 			<SecondFactor {reader} bind:busy={settingUp} />
+		{:else if tab === 'apps'}
+			<Apps {reader} bind:busy={addingApp} />
 		{:else if tab === 'move'}
 			<MoveAccount {reader} />
 		{:else if tab === 'account'}

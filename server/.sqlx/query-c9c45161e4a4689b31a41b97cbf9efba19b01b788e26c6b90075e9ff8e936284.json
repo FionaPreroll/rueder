@@ -1,0 +1,147 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.feed_id, a.seq, a.published_at, a.updated_at, a.title, a.author, a.url,\n                  c.html, c.enclosures,\n                  CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                       ELSE coalesce(st.read, false) END AS \"read!\",\n                  coalesce(st.starred, false) AS \"starred!\",\n                  a.seq <= s.read_upto AND coalesce(st.kept_unread, false) AS \"kept_unread!\"\n           FROM unnest($2::int4[], $3::int4[]) WITH ORDINALITY AS k (feed_id, seq, ord)\n           JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id\n           JOIN feeds f ON f.id = k.feed_id AND f.blocked_at IS NULL\n           JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq\n           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           LEFT JOIN article_states st\n               ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n           WHERE NOT coalesce(st.hidden, false)\n           ORDER BY k.ord",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "author",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "author"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "html",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "html"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "enclosures",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "enclosures"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "read!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "starred!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "kept_unread!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c9c45161e4a4689b31a41b97cbf9efba19b01b788e26c6b90075e9ff8e936284"
+}

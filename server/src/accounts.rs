@@ -206,6 +206,14 @@ pub async fn set_password(
     sqlx::query!("DELETE FROM sessions WHERE account_id = $1", account_id)
         .execute(&mut *tx)
         .await?;
+    // And so do the app passwords: whoever had the account's password may
+    // have made some.
+    sqlx::query!(
+        "DELETE FROM app_passwords WHERE account_id = $1",
+        account_id
+    )
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(Ok(true))
 }
@@ -320,6 +328,14 @@ pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Re
     sqlx::query!("DELETE FROM sessions WHERE account_id = $1", account_id)
         .execute(&mut *tx)
         .await?;
+    // And so do the app passwords: whoever had the account's password may
+    // have made some.
+    sqlx::query!(
+        "DELETE FROM app_passwords WHERE account_id = $1",
+        account_id
+    )
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(true)
 }

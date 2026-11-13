@@ -868,3 +868,110 @@ describe('ReportDialog', () => {
 		);
 	});
 });
+
+describe('Apps in the settings', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+	const onclose = vi.fn();
+
+	beforeEach(() => {
+		server = new FakeServer();
+		server.accounts.set('fiona', 'correct horse');
+		server.signedIn = 'fiona';
+		vi.stubGlobal('fetch', server.fetch);
+		vi.stubGlobal('EventSource', server.EventSource);
+		onclose.mockClear();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	function open(account: Partial<{ appApi: boolean }> = { appApi: true }) {
+		const reader = new ServerReader({ name: 'fiona', admin: false, ...account }, session);
+		reader.start();
+		render(SettingsDialog, { reader, tab: 'apps', onclose });
+		return reader;
+	}
+
+	it('sets up an app step by step, and says when it logged in', async () => {
+		open();
+		expect(await screen.findByText('No app is set up yet.')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Set up an app' }));
+		expect(screen.getByText('Which app do you want to use?')).toBeInTheDocument();
+		const site = screen.getByRole('link', { name: 'Website of NetNewsWire' });
+		expect(site).toHaveAttribute('href', 'https://netnewswire.com/');
+		expect(site).toHaveAttribute('rel', 'noopener noreferrer');
+		expect(screen.getByRole('link', { name: 'Website of Read You' })).toHaveAttribute(
+			'href',
+			'https://github.com/ReadYouApp/ReadYou/releases'
+		);
+		await userEvent.click(screen.getByRole('button', { name: 'Read You' }));
+
+		expect(screen.getByLabelText('Name of the app password')).toHaveValue('Read You');
+		await userEvent.type(screen.getByLabelText('Your password'), 'wrong');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('The password is not right.');
+		// A click beside the window does not lose the setup.
+		await userEvent.click(screen.getByRole('dialog', { name: 'Settings' }).parentElement!);
+		expect(onclose).not.toHaveBeenCalled();
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+
+		// What to enter, with Read You's address ending in a slash.
+		expect(await screen.findByText(/In Read You, open Settings/)).toBeInTheDocument();
+		expect(screen.getByText(`${location.origin}/greader/`)).toBeInTheDocument();
+		expect(screen.getByText('fiona')).toBeInTheDocument();
+		expect(screen.getByText('abcd-efgh-ijkl-mnop-qrst-uvwx')).toBeInTheDocument();
+		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+		await userEvent.click(screen.getByRole('button', { name: 'Copy App password' }));
+		expect(writeText).toHaveBeenLastCalledWith('abcd-efgh-ijkl-mnop-qrst-uvwx');
+		expect(screen.getByRole('status')).toHaveTextContent('Waiting for the app to log in');
+		expect(server.appPasswords.map((app) => app.name)).toEqual(['Read You']);
+
+		server.appLogsIn(1);
+		expect(await screen.findByText('Connected: the app has logged in.')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+		expect(await screen.findByText('Read You')).toBeInTheDocument();
+		expect(screen.getByText(/^last used/)).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Revoke the app password Read You' }));
+		expect(await screen.findByText('No app is set up yet.')).toBeInTheDocument();
+		expect(server.appPasswords).toEqual([]);
+	});
+
+	it('asks for a code where the account has a second factor', async () => {
+		server.secondFactor = { code: server.appCode, recovery: [] };
+		open();
+		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Another app' }));
+		await userEvent.type(screen.getByLabelText('Name of the app password'), 'Reeder');
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		const code = await screen.findByLabelText('Code of your authenticator app, or a recovery code');
+		await userEvent.type(code, '111111');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('That code is not right.');
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.type(code, server.appCode);
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+		expect(await screen.findByText(/“Google Reader API”/)).toBeInTheDocument();
+		// Any other app gets the address without a slash.
+		expect(screen.getByText(`${location.origin}/greader`)).toBeInTheDocument();
+	});
+
+	it('is not there where the server lets no app in', async () => {
+		server.appApi = false;
+		const reader = new ServerReader({ name: 'fiona', admin: false, appApi: false }, session);
+		render(SettingsDialog, { reader, onclose });
+		expect(screen.queryByRole('tab', { name: 'Apps' })).toBeNull();
+	});
+
+	it('shows in the draft, with app passwords that open nothing', async () => {
+		render(SettingsDialog, { reader: new DemoReader(() => now), tab: 'apps', onclose });
+		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
+		await userEvent.click(screen.getByRole('button', { name: 'NetNewsWire' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+		expect(await screen.findByText(/choose FreshRSS/)).toBeInTheDocument();
+		expect(screen.getByText(/^[a-z2-7]{4}(-[a-z2-7]{4}){5}$/)).toBeInTheDocument();
+	});
+});

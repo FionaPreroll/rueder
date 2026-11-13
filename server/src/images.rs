@@ -155,6 +155,67 @@ impl Signer {
     pub fn in_html(&self, html: &str) -> String {
         cleaning::with_images(html, |source| self.address(Size::Image, source))
     }
+
+    /// The signature of an address for an app: the number of its app password
+    /// goes into it, so that the address holds only as long as that does.
+    fn app_signature(&self, app: i32, size: Size, url: &str) -> Option<Hmac<Sha256>> {
+        let mut mac = Hmac::<Sha256>::new_from_slice(&self.key).ok()?;
+        mac.update(b"app\n");
+        mac.update(app.to_string().as_bytes());
+        mac.update(b"\n");
+        mac.update(size.name().as_bytes());
+        mac.update(b"\n");
+        mac.update(url.as_bytes());
+        Some(mac)
+    }
+
+    /// The address under which the proxy serves the image at `url` to an app
+    /// of another maker, which loads it without a session: `/greader/img/`,
+    /// then the number of the app password, the signature, the size and the
+    /// source. `None` if `url` is no web address.
+    pub fn app_address(&self, app: i32, size: Size, url: &str) -> Option<String> {
+        if url.len() > MAX_ADDRESS || !is_web(url) {
+            return None;
+        }
+        let signature = self.app_signature(app, size, url)?.finalize().into_bytes();
+        let signature = URL_SAFE_NO_PAD.encode(signature.get(..16)?);
+        let address = URL_SAFE_NO_PAD.encode(url);
+        Some(format!(
+            "/greader/img/{app}/{signature}/{}/{address}",
+            size.name()
+        ))
+    }
+
+    /// What an app's address of the proxy stands for, if the server made it
+    /// for this app password.
+    pub fn open_for_app(
+        &self,
+        app: i32,
+        signature: &str,
+        size: &str,
+        address: &str,
+    ) -> Option<(Size, String)> {
+        let size = Size::named(size)?;
+        let url = String::from_utf8(URL_SAFE_NO_PAD.decode(address).ok()?).ok()?;
+        let signature = URL_SAFE_NO_PAD.decode(signature).ok()?;
+        if signature.len() != 16 || url.len() > MAX_ADDRESS || !is_web(&url) {
+            return None;
+        }
+        self.app_signature(app, size, &url)?
+            .verify_truncated_left(&signature)
+            .ok()?;
+        Some((size, url))
+    }
+
+    /// A cleaned text as an app gets it: every image points to the proxy, at
+    /// the full address of this server (`origin`), as apps show texts in a
+    /// page of their own.
+    pub fn in_html_for_app(&self, app: i32, origin: &str, html: &str) -> String {
+        cleaning::with_images(html, |source| {
+            let address = self.app_address(app, Size::Image, source)?;
+            Some(format!("{origin}{address}"))
+        })
+    }
 }
 
 fn is_web(url: &str) -> bool {
@@ -538,8 +599,28 @@ impl ImageProxy {
         size: &str,
         address: &str,
     ) -> Result<Picture, Refused> {
+        self.deliver(self.signer.open(signature, size, address))
+            .await
+    }
+
+    /// The image behind an address the proxy made for an app (see
+    /// [`Signer::app_address`]). That its app password still counts is the
+    /// caller's to check.
+    pub async fn get_for_app(
+        &self,
+        app: i32,
+        signature: &str,
+        size: &str,
+        address: &str,
+    ) -> Result<Picture, Refused> {
+        let opened = self.signer.open_for_app(app, signature, size, address);
+        self.deliver(opened).await
+    }
+
+    /// The image an address stands for, if the server made the address.
+    async fn deliver(&self, opened: Option<(Size, String)>) -> Result<Picture, Refused> {
         let started = Instant::now();
-        let found = self.find(signature, size, address).await;
+        let found = self.find(opened).await;
         let cached = matches!(found, Ok((_, true)));
         let got = found.map(|(picture, _)| picture);
         let now = Instant::now();
@@ -561,16 +642,8 @@ impl ImageProxy {
     }
 
     /// The image, and whether it came from the cache.
-    async fn find(
-        &self,
-        signature: &str,
-        size: &str,
-        address: &str,
-    ) -> Result<(Picture, bool), Refused> {
-        let (size, url) = self
-            .signer
-            .open(signature, size, address)
-            .ok_or(Refused::NotFound)?;
+    async fn find(&self, opened: Option<(Size, String)>) -> Result<(Picture, bool), Refused> {
+        let (size, url) = opened.ok_or(Refused::NotFound)?;
         let cached = {
             let (cache, url) = (self.cache.clone(), url.clone());
             tokio::task::spawn_blocking(move || cache.get(size, &url)).await

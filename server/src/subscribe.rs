@@ -127,16 +127,16 @@ fn rules(state: &AppState) -> anyhow::Result<Arc<Rules>> {
 /// names its feeds.
 #[derive(Deserialize, TS)]
 #[ts(rename = "FindFeeds")]
-struct Find {
-    url: String,
+pub(crate) struct Find {
+    pub(crate) url: String,
 }
 
 /// A feed found at an address.
 #[derive(Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(rename = "FeedCandidate")]
-struct Candidate {
-    url: String,
-    title: String,
+pub(crate) struct Candidate {
+    pub(crate) url: String,
+    pub(crate) title: String,
     /// The number of the feed if the reader subscribes to it already.
     feed_id: Option<i32>,
 }
@@ -144,8 +144,8 @@ struct Candidate {
 /// What `POST /api/feeds/find` answers.
 #[derive(Serialize, TS)]
 #[ts(rename = "FoundFeeds")]
-struct Found {
-    feeds: Vec<Candidate>,
+pub(crate) struct Found {
+    pub(crate) feeds: Vec<Candidate>,
     /// Where the site sent the request on to, if it did: a site that turns
     /// readers away often sends them to its login.
     moved_to: Option<String>,
@@ -230,7 +230,7 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
 
 /// Looks at an address for feeds. An address that is a feed is the one feed;
 /// a web page has the feeds it names, which nobody has looked at yet.
-async fn find(
+pub(crate) async fn find(
     State(state): State<AppState>,
     session: Session,
     Json(find): Json<Find>,
@@ -296,15 +296,15 @@ async fn look(state: &AppState, session: &Session, url: Url) -> Result<Json<Foun
 /// What `POST /api/feeds` reads. It answers with `Subscribed`.
 #[derive(Deserialize, TS)]
 #[ts(rename = "NewSubscription", optional_fields = nullable)]
-struct New {
-    url: String,
-    folder_id: Option<i32>,
+pub(crate) struct New {
+    pub(crate) url: String,
+    pub(crate) folder_id: Option<i32>,
 }
 
 /// The answer to subscribing: the number of the feed.
 #[derive(Serialize, TS)]
-struct Subscribed {
-    id: i32,
+pub(crate) struct Subscribed {
+    pub(crate) id: i32,
 }
 
 /// The feed at this address that is there already: the oldest, as the store
@@ -430,7 +430,7 @@ async fn own_folder(conn: &mut PgConnection, account_id: i32, id: i32) -> Result
 /// Subscribes to the feed at an address: 201 with its number, or 200 if the
 /// reader has it already. The address has to be the feed itself; `find` says
 /// which feeds a web page has.
-async fn subscribe(
+pub(crate) async fn subscribe(
     State(state): State<AppState>,
     session: Session,
     Json(new): Json<New>,

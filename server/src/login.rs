@@ -268,6 +268,9 @@ pub struct Me {
     terms_to_accept: Option<String>,
     /// Whether the account may report feeds and articles on this server.
     content_reports: bool,
+    /// Whether apps of other makers may log in to this server with app
+    /// passwords.
+    app_api: bool,
 }
 
 impl Me {
@@ -280,6 +283,7 @@ impl Me {
             admin_needs_second_factor: false,
             terms_to_accept: None,
             content_reports: false,
+            app_api: false,
         }
     }
 
@@ -294,6 +298,7 @@ impl Me {
             admin_needs_second_factor: session.admin_needs_second_factor,
             terms_to_accept: legal.to_accept(session.terms_version.as_deref()),
             content_reports: false,
+            app_api: false,
         }
     }
 
@@ -302,6 +307,15 @@ impl Me {
         Self {
             content_reports,
             ..self
+        }
+    }
+
+    /// Says what this server lets in besides the page: reports of feeds and
+    /// articles, and apps of other makers.
+    pub(crate) fn offering(self, state: &crate::AppState) -> Self {
+        Self {
+            app_api: state.app_api,
+            ..self.reporting(state.content_reports)
         }
     }
 }
@@ -404,7 +418,7 @@ pub async fn login(
         true,
         &state.legal,
     )
-    .reporting(state.content_reports);
+    .offering(&state);
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -431,7 +445,7 @@ pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<
     .await?
     .unwrap_or(false);
     Ok(Json(
-        Me::of(session, has_password, &state.legal).reporting(state.content_reports),
+        Me::of(session, has_password, &state.legal).offering(&state),
     ))
 }
 
