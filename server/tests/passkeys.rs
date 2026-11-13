@@ -11,7 +11,13 @@ use axum::http::{HeaderMap, Method, StatusCode, header};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use common::{call, raw};
 use p256::ecdsa::{Signature, SigningKey, signature::Signer};
-use rueder::{AppState, accounts, login, passkeys::Passkeys, second_factor};
+use rueder::{
+    AppState, accounts,
+    asset_links::{self, AndroidApp},
+    login,
+    passkeys::Passkeys,
+    second_factor,
+};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -1031,4 +1037,151 @@ async fn the_command_line_takes_the_passkeys_too(db: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+}
+
+/// The Android app's key, made up, and the origin its answers name.
+const APP_KEY: [u8; 32] = [0x5a; 32];
+
+fn app_origin(key: &[u8; 32]) -> String {
+    format!("android:apk-key-hash:{}", b64(key))
+}
+
+fn app_setting(key: &[u8; 32]) -> String {
+    let fingerprint: Vec<_> = key.iter().map(|byte| format!("{byte:02X}")).collect();
+    format!("org.example.reader={}", fingerprint.join(":"))
+}
+
+fn with_app(db: &PgPool, setting: Option<&str>) -> AppState {
+    let apps = AndroidApp::from_setting(setting).unwrap();
+    AppState::new(db.clone()).with_passkeys(Passkeys::for_apps(SITE, apps).unwrap())
+}
+
+#[sqlx::test]
+async fn the_site_names_the_android_apps_that_may_use_its_passkeys(db: PgPool) {
+    // Without passkeys, and with passkeys but no app, there is no statement.
+    for state in [
+        AppState::new(db.clone()),
+        with_passkeys(&db),
+        with_app(&db, Some("none")),
+    ] {
+        let (status, _, _) = raw(
+            &state,
+            Method::GET,
+            "/.well-known/assetlinks.json",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    // Without the setting it is rueder's own app; Android asks without a
+    // session.
+    let state = with_app(&db, None);
+    let (status, headers, body) = raw(
+        &state,
+        Method::GET,
+        "/.well-known/assetlinks.json",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "application/json");
+    let statement: Value = serde_json::from_slice(&body).unwrap();
+    let target = &statement[0]["target"];
+    assert_eq!(target["namespace"], "android_app");
+    assert_eq!(target["package_name"], "io.github.fionapreroll.rueder");
+    assert_eq!(
+        target["sha256_cert_fingerprints"][0],
+        asset_links::OFFICIAL.split_once('=').unwrap().1
+    );
+    let relations = statement[0]["relation"].as_array().unwrap();
+    assert!(relations.contains(&json!("delegate_permission/common.get_login_creds")));
+    assert_eq!(statement.as_array().unwrap().len(), 1);
+
+    let state = with_app(&db, Some(&app_setting(&APP_KEY)));
+    let (_, statement) = call(
+        &state,
+        Method::GET,
+        "/.well-known/assetlinks.json",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(statement[0]["target"]["package_name"], "org.example.reader");
+    assert_eq!(
+        statement[0]["target"]["sha256_cert_fingerprints"],
+        json!([(["5A"; 32].join(":"))])
+    );
+}
+
+#[sqlx::test]
+async fn a_named_android_app_adds_and_logs_in_and_no_other_app_does(db: PgPool) {
+    let ada = ada(&db).await;
+    let state = with_app(&db, Some(&app_setting(&APP_KEY)));
+    let cookie = common::session(&db, ada).await;
+
+    // An app the site does not name: another key, or the right key while the
+    // site names no app.
+    let mut stranger = Device {
+        origin: app_origin(&[0xa5; 32]),
+        ..Device::new()
+    };
+    let without_apps = with_passkeys(&db);
+    for (state, origin) in [
+        (&state, stranger.origin.clone()),
+        (&without_apps, app_origin(&APP_KEY)),
+    ] {
+        let mut device = Device {
+            origin,
+            ..Device::new()
+        };
+        let challenge = start(
+            state,
+            "/api/passkeys/register",
+            Some(&cookie),
+            json!({ "name": "Phone", "password": PASSWORD }),
+        )
+        .await;
+        let (status, _) = call(
+            state,
+            Method::POST,
+            "/api/passkeys",
+            Some(&cookie),
+            Some(device.create(&challenge)),
+        )
+        .await;
+        assert_ne!(status, StatusCode::CREATED);
+    }
+    let (_, list) = call(&state, Method::GET, "/api/passkeys", Some(&cookie), None).await;
+    assert_eq!(list["passkeys"].as_array().unwrap().len(), 0);
+
+    // The app the site names adds a passkey, and logs in with it.
+    let mut phone = Device {
+        origin: app_origin(&APP_KEY),
+        ..Device::new()
+    };
+    add(&state, &cookie, &mut phone, json!({ "password": PASSWORD })).await;
+    let (status, logged_in, me) = log_in(&state, &mut phone).await;
+    assert_eq!(status, StatusCode::OK, "{me}");
+    assert_eq!(me["username"], "ada");
+    assert!(session_has_second_factor(&db, &logged_in.unwrap()).await);
+    // The same passkey counts in the browser, which names the site.
+    phone.origin = SITE.into();
+    let (status, _, _) = log_in(&state, &mut phone).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Another app with the same passkey, or this one once the site no longer
+    // names it, logs nobody in.
+    stranger.key = phone.key.clone();
+    stranger.id = phone.id.clone();
+    stranger.user = phone.user.clone();
+    stranger.counter = phone.counter + 10;
+    let (status, cookie, _) = log_in(&state, &mut stranger).await;
+    assert_eq!((status, cookie), (StatusCode::UNAUTHORIZED, None));
+    phone.origin = app_origin(&APP_KEY);
+    phone.counter += 20;
+    let (status, cookie, _) = log_in(&with_app(&db, Some("none")), &mut phone).await;
+    assert_eq!((status, cookie), (StatusCode::UNAUTHORIZED, None));
 }

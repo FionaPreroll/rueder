@@ -6,6 +6,8 @@ import android.os.SystemClock;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 import com.getcapacitor.BridgeActivity;
 
 /**
@@ -18,6 +20,11 @@ import com.getcapacitor.BridgeActivity;
  * page, which keeps them in its history, or from the start page to the server.
  * Where there is nothing to go back to, the first press says that a second one
  * closes the app, and only a second one soon after does.
+ *
+ * Passkeys work in rueder's page where the WebView can do WebAuthn: it asks
+ * Android's Credential Manager as this app, and Android gives the app the
+ * passkeys of the reader's rueder only if the server names the app in its
+ * /.well-known/assetlinks.json. Where the WebView cannot, the page offers none.
  */
 public class MainActivity extends BridgeActivity {
     /** The extra of the shortcut that asks for the start page. */
@@ -34,6 +41,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         client = new ServerClient(bridge);
         bridge.setWebViewClient(client);
+        allowPasskeys(bridge.getWebView());
         setup = asksForSetup(getIntent());
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -52,6 +60,14 @@ public class MainActivity extends BridgeActivity {
         if (asksForSetup(intent)) {
             setup = true;
             bridge.getWebView().loadUrl(bridge.getLocalUrl() + "/index.html?setup");
+        }
+    }
+
+    /** Lets the pages in the WebView use passkeys, as this app, where it can. */
+    private static void allowPasskeys(WebView web) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+            WebSettingsCompat.setWebAuthenticationSupport(
+                web.getSettings(), WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP);
         }
     }
 

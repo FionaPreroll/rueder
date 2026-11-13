@@ -77,7 +77,10 @@ What is here:
   has one, its password alone opens nothing, and wherever a change asks for the
   password and a code, a passkey stands in for both. The checking is
   `webauthn-rs`'s; `.cargo/audit.toml` says why `rsa`'s advisory does not
-  touch rueder.
+  touch rueder. The Android app uses them too (`src/asset_links.rs`): the
+  server names it at `/.well-known/assetlinks.json` and takes its answers,
+  which name the app's key as their origin; `PASSKEY_ANDROID_APPS` says which
+  apps, by default the one released on GitHub.
 - Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
   readers report a feed or an article with a reason and a note, at most 20 a
   day; the status page lists the reported feeds with their address, never who

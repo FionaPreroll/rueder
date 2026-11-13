@@ -836,11 +836,20 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     // PUBLIC_URL: the address browsers reach rueder at. Passkeys belong to
     // it, and there are none without it. One that is no such address stops
     // the start rather than turning passkeys off unnoticed.
+    // PASSKEY_ANDROID_APPS: the Android apps that may use them too; without
+    // it rueder's own app from GitHub, with "none" no app.
     if let Ok(url) = env::var("PUBLIC_URL")
         && !url.trim().is_empty()
     {
-        let passkeys = rueder::passkeys::Passkeys::new(&url)?;
-        tracing::info!("passkeys for {}", url.trim());
+        let apps = rueder::asset_links::AndroidApp::from_setting(
+            env::var("PASSKEY_ANDROID_APPS").ok().as_deref(),
+        )?;
+        let packages: Vec<_> = apps.iter().map(|app| app.package().to_owned()).collect();
+        let passkeys = rueder::passkeys::Passkeys::for_apps(&url, apps)?;
+        tracing::info!(
+            "passkeys for {}, also in the Android apps {packages:?}",
+            url.trim()
+        );
         state = state.with_passkeys(passkeys);
     }
     // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:

@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod api;
 pub mod app_passwords;
 pub mod articles;
+pub mod asset_links;
 pub mod bench;
 pub mod cleaning;
 pub mod events;
@@ -244,6 +245,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .nest("/api", api(&state))
         .nest("/greader", greader::router(&state))
         .route("/img/{signature}/{size}/{address}", get(image))
+        .route("/.well-known/assetlinks.json", get(asset_links::serve))
         .fallback_service(spa)
         // Around everything, from the inside out: a change asked for by a
         // page of another site is refused, every request counts for its
