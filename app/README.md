@@ -19,6 +19,13 @@ and its Content-Security-Policy stay as they are.
   server's page runs in the same WebView and must not change where the app goes.
   It also asks the saved server where its operator's imprint, privacy policy and
   terms of use are, which the start page links to (`www/legal.js`).
+- **Passkeys**: where the WebView can do WebAuthn, `MainActivity` switches it on
+  for the app (`androidx.webkit`). Android then gives the app the passkeys of
+  your rueder only if the server names the app, with its package and the
+  fingerprint of its signing key, at `/.well-known/assetlinks.json`; rueder
+  does that for the build from GitHub by itself, others go into
+  `PASSKEY_ANDROID_APPS` (see `deploy/README.md`). A build signed with another
+  key, a debug build too, gets no passkeys until the server names its key.
 - **Updates**, for the build from GitHub only: if you agreed, the app reads
   `version.json` from the release
   [`android-latest`](https://github.com/FionaPreroll/rueder/releases/tag/android-latest)
