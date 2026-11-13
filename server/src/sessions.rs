@@ -48,6 +48,8 @@ pub struct Session {
     pub second_factor: bool,
     /// An admin whose right waits for a session with a second factor.
     pub admin_needs_second_factor: bool,
+    /// The version of the terms of use the account agreed to, if any.
+    pub terms_version: Option<String>,
 }
 
 impl Session {
@@ -102,7 +104,7 @@ pub async fn find(db: &PgPool, token: &str) -> anyhow::Result<Option<Session>> {
     }
     let hash = token_hash(token);
     let found = sqlx::query!(
-        r#"SELECT a.id, a.username, a.is_admin, s.second_factor,
+        r#"SELECT a.id, a.username, a.is_admin, s.second_factor, a.terms_version,
                   s.last_seen_at < now() - $2::float8 * interval '1 second' AS "stale!"
            FROM sessions s JOIN accounts a ON a.id = s.account_id
            WHERE s.token_hash = $1 AND s.expires_at > now() AND a.disabled_at IS NULL"#,
@@ -131,6 +133,7 @@ pub async fn find(db: &PgPool, token: &str) -> anyhow::Result<Option<Session>> {
         is_admin: found.is_admin,
         second_factor: found.second_factor,
         admin_needs_second_factor: false,
+        terms_version: found.terms_version,
     }))
 }
 

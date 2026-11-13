@@ -136,6 +136,15 @@ export class FakeServer {
 	oidc = false;
 	/** Whether anybody can register, and why nobody can right now: no room, or enough for today. */
 	registrationOpen = false;
+	/** The operator's legal texts, and the version of the terms an account agrees to. */
+	legal: {
+		imprint: string | null;
+		privacy: string | null;
+		terms: string | null;
+		terms_version: string | null;
+	} = { imprint: null, privacy: null, terms: null, terms_version: null };
+	/** The version of the terms the account agreed to. */
+	agreedTerms: string | null = null;
 	noRoom: 'full' | 'today' | null = null;
 	/** The invitations of the account that is logged in, the newest first. */
 	invites: FakeInvite[] = [];
@@ -354,7 +363,11 @@ export class FakeServer {
 	): Response {
 		const data = (body ?? {}) as Record<string, unknown>;
 		if (method === 'GET' && path === '/login/ways') {
-			return json({ oidc: this.oidc, registration: this.registrationOpen && !this.noRoom });
+			return json({
+				oidc: this.oidc,
+				registration: this.registrationOpen && !this.noRoom,
+				legal: this.legal
+			});
 		}
 		if (method === 'GET' && path === '/register') {
 			const token = query.get('invite');
@@ -363,6 +376,8 @@ export class FakeServer {
 		}
 		if (method === 'POST' && path === '/register') {
 			const invite = typeof data.invite === 'string' ? this.usable(data.invite) : undefined;
+			const terms = this.legal.terms_version;
+			if (terms && data.accepted_terms !== terms) return refused(403, 'terms');
 			if (typeof data.invite === 'string' && !invite) return refused(403, 'invite');
 			if (!invite && !this.registrationOpen) return refused(403, 'closed');
 			if (this.noRoom) return refused(403, this.noRoom);
@@ -377,6 +392,7 @@ export class FakeServer {
 			this.accounts.set(name.toLowerCase(), String(data.password));
 			if (invite) invite.uses++;
 			this.signedIn = name.toLowerCase();
+			if (terms) this.agreedTerms = terms;
 			this.admin = false;
 			return json(this.me(), 201);
 		}
@@ -424,6 +440,12 @@ export class FakeServer {
 			}
 			this.accounts.delete(name);
 			this.signedIn = null;
+			return empty();
+		}
+		if (method === 'PUT' && path === '/terms') {
+			if (!this.legal.terms_version) return refused(404);
+			if (data.version !== this.legal.terms_version) return refused(409, 'not these terms');
+			this.agreedTerms = this.legal.terms_version;
 			return empty();
 		}
 		const secondFactor = this.answerSecondFactor(method, path, data);
@@ -653,7 +675,11 @@ export class FakeServer {
 			username: this.signedIn,
 			is_admin: this.admin,
 			has_password: this.accounts.has(this.signedIn ?? ''),
-			admin_needs_second_factor: this.adminNeedsSecondFactor
+			admin_needs_second_factor: this.adminNeedsSecondFactor,
+			terms_to_accept:
+				this.legal.terms_version && this.agreedTerms !== this.legal.terms_version
+					? this.legal.terms_version
+					: null
 		};
 	}
 

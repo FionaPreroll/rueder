@@ -29,6 +29,7 @@ import {
 	MAX_OPML,
 	type Abilities,
 	type Account,
+	type LegalLinks,
 	type Found,
 	type Fresh,
 	type Imported,
@@ -309,7 +310,10 @@ export class ServerReader implements Reader {
 	readonly filters = this;
 	readonly demo = null;
 	readonly can: Abilities;
-	readonly account: Account;
+	/** Who is logged in; it changes when the account agrees to the terms. */
+	account = $state.raw<Account>({ name: '', admin: false });
+	/** The operator's legal texts, as the session found them. */
+	legal = $state.raw<LegalLinks | null>(null);
 	/** Whether the server takes reports of errors, and whether this account sends them; null until asked. */
 	reportsConsent = $state.raw<{ available: boolean; on: boolean } | null>(null);
 	/** Gathers the errors of this browser while the account sends reports. */
@@ -416,6 +420,23 @@ export class ServerReader implements Reader {
 
 	signOut() {
 		this.session.signOut();
+	}
+
+	// The terms of use
+
+	async acceptTerms(): Promise<boolean> {
+		const version = this.account.termsToAccept;
+		if (!version) return true;
+		try {
+			await this.api.acceptTerms(version);
+			this.account = { ...this.account, termsToAccept: null };
+			return true;
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			// The terms changed meanwhile: the page asks about the new ones.
+			if (error instanceof ApiError && error.status === 409) void this.checkSession();
+			return false;
+		}
 	}
 
 	// The second factor
@@ -1619,7 +1640,11 @@ export class ServerReader implements Reader {
 
 	private async checkSession() {
 		try {
-			await this.api.me();
+			// What another tab changed, such as agreeing to the terms, shows here too.
+			const me = await this.api.me();
+			if (me.terms_to_accept !== (this.account.termsToAccept ?? null)) {
+				this.account = { ...this.account, termsToAccept: me.terms_to_accept };
+			}
 		} catch (error) {
 			if (error instanceof ApiError && error.signedOut) this.session.expired();
 		}

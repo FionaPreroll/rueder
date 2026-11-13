@@ -175,6 +175,23 @@
 				<Icon name="logout" />
 				{m.nav.logout}
 			</button>
+			{#if reader.legal}
+				<!-- The operator's texts, where the server names them. -->
+				<hr class="my-1 border-line" />
+				{#each [[reader.legal.imprint, m.legal.imprint], [reader.legal.privacy, m.legal.privacy], [reader.legal.terms, m.legal.terms]] as [href, label] (label)}
+					{#if href}
+						<a
+							role="menuitem"
+							class="menu-item text-soft"
+							{href}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{label}
+						</a>
+					{/if}
+				{/each}
+			{/if}
 		</Menu>
 	{/if}
 </header>

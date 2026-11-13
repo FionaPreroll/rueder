@@ -13,6 +13,7 @@ pub mod http_client;
 pub mod images;
 pub mod import;
 pub mod labels;
+pub mod legal;
 pub mod login;
 pub mod monitor;
 pub mod oidc;
@@ -51,6 +52,7 @@ use crate::{
     hardening::Policies,
     http_client::HttpClient,
     images::{ImageProxy, Refused},
+    legal::Legal,
     login::Limiter,
     monitor::Monitor,
     oidc::Oidc,
@@ -95,6 +97,8 @@ pub struct AppState {
     /// Whether the right of an admin counts only in a session that began with
     /// a second factor (`ADMIN_SECOND_FACTOR=required`).
     pub admin_second_factor: bool,
+    /// Where the operator's legal texts are, and which terms count.
+    pub legal: Arc<Legal>,
 }
 
 impl AppState {
@@ -112,6 +116,7 @@ impl AppState {
             monitor: Arc::default(),
             reports: true,
             admin_second_factor: false,
+            legal: Arc::default(),
         }
     }
 
@@ -128,6 +133,14 @@ impl AppState {
     pub fn with_admin_second_factor(self) -> Self {
         Self {
             admin_second_factor: true,
+            ..self
+        }
+    }
+
+    /// Links to the operator's legal texts, and the terms an account agrees to.
+    pub fn with_legal(self, legal: Legal) -> Self {
+        Self {
+            legal: Arc::new(legal),
             ..self
         }
     }
@@ -227,6 +240,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(subscribe::routes())
         .merge(profile::routes())
         .merge(second_factor::routes())
+        .merge(legal::routes())
         .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())

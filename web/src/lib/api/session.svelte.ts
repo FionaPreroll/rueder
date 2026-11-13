@@ -3,6 +3,7 @@
 // reader of the account that is logged in.
 
 import { api as theApi, ApiError, type Api, type ApiAccount, type ApiLoginWays } from './client.ts';
+import type { LegalLinks } from '#lib/reader.ts';
 import { ServerReader } from './reader.svelte.ts';
 import { forgetView } from '#lib/view.ts';
 
@@ -27,10 +28,25 @@ export type RegisterFailure =
 	/** There is no room for another account, for good or for today. */
 	| { kind: 'full' }
 	| { kind: 'today' }
+	/** The terms of use were not agreed to. */
+	| { kind: 'terms' }
 	| { kind: 'taken' }
 	/** The name or the password cannot be one; the server says why. */
 	| { kind: 'invalid'; reason: string }
 	| { kind: 'unreachable' };
+
+/** A server that does not say: no other ways, no legal texts. */
+const NO_WAYS: ApiLoginWays = {
+	oidc: false,
+	registration: false,
+	legal: { imprint: null, privacy: null, terms: null, terms_version: null }
+};
+
+/** The texts to link to, or null where the operator names none. */
+function legalLinks(ways: ApiLoginWays): LegalLinks | null {
+	const { imprint, privacy, terms } = ways.legal;
+	return imprint || privacy || terms ? { imprint, privacy, terms } : null;
+}
 
 /** The invitation the page was opened with, and whether it can be used. */
 export interface Invitation {
@@ -53,7 +69,7 @@ export class Session {
 	/** The reader of the account that is logged in. */
 	reader = $state.raw<ServerReader | null>(null);
 	/** The ways to log in besides name and password. */
-	ways = $state.raw<ApiLoginWays>({ oidc: false, registration: false });
+	ways = $state.raw<ApiLoginWays>(NO_WAYS);
 	/** The invitation the page was opened with, once the server said whether it can be used. */
 	invitation = $state.raw<Invitation | null>(null);
 	/** The account was deleted here a moment ago, which the login page says. */
@@ -82,7 +98,8 @@ export class Session {
 				name: account.username,
 				admin: account.is_admin,
 				password: account.has_password,
-				adminNeedsSecondFactor: account.admin_needs_second_factor
+				adminNeedsSecondFactor: account.admin_needs_second_factor,
+				termsToAccept: account.terms_to_accept
 			},
 			{
 				signOut: () => void this.signOut(),
@@ -92,7 +109,10 @@ export class Session {
 			this.api
 		);
 		this.farewell = false;
+		this.reader.legal = legalLinks(this.ways);
 		this.state = 'in';
+		// The account menu links to the operator's texts, which come with the ways.
+		void this.askWays();
 	}
 
 	/** The account is gone, and with it the session; where it was goes too. */
@@ -113,8 +133,9 @@ export class Session {
 		try {
 			this.ways = await this.api.loginWays();
 		} catch {
-			this.ways = { oidc: false, registration: false };
+			this.ways = NO_WAYS;
 		}
+		if (this.reader) this.reader.legal = legalLinks(this.ways);
 		const token = invitedBy();
 		if (!token) return;
 		try {
@@ -124,17 +145,21 @@ export class Session {
 		}
 	}
 
-	/** Makes an account and logs it in; null if it worked, else why it did not. */
-	async register(name: string, password: string): Promise<RegisterFailure | null> {
+	/**
+	 * Makes an account and logs it in; null if it worked, else why it did not.
+	 * `agreed` says the reader agreed to the terms of use the server names.
+	 */
+	async register(name: string, password: string, agreed = false): Promise<RegisterFailure | null> {
 		try {
-			this.enter(await this.api.register(name, password, this.invitation?.token));
+			const terms = agreed ? (this.ways.legal.terms_version ?? undefined) : undefined;
+			this.enter(await this.api.register(name, password, this.invitation?.token, terms));
 			this.invitation = null;
 			return null;
 		} catch (error) {
 			if (!(error instanceof ApiError)) throw error;
 			const word = error.message.trim();
-			if (error.status === 403 && ['closed', 'invite', 'full', 'today'].includes(word)) {
-				return { kind: word as 'closed' | 'invite' | 'full' | 'today' };
+			if (error.status === 403 && ['closed', 'invite', 'full', 'today', 'terms'].includes(word)) {
+				return { kind: word as 'closed' | 'invite' | 'full' | 'today' | 'terms' };
 			}
 			if (error.status === 409) return { kind: 'taken' };
 			if (error.status === 400 || error.status === 422) {

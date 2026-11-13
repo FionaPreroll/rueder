@@ -219,6 +219,50 @@ describe('registering', () => {
 		expect(server.accounts.get('grace')).toBe('a long password');
 	});
 
+	it('takes the agreement to the terms of use, where the server names them', async () => {
+		server.registrationOpen = true;
+		server.legal = {
+			imprint: 'https://operator.example/imprint',
+			privacy: null,
+			terms: 'https://operator.example/terms',
+			terms_version: '2026-11'
+		};
+		const session = await loginPage();
+		// The login links to the operator's texts.
+		const footer = await screen.findByRole('link', { name: 'Imprint' });
+		expect(footer).toHaveAttribute('href', 'https://operator.example/imprint');
+		expect(screen.queryByRole('link', { name: 'Privacy policy' })).toBeNull();
+
+		await userEvent.click(screen.getByRole('button', { name: 'Make an account' }));
+		await fillNew('grace', 'a long password', 'a long password');
+		expect(make()).toBeDisabled();
+		const agree = screen.getByRole('checkbox', { name: 'I agree to the terms of use' });
+		await userEvent.click(agree);
+		await userEvent.click(make());
+		await vi.waitFor(() => expect(session.state).toBe('in'));
+		expect(server.agreedTerms).toBe('2026-11');
+		expect(session.reader?.account.termsToAccept).toBeNull();
+	});
+
+	it('says when the server wanted the terms agreed to', async () => {
+		server.registrationOpen = true;
+		const session = await loginPage();
+		// The page did not know of terms; the server meanwhile names some.
+		server.legal = {
+			imprint: null,
+			privacy: null,
+			terms: 'https://t.example/',
+			terms_version: '2'
+		};
+		await userEvent.click(await screen.findByRole('button', { name: 'Make an account' }));
+		await fillNew('grace', 'a long password', 'a long password');
+		await userEvent.click(make());
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'Agree to the terms of use to make an account.'
+		);
+		expect(session.state).toBe('out');
+	});
+
 	it('goes back to the login', async () => {
 		server.registrationOpen = true;
 		await loginPage();

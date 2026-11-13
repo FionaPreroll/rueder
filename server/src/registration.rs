@@ -32,7 +32,7 @@ use time::OffsetDateTime;
 use ts_rs::TS;
 
 use crate::{
-    AppError, AppState, accounts,
+    AppError, AppState, accounts, legal,
     login::Me,
     sessions::{self, Session},
 };
@@ -409,9 +409,10 @@ pub(crate) async fn is_open(db: &PgPool) -> anyhow::Result<bool> {
 /// What `POST /api/register` reads. It answers with `Me` and sets the
 /// session's cookie, as a login does.
 ///
-/// A refusal is 403 with one word: `closed` (no invitation, and registration
-/// is not open), `invite` (the invitation cannot be used), `full` (no room for
-/// another account) or `today` (enough accounts for one day). A name or a
+/// A refusal is 403 with one word: `terms` (the terms of use the server names
+/// were not agreed to), `closed` (no invitation, and registration is not open),
+/// `invite` (the invitation cannot be used), `full` (no room for another
+/// account) or `today` (enough accounts for one day). A name or a
 /// password that cannot be one is 400 with the reason, a name that is taken
 /// 409.
 #[derive(Deserialize, TS)]
@@ -422,6 +423,10 @@ struct NewRegistration {
     #[serde(default)]
     #[ts(optional)]
     invite: Option<String>,
+    /// The version of the terms of use agreed to, where the server names one.
+    #[serde(default)]
+    #[ts(optional)]
+    accepted_terms: Option<String>,
 }
 
 async fn register(
@@ -429,6 +434,11 @@ async fn register(
     headers: HeaderMap,
     Json(new): Json<NewRegistration>,
 ) -> Result<Response, AppError> {
+    // Before anything else: who did not agree gets no account, whatever else.
+    let terms = state.legal.terms_version.as_deref();
+    if terms.is_some() && new.accepted_terms.as_deref() != terms {
+        return Err(AppError::Status(StatusCode::FORBIDDEN, "terms".into()));
+    }
     let token = new.invite.as_deref().filter(|token| !token.is_empty());
     let id = match make(&state.db, &new.username, &new.password, token).await? {
         Outcome::Made(id) => id,
@@ -442,6 +452,9 @@ async fn register(
     // Whoever was logged in in this browser is not any more.
     if let Some(old) = sessions::token(&headers) {
         sessions::end(&state.db, old).await?;
+    }
+    if let Some(version) = terms {
+        legal::agreed(&state.db, id, version).await?;
     }
     let token = sessions::start(&state.db, id, false).await?;
     let me = Me::new(id, new.username.trim().to_owned(), false, true);

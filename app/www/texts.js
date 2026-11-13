@@ -17,7 +17,10 @@ const en = {
 	empty: 'Enter the address of your rueder.',
 	invalid: 'This is not the address of a web page.',
 	insecure: 'The address must start with https://: rueder logs in only over a secure connection.',
-	version: (name, build) => `App version ${name} (build ${build})`
+	version: (name, build) => `App version ${name} (build ${build})`,
+	imprint: 'Imprint',
+	privacy: 'Privacy policy',
+	terms: 'Terms of use'
 };
 
 const de = {
@@ -38,7 +41,10 @@ const de = {
 	invalid: 'Das ist keine Adresse einer Webseite.',
 	insecure:
 		'Die Adresse muss mit https:// beginnen: rueder meldet nur über eine sichere Verbindung an.',
-	version: (name, build) => `App-Version ${name} (Build ${build})`
+	version: (name, build) => `App-Version ${name} (Build ${build})`,
+	imprint: 'Impressum',
+	privacy: 'Datenschutzerklärung',
+	terms: 'Nutzungsbedingungen'
 };
 
 export const catalogs = { en, de };

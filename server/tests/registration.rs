@@ -100,7 +100,10 @@ async fn nothing_is_open_until_the_operator_says_so(db: PgPool) {
         }
     );
     let (_, ways) = call(&state, Method::GET, "/api/login/ways", None, None).await;
-    assert_eq!(ways, json!({ "oidc": false, "registration": false }));
+    assert_eq!(
+        (&ways["oidc"], &ways["registration"]),
+        (&json!(false), &json!(false))
+    );
     let (_, asked) = call(&state, Method::GET, "/api/register", None, None).await;
     assert_eq!(asked, json!({ "open": false }));
 

@@ -295,3 +295,55 @@ describe('the page with a server', () => {
 		expect(row.closest('div')).toHaveTextContent('T');
 	});
 });
+
+describe('the legal texts of the operator', () => {
+	const texts = {
+		imprint: 'https://operator.example/imprint',
+		privacy: 'https://operator.example/privacy',
+		terms: 'https://operator.example/terms'
+	};
+
+	it('are linked from the menu of the account, and new terms are asked for once', async () => {
+		server.legal = { ...texts, terms_version: '2026-11' };
+		render(Page);
+		const dialog = await screen.findByRole('alertdialog', {
+			name: 'The terms of use have changed'
+		});
+		expect(
+			await within(dialog).findByRole('link', { name: 'Read the terms of use' })
+		).toHaveAttribute('href', texts.terms);
+		await userEvent.click(within(dialog).getByRole('button', { name: 'I agree' }));
+		await vi.waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+		expect(server.agreedTerms).toBe('2026-11');
+
+		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
+		for (const [name, href] of [
+			['Imprint', texts.imprint],
+			['Privacy policy', texts.privacy],
+			['Terms of use', texts.terms]
+		]) {
+			const link = screen.getByRole('menuitem', { name });
+			expect(link).toHaveAttribute('href', href);
+			expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+		}
+	});
+
+	it('cannot be put aside: who does not agree logs out', async () => {
+		server.legal = { ...texts, terms_version: '2026-11' };
+		render(Page);
+		const dialog = await screen.findByRole('alertdialog');
+		await userEvent.keyboard('{Escape}');
+		expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Log out' }));
+		expect(await screen.findByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+		expect(server.agreedTerms).toBeNull();
+	});
+
+	it('are nowhere where the operator names none', async () => {
+		await reading();
+		expect(screen.queryByRole('alertdialog')).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
+		expect(screen.queryByRole('menuitem', { name: 'Imprint' })).toBeNull();
+		expect(screen.queryByRole('menuitem', { name: 'Terms of use' })).toBeNull();
+	});
+});

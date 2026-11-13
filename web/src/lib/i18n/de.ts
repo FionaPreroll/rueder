@@ -147,6 +147,20 @@ const de: Messages = {
 		note: 'Registrieren kann man sich nicht. Konten legt an, wer diesen rueder betreibt.'
 	},
 
+	legal: {
+		imprint: 'Impressum',
+		privacy: 'Datenschutzerklärung',
+		terms: 'Nutzungsbedingungen',
+		agree: 'Ich stimme den Nutzungsbedingungen zu',
+		changed: 'Die Nutzungsbedingungen haben sich geändert',
+		changedIntro:
+			'Bitte lies die neuen Nutzungsbedingungen. Um rueder weiter zu nutzen, stimm ihnen zu.',
+		read: 'Nutzungsbedingungen lesen',
+		accept: 'Ich stimme zu',
+		decline: 'Abmelden',
+		notSaved: 'Das hat nicht geklappt. Versuch es gleich noch einmal.'
+	},
+
 	register: {
 		title: 'Konto anlegen',
 		invited: 'Du wurdest zu diesem rueder eingeladen. Such dir einen Namen und ein Passwort aus.',
@@ -161,6 +175,7 @@ const de: Messages = {
 		full: 'Hier ist kein Platz für ein weiteres Konto.',
 		today: 'Für heute wurden hier genug Konten angelegt. Versuch es morgen wieder.',
 		taken: 'Ein Konto mit diesem Namen gibt es schon.',
+		terms: 'Stimm den Nutzungsbedingungen zu, um ein Konto anzulegen.',
 		invalid: (reason) => `Das kann kein Konto werden. Der Server sagt: ${reason}`
 	},
 

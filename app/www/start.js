@@ -4,6 +4,7 @@
 // app's own plugin (RuederPlugin.java), which answers nothing else.
 
 import { serverAddress } from './address.js';
+import { legalLinks } from './legal.js';
 import { textsFor } from './texts.js';
 
 const t = textsFor(navigator.language);
@@ -68,6 +69,31 @@ async function look() {
 	}
 }
 
+/**
+ * Links to the legal texts of the server's operator, where the saved server
+ * names them. A server that does not answer simply has none here.
+ */
+async function showLegal() {
+	let links;
+	try {
+		links = legalLinks((await call('legal')).body);
+	} catch {
+		return;
+	}
+	const nav = $('legal');
+	nav.replaceChildren(
+		...links.map(({ kind, href }) => {
+			const link = document.createElement('a');
+			link.href = href;
+			link.textContent = t[kind];
+			// Pages of other sites open in the browser, not in the app.
+			link.rel = 'noopener noreferrer';
+			return link;
+		})
+	);
+	nav.hidden = links.length === 0;
+}
+
 async function start() {
 	const state = await call('state');
 	fill(state);
@@ -88,6 +114,7 @@ async function start() {
 	}
 	$('form').hidden = false;
 	if (!state.server) $('address').focus();
+	else void showLegal();
 }
 
 void start();

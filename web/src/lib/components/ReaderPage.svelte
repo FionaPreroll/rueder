@@ -18,6 +18,7 @@
 	import Icon from './Icon.svelte';
 	import SettingsDialog from './SettingsDialog.svelte';
 	import StatusDialog from './StatusDialog.svelte';
+	import TermsDialog from './TermsDialog.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import SubscribeDialog from './SubscribeDialog.svelte';
 	import Toolbar from './Toolbar.svelte';
@@ -202,7 +203,7 @@
 
 	function keydown(event: KeyboardEvent) {
 		if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-		if (dialog || comparing || typing(event.target)) return;
+		if (dialog || comparing || reader.account?.termsToAccept || typing(event.target)) return;
 
 		const key = event.key;
 		const article = reader.current;
@@ -373,6 +374,10 @@
 			<ArticlePane {reader} {now} onversions={compare} />
 		</div>
 	</div>
+{/if}
+
+{#if reader.account?.termsToAccept}
+	<TermsDialog {reader} />
 {/if}
 
 {#if dialog === 'settings'}

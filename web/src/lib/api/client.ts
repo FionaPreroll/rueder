@@ -51,6 +51,7 @@ import type {
 	SecondFactorCode,
 	SecondFactorPassword,
 	SecondFactorSetup,
+	TermsAgreement,
 	ServerStatus,
 	StateChange,
 	Subscribed,
@@ -267,11 +268,12 @@ export const api = {
 			invite ? `/register?invite=${encodeURIComponent(invite)}` : '/register'
 		),
 	/** Makes an account and logs it in. A refusal is 403 with one word, see `NewRegistration`. */
-	register: (username: string, password: string, invite?: string) =>
+	register: (username: string, password: string, invite?: string, acceptedTerms?: string) =>
 		call<ApiAccount>('POST', '/register', {
 			username,
 			password,
-			...(invite ? { invite } : {})
+			...(invite ? { invite } : {}),
+			...(acceptedTerms ? { accepted_terms: acceptedTerms } : {})
 		} satisfies NewRegistration),
 
 	invites: () => call<Invites>('GET', '/invites'),
@@ -371,6 +373,9 @@ export const api = {
 
 	/** For admins only. */
 	status: () => call<ServerStatus>('GET', '/status'),
+
+	acceptTerms: (version: string) =>
+		call<void>('PUT', '/terms', { version } satisfies TermsAgreement),
 
 	secondFactor: () => call<SecondFactor>('GET', '/second-factor'),
 	setUpSecondFactor: (password: string) =>

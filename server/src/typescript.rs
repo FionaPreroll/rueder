@@ -18,8 +18,8 @@ use std::any::TypeId;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use crate::{
-    api, events, filters, labels, login, profile, registration, reports, second_factor, status,
-    subscribe, transfer, tree,
+    api, events, filters, labels, legal, login, profile, registration, reports, second_factor,
+    status, subscribe, transfer, tree,
 };
 
 /// Where the committed file lies, seen from the crate.
@@ -128,6 +128,7 @@ pub fn generate() -> anyhow::Result<String> {
     login::types(&mut types);
     profile::types(&mut types);
     second_factor::types(&mut types);
+    legal::types(&mut types);
     registration::types(&mut types);
     api::types(&mut types);
     tree::types(&mut types);

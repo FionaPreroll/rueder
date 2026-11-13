@@ -32,6 +32,15 @@ export interface Account {
 	password?: boolean;
 	/** An admin whose right waits for a login with a second factor, as the server wants. */
 	adminNeedsSecondFactor?: boolean;
+	/** The version of the terms of use the account has yet to agree to, if any. */
+	termsToAccept?: string | null;
+}
+
+/** Where the operator's legal texts are; what is null, the operator did not name. */
+export interface LegalLinks {
+	imprint: string | null;
+	privacy: string | null;
+	terms: string | null;
 }
 
 /** Why the account was not deleted. The page has the words. */
@@ -268,6 +277,10 @@ export interface Reader {
 	/** Who is logged in; null where there is nobody to log in. */
 	readonly account: Account | null;
 	signOut(): void;
+	/** The operator's legal texts, where the reader has a server that names them. */
+	readonly legal: LegalLinks | null;
+	/** Agrees to the version of the terms the account was asked about; false if that did not work. */
+	acceptTerms(): Promise<boolean>;
 
 	/** The account's second factor, where the reader has one (`can.secondFactor`). */
 	secondFactor(): Promise<SecondFactorState | null>;

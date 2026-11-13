@@ -119,6 +119,16 @@ fieldset {
 	color: var(--warn);
 }
 
+#legal {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+}
+
+#legal a {
+	color: inherit;
+}
+
 [hidden] {
 	display: none !important;
 }
