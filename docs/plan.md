@@ -45,6 +45,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A20 | Rechtliches und Meldeweg (2026-11-12) | Impressum, Datenschutz und Nutzungsbedingungen mit Zustimmung; Meldungen von Inhalten; Sperre von Feeds. |
 | A21 | Wachstum im Griff (2026-11-12) | Aufbewahrung von Artikeln einstellbar, Abruf einstellbar und gemessen. |
 | A22 | Zweiter Faktor (2026-11-12) | TOTP mit Wiederherstellungscodes, Pflicht für Admins der öffentlichen Instanz. |
+| A24 | Apps anderer Anbieter (2026-11-13) | Feedreader-Apps wie Reeder, NetNewsWire oder Read You lesen und bedienen ein Konto über die Google-Reader-API, angemeldet mit App-Passwörtern. |
 
 Die Nummern ab A16 und die Kennungen E4, E12, E13 und 5.x stammen aus Fionas eigener Planung für eine öffentliche Instanz; was hier fehlt, steht dort und gehört nicht zu diesem Repository. Die Lücken sind Absicht.
 
@@ -98,6 +99,7 @@ Von Fiona am 2026-11-10 entschieden.
 | E4 Aufbewahrung (2026-11-12) | Einstellbar, Standard bleibt alles, wie bisher. Vorgesehen für eine öffentliche Instanz: Texte 24 Monate, Versionen 12 Monate, Artikel mit Stern oder Label bleiben, verwaiste Feeds gehen nach 90 Tagen. Das ersetzt die Detailfrage „Werden Artikel irgendwann gelöscht? Nein.“ | Paket 5.3. |
 | E12 Meldungen (2026-11-12) | Admins sehen bei gemeldeten Feeds die Adresse, nie, wer gemeldet hat. Das ist eine Ausnahme davon, dass die Statusseite keine Feeds nennt. | Paket 5.9. |
 | E13 Inaktive Konten (2026-11-12) | Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht. | Paket 5.3. |
+| A24 Apps anderer Anbieter (2026-11-13) | rueder spricht die Google-Reader-API, wie FreshRSS, Miniflux und Inoreader; Fever und eine eigene API für Apps sind verworfen. Apps melden sich nur mit App-Passwörtern an, nie mit dem Passwort des Kontos: Jedes entsteht in den Einstellungen mit Passwort und, wo eingerichtet, dem Code des zweiten Faktors, wird einmal gezeigt, nur als Hash gespeichert und lässt sich einzeln widerrufen. Bilder gehen auch an Apps über den Bild-Proxy, mit Adressen, die für das App-Passwort signiert sind und ohne Cookie gelten; mit dem Widerruf enden sie. Verschachtelte Ordner erscheinen als Pfad („News/Tech“), weil die Google-Reader-API nur eine Ebene kennt. Apps dürfen alles ändern, was die Seite ändert: Lesestand, Sterne, Labels, alles als gelesen, Abos. Der Reiter „Apps“ der Einstellungen zeigt die Apps, die mit rueder gehen, mit Links zu ihnen, und führt durch die Einrichtung, so dass sie ohne Anleitung von außen gelingt. Eingeschaltet als Standard, weil es auch für selbst gehostete Instanzen zählt; `APP_API=off` schaltet es ab. Das ist bewusst anders als bei A16, wo alles für die öffentliche Instanz aus als Standard ist. Das Lesen der Anfragen bekommt ein Fuzz-Target; die Fuzz-Targets laufen auf GitHub, nicht in der Entwicklungsumgebung. | Paket 2.15, [Apps anderer Anbieter](architecture.md#apps-anderer-anbieter). |
 
 Technische Festlegungen (Stack, Werkzeuge, CI) stehen in [implementation.md](implementation.md#stack-und-konventionen).
 
