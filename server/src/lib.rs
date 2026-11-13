@@ -1,3 +1,35 @@
+//! The rueder server: one program next to PostgreSQL that fetches feeds,
+//! cleans and stores their articles, and serves the web page, the page's API
+//! and the Google Reader API for apps of other makers. `src/main.rs` is the
+//! command line (`rueder serve`, `rueder account add` and the others); all
+//! else is in this library, where the tests and the benchmarks reach it.
+//!
+//! These pages come from the comments in the code, private items included
+//! (`cargo doc --no-deps --lib --document-private-items`). How to build and
+//! run the server is in `server/README.md`.
+//!
+//! # Where to find what
+//!
+//! - **The server as a whole:** [`router`] puts the routes together with the
+//!   layers around them, [`AppState`] is what every request reaches, and
+//!   [`AppError`] is how a request fails without giving away internals.
+//! - **Feeds and articles:** [`fetch`] fetches what is due, [`feeds`] turns a
+//!   feed into articles, [`cleaning`] makes their HTML safe, [`articles`]
+//!   stores them, [`images`] is the image proxy, and [`http_client`] is the
+//!   only way out to the internet.
+//! - **Reading:** [`mod@api`] is the API the page lives on, with [`reading`],
+//!   [`tree`], [`subscribe`], [`search`], [`filters`] and [`labels`];
+//!   [`events`] brings what changes to every open tab.
+//! - **Accounts:** [`accounts`], [`login`], [`sessions`], [`second_factor`],
+//!   [`passkeys`], [`oidc`], [`registration`], [`profile`] and [`transfer`].
+//! - **Apps of other makers:** [`greader`] and [`app_passwords`].
+//! - **Safety:** [`hardening`] for every answer and every changing request,
+//!   [`rate`] for how much one sender and one account may ask.
+//! - **Running it:** [`status`], [`monitor`], [`history`], [`mod@health`],
+//!   [`reports`], [`retention`], [`moderation`], [`legal`] and [`version`].
+//! - **Tools:** [`import`] (the old rueder's data), [`reclean`],
+//!   [`mod@bench`] and [`typescript`] (the API's types for the page).
+
 pub mod accounts;
 pub mod api;
 pub mod app_passwords;

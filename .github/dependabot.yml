@@ -11,7 +11,7 @@ updates:
       cargo:
         patterns: ["*"]
   - package-ecosystem: npm
-    directories: ["/web", "/app"]
+    directories: ["/web", "/app", "/pages"]
     schedule:
       interval: monthly
     groups:

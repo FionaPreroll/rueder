@@ -35,3 +35,6 @@ __pycache__
 
 
 .vscode/*.log
+
+# The site for GitHub Pages as pages/build.js puts it together
+/_site
