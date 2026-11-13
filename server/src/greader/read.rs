@@ -213,7 +213,7 @@ impl Filter {
 }
 
 /// The order of arrival from which on articles arrived at or after `at`, by
-/// the marks of arrival (see migration `0012_arrivals.sql`). Before the
+/// the marks of arrival (see migration `0013_arrivals.sql`). Before the
 /// first mark nothing is known, and everything counts.
 async fn arrived_since(db: &PgPool, at: OffsetDateTime) -> anyhow::Result<i64> {
     let row = sqlx::query!(
