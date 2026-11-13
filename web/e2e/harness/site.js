@@ -80,6 +80,23 @@ function freshFeeds() {
 			name: 'Wire',
 			articles: [article('Wire', 1, 'The first report.'), article('Wire', 2, 'The second report.')]
 		},
+		// Long enough that an article does not fit on a screen: for scrolling.
+		long: {
+			title: 'Long Story',
+			name: 'Story',
+			articles: Array.from({ length: 4 }, (_, i) =>
+				article(
+					'Story',
+					i + 1,
+					Array.from(
+						{ length: 40 },
+						(_, p) =>
+							`Paragraph ${p + 1} of story ${i + 1}. ` +
+							'The ferry keeps to its timetable, and the harbour keeps to the ferry. '.repeat(4)
+					).join('</p><p>')
+				)
+			)
+		},
 		// For the filter rules: some of its titles are advertising.
 		market: {
 			title: 'Market Courier',

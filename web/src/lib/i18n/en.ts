@@ -62,6 +62,7 @@ const en = {
 		waiting: 'Not fetched yet',
 		blocked: 'Blocked by the operator of this rueder',
 		moveHint: 'Drag to sort, or press Alt with the arrow keys',
+		resizeSidebar: 'How wide the sidebar is: drag, or use the arrow keys',
 		tooDeep: (levels: number) => `Folders nest ${levels} levels deep at most.`
 	},
 
@@ -111,6 +112,7 @@ const en = {
 		loadingList: 'Loading …',
 		toTop: 'Back to the top',
 		pick: 'Pick an article to read it here.',
+		resizeList: 'How wide the list is: drag, or use the arrow keys',
 		closeArticle: 'Close the article',
 		blockedFeed:
 			'The operator of this rueder blocked this feed. It is not fetched, and its articles are not shown.',
@@ -430,6 +432,8 @@ const en = {
 		color: 'Color',
 		colors: ['Red', 'Orange', 'Yellow', 'Green', 'Teal', 'Blue', 'Purple', 'Gray'],
 		remove: 'Delete the label',
+		show: 'Show the labels',
+		hide: 'Hide the labels',
 		forArticle: 'Labels',
 		set: (title: string) => `Label: ${title}`
 	},

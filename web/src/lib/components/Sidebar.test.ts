@@ -279,6 +279,31 @@ describe('Sidebar', () => {
 		expect(reader.labels.map((label) => label.title)).toEqual(['Später lesen', 'Arbeit']);
 	});
 
+	it('folds the labels away and back, and the + brings them out again', async () => {
+		const { reader } = setup();
+		const nav = screen.getByRole('navigation', { name: 'Subscriptions' });
+		expect(within(nav).getByRole('button', { name: 'Arbeit' })).toBeInTheDocument();
+
+		await userEvent.click(within(nav).getByRole('button', { name: 'Hide the labels' }));
+		expect(within(nav).queryByRole('button', { name: 'Arbeit' })).toBeNull();
+		// Folded away, the heading says how many there are.
+		const heading = within(nav).getByRole('button', { name: 'Show the labels' });
+		expect(heading).toHaveTextContent(`Labels (${reader.labels.length})`);
+		expect(heading).toHaveAttribute('aria-expanded', 'false');
+		// It stays folded away for the next time, next to the folders.
+		expect(reader.isClosed('labels')).toBe(true);
+
+		await userEvent.click(heading);
+		expect(within(nav).getByRole('button', { name: 'Arbeit' })).toBeInTheDocument();
+
+		// Making one brings them out, so the new one is not made out of sight.
+		await userEvent.click(within(nav).getByRole('button', { name: 'Hide the labels' }));
+		await userEvent.click(within(nav).getByRole('button', { name: 'New label' }));
+		expect(within(nav).getByRole('button', { name: 'Arbeit' })).toBeInTheDocument();
+		await userEvent.type(screen.getByLabelText('Name of the label'), 'Recipes{Enter}');
+		expect(reader.labels.at(-1)?.title).toBe('Recipes');
+	});
+
 	it('asks to subscribe', async () => {
 		const { onsubscribe } = setup();
 		await userEvent.click(screen.getByRole('button', { name: 'Subscribe' }));

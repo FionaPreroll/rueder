@@ -367,8 +367,12 @@ export interface Reader {
 	move(id: string, targetId: string, position: DropPosition): void;
 	/** Moves a node one step with the keyboard; false when there is nowhere to go. */
 	nudge(id: string, direction: NudgeDirection): boolean;
-	isClosed(folderId: string): boolean;
-	setClosed(folderId: string, closed: boolean): void;
+	/**
+	 * Whether a folder of the tree is folded away in the sidebar. The sidebar's own
+	 * sections use a name instead of a folder's id, `labels` for one.
+	 */
+	isClosed(id: string): boolean;
+	setClosed(id: string, closed: boolean): void;
 	addFolder(title: string): void;
 	/** Whether dropping the feed `id` on the feed `targetId` can put both into a new folder. */
 	canGroup(id: string, targetId: string): boolean;

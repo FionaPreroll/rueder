@@ -186,9 +186,9 @@ describe('the page with a server', () => {
 			expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();
 			await userEvent.keyboard(key);
 			await vi.waitFor(() =>
-				expect(document.querySelector('[aria-expanded="true"][class*="py-"]')).toHaveTextContent(
-					'Lone Article 1 of feed'
-				)
+				expect(
+					document.querySelector('[data-article] [aria-expanded="true"][class*="py-"]')
+				).toHaveTextContent('Lone Article 1 of feed')
 			);
 			expect(heading()).toHaveTextContent('All items');
 			unmount();
