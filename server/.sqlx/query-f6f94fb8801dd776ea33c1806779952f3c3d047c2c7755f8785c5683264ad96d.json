@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title,\n                  f.feed_url, f.site_url, f.title, f.fetch_agent, f.last_seq,\n                  a.seq AS \"mark_seq?\", a.url AS mark_url, a.published_at AS \"mark_at?\",\n                  c.guid AS \"mark_guid?\"\n           FROM subscriptions s\n           JOIN feeds f ON f.id = s.feed_id\n           LEFT JOIN articles a ON a.feed_id = s.feed_id AND a.seq = s.read_upto\n           LEFT JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           WHERE s.account_id = $1",
+  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title,\n                  f.feed_url, f.site_url, f.title, f.fetch_agent, f.last_seq,\n                  a.seq AS \"mark_seq?\", a.url AS mark_url, a.published_at AS \"mark_at?\",\n                  c.guid AS \"mark_guid?\", s.read_upto, f.cut_seq, f.cut_guid, f.cut_url,\n                  f.cut_published_at\n           FROM subscriptions s\n           JOIN feeds f ON f.id = s.feed_id\n           LEFT JOIN articles a ON a.feed_id = s.feed_id AND a.seq = s.read_upto\n           LEFT JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           WHERE s.account_id = $1",
   "describe": {
     "columns": [
       {
@@ -145,6 +145,61 @@
             "name": "guid"
           }
         }
+      },
+      {
+        "ordinal": 13,
+        "name": "read_upto",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "subscriptions",
+            "name": "read_upto"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "cut_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "cut_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "cut_guid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "cut_guid"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "cut_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "cut_url"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "cut_published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "cut_published_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -165,8 +220,13 @@
       false,
       true,
       false,
+      true,
+      false,
+      false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "276d42a40a1af7a01923ea4ad845256384937b1b9edd01728a51630e6ff561ea"
+  "hash": "f6f94fb8801dd776ea33c1806779952f3c3d047c2c7755f8785c5683264ad96d"
 }

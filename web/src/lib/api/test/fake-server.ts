@@ -65,6 +65,8 @@ export interface FakeArticle {
 	/** The picture a list shows the article by, at the proxy. */
 	thumbnail_url?: string | null;
 	image_title: string | null;
+	/** The retention took its text; its line stays. */
+	text_dropped: boolean;
 }
 
 /** An invitation, with the token the real server keeps only the hash of. */
@@ -286,6 +288,7 @@ export class FakeServer {
 				enclosures: [],
 				image_url: null,
 				image_title: null,
+				text_dropped: false,
 				...over
 			};
 			this.articles.push(article);

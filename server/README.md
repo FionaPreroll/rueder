@@ -159,6 +159,9 @@ cargo run -- registration show          # who may make an account, the limits, h
 cargo run -- registration set --open true --max-accounts 50 --per-day 5
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20
 cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
+cargo run -- retention show             # how long what is kept; everything, until it is set
+cargo run -- retention set --articles 24 --remove text --versions 12 --orphans 90
+cargo run -- retention run              # clear all that is old now, not within the hour
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
 cargo run -- retention show             # how long the counts of the status page are kept
 cargo run -- retention set --status-days 30

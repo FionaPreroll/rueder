@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT seq AS \"seq!\" FROM article_states\n           WHERE account_id = ANY($1) AND feed_id = $2 AND seq = ANY($3) AND starred\n           UNION\n           SELECT seq FROM article_labels WHERE feed_id = $2 AND seq = ANY($3)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9359db57cf119e1a7755766798340a614406fe081d0033ee07a93e48771f707a"
+}

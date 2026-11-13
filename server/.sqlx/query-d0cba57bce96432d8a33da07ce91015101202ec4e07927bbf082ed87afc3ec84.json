@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.id FROM feeds f\n                 CROSS JOIN LATERAL (\n                     SELECT a.arrived_at FROM articles a\n                     WHERE a.feed_id = f.id AND a.seq > f.cut_seq\n                     ORDER BY a.seq LIMIT 1) oldest\n                 WHERE oldest.arrived_at < $1\n                 ORDER BY f.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d0cba57bce96432d8a33da07ce91015101202ec4e07927bbf082ed87afc3ec84"
+}

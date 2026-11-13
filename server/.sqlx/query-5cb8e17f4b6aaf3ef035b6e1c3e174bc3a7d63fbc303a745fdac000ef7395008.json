@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE retention\n         SET articles_months = $1, articles_what = $2, versions_months = $3, orphans_days = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5cb8e17f4b6aaf3ef035b6e1c3e174bc3a7d63fbc303a745fdac000ef7395008"
+}

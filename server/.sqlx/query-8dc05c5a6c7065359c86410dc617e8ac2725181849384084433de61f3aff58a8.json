@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds f SET orphaned_at = NULL\n         WHERE orphaned_at IS NOT NULL AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "8dc05c5a6c7065359c86410dc617e8ac2725181849384084433de61f3aff58a8"
+}

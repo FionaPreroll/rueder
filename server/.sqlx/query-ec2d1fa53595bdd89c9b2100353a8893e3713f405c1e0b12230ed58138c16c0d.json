@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (SELECT count(*) FROM article_tombstones) AS \"tombstones!\",\n                  (SELECT count(*) FROM article_content WHERE text_dropped) AS \"dropped!\",\n                  (SELECT count(*) FROM feeds WHERE orphaned_at IS NOT NULL) AS \"orphans!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tombstones!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "dropped!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "orphans!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ec2d1fa53595bdd89c9b2100353a8893e3713f405c1e0b12230ed58138c16c0d"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.read_upto, f.last_seq\n         FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1 AND s.feed_id = $2\n         FOR UPDATE OF s",
+  "query": "SELECT s.read_upto, f.last_seq, f.cut_seq\n         FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1 AND s.feed_id = $2\n         FOR UPDATE OF s",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "last_seq"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "cut_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "cut_seq"
+          }
+        }
       }
     ],
     "parameters": {
@@ -34,8 +45,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "a1229ae60d29bc8390b9ef7d89885a3aeaf33dc148e4b914ce03acccf7f45c93"
+  "hash": "91b2079aa3bfd9b87dd010c9279803be72e992bb223fa42bab59892c21f478d7"
 }

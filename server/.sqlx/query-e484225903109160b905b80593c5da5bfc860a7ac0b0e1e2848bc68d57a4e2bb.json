@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO article_states (account_id, feed_id, seq, kept_unread)\n         SELECT s.account_id, s.feed_id, k.seq, true\n         FROM subscriptions s CROSS JOIN unnest($2::int4[]) AS k (seq)\n         WHERE s.feed_id = $1 AND k.seq > s.read_upto AND k.seq <= $3\n         ON CONFLICT (account_id, feed_id, seq) DO UPDATE SET kept_unread = true\n         WHERE NOT article_states.read AND NOT article_states.hidden",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e484225903109160b905b80593c5da5bfc860a7ac0b0e1e2848bc68d57a4e2bb"
+}

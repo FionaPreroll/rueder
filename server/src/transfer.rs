@@ -292,7 +292,8 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
         r#"SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title,
                   f.feed_url, f.site_url, f.title, f.fetch_agent, f.last_seq,
                   a.seq AS "mark_seq?", a.url AS mark_url, a.published_at AS "mark_at?",
-                  c.guid AS "mark_guid?"
+                  c.guid AS "mark_guid?", s.read_upto, f.cut_seq, f.cut_guid, f.cut_url,
+                  f.cut_published_at
            FROM subscriptions s
            JOIN feeds f ON f.id = s.feed_id
            LEFT JOIN articles a ON a.feed_id = s.feed_id AND a.seq = s.read_upto
@@ -384,7 +385,21 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
                 url: sub.mark_url,
                 published_at,
             }),
-            _ => None,
+            // The retention cleared the feed up to the mark and took the
+            // article there; the feed noted it before.
+            _ => match (
+                sub.read_upto == sub.cut_seq,
+                sub.cut_guid,
+                sub.cut_published_at,
+            ) {
+                (true, Some(guid), Some(published_at)) => Some(ArticleRef {
+                    seq: sub.read_upto,
+                    guid,
+                    url: sub.cut_url,
+                    published_at,
+                }),
+                _ => None,
+            },
         };
         let feed = ExportedFeed {
             id: sub.feed_id,
