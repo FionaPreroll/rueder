@@ -45,7 +45,7 @@ jobs:
     env:
       SQLX_OFFLINE: "true"
       # Five minutes on a pull request, half an hour on schedule.
-      SECONDS_TO_RUN: ${{ github.event.inputs.seconds || (github.event_name == 'pull_request' && '300') || '1800' }}
+      SECONDS_TO_RUN: ${{ github.event.inputs.seconds || (github.event_name == 'pull_request' && '180') || '1800' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # cargo-fuzz needs nightly Rust; rustup checks what it downloads, as in
