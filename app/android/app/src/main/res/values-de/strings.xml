@@ -7,4 +7,5 @@
     <string name="update_metered">Du bist in einem Netz, das Geld kosten kann.</string>
     <string name="update_download">Herunterladen</string>
     <string name="update_later">Später</string>
+    <string name="back_again">Noch einmal Zurück drücken, um rueder zu schließen</string>
 </resources>

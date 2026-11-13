@@ -13,4 +13,5 @@
     <string name="update_metered">You are on a network that may cost money.</string>
     <string name="update_download">Download</string>
     <string name="update_later">Later</string>
+    <string name="back_again">Press back again to close rueder</string>
 </resources>
