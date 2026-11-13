@@ -41,6 +41,13 @@ import type {
 	NewSubscription,
 	NodeRef,
 	OpmlImported,
+	NewPasskey,
+	PasskeyAnswer,
+	PasskeyChallenge,
+	PasskeyRegistration,
+	Passkeys as PasskeysJson,
+	RegisteredPasskey,
+	RemovePasskey,
 	Registering,
 	Rename,
 	ReportsConsent,
@@ -401,14 +408,24 @@ export const api = {
 		call<CreatedAppPassword>('POST', '/app-passwords', body),
 	revokeAppPassword: (id: number) => call<void>('DELETE', `/app-passwords/${id}`),
 	secondFactor: () => call<SecondFactor>('GET', '/second-factor'),
-	setUpSecondFactor: (password: string) =>
-		call<SecondFactorSetup>('POST', '/second-factor/setup', {
-			password
-		} satisfies SecondFactorPassword),
+	setUpSecondFactor: (body: SecondFactorPassword) =>
+		call<SecondFactorSetup>('POST', '/second-factor/setup', body),
 	confirmSecondFactor: (code: string) =>
 		call<RecoveryCodes>('POST', '/second-factor/confirm', { code } satisfies SecondFactorCode),
-	switchOffSecondFactor: (password: string, code: string) =>
-		call<void>('DELETE', '/second-factor', { password, code } satisfies SecondFactorSwitchOff),
+	switchOffSecondFactor: (body: SecondFactorSwitchOff) =>
+		call<void>('DELETE', '/second-factor', body),
+
+	passkeys: () => call<PasskeysJson>('GET', '/passkeys'),
+	/** Starts making a passkey: what to ask the device. */
+	startPasskey: (body: NewPasskey) => call<PasskeyChallenge>('POST', '/passkeys/register', body),
+	finishPasskey: (body: PasskeyRegistration) => call<RegisteredPasskey>('POST', '/passkeys', body),
+	removePasskey: (id: number, body: RemovePasskey) => call<void>('DELETE', `/passkeys/${id}`, body),
+	/** Starts asking a passkey of the account that its owner is there. */
+	startPasskeyProof: () => call<PasskeyChallenge>('POST', '/passkeys/proof'),
+	/** Starts logging in with a passkey: what to ask the device. */
+	startPasskeyLogin: () => call<PasskeyChallenge>('POST', '/login/passkey'),
+	finishPasskeyLogin: (body: PasskeyAnswer) =>
+		call<ApiAccount>('POST', '/login/passkey/finish', body),
 
 	reportsConsent: () => call<ReportsConsent>('GET', '/reports/consent'),
 	setReportsConsent: (on: boolean) =>

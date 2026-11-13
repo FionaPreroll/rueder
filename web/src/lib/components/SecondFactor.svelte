@@ -1,17 +1,32 @@
 <script lang="ts">
-	// The second factor of the account, in the settings: whether it is on, setting
-	// it up with the password, a QR code and a code of the app, the recovery codes
-	// shown once, and switching it off with the password. While it is being set up,
-	// `busy` says so, so that the window around it is not closed by mistake.
+	// The second factor of the account, in the settings: whether it is on, through
+	// the authenticator app or passkeys, setting the app up with the password, a QR
+	// code and a code of the app, the recovery codes shown once, and switching the
+	// app off with the password and a code. A passkey can stand in for password and
+	// code. While the app is being set up, `busy` says so, so that the window around
+	// it is not closed by mistake.
 	import { m } from '#lib/i18n/index.ts';
 	import type {
+		PasskeyProof as Proof,
 		Reader,
 		SecondFactorRefusal,
 		SecondFactorSetup,
 		SecondFactorState
 	} from '#lib/reader.ts';
+	import PasskeyProof from './PasskeyProof.svelte';
 
-	let { reader, busy: settingUp = $bindable(false) }: { reader: Reader; busy?: boolean } = $props();
+	let {
+		reader,
+		busy: settingUp = $bindable(false),
+		version = 0,
+		onchange
+	}: {
+		reader: Reader;
+		busy?: boolean;
+		/** Counts up when something else changed the second factor. */
+		version?: number;
+		onchange?: () => void;
+	} = $props();
 
 	const texts = m.settings.secondFactor;
 
@@ -43,6 +58,7 @@
 		current = await reader.secondFactor();
 	}
 	$effect(() => {
+		void version;
 		void load();
 	});
 
@@ -61,16 +77,21 @@
 
 	const isRefusal = (value: unknown): value is SecondFactorRefusal => typeof value === 'string';
 
-	function start(event: SubmitEvent) {
-		event.preventDefault();
-		void step(async () => {
-			const answer = await reader.setUpSecondFactor(password);
+	function startWith(passkey?: Proof) {
+		return step(async () => {
+			const answer = await reader.setUpSecondFactor(password, code, passkey);
+			code = '';
 			if (isRefusal(answer)) return answer;
 			setup = answer;
 			large = false;
 			copied = null;
 			return null;
 		});
+	}
+
+	function start(event: SubmitEvent) {
+		event.preventDefault();
+		void startWith();
 	}
 
 	function confirm(event: SubmitEvent) {
@@ -82,19 +103,25 @@
 			setup = null;
 			codes = answer;
 			copied = null;
+			onchange?.();
+			return null;
+		});
+	}
+
+	function switchOffWith(passkey?: Proof) {
+		return step(async () => {
+			const answer = await reader.switchOffSecondFactor(password, code, passkey);
+			code = '';
+			if (answer) return answer;
+			await load();
+			onchange?.();
 			return null;
 		});
 	}
 
 	function switchOff(event: SubmitEvent) {
 		event.preventDefault();
-		void step(async () => {
-			const answer = await reader.switchOffSecondFactor(password, code);
-			code = '';
-			if (answer) return answer;
-			await load();
-			return null;
-		});
+		void switchOffWith();
 	}
 
 	async function kept() {
@@ -174,14 +201,19 @@
 		</div>
 	{:else if current}
 		<p>
-			{#if current.on}
+			<span class="text-soft">{texts.app}:</span>
+			{#if current.app}
 				<strong>{texts.on}</strong>
-				{texts.left(current.recoveryCodesLeft)}
+			{:else if current.passkeys > 0}
+				{texts.byPasskeys}
 			{:else}
 				<strong>{texts.off}</strong>
 			{/if}
+			{#if current.on}
+				{texts.left(current.recoveryCodesLeft)}
+			{/if}
 		</p>
-		<form class="flex flex-wrap items-end gap-2" onsubmit={current.on ? switchOff : start}>
+		<form class="flex flex-wrap items-end gap-2" onsubmit={current.app ? switchOff : start}>
 			<label class="block">
 				<span class="block text-soft">{texts.password}</span>
 				<input
@@ -198,17 +230,26 @@
 						class="mt-1 w-40 rounded py-1 tracking-widest"
 						autocomplete="one-time-code"
 						maxlength="32"
-						required
+						required={current.app}
 						bind:value={code}
 					/>
 				</label>
 			{/if}
 			<button type="submit" class="tool" disabled={busy}>
-				{current.on ? texts.switchOff : texts.start}
+				{current.app ? texts.switchOff : texts.start}
 			</button>
 		</form>
-		{#if current.on}
-			<p class="text-xs text-soft">{texts.switchOffNote}</p>
+		<PasskeyProof
+			{reader}
+			has={current.passkeys > 0}
+			label={current.app ? texts.switchOffWithPasskey : texts.startWithPasskey}
+			disabled={busy}
+			onproof={(passkey) => (current?.app ? switchOffWith(passkey) : startWith(passkey))}
+		/>
+		{#if current.app}
+			<p class="text-xs text-soft">
+				{current.passkeys > 0 ? texts.switchOffNoteKeys : texts.switchOffNote}
+			</p>
 		{/if}
 	{/if}
 

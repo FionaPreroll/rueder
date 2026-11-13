@@ -229,7 +229,8 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
             "admin_needs_second_factor": false,
             "terms_to_accept": null,
             "content_reports": false,
-            "app_api": true
+            "app_api": true,
+            "passkeys": false
         })
     );
 
@@ -265,7 +266,8 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
             "admin_needs_second_factor": false,
             "terms_to_accept": null,
             "content_reports": false,
-            "app_api": true
+            "app_api": true,
+            "passkeys": false
         })
     );
     // Among other cookies too.

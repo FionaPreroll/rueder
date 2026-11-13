@@ -141,9 +141,10 @@ enum AccountCommand {
     /// Say how many accounts this one may invite in all: a number, or
     /// `default` for what `rueder registration set --invites` gives everybody.
     Invites { name: String, quota: Quota },
-    /// Switch off the second factor of an account and delete its recovery
-    /// codes, for somebody who lost the app and the codes. The account logs in
-    /// with its password alone after that, until it sets one up again.
+    /// Switch off the second factor of an account and delete its passkeys and
+    /// recovery codes, for somebody who lost the app, the passkeys and the
+    /// codes. The account logs in with its password alone after that, until it
+    /// sets one up again.
     SecondFactorOff { name: String },
 }
 
@@ -831,6 +832,16 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             state = state.with_admin_second_factor();
         }
         Ok(other) => anyhow::bail!("ADMIN_SECOND_FACTOR must be required or off, not {other:?}"),
+    }
+    // PUBLIC_URL: the address browsers reach rueder at. Passkeys belong to
+    // it, and there are none without it. One that is no such address stops
+    // the start rather than turning passkeys off unnoticed.
+    if let Ok(url) = env::var("PUBLIC_URL")
+        && !url.trim().is_empty()
+    {
+        let passkeys = rueder::passkeys::Passkeys::new(&url)?;
+        tracing::info!("passkeys for {}", url.trim());
+        state = state.with_passkeys(passkeys);
     }
     // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:
     // the operator's legal texts, and the terms an account has to agree to.

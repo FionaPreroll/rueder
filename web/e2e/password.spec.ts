@@ -37,13 +37,13 @@ test('a new password logs the other browsers out and logs in from then on', asyn
 
 	// The other one is out, and the password it logged in with no longer works.
 	await other.reload();
-	await expect(other.getByRole('button', { name: 'Log in' })).toBeVisible();
+	await expect(other.getByRole('button', { name: 'Log in', exact: true })).toBeVisible();
 	await other.getByLabel('Name').fill('secrets');
 	await other.getByLabel('Password').fill(PASSWORD);
-	await other.getByRole('button', { name: 'Log in' }).click();
+	await other.getByRole('button', { name: 'Log in', exact: true }).click();
 	await expect(other.getByRole('alert')).toContainText('Wrong name or password.');
 	await other.getByLabel('Password').fill(FRESH);
-	await other.getByRole('button', { name: 'Log in' }).click();
+	await other.getByRole('button', { name: 'Log in', exact: true }).click();
 	await expect(sidebar(other)).toBeVisible();
 
 	await context.close();

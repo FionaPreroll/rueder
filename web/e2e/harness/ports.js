@@ -43,5 +43,7 @@ export const ACCOUNTS = [
 	'reporting',
 	'panes',
 	'apps',
-	'secrets'
+	'secrets',
+	'keyholder',
+	'unverified'
 ];

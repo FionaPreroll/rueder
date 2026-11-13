@@ -238,7 +238,15 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/reports", None),
         ("/api/feeds/not-a-number/read", reading(None, None)),
         ("/api/login", None),
+        ("/api/login/passkey", None),
+        ("/api/login/passkey/finish", None),
         ("/api/oidc/callback", None),
+        // Passkeys: starting changes nothing; one that comes or goes changes
+        // what the sessions may.
+        ("/api/passkeys/register", None),
+        ("/api/passkeys/proof", None),
+        ("/api/passkeys", area(Area::Session)),
+        ("/api/passkeys/4", area(Area::Session)),
     ] {
         assert_eq!(changed(path), what, "{path}");
     }

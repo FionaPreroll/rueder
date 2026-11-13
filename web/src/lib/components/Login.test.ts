@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Session } from '#lib/api/session.svelte.ts';
+import { fakeDevice, noDevice } from '#lib/api/test/fake-device.ts';
 import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import Login from './Login.svelte';
@@ -18,6 +19,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	noDevice();
 	useLanguage(null);
 	history.replaceState(null, '', '/');
 });
@@ -73,6 +75,48 @@ describe('Login', () => {
 		await userEvent.type(screen.getByLabelText('Code'), 'aaaaa-bbbbb{Enter}');
 		await vi.waitFor(() => expect(session.state).toBe('in'));
 		expect(server.secondFactor.recovery).toEqual([]);
+	});
+
+	it('logs in with a passkey, without name or password', async () => {
+		server.passkeysOn = true;
+		server.passkeys = [
+			{ id: 1, owner: 'fiona', key: 'a2V5MQ', name: 'Phone', created_at: '', used_at: null }
+		];
+		const device = fakeDevice('a2V5MQ');
+		const session = await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Log in with a passkey' }));
+		await vi.waitFor(() => expect(session.state).toBe('in'));
+		// The device was asked to verify the reader, for any key of this site.
+		const asked = device.get.mock.calls[0][0] as CredentialRequestOptions;
+		expect(asked.publicKey!.userVerification).toBe('required');
+		expect(asked.publicKey!.allowCredentials).toEqual([]);
+		expect(session.reader?.account?.name).toBe('fiona');
+	});
+
+	it('offers a passkey only where the server and the browser have them', async () => {
+		fakeDevice();
+		await loginPage();
+		expect(screen.queryByRole('button', { name: 'Log in with a passkey' })).toBeNull();
+		document.body.innerHTML = '';
+		server.passkeysOn = true;
+		noDevice();
+		await loginPage();
+		expect(screen.queryByRole('button', { name: 'Log in with a passkey' })).toBeNull();
+	});
+
+	it('says when no passkey was used, or one nobody here has', async () => {
+		server.passkeysOn = true;
+		const device = fakeDevice('bm9ib2R5');
+		const session = await loginPage();
+		const button = await screen.findByRole('button', { name: 'Log in with a passkey' });
+		device.refuse('NotAllowedError');
+		await userEvent.click(button);
+		expect(await screen.findByRole('alert')).toHaveTextContent('No passkey was used.');
+		await userEvent.click(button);
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'This passkey belongs to no account here.'
+		);
+		expect(session.state).toBe('out');
 	});
 
 	it('says when name or password is wrong, and empties the password', async () => {

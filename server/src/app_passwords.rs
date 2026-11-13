@@ -3,7 +3,7 @@
 //!
 //! - **Making one** (`POST /api/app-passwords`) takes the account's password
 //!   and, where the second factor is on, one of its codes, counted like a
-//!   login. The answer shows the app password this once; the database keeps
+//!   login, or a passkey instead of both. The answer shows the app password this once; the database keeps
 //!   only its SHA-256. An account has at most [`MAX_PER_ACCOUNT`].
 //! - **The list** (`GET /api/app-passwords`) has each one's name, when it was
 //!   made and when an app last used it. `DELETE /api/app-passwords/{id}`
@@ -21,7 +21,7 @@
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     routing::{delete, get},
 };
 use serde::{Deserialize, Serialize};
@@ -30,13 +30,7 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
 
-use crate::{
-    AppError, AppState,
-    login::{CODE_NEEDED, Key},
-    second_factor,
-    sessions::Session,
-    tree,
-};
+use crate::{AppError, AppState, passkeys, second_factor, sessions::Session, tree};
 
 /// How many app passwords an account can have.
 pub const MAX_PER_ACCOUNT: i64 = 20;
@@ -83,7 +77,8 @@ struct AppPasswords {
 }
 
 /// What `POST /api/app-passwords` reads: a name for it, and the account's
-/// password and, where the second factor is on, one of its codes.
+/// password and, where the second factor is on, one of its codes; or a
+/// passkey instead of both.
 #[derive(Deserialize, TS)]
 #[ts(rename = "NewAppPassword")]
 struct New {
@@ -94,6 +89,9 @@ struct New {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
     code: String,
+    #[serde(default)]
+    #[ts(optional)]
+    passkey: Option<passkeys::Answer>,
 }
 
 /// What `POST /api/app-passwords` answers: the app password, this once.
@@ -238,28 +236,15 @@ async fn list(
 async fn create(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Json(new): Json<New>,
 ) -> Result<(StatusCode, Json<Created>), AppError> {
     if !state.app_api {
         return Err(AppError::NotFound);
     }
     let name = tree::title(&new.name)?;
-    let keys = [Key::name(&session.username)];
-    second_factor::tried_password(&state, &session, &keys, &new.password).await?;
-    if second_factor::is_on(&state.db, session.account_id).await? {
-        let code = new.code.trim();
-        if code.is_empty() {
-            // The password was right; the code is what is missing.
-            state.logins.succeeded(&keys);
-            return Err(AppError::Status(StatusCode::FORBIDDEN, CODE_NEEDED.into()));
-        }
-        // A wrong code stays counted, like a wrong password.
-        if !second_factor::take(&state.db, session.account_id, code).await? {
-            let message = "the code is wrong";
-            return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
-        }
-    }
-    state.logins.succeeded(&keys);
+    let proof = passkeys::proof(&new.password, &new.code, new.passkey.as_ref());
+    second_factor::prove(&state, &session, &headers, proof).await?;
     let mut tx = state.db.begin().await?;
     tree::lock(&mut tx, session.account_id).await?;
     let have = sqlx::query_scalar!(

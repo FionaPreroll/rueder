@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.totp_secret IS NOT NULL AS \"app!\",\n                  (SELECT count(*) FROM passkeys p WHERE p.account_id = a.id) AS \"passkeys!\",\n                  (SELECT count(*) FROM recovery_codes r WHERE r.account_id = a.id) AS \"left!\"\n           FROM accounts a WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "app!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "passkeys!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "left!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "f9c1c427d7958484a879b88010d42ceaee889e778934a5b52ee1070f5f2dbbcf"
+}

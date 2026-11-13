@@ -12,7 +12,12 @@ all-features = true
 # nobody maintains any more. An exception gets a line here with its reason.
 unmaintained = "all"
 yanked = "deny"
-ignore = []
+ignore = [
+    # rsa (Marvin attack): only decrypting and signing with a private key are
+    # at risk; rueder checks the signatures of passkeys with their public key
+    # and holds no private RSA key. See .cargo/audit.toml.
+    { id = "RUSTSEC-2023-0071", reason = "rueder only verifies RSA signatures of passkeys" },
+]
 
 [licenses]
 # Licenses that let rueder be passed on as it is. A new one is a decision,
@@ -25,7 +30,8 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     # Only the files of these crates themselves stay under it: cssparser and
-    # dtoa-short, which the HTML cleaning pulls in.
+    # dtoa-short, which the HTML cleaning pulls in, and webauthn-rs and
+    # crypto-glue for passkeys.
     "MPL-2.0",
     # The list of root certificates in webpki-roots.
     "CDLA-Permissive-2.0",

@@ -1,9 +1,11 @@
 <script lang="ts">
 	// Deleting the own account, for good: what goes and what stays, and the
 	// password, or the name of an account without one, to show it is meant. Where
-	// the account has a second factor, the server asks for its code as well.
-	import type { Reader, RemoveRefusal } from '#lib/reader.ts';
+	// the account has a second factor, the server asks for its code as well. A
+	// passkey of the account stands for all of that.
+	import type { PasskeyProof as Proof, Reader, RemoveRefusal } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
+	import PasskeyProof from './PasskeyProof.svelte';
 
 	let { reader }: { reader: Reader } = $props();
 
@@ -27,6 +29,18 @@
 				return m.removeAccount.busy(refusal.minutes);
 			case 'unreachable':
 				return m.removeAccount.unreachable;
+		}
+	}
+
+	async function withPasskey(passkey: Proof) {
+		if (busy) return;
+		busy = true;
+		refusal = null;
+		try {
+			// Gone, the page is logged out and this is no longer there.
+			refusal = await reader.removeAccount('', undefined, passkey);
+		} finally {
+			busy = false;
 		}
 	}
 
@@ -97,4 +111,5 @@
 	>
 		{m.removeAccount.submit}
 	</button>
+	<PasskeyProof {reader} disabled={busy} onproof={withPasskey} />
 </form>

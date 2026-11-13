@@ -938,7 +938,9 @@ describe('reading', () => {
 			password: true,
 			remove: true,
 			reportContent: false,
-			apps: false
+			apps: false,
+			// The server here has no passkeys.
+			passkeys: false
 		});
 	});
 });

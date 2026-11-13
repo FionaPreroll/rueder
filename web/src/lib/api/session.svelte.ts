@@ -5,6 +5,7 @@
 import { api as theApi, ApiError, type Api, type ApiAccount, type ApiLoginWays } from './client.ts';
 import type { LegalLinks } from '#lib/reader.ts';
 import { ServerReader } from './reader.svelte.ts';
+import { passkeysWork, usePasskey } from '#lib/webauthn.ts';
 import { forgetView } from '#lib/view.ts';
 
 /** Why a login did not work. */
@@ -17,6 +18,12 @@ export type LoginFailure =
 	| { kind: 'tooMany'; minutes: number }
 	/** The password was right, but the operator disabled the account. */
 	| { kind: 'disabled' }
+	/** The reader closed the browser's window for the passkey, or it timed out. */
+	| { kind: 'passkeyCancelled' }
+	/** The browser or the device could not use a passkey. */
+	| { kind: 'passkeyFailed' }
+	/** The server took the passkey for none of its accounts. */
+	| { kind: 'passkeyWrong' }
 	| { kind: 'unreachable' };
 
 /** Why nobody was registered. */
@@ -39,6 +46,7 @@ export type RegisterFailure =
 const NO_WAYS: ApiLoginWays = {
 	oidc: false,
 	registration: false,
+	passkeys: false,
 	legal: { imprint: null, privacy: null, terms: null, terms_version: null }
 };
 
@@ -101,7 +109,8 @@ export class Session {
 				adminNeedsSecondFactor: account.admin_needs_second_factor,
 				termsToAccept: account.terms_to_accept,
 				contentReports: account.content_reports,
-				appApi: account.app_api
+				appApi: account.app_api,
+				passkeys: account.passkeys
 			},
 			{
 				signOut: () => void this.signOut(),
@@ -192,6 +201,40 @@ export class Session {
 			if (error.status >= 400 && error.status < 500) return { kind: 'wrong' };
 			return { kind: 'unreachable' };
 		}
+	}
+
+	/** Whether the login page offers a passkey: the server has them, and so does the browser. */
+	get passkeys(): boolean {
+		return this.ways.passkeys && passkeysWork();
+	}
+
+	/** Logs in with a passkey, whoever it belongs to; null if it worked, else why it did not. */
+	async loginWithPasskey(): Promise<LoginFailure | null> {
+		let challenge;
+		try {
+			challenge = await this.api.startPasskeyLogin();
+		} catch (error) {
+			return this.passkeyFailure(error);
+		}
+		const credential = await usePasskey(challenge.options);
+		if (credential === 'cancelled') return { kind: 'passkeyCancelled' };
+		if (typeof credential === 'string') return { kind: 'passkeyFailed' };
+		try {
+			this.enter(await this.api.finishPasskeyLogin({ ceremony: challenge.ceremony, credential }));
+			return null;
+		} catch (error) {
+			return this.passkeyFailure(error);
+		}
+	}
+
+	private passkeyFailure(error: unknown): LoginFailure {
+		if (!(error instanceof ApiError)) return { kind: 'unreachable' };
+		if (error.status === 429) {
+			return { kind: 'tooMany', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
+		}
+		if (error.status === 403 && error.message.trim() === 'disabled') return { kind: 'disabled' };
+		if (error.status >= 400 && error.status < 500) return { kind: 'passkeyWrong' };
+		return { kind: 'unreachable' };
 	}
 
 	/** Ends the session on the server, and here whether or not the server heard it. */

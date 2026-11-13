@@ -164,7 +164,8 @@ const en = {
 		submit: 'Log in',
 		checking: 'One moment …',
 		wrong: 'Wrong name or password.',
-		codeNeeded: 'This account has a second factor. Enter the code your app shows.',
+		codeNeeded:
+			'This account has a second factor. Enter the code your app shows or a recovery code, or log in with a passkey.',
 		wrongCode: 'That code is not right. Codes change every 30 seconds.',
 		code: 'Code',
 		codeNote: 'The six digits from your authenticator app, or one of your recovery codes.',
@@ -174,6 +175,10 @@ const en = {
 		retry: 'Try again',
 		or: 'or',
 		oidc: 'Log in with single sign-on',
+		passkey: 'Log in with a passkey',
+		passkeyCancelled: 'No passkey was used. Try again, or log in with name and password.',
+		passkeyFailed: 'This browser or device cannot use a passkey here.',
+		passkeyWrong: 'This passkey belongs to no account here.',
 		oidcFailed: 'The login through single sign-on did not work. Try again.',
 		oidcDenied: 'The login through single sign-on was cancelled.',
 		oidcUnknown: 'No account here belongs to that login. Ask whoever runs this rueder to link it.',
@@ -406,7 +411,8 @@ const en = {
 			done: 'Done',
 			refusals: {
 				wrongPassword: 'The password is not right.',
-				codeNeeded: 'Enter a code of your authenticator app as well.',
+				codeNeeded:
+					'Enter a code of your authenticator app or a recovery code as well, or confirm with a passkey.',
 				wrongCode: 'That code is not right. Codes change every 30 seconds.',
 				tooManyApps: 'An account has at most 20 app passwords.',
 				tooMany: 'Too many wrong tries. Try again in a few minutes.',
@@ -416,11 +422,13 @@ const en = {
 		secondFactor: {
 			title: 'Second factor',
 			intro:
-				'With a second factor, logging in takes a code from an authenticator app on your phone besides the password, so a password that got out is not enough.',
+				'With a second factor, logging in takes more than the password: a code from an authenticator app on your phone, or a passkey. A password that got out is not enough then.',
+			app: 'Authenticator app',
 			on: 'On.',
 			left: (count: number) =>
 				`${n(count)} ${plural(count, { one: 'recovery code', other: 'recovery codes' })} left.`,
 			off: 'Off.',
+			byPasskeys: 'Not set up. Your passkeys keep the second factor on.',
 			adminNeeds:
 				'This server makes admins admins only with a second factor. Set it up, or log in again with its code, to see the server status.',
 			password: 'Your password',
@@ -443,9 +451,58 @@ const en = {
 			codesDone: 'I have kept them',
 			switchOff: 'Switch off',
 			switchOffNote: 'Logging in then takes the password alone again.',
+			switchOffNoteKeys: 'Your passkeys keep the second factor on.',
+			startWithPasskey: 'Set up with a passkey',
+			switchOffWithPasskey: 'Switch off with a passkey',
 			refusals: {
 				wrongPassword: 'The password is not right.',
+				codeNeeded: 'Your passkeys have the second factor on. Enter a recovery code as well.',
 				wrongCode: 'That code is not right. Codes change every 30 seconds.',
+				tooMany: 'Too many wrong tries. Try again in a few minutes.',
+				unreachable: 'The server does not answer. Try again in a moment.'
+			}
+		},
+		passkeys: {
+			title: 'Passkeys',
+			intro:
+				'A passkey logs you in without name and password: your device asks for its PIN, fingerprint or face. It counts as a second factor, works only on this rueder and cannot be caught by a fake page.',
+			once: 'Once you have a passkey, your password alone no longer opens your account: it takes a passkey, a code of your authenticator app or a recovery code as well.',
+			none: 'No passkey yet.',
+			made: (when: string) => `added ${when}`,
+			used: (when: string) => `last used ${when}`,
+			unused: 'not used yet',
+			add: 'Add a passkey',
+			name: 'Name, such as the device',
+			defaultName: 'Passkey',
+			password: 'Your password',
+			code: 'Code of your authenticator app, or a recovery code',
+			create: 'Create the passkey',
+			working: 'Follow your browser …',
+			cancel: 'Cancel',
+			remove: 'Remove',
+			removeName: (name: string) => `Remove the passkey ${name}`,
+			confirmRemove: 'Remove the passkey',
+			full: (max: number) => `An account has at most ${n(max)} passkeys.`,
+			or: 'or',
+			confirmWith: 'Confirm with a passkey',
+			codesTitle: 'Your recovery codes',
+			codesIntro:
+				'Your first passkey turned the second factor on. Each of these codes logs you in once without it, if you lose your device. Keep them somewhere safe: they are shown only now.',
+			copyCodes: 'Copy the codes',
+			copied: 'Copied',
+			codesDone: 'I have kept them',
+			refusals: {
+				cancelled: 'The browser’s window was closed before the passkey was used.',
+				known: 'This device has a passkey for your account already.',
+				failed: 'This browser or device could not make or use a passkey.',
+				wrong: 'The passkey was not taken. Try again.',
+				wrongPassword: 'The password is not right.',
+				codeNeeded:
+					'Your account has a second factor. Enter a code of your app or a recovery code as well, or confirm with a passkey.',
+				wrongCode: 'That code is not right. Codes change every 30 seconds.',
+				tooManyPasskeys: 'An account has at most 10 passkeys.',
+				loginAgain:
+					'Your account has no password and no second factor yet. Log in again, then add your first passkey within ten minutes.',
 				tooMany: 'Too many wrong tries. Try again in a few minutes.',
 				unreachable: 'The server does not answer. Try again in a moment.'
 			}
@@ -603,7 +660,8 @@ const en = {
 		code: 'Code from your app, or a recovery code',
 		submit: 'Delete my account for good',
 		wrong: 'That is not right. Nothing was deleted.',
-		codeNeeded: 'Your account has a second factor. Type a code from your app as well.',
+		codeNeeded:
+			'Your account has a second factor. Type a code from your app or a recovery code as well, or confirm with a passkey.',
 		busy: (minutes: number) =>
 			`Too many wrong tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
 		unreachable: 'The server does not answer. Nothing was deleted.'

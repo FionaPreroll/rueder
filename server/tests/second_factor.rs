@@ -125,7 +125,13 @@ async fn it_is_set_up_with_the_password_and_a_code(db: PgPool) {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         off,
-        json!({ "on": false, "recovery_codes_left": 0, "required_for_admins": false })
+        json!({
+            "on": false,
+            "app": false,
+            "passkeys": 0,
+            "recovery_codes_left": 0,
+            "required_for_admins": false,
+        })
     );
 
     // Not without the password.

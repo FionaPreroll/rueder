@@ -174,7 +174,8 @@ a change, `docker compose up --detach` starts the containers anew.
 | `CONTENT_REPORTS` | `on` lets readers report a feed or an article to you, with a reason and a short note. The status page lists the reported feeds with their address, never who reported; `rueder feed block` blocks one. Off if not set. |
 | `LEGAL_IMPRINT_URL`, `LEGAL_PRIVACY_URL`, `LEGAL_TERMS_URL` | Where your imprint, privacy policy and terms of use are, on your own website. rueder links to them on the login page, in the account menu and in the app; without them it shows none. |
 | `TERMS_VERSION` | A name for the version of your terms of use, such as `2026-11`. Registering then takes the agreement to it, and every account is asked to agree to a new one at its next visit. Needs `LEGAL_TERMS_URL`. |
-| `ADMIN_SECOND_FACTOR` | `required` makes admins admins only after logging in with a second factor (an authenticator app); readers set one up under Settings, Security. |
+| `ADMIN_SECOND_FACTOR` | `required` makes admins admins only after logging in with a second factor (an authenticator app or a passkey); readers set one up under Account settings, Security. |
+| `PUBLIC_URL` | The address browsers reach rueder at, such as `https://reader.example`: HTTPS, scheme and host only. With it, readers can add passkeys under Account settings, Security and log in with them, without name or password. A passkey belongs to this address; one made for another address does not work. Without it there are no passkeys. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | Login through an OpenID Connect provider. |
 
 Changing `POSTGRES_PASSWORD` later does not change the password of a database

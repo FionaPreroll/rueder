@@ -35,10 +35,10 @@ async function logInWith(page: Page, code: string) {
 	await page.goto('/');
 	await page.getByLabel('Name').fill('guarded');
 	await page.getByLabel('Password').fill(PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 	await expect(page.getByRole('alert')).toContainText('This account has a second factor.');
 	await page.getByLabel('Code').fill(code);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 }
 
 test('a second factor is set up, needed to log in and to switch it off', async ({ page }) => {
@@ -85,7 +85,7 @@ test('a second factor is set up, needed to log in and to switch it off', async (
 	await expect(page.getByRole('alert')).toContainText('That code is not right.');
 	// The code of the next step is one the server has not taken yet.
 	await page.getByLabel('Code').fill(totp(key, Date.now() + 30_000));
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 	await expect(sidebar(page)).toBeVisible();
 
 	// Switching it off takes the password and a code; the password alone is not enough.

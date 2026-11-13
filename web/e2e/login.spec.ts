@@ -18,7 +18,7 @@ test('a wrong password is refused, the right one logs in, and the session holds'
 	await page.goto('/');
 	await page.getByLabel('Name').fill('login');
 	await page.getByLabel('Password').fill('not the password');
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 	await expect(page.getByRole('alert')).toHaveText('Wrong name or password.');
 	await expect(page.getByLabel('Password')).toHaveValue('');
 
