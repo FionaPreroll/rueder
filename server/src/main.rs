@@ -699,7 +699,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     // Images reach readers through the proxy. IMAGE_CACHE_DIR is where it keeps
     // them, IMAGE_CACHE_MB how much of them; IMAGE_PROXY_KEY is the secret for
     // its addresses, which it makes itself if there is none.
-    let images = Arc::new(ImageProxy::open(image_config()?, client.clone())?);
+    // It fetches nothing that belongs to a blocked feed.
+    let images =
+        Arc::new(ImageProxy::open(image_config()?, client.clone())?.with_blocked_from(db.clone()));
     // Once an hour, what the cache holds too much of goes.
     let cache = images.clone();
     tokio::spawn(async move {
