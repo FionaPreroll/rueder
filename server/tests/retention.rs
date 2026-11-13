@@ -258,13 +258,13 @@ async fn made_up(db: &PgPool, random: &mut Random) -> (Model, BTreeMap<i32, Vec<
 /// The store agrees with the model: unread counts, both lists with their
 /// read and starred marks, and the search.
 async fn agrees(db: &PgPool, model: &Model, seed: u64) {
-    for ((account_id, feed_id), mine) in &model.subs {
-        let counts = reading::unread_counts(db, *account_id).await.unwrap();
+    for ((reader, feed_id), mine) in &model.subs {
+        let counts = reading::unread_counts(db, *reader).await.unwrap();
         let count = counts.iter().find(|c| c.feed_id == *feed_id).unwrap();
         assert_eq!(
             count.unread,
-            model.unread(*account_id, *feed_id),
-            "seed {seed}: unread of feed {feed_id} for {account_id}"
+            model.unread(*reader, *feed_id),
+            "seed {seed}: unread of feed {feed_id} for {reader}"
         );
         for unread_only in [false, true] {
             let page = Page {
@@ -273,14 +273,14 @@ async fn agrees(db: &PgPool, model: &Model, seed: u64) {
                 limit: 1000,
                 unread_only,
             };
-            let items = articles::page(db, *account_id, &[*feed_id], page)
+            let items = articles::page(db, *reader, &[*feed_id], page)
                 .await
                 .unwrap();
             let seqs: Vec<i32> = items.iter().map(|item| item.seq).collect();
             assert_eq!(
                 seqs,
-                model.listed(*account_id, *feed_id, unread_only),
-                "seed {seed}: list of feed {feed_id} for {account_id}, unread only {unread_only}"
+                model.listed(*reader, *feed_id, unread_only),
+                "seed {seed}: list of feed {feed_id} for {reader}, unread only {unread_only}"
             );
             for item in &items {
                 assert_eq!(
@@ -304,10 +304,9 @@ async fn agrees(db: &PgPool, model: &Model, seed: u64) {
                 limit: 100,
                 unread_only: false,
             };
-            let Outcome::Found(hits) =
-                search::search(db, *account_id, &[*feed_id], "article", page)
-                    .await
-                    .unwrap()
+            let Outcome::Found(hits) = search::search(db, *reader, &[*feed_id], "article", page)
+                .await
+                .unwrap()
             else {
                 panic!("seed {seed}: the search did not search");
             };
@@ -319,8 +318,8 @@ async fn agrees(db: &PgPool, model: &Model, seed: u64) {
         }
         assert_eq!(
             found,
-            model.listed(*account_id, *feed_id, false),
-            "seed {seed}: search in feed {feed_id} for {account_id}"
+            model.listed(*reader, *feed_id, false),
+            "seed {seed}: search in feed {feed_id} for {reader}"
         );
     }
 }
@@ -468,13 +467,13 @@ async fn only_texts_go_and_the_lists_stay(db: PgPool) {
         assert_eq!(swept.texts, dropped, "seed {seed}: how many texts went");
 
         // What was only in the text is no longer found.
-        for ((account_id, feed_id), mine) in &model.subs {
+        for ((reader, feed_id), mine) in &model.subs {
             let page = search::Page {
                 before: None,
                 limit: 1000,
                 unread_only: false,
             };
-            let Outcome::Found(hits) = search::search(&db, *account_id, &[*feed_id], "text", page)
+            let Outcome::Found(hits) = search::search(&db, *reader, &[*feed_id], "text", page)
                 .await
                 .unwrap()
             else {
