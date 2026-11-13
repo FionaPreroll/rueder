@@ -1,8 +1,8 @@
 name: Fuzz
 
 # The fuzz targets in server/fuzz run here, not on a developer's machine:
-# a while on a pull request that touches what they look at, half an hour each
-# every week, and as long as asked when started by hand. A finding fails the
+# three minutes each on a pull request that touches what they look at, half
+# an hour each every week, and as long as asked when started by hand. A finding fails the
 # run and comes with the input that broke a property, as an artifact; whoever
 # fixes it puts the input into server/fuzz/corpus/<target>/ as `found-…`, where
 # server/tests/fuzz_corpus.rs plays it in every `cargo test`.
@@ -44,7 +44,7 @@ jobs:
         working-directory: server
     env:
       SQLX_OFFLINE: "true"
-      # Five minutes on a pull request, half an hour on schedule.
+      # Three minutes on a pull request, half an hour on schedule.
       SECONDS_TO_RUN: ${{ github.event.inputs.seconds || (github.event_name == 'pull_request' && '180') || '1800' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

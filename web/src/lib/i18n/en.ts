@@ -338,10 +338,22 @@ const en = {
 				netnewswire:
 					'In NetNewsWire, add an account (Settings, Accounts, then +) and choose FreshRSS. Enter the server address, name and app password below.',
 				readyou:
-					'In Read You, open Settings, Accounts, Add accounts, and choose Google Reader. Enter the server address, name and app password below.',
+					'In Read You, open Settings, Accounts, Add accounts, and choose Google Reader. Enter the server address below as Server URL, the name as Username and the app password as Password.',
 				other:
 					'In your app, add an account of the kind “Google Reader API” or, where there is none, “FreshRSS”. Enter the server address, name and app password below.'
 			},
+			shotsTitle: 'Step by step, with pictures',
+			shots: {
+				readyou: [
+					'Tap the gear at the top left.',
+					'Open Accounts.',
+					'Tap Add accounts.',
+					'Choose Google Reader.',
+					'Enter the server address as Server URL, the name as Username and the app password as Password, then tap Add.'
+				],
+				netnewswire: []
+			},
+			shotAlt: (app: string, step: number) => `${app}, step ${n(step)}`,
 			server: 'Server address',
 			user: 'Name',
 			secret: 'App password',

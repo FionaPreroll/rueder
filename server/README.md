@@ -281,7 +281,7 @@ API, and check what
 every input: no panic, no script or foreign image address in a cleaned text,
 the limits of a feed, only the formats and sizes the proxy lets through, IDs
 of the Google Reader API that read back as themselves. They run on GitHub
-(`.github/workflows/fuzz.yml`): five minutes each on a pull request that
+(`.github/workflows/fuzz.yml`): three minutes each on a pull request that
 touches them, half an hour each on Mondays, and as long as asked when started
 by hand; a finding fails the run and comes as an artifact. By hand they need
 nightly Rust and `cargo install cargo-fuzz`:

@@ -5,7 +5,7 @@
 	// way, `busy` says so, so that the window around it is not closed by
 	// mistake.
 	import { onMount } from 'svelte';
-	import { knownApps, serverAddress, type KnownApp } from '#lib/apps.ts';
+	import { knownApps, serverAddress, shot, type KnownApp } from '#lib/apps.ts';
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { AppPasswordRefusal, AppPasswords, NewAppPassword, Reader } from '#lib/reader.ts';
@@ -242,9 +242,32 @@
 	{:else if made}
 		<h3 class="font-semibold">{appName(chosen)}</h3>
 		<p>{how(chosen)}</p>
+		{#if chosen !== null && chosen !== 'other' && chosen.shots > 0}
+			{@const app = chosen}
+			<details class="rounded border border-line">
+				<summary class="cursor-pointer px-3 py-2 font-medium">{texts.shotsTitle}</summary>
+				<ol class="flex gap-3 overflow-x-auto px-3 pb-3">
+					{#each texts.shots[app.id] as caption, i (i)}
+						<li class="w-40 shrink-0 text-xs">
+							<img
+								class="w-40 rounded border border-line"
+								src={shot(app, i + 1)}
+								alt={texts.shotAlt(app.name, i + 1)}
+								width="360"
+								height="718"
+								loading="lazy"
+							/>
+							<p class="mt-1">{i + 1}. {caption}</p>
+						</li>
+					{/each}
+				</ol>
+			</details>
+		{/if}
 		<div class="space-y-2 rounded border border-line p-3">
 			{@render value(texts.server, 'server', address)}
-			{@render value(texts.user, 'user', user)}
+			{#if user}
+				{@render value(texts.user, 'user', user)}
+			{/if}
 			{@render value(texts.secret, 'secret', made.secret)}
 		</div>
 		<p class="text-xs text-soft">{texts.once}</p>

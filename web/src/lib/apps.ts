@@ -15,7 +15,16 @@ export interface KnownApp {
 	 * address it is given ends with a slash (Read You does this).
 	 */
 	slash: boolean;
+	/**
+	 * How many pictures show the way in the app, step by step: screenshots in
+	 * `static/apps/<id>-<n>.webp`, from 1 on, each with its caption in the
+	 * texts. None where there are none yet.
+	 */
+	shots: number;
 }
+
+/** Where the picture of a step of an app is, from 1 on. */
+export const shot = (app: KnownApp, n: number) => `/apps/${app.id}-${n}.webp`;
 
 export const knownApps: KnownApp[] = [
 	{
@@ -23,14 +32,16 @@ export const knownApps: KnownApp[] = [
 		name: 'NetNewsWire',
 		platforms: ['apple'],
 		url: 'https://netnewswire.com/',
-		slash: false
+		slash: false,
+		shots: 0
 	},
 	{
 		id: 'readyou',
 		name: 'Read You',
 		platforms: ['android'],
-		url: 'https://github.com/ReadYouApp/ReadYou/releases',
-		slash: true
+		url: 'https://f-droid.org/packages/me.ash.reader/',
+		slash: true,
+		shots: 5
 	}
 ];
 

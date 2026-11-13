@@ -905,7 +905,7 @@ describe('Apps in the settings', () => {
 		expect(site).toHaveAttribute('rel', 'noopener noreferrer');
 		expect(screen.getByRole('link', { name: 'Website of Read You' })).toHaveAttribute(
 			'href',
-			'https://github.com/ReadYouApp/ReadYou/releases'
+			'https://f-droid.org/packages/me.ash.reader/'
 		);
 		await userEvent.click(screen.getByRole('button', { name: 'Read You' }));
 
@@ -924,6 +924,13 @@ describe('Apps in the settings', () => {
 		expect(screen.getByText(`${location.origin}/greader/`)).toBeInTheDocument();
 		expect(screen.getByText('fiona')).toBeInTheDocument();
 		expect(screen.getByText('abcd-efgh-ijkl-mnop-qrst-uvwx')).toBeInTheDocument();
+		// The way in Read You, in pictures from the app itself.
+		await userEvent.click(screen.getByText('Step by step, with pictures'));
+		const pictures = screen.getAllByRole('img', { name: /^Read You, step / });
+		expect(pictures.map((picture) => picture.getAttribute('src'))).toEqual(
+			[1, 2, 3, 4, 5].map((n) => `/apps/readyou-${n}.webp`)
+		);
+		expect(screen.getByText(/^5\. Enter the server address as Server URL/)).toBeInTheDocument();
 		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
 		await userEvent.click(screen.getByRole('button', { name: 'Copy App password' }));
 		expect(writeText).toHaveBeenLastCalledWith('abcd-efgh-ijkl-mnop-qrst-uvwx');
