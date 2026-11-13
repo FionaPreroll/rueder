@@ -24,6 +24,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 /coverage
 
-# End-to-end runs
+# End-to-end runs and screenshots
 /test-results
 /playwright-report
+/screenshots/out

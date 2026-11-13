@@ -3,5 +3,12 @@
 	"compilerOptions": {
 		"strict": true
 	},
-	"include": ["src", "e2e/**/*.ts", "vite.config.ts", "playwright.config.ts"]
+	"include": [
+		"src",
+		"e2e/**/*.ts",
+		"screenshots/**/*.ts",
+		"vite.config.ts",
+		"playwright.config.ts",
+		"playwright.screenshots.config.ts"
+	]
 }
