@@ -690,8 +690,8 @@ export class DemoReader implements Reader {
 	}
 
 	/** A made-up status, so the page can be seen without a server. */
-	async status(): Promise<ServerStatus | null> {
-		return demoStatus(Date.now());
+	async status(hours?: number): Promise<ServerStatus | null> {
+		return demoStatus(Date.now(), hours);
 	}
 
 	// Labels

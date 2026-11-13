@@ -107,7 +107,7 @@ async fn the_status_counts_and_names_nobody(db: PgPool) {
     let recent = &body["problems"]["recent"];
     assert_eq!(recent[0]["text"], "the database went away");
     assert_eq!(recent[0]["error"], true);
-    assert_eq!(body["problems"]["errors_last_hour"], 1);
+    assert_eq!(body["problems"]["errors"], 1);
     let hints: Vec<&str> = body["hints"]
         .as_array()
         .unwrap()

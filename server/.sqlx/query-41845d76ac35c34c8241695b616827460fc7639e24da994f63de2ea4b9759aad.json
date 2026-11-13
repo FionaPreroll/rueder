@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO status_slots (starts_at, kind, route, counts)\n               SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::jsonb[])\n               ON CONFLICT (starts_at, kind, route) DO UPDATE SET counts = EXCLUDED.counts",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TimestamptzArray",
+        "TextArray",
+        "TextArray",
+        "JsonbArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41845d76ac35c34c8241695b616827460fc7639e24da994f63de2ea4b9759aad"
+}

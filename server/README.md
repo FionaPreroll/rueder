@@ -149,6 +149,8 @@ cargo run -- registration set --open true --max-accounts 50 --per-day 5
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20
 cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
+cargo run -- retention show             # how long the counts of the status page are kept
+cargo run -- retention set --status-days 30
 cargo run -- account second-factor-off ada   # ada lost the app and the recovery codes
 cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
 ```
@@ -156,8 +158,11 @@ cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unbl
 Admins see the status of the server in the account menu of the page
 (`GET /api/status`, `src/monitor.rs`, `src/status.rs`): how long requests take
 by route, the database, fetching, the feed search, the image proxy and the
-warnings and errors of the log, for the last hour, kept in memory. It counts
-failing feeds by why and names none.
+warnings and errors of the log, for the last hour or, if asked, longer. It
+counts in memory and writes the counts to the database every minute and when
+it stops (`src/history.rs`), so they survive a restart; they are kept for 7
+days unless `retention set --status-days` says otherwise. It counts failing
+feeds by why and names none.
 
 Readers who agree in the settings (Privacy) send reports of errors in their
 browser to `POST /api/reports` (`src/reports.rs`): scrubbed of addresses and

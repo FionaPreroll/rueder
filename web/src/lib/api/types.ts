@@ -1198,6 +1198,17 @@ export type BuildInfo = {
 };
 
 /**
+ * What `GET /api/status` takes.
+ */
+export type StatusQuery = {
+	/**
+	 * Over how many hours to count, up to the days the counts are kept;
+	 * 1 if not said.
+	 */
+	hours?: number,
+};
+
+/**
  * What `GET /api/status` answers, for admins only.
  */
 export type ServerStatus = {
@@ -1215,6 +1226,16 @@ export type ServerStatus = {
 	 * The memory the server holds, if the system says.
 	 */
 	memory_bytes: number | null,
+	/**
+	 * Over how many hours requests, fetches, the feed search, the images and
+	 * the problems of the log were counted.
+	 */
+	hours: number,
+	/**
+	 * How many days the counts are kept for, so the most hours to ask for
+	 * are 24 times as many.
+	 */
+	kept_days: number,
 	/**
 	 * What looks like a bottleneck or a problem, the most pressing first.
 	 */
@@ -1238,7 +1259,7 @@ export type ServerStatus = {
 };
 
 /**
- * How long things took in the last hour, in milliseconds. The times are null
+ * How long things took in the hours counted, in milliseconds. The times are null
  * when nothing was timed.
  */
 export type Durations = {
@@ -1392,7 +1413,7 @@ export type StatusFetcher = {
 	last_round_feeds: number | null,
 	last_round_s: number | null,
 	/**
-	 * The fetches of the last hour.
+	 * The fetches of the hours counted.
 	 */
 	took: Durations,
 	fetched: number,
@@ -1419,7 +1440,7 @@ export type StatusFetcher = {
 };
 
 /**
- * The feed search, in the last hour.
+ * The feed search, in the hours counted.
  */
 export type StatusFinder = {
 	/**
@@ -1509,7 +1530,7 @@ export type StatusImages = {
 	 */
 	failing_sources: number,
 	/**
-	 * Images not in the cache, in the last hour.
+	 * Images not in the cache, in the hours counted.
 	 */
 	took: Durations,
 	cached: number,
@@ -1536,8 +1557,11 @@ export type StatusProblem = {
  * The warnings and errors of the log.
  */
 export type StatusProblems = {
-	errors_last_hour: number,
-	warnings_last_hour: number,
+	/**
+	 * In the hours counted.
+	 */
+	errors: number,
+	warnings: number,
 	/**
 	 * The latest first. The same text from the same place is one.
 	 */
@@ -1545,7 +1569,7 @@ export type StatusProblems = {
 };
 
 /**
- * The requests of the last hour.
+ * The requests of the hours counted.
  */
 export type StatusRequests = {
 	all: Durations,

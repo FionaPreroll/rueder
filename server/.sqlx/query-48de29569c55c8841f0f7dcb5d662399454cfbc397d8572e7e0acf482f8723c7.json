@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT error, target, text, count, first_at, last_at\n         FROM status_problems ORDER BY position LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "error",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "status_problems",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "status_problems",
+            "name": "target"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "text",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "status_problems",
+            "name": "text"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "count",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "status_problems",
+            "name": "count"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "first_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "status_problems",
+            "name": "first_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "status_problems",
+            "name": "last_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "48de29569c55c8841f0f7dcb5d662399454cfbc397d8572e7e0acf482f8723c7"
+}

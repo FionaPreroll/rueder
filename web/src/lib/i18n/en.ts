@@ -645,7 +645,15 @@ const en = {
 		loading: 'Asking the server …',
 		failed: 'The server did not answer. Try again in a moment.',
 		refresh: 'Refresh',
-		asOf: (time: string) => `As of ${time}. What is counted is the last hour.`,
+		asOf: (time: string) => `As of ${time}.`,
+		period: {
+			label: 'Counted over',
+			hour: 'the last hour',
+			hours: (hours: number) => `the last ${n(hours)} hours`,
+			days: (days: number) => `the last ${n(days)} days`,
+			kept: (days: number) =>
+				`The server keeps its counts for ${n(days)} ${plural(days, { one: 'day', other: 'days' })}, also across a restart; “rueder retention set --status-days <days>” changes that. The hints are about the last hour.`
+		},
 		demo: 'Made up, as there is no server here.',
 		empty: '–',
 		on: 'On',
@@ -800,13 +808,13 @@ const en = {
 			p95: '95%',
 			max: 'Longest',
 			errors: 'Errors',
-			none: 'No requests in the last hour.'
+			none: 'No requests in the time counted.'
 		},
 		problems: {
 			title: 'Warnings and errors',
-			counts: (errors: number, warnings: number) =>
-				`In the last hour ${n(errors)} ${plural(errors, { one: 'error', other: 'errors' })} and ${n(warnings)} ${plural(warnings, { one: 'warning', other: 'warnings' })}.`,
-			none: 'Nothing was logged since the start.',
+			counts: (errors: number, warnings: number, over: string) =>
+				`Over ${over}, ${n(errors)} ${plural(errors, { one: 'error', other: 'errors' })} and ${n(warnings)} ${plural(warnings, { one: 'warning', other: 'warnings' })}.`,
+			none: 'Nothing was logged in the days kept.',
 			error: 'Error',
 			warning: 'Warning',
 			times: (count: number, last: string) => (count > 1 ? `${n(count)} times, last ${last}` : last)

@@ -12,8 +12,17 @@ const took = (count: number, p50: number, p95: number, max: number): Durations =
 	max_ms: count ? max : null
 });
 
-/** The status as it would be at `now` (milliseconds since 1970). */
-export function demoStatus(now: number): ServerStatus {
+/** How many days the made-up server keeps its counts. */
+const KEPT_DAYS = 7;
+
+/**
+ * The status as it would be at `now` (milliseconds since 1970), counted over
+ * the last `asked` hours, as far as the made-up server keeps its counts.
+ */
+export function demoStatus(now: number, asked = 1): ServerStatus {
+	const hours = Math.min(Math.max(Math.round(asked), 1), KEPT_DAYS * 24);
+	// More hours count more; how long things take stays the same.
+	const many = (count: number) => Math.round(count * hours);
 	const ago = (seconds: number) => new Date(now - seconds * 1000).toISOString();
 	const uptime = 26 * 60 * 60 + 17 * 60;
 	return {
@@ -34,6 +43,8 @@ export function demoStatus(now: number): ServerStatus {
 		started_at: ago(uptime),
 		uptime_s: uptime,
 		memory_bytes: 74 * 1024 * 1024,
+		hours,
+		kept_days: KEPT_DAYS,
 		hints: [
 			{ kind: 'slow_route', route: 'POST /api/feeds/find', p95_ms: 2380 },
 			{ kind: 'feeds_failing', failing: 7, subscribed: 31 },
@@ -49,24 +60,28 @@ export function demoStatus(now: number): ServerStatus {
 			live_connections: 2
 		},
 		requests: {
-			all: took(1843, 3.2, 41, 2900),
-			answers: [0, 1790, 12, 39, 2],
+			all: took(many(1843), 3.2, 41, 2900),
+			answers: [0, many(1790), many(12), many(39), many(2)],
 			limited: 0,
 			routes: [
-				{ route: 'POST /api/feeds/find', took: took(6, 820, 2380, 2900), errors: 0 },
-				{ route: 'POST /api/feeds', took: took(2, 640, 1150, 1150), errors: 0 },
-				{ route: 'GET /api/feeds/{id}/articles', took: took(212, 6.4, 18, 52), errors: 0 },
-				{ route: 'GET /api/articles', took: took(96, 7.1, 16, 31), errors: 0 },
-				{ route: 'GET /api/tree', took: took(118, 4.3, 12, 27), errors: 0 },
-				{ route: 'GET /api/feeds/{id}/articles/{seq}', took: took(371, 2.6, 8.1, 19), errors: 2 },
+				{ route: 'POST /api/feeds/find', took: took(many(6), 820, 2380, 2900), errors: 0 },
+				{ route: 'POST /api/feeds', took: took(many(2), 640, 1150, 1150), errors: 0 },
+				{ route: 'GET /api/feeds/{id}/articles', took: took(many(212), 6.4, 18, 52), errors: 0 },
+				{ route: 'GET /api/articles', took: took(many(96), 7.1, 16, 31), errors: 0 },
+				{ route: 'GET /api/tree', took: took(many(118), 4.3, 12, 27), errors: 0 },
+				{
+					route: 'GET /api/feeds/{id}/articles/{seq}',
+					took: took(many(371), 2.6, 8.1, 19),
+					errors: 2
+				},
 				{
 					route: 'PUT /api/feeds/{id}/articles/{seq}/state',
-					took: took(402, 1.9, 5.2, 14),
+					took: took(many(402), 1.9, 5.2, 14),
 					errors: 0
 				},
 				{
 					route: 'GET /img/{signature}/{size}/{address}',
-					took: took(588, 0.4, 3.3, 640),
+					took: took(many(588), 0.4, 3.3, 640),
 					errors: 0
 				}
 			]
@@ -96,12 +111,12 @@ export function demoStatus(now: number): ServerStatus {
 			last_round_at: ago(14),
 			last_round_feeds: 3,
 			last_round_s: 1.8,
-			took: took(84, 410, 1900, 6100),
-			fetched: 22,
-			unchanged: 55,
-			failed: 7,
+			took: took(many(84), 410, 1900, 6100),
+			fetched: many(22),
+			unchanged: many(55),
+			failed: many(7),
 			broken: 0,
-			new_articles: 137,
+			new_articles: many(137),
 			failing: [
 				{ failure: 'status', status: 403, feeds: 3 },
 				{ failure: 'timeout', status: null, feeds: 2 },
@@ -114,10 +129,10 @@ export function demoStatus(now: number): ServerStatus {
 		},
 		finder: {
 			on: true,
-			took: took(6, 820, 2380, 2900),
-			found: 4,
-			none: 1,
-			failed: 1,
+			took: took(many(6), 820, 2380, 2900),
+			found: many(4),
+			none: many(1),
+			failed: many(1),
 			limited: 0
 		},
 		images: {
@@ -125,17 +140,17 @@ export function demoStatus(now: number): ServerStatus {
 			cache_bytes: 183 * 1024 * 1024,
 			cache_max_bytes: 1024 * 1024 * 1024,
 			failing_sources: 4,
-			took: took(141, 180, 720, 2400),
-			cached: 431,
-			fetched: 137,
+			took: took(many(141), 180, 720, 2400),
+			cached: many(431),
+			fetched: many(137),
 			not_found: 0,
-			source_failed: 4,
-			not_image: 1,
+			source_failed: many(4),
+			not_image: many(1),
 			too_large: 0
 		},
 		problems: {
-			errors_last_hour: 1,
-			warnings_last_hour: 2,
+			errors: hours > 1 ? many(1) + 3 : 1,
+			warnings: hours > 1 ? many(2) + 5 : 2,
 			recent: [
 				{
 					error: true,
