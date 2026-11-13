@@ -49,6 +49,7 @@ import {
 	type Notice,
 	type Reader,
 	type Refusal,
+	type PasswordRefusal,
 	type RemoveRefusal,
 	type Resumed,
 	type RulePreview,
@@ -417,6 +418,7 @@ export class ServerReader implements Reader {
 			invites: true,
 			reports: true,
 			secondFactor: true,
+			password: true,
 			remove: true,
 			reportContent: account.contentReports === true,
 			apps: account.appApi === true
@@ -2023,6 +2025,24 @@ export class ServerReader implements Reader {
 		}
 		if (this.session.removed) this.session.removed();
 		else this.session.expired();
+		return null;
+	}
+
+	async changePassword(current: string, fresh: string): Promise<PasswordRefusal | null> {
+		try {
+			await this.api.changePassword(current, fresh);
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 403) return { problem: 'wrong' };
+			if (error instanceof ApiError && error.status === 400) return { problem: 'invalid' };
+			if (error instanceof ApiError && error.status === 429) {
+				return { problem: 'busy', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
+			}
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			return { problem: 'unreachable' };
+		}
+		// An account that had none logs in with its name from now on. The server
+		// gave this browser a new session; the others are gone.
+		this.account = { ...this.account, password: true };
 		return null;
 	}
 

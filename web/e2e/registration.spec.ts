@@ -2,7 +2,7 @@
 // the operator sets on the command line.
 
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { PASSWORD, logIn, rueder, sidebar } from './harness/helpers.ts';
+import { PASSWORD, accountSettings, logIn, rueder, sidebar } from './harness/helpers.ts';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -20,9 +20,7 @@ const stranger = async (browser: Browser) => (await browser.newContext()).newPag
 
 /** Makes a link in the settings and returns it. */
 async function makeLink(page: Page) {
-	await page.getByRole('button', { name: 'Settings' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Settings' });
-	await dialog.getByRole('tab', { name: 'Invitations' }).click();
+	const dialog = await accountSettings(page, 'Invitations');
 	await dialog.getByRole('button', { name: 'Make a link' }).click();
 	const link = await dialog.getByLabel('The link, to pass on now').inputValue();
 	expect(link).toMatch(/^http:\/\/localhost:3210\/\?invite=[\w-]{43}$/);
@@ -47,8 +45,7 @@ test('nobody registers until the operator opens something', async ({ page }) => 
 
 	// A reader has no invitations to give either.
 	await logIn(page, 'inviter');
-	await page.getByRole('button', { name: 'Settings' }).click();
-	await page.getByRole('tab', { name: 'Invitations' }).click();
+	await accountSettings(page, 'Invitations');
 	await expect(page.getByText('You have no invitations to give.')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Make a link' })).toHaveCount(0);
 });

@@ -8,7 +8,7 @@ import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import Invitations from './Invitations.svelte';
-import SettingsDialog from './SettingsDialog.svelte';
+import AccountDialog from './AccountDialog.svelte';
 
 let server: FakeServer;
 
@@ -143,17 +143,17 @@ describe('Invitations', () => {
 	});
 });
 
-describe('the settings', () => {
+describe('the account settings', () => {
 	it('have a tab for invitations where there is a server', async () => {
 		server.inviteQuota = 1;
-		render(SettingsDialog, { reader: reader(), onclose: () => {} });
+		render(AccountDialog, { reader: reader(), onclose: () => {} });
 		await userEvent.click(screen.getByRole('tab', { name: 'Invitations' }));
 		const panel = screen.getByRole('tabpanel');
 		expect(await within(panel).findByText(/You can invite 1 more person\./)).toBeInTheDocument();
 	});
 
 	it('have none with made-up data, where there is nobody to invite to', () => {
-		render(SettingsDialog, { reader: new DemoReader(), onclose: () => {} });
+		render(AccountDialog, { reader: new DemoReader(), onclose: () => {} });
 		expect(screen.queryByRole('tab', { name: 'Invitations' })).toBeNull();
 	});
 });

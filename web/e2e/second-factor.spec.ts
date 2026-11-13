@@ -3,7 +3,7 @@
 
 import { createHmac } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { PASSWORD, logIn, sidebar } from './harness/helpers.ts';
+import { PASSWORD, accountSettings, logIn, sidebar } from './harness/helpers.ts';
 
 /** The bytes of a key in base32, as the page shows it in groups. */
 function fromBase32(text: string): Buffer {
@@ -44,9 +44,7 @@ async function logInWith(page: Page, code: string) {
 test('a second factor is set up, needed to log in and to switch it off', async ({ page }) => {
 	await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 	await logIn(page, 'guarded');
-	await page.getByRole('button', { name: 'Settings' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Settings' });
-	await dialog.getByRole('tab', { name: 'Security' }).click();
+	const dialog = await accountSettings(page, 'Security');
 	await expect(dialog.getByText('Off.')).toBeVisible();
 	await dialog.getByLabel('Your password').fill(PASSWORD);
 	await dialog.getByRole('button', { name: 'Set up' }).click();
@@ -91,8 +89,7 @@ test('a second factor is set up, needed to log in and to switch it off', async (
 	await expect(sidebar(page)).toBeVisible();
 
 	// Switching it off takes the password and a code; the password alone is not enough.
-	await page.getByRole('button', { name: 'Settings' }).click();
-	await dialog.getByRole('tab', { name: 'Security' }).click();
+	await accountSettings(page, 'Security');
 	await dialog.getByLabel('Your password').fill(PASSWORD);
 	await dialog.getByLabel('Code of the app, or a recovery code').fill('000000');
 	await dialog.getByRole('button', { name: 'Switch off' }).click();

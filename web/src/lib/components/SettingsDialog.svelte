@@ -1,9 +1,9 @@
 <script lang="ts">
 	// The settings: how the reader looks, how it behaves while reading, the filter
-	// rules, the keyboard shortcuts, where the server takes them whether this browser
-	// sends reports of its errors, the second factor, moving the account to
-	// another rueder and deleting it.
-	// Everything applies as it is changed.
+	// rules and the keyboard shortcuts. Everything applies as it is changed, and
+	// the server keeps it with the account, apart from what belongs to the device.
+	// What belongs to the account itself - its password, the second factor, apps,
+	// invitations, the move and deleting it - is in AccountDialog.svelte.
 	import type { Reader } from '#lib/reader.ts';
 	import { languageNames, m } from '#lib/i18n/index.ts';
 	import {
@@ -17,54 +17,19 @@
 		views
 	} from '#lib/settings.svelte.ts';
 	import { canKeepAwake } from '#lib/wakelock.ts';
-	import Apps from './Apps.svelte';
 	import Choice from './Choice.svelte';
 	import Dialog from './Dialog.svelte';
-	import Invitations from './Invitations.svelte';
-	import MoveAccount from './MoveAccount.svelte';
-	import RemoveAccount from './RemoveAccount.svelte';
 	import RulesEditor from './RulesEditor.svelte';
-	import SecondFactor from './SecondFactor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
 
-	const allTabs = [
-		'look',
-		'reading',
-		'rules',
-		'keys',
-		'invites',
-		'privacy',
-		'security',
-		'apps',
-		'move',
-		'account'
-	] as const;
-	type Tab = (typeof allTabs)[number];
+	const tabs = ['look', 'reading', 'rules', 'keys'] as const;
+	type Tab = (typeof tabs)[number];
 
 	let {
 		reader,
 		tab = $bindable('look'),
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
-
-	/** A second factor is being set up: a click beside the window would lose it. */
-	let settingUp = $state(false);
-	/** An app is being set up: the same. */
-	let addingApp = $state(false);
-
-	// Privacy only says something where the server takes reports of errors,
-	// invitations only where there is a server to make an account on, and moving
-	// only where there is a server to move from.
-	const tabs = $derived(
-		allTabs.filter((name) => {
-			if (name === 'privacy') return reader.can.reports && reader.reportsConsent?.available;
-			if (name === 'move') return reader.can.move;
-			if (name === 'account') return reader.can.remove && reader.account !== null;
-			if (name === 'security') return reader.can.secondFactor;
-			if (name === 'apps') return reader.can.apps;
-			return name !== 'invites' || reader.can.invites;
-		})
-	);
 
 	const swatch: Record<(typeof accents)[number], string> = {
 		red: '#c8402e',
@@ -76,7 +41,7 @@
 	};
 </script>
 
-<Dialog title={m.settings.title} wide holds={settingUp || addingApp} {onclose}>
+<Dialog title={m.settings.title} wide {onclose}>
 	<div class="-mt-1 flex flex-wrap gap-1 border-b border-line" role="tablist">
 		{#each tabs as name (name)}
 			<button
@@ -193,45 +158,16 @@
 			</div>
 		{:else if tab === 'rules'}
 			<RulesEditor {reader} book={reader.filters} />
-		{:else if tab === 'invites'}
-			<Invitations {reader} />
-		{:else if tab === 'privacy'}
-			<div class="space-y-3 text-sm">
-				<label class="flex cursor-pointer items-start gap-2 font-medium">
-					<input
-						type="checkbox"
-						class="mt-0.5 rounded text-accent"
-						checked={reader.reportsConsent?.on ?? false}
-						onchange={(event) => reader.setReportsConsent(event.currentTarget.checked)}
-					/>
-					{m.settings.reports.send}
-				</label>
-				<p class="text-soft">{m.settings.reports.intro}</p>
-				<div>
-					<p class="text-soft">{m.settings.reports.what}</p>
-					<ul class="mt-1 list-disc pl-5 text-soft">
-						{#each m.settings.reports.holds as line (line)}
-							<li>{line}</li>
-						{/each}
-					</ul>
-				</div>
-				<p class="text-soft">{m.settings.reports.never}</p>
-				<p class="text-xs text-soft">{m.settings.reports.off}</p>
-			</div>
-		{:else if tab === 'security'}
-			<SecondFactor {reader} bind:busy={settingUp} />
-		{:else if tab === 'apps'}
-			<Apps {reader} bind:busy={addingApp} />
-		{:else if tab === 'move'}
-			<MoveAccount {reader} />
-		{:else if tab === 'account'}
-			<RemoveAccount {reader} />
 		{:else}
 			<Shortcuts />
 		{/if}
 
 		{#if tab === 'look' || tab === 'reading'}
 			<p class="mt-5 text-xs text-soft">{reader.demo ? m.settings.noteDemo : m.settings.note}</p>
+		{/if}
+		{#if reader.account}
+			<!-- Where to find what used to be here, for whoever looks for it. -->
+			<p class="mt-2 text-xs text-soft">{m.settings.accountNote}</p>
 		{/if}
 	</div>
 </Dialog>

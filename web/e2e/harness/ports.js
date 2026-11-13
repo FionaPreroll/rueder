@@ -42,5 +42,6 @@ export const ACCOUNTS = [
 	'barred',
 	'reporting',
 	'panes',
-	'apps'
+	'apps',
+	'secrets'
 ];

@@ -89,6 +89,16 @@ export type RemoveRefusal =
 	| { problem: 'busy'; minutes: number }
 	| { problem: 'unreachable' };
 
+/** Why a new password was not taken. The page has the words. */
+export type PasswordRefusal =
+	/** The password so far is not right. */
+	| { problem: 'wrong' }
+	/** The server does not take the new one: too short, or too long. */
+	| { problem: 'invalid' }
+	/** Too many wrong tries; wait so many minutes. */
+	| { problem: 'busy'; minutes: number }
+	| { problem: 'unreachable' };
+
 /** Whether the account has a second factor, and what the server wants of it. */
 export interface SecondFactorState {
 	on: boolean;
@@ -138,6 +148,8 @@ export interface Abilities {
 	reports: boolean;
 	/** The account can have a second factor: codes of an authenticator app. */
 	secondFactor: boolean;
+	/** The account's password can be changed, or a first one set. */
+	password: boolean;
 	/** The account can delete itself, with everything that is its own. */
 	remove: boolean;
 	/** Feeds and articles can be reported to the admins. */
@@ -475,6 +487,14 @@ export interface Reader {
 	 * it has one. Null when it is gone: then the page is logged out.
 	 */
 	removeAccount(proof: string, code?: string): Promise<RemoveRefusal | null>;
+
+	/**
+	 * Gives the account another password, with the one so far; an account that
+	 * logs in through single sign-on alone has none and sends nothing. Null when
+	 * it worked: every other session of the account ends, this one goes on
+	 * (`can.password`).
+	 */
+	changePassword(current: string, fresh: string): Promise<PasswordRefusal | null>;
 
 	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
 	status(): Promise<ServerStatus | null>;
