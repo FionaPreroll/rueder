@@ -936,7 +936,8 @@ describe('reading', () => {
 			reports: true,
 			secondFactor: true,
 			remove: true,
-			reportContent: false
+			reportContent: false,
+			apps: false
 		});
 	});
 });

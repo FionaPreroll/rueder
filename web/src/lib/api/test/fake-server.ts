@@ -138,6 +138,11 @@ export class FakeServer {
 	/** Whether readers can report feeds and articles, and what they reported. */
 	contentReports = false;
 	contentReported: { feed_id: number; seq: number | null; reason: unknown; note: unknown }[] = [];
+	/** Whether apps of other makers may log in, and the account's app passwords. */
+	appApi = true;
+	appPasswords: { id: number; name: string; created_at: string; used_at: string | null }[] = [];
+	/** The secret the next app password gets. */
+	nextSecret = 'abcd-efgh-ijkl-mnop-qrst-uvwx';
 	oidc = false;
 	/** Whether anybody can register, and why nobody can right now: no room, or enough for today. */
 	registrationOpen = false;
@@ -455,6 +460,8 @@ export class FakeServer {
 		}
 		const secondFactor = this.answerSecondFactor(method, path, data);
 		if (secondFactor) return secondFactor;
+		const apps = this.answerAppPasswords(method, path, data);
+		if (apps) return apps;
 		if (method === 'GET' && path === '/tree') return json(this.tree());
 		if (path === '/reports/consent') {
 			if (method === 'GET')
@@ -697,11 +704,57 @@ export class FakeServer {
 			has_password: this.accounts.has(this.signedIn ?? ''),
 			admin_needs_second_factor: this.adminNeedsSecondFactor,
 			content_reports: this.contentReports,
+			app_api: this.appApi,
 			terms_to_accept:
 				this.legal.terms_version && this.agreedTerms !== this.legal.terms_version
 					? this.legal.terms_version
 					: null
 		};
+	}
+
+	/** An app logs in with an app password for the first time. */
+	appLogsIn(id: number) {
+		this.appPasswords = this.appPasswords.map((app) =>
+			app.id === id ? { ...app, used_at: new Date().toISOString() } : app
+		);
+		this.emit({ event: 'apps', data: { by: null } });
+	}
+
+	private answerAppPasswords(method: string, path: string, data: Record<string, unknown>) {
+		if (!path.startsWith('/app-passwords')) return null;
+		if (!this.appApi) return refused(404);
+		if (method === 'GET' && path === '/app-passwords') {
+			return json({ app_passwords: this.appPasswords, max: 20 });
+		}
+		if (method === 'POST' && path === '/app-passwords') {
+			if (this.accounts.get(this.signedIn ?? '') !== (data.password ?? '')) {
+				return refused(403, 'the password is wrong');
+			}
+			if (this.secondFactor) {
+				const code = String(data.code ?? '');
+				if (!code) return refused(403, 'second factor needed');
+				if (code !== this.secondFactor.code && !this.secondFactor.recovery.includes(code)) {
+					return refused(403, 'the code is wrong');
+				}
+			}
+			if (this.appPasswords.length >= 20) return refused(400, 'at most 20');
+			const made = {
+				id: this.appPasswords.length + 1,
+				name: String(data.name ?? '').trim(),
+				created_at: new Date().toISOString(),
+				used_at: null
+			};
+			this.appPasswords = [...this.appPasswords, made];
+			return json({ ...made, secret: this.nextSecret }, 201);
+		}
+		const one = /^\/app-passwords\/(\d+)$/.exec(path);
+		if (method === 'DELETE' && one) {
+			const id = Number(one[1]);
+			if (!this.appPasswords.some((app) => app.id === id)) return refused(404);
+			this.appPasswords = this.appPasswords.filter((app) => app.id !== id);
+			return empty();
+		}
+		return refused(404);
 	}
 
 	private answerSecondFactor(method: string, path: string, data: Record<string, unknown>) {

@@ -36,7 +36,33 @@ export interface Account {
 	termsToAccept?: string | null;
 	/** The server takes reports of feeds and articles from the account. */
 	contentReports?: boolean;
+	/** The server lets apps of other makers in, with app passwords. */
+	appApi?: boolean;
 }
+
+/** An app password, as the list shows it: never the password itself. */
+export interface AppPassword {
+	id: number;
+	name: string;
+	/** When it was made, and when an app last used it (to the hour), in ms. */
+	createdAt: number;
+	usedAt: number | null;
+}
+
+/** The account's app passwords, and how many it can have. */
+export interface AppPasswords {
+	list: AppPassword[];
+	max: number;
+}
+
+/** A new app password, with the password itself, shown this once. */
+export interface NewAppPassword extends AppPassword {
+	secret: string;
+}
+
+/** Why no app password was made. */
+export type AppPasswordRefusal =
+	'wrongPassword' | 'codeNeeded' | 'wrongCode' | 'tooManyApps' | 'tooMany' | 'unreachable';
 
 /** Why a feed or an article is reported, as the server knows them. */
 export const reportReasons = ['illegal', 'copyright', 'malicious', 'spam', 'other'] as const;
@@ -116,6 +142,8 @@ export interface Abilities {
 	remove: boolean;
 	/** Feeds and articles can be reported to the admins. */
 	reportContent: boolean;
+	/** Apps of other makers can be let in with app passwords. */
+	apps: boolean;
 }
 
 /** A feed found at an address. */
@@ -300,6 +328,21 @@ export interface Reader {
 	/** Agrees to the version of the terms the account was asked about; false if that did not work. */
 	acceptTerms(): Promise<boolean>;
 
+	/** The account's app passwords (`can.apps`); null if the server does not answer. */
+	appPasswords(): Promise<AppPasswords | null>;
+	/** Makes an app password, with the account's password and, if it has one, a code. */
+	createAppPassword(
+		name: string,
+		password: string,
+		code: string
+	): Promise<NewAppPassword | AppPasswordRefusal>;
+	/** Revokes an app password; false if that did not work. */
+	revokeAppPassword(id: number): Promise<boolean>;
+	/**
+	 * Counts up when app passwords change or an app logs in for the first
+	 * time, in another tab or from the app itself.
+	 */
+	readonly appsVersion: number;
 	/** The account's second factor, where the reader has one (`can.secondFactor`). */
 	secondFactor(): Promise<SecondFactorState | null>;
 	/** Starts setting it up, with the account's password. */

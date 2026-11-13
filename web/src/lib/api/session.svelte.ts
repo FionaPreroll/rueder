@@ -100,7 +100,8 @@ export class Session {
 				password: account.has_password,
 				adminNeedsSecondFactor: account.admin_needs_second_factor,
 				termsToAccept: account.terms_to_accept,
-				contentReports: account.content_reports
+				contentReports: account.content_reports,
+				appApi: account.app_api
 			},
 			{
 				signOut: () => void this.signOut(),

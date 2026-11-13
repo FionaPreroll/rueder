@@ -35,7 +35,11 @@ import {
 	MAX_OPML,
 	type Abilities,
 	type Account,
+	type AppPassword,
+	type AppPasswordRefusal,
+	type AppPasswords,
 	type LegalLinks,
+	type NewAppPassword,
 	type ReportOutcome,
 	type ReportReason,
 	type Found,
@@ -165,7 +169,8 @@ const EVENTS: ServerEvent['event'][] = [
 	'labels',
 	'settings',
 	'rules',
-	'session'
+	'session',
+	'apps'
 ];
 const folderKey = (id: number) => `folder-${id}`;
 const ruleKey = (id: number) => `rule-${id}`;
@@ -276,6 +281,21 @@ function readClosed(): ReadonlySet<string> {
 	} catch {
 		return new Set();
 	}
+}
+
+/** An app password as the page keeps it. */
+function appPassword(stored: {
+	id: number;
+	name: string;
+	created_at: string;
+	used_at: string | null;
+}): AppPassword {
+	return {
+		id: stored.id,
+		name: stored.name,
+		createdAt: Date.parse(stored.created_at),
+		usedAt: stored.used_at === null ? null : Date.parse(stored.used_at)
+	};
 }
 
 export class ServerReader implements Reader {
@@ -397,7 +417,8 @@ export class ServerReader implements Reader {
 			reports: true,
 			secondFactor: true,
 			remove: true,
-			reportContent: account.contentReports === true
+			reportContent: account.contentReports === true,
+			apps: account.appApi === true
 		};
 		this.session = session;
 		this.api = api;
@@ -477,6 +498,55 @@ export class ServerReader implements Reader {
 		if (error.status === 429) return 'tooMany';
 		if (error.status === 403) return wrong;
 		return 'unreachable';
+	}
+
+	// App passwords for apps of other makers
+
+	appsVersion = $state(0);
+
+	async appPasswords(): Promise<AppPasswords | null> {
+		try {
+			const answer = await this.api.appPasswords();
+			return { list: answer.app_passwords.map(appPassword), max: answer.max };
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			return null;
+		}
+	}
+
+	async createAppPassword(
+		name: string,
+		password: string,
+		code: string
+	): Promise<NewAppPassword | AppPasswordRefusal> {
+		try {
+			const made = await this.api.createAppPassword({
+				name: name.trim(),
+				password,
+				code: code.trim()
+			});
+			return { ...appPassword(made), secret: made.secret };
+		} catch (error) {
+			if (!(error instanceof ApiError)) return 'unreachable';
+			if (error.signedOut) this.session.expired();
+			const said = error.message.trim();
+			if (error.status === 429) return 'tooMany';
+			if (error.status === 400) return 'tooManyApps';
+			if (error.status === 403 && said === 'second factor needed') return 'codeNeeded';
+			if (error.status === 403 && said === 'the code is wrong') return 'wrongCode';
+			if (error.status === 403) return 'wrongPassword';
+			return 'unreachable';
+		}
+	}
+
+	async revokeAppPassword(id: number): Promise<boolean> {
+		try {
+			await this.api.revokeAppPassword(id);
+			return true;
+		} catch (error) {
+			if (error instanceof ApiError && error.signedOut) this.session.expired();
+			return false;
+		}
 	}
 
 	async secondFactor(): Promise<SecondFactorState | null> {
@@ -1751,6 +1821,9 @@ export class ServerReader implements Reader {
 				return;
 			case 'session':
 				void this.checkSession();
+				return;
+			case 'apps':
+				this.appsVersion += 1;
 				return;
 			case 'settings':
 				if (!own) {
