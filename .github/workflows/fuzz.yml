@@ -48,6 +48,8 @@ jobs:
       SECONDS_TO_RUN: ${{ github.event.inputs.seconds || (github.event_name == 'pull_request' && '180') || '1800' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # cargo-fuzz needs nightly Rust; rustup checks what it downloads, as in
       # ci.yml.
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # branch stable
@@ -56,7 +58,10 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: server/fuzz
-      - run: cargo install cargo-fuzz --locked
+      # A fixed version: cargo-fuzz is not in the list of taiki-e/install-action,
+      # and Dependabot does not raise what cargo install builds. It only needs
+      # raising when a new nightly breaks it.
+      - run: cargo install cargo-fuzz@0.13.2 --locked
       # From the stored corpus on, with the limits of the manual runs in
       # docs/implementation.md.
       # The time comes in as a shell variable and has to be a number: what is

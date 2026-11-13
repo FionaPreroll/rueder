@@ -1,12 +1,16 @@
-# Updates for what the new rueder is built from, once a month and one pull
-# request per ecosystem. Security updates come on their own whenever an
-# advisory appears.
+# Updates for what the new rueder is built from, once a month (the base
+# images once a week) and one pull request per ecosystem. Security updates
+# come on their own whenever an advisory appears. A version is only offered
+# once it has been out for a week (cooldown): a release that was taken over
+# is usually found and pulled within days. Security updates do not wait.
 version: 2
 updates:
   - package-ecosystem: cargo
     directories: ["/server", "/server/fuzz"]
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       cargo:
         patterns: ["*"]
@@ -14,6 +18,8 @@ updates:
     directories: ["/web", "/app"]
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       npm:
         patterns: ["*"]
@@ -22,18 +28,25 @@ updates:
     directory: /app/android
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       gradle:
         patterns: ["*"]
-  # The base images in the Dockerfile.
+  # The base images in the Dockerfile, weekly: they bring the fixes of glibc
+  # and the certificates, which the job image-scan in ci.yml asks about.
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
