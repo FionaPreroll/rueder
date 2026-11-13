@@ -71,6 +71,7 @@ export function streamOf(value: unknown): Stream | null {
 	switch (kind) {
 		case 'home':
 		case 'all':
+		case 'unread':
 		case 'starred':
 		case 'hidden':
 			return { kind };

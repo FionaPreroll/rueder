@@ -23,6 +23,7 @@ export const actions = [
 	'magazineView',
 	'goHome',
 	'goAll',
+	'goUnread',
 	'goStarred',
 	'search',
 	'sidebar',
@@ -50,6 +51,7 @@ export const defaultKeys: Record<Action, string> = {
 	magazineView: '4',
 	goHome: 'g h',
 	goAll: 'g a',
+	goUnread: 'g u',
 	goStarred: 'g s',
 	search: '/',
 	sidebar: 'u',
@@ -60,7 +62,7 @@ export const defaultKeys: Record<Action, string> = {
 export const fixedKeys = ['Enter', 'Escape', 'g', 'Tab', ' '];
 
 /** The actions that go somewhere with a second key after g. */
-const goActions: readonly Action[] = ['goHome', 'goAll', 'goStarred'];
+const goActions: readonly Action[] = ['goHome', 'goAll', 'goUnread', 'goStarred'];
 export const isGo = (action: Action) => goActions.includes(action);
 
 /** The keys a reader chose, by action; an action that is not named keeps its own. */
@@ -159,6 +161,7 @@ export const shortcutGroups = (m: Messages): { title: string; shortcuts: Shortcu
 		shortcuts: [
 			{ action: 'goHome', text: m.keys.goHome },
 			{ action: 'goAll', text: m.keys.goAll },
+			{ action: 'goUnread', text: m.keys.goUnread },
 			{ action: 'goStarred', text: m.keys.goStarred }
 		]
 	},

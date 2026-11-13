@@ -11,7 +11,7 @@
 	import { sameStream, type Article, type ArticleVersion, type Stream } from '#lib/model.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { keyMap, type Action } from '#lib/keys.ts';
-	import { settings, widths } from '#lib/settings.svelte.ts';
+	import { listFits, settings, widths } from '#lib/settings.svelte.ts';
 	import { closeView, dropSpots, noteView, openView } from '#lib/view.ts';
 	import { Journey } from '#lib/history.ts';
 	import AccountDialog from './AccountDialog.svelte';
@@ -61,6 +61,8 @@
 				return m.nav.home;
 			case 'all':
 				return m.nav.all;
+			case 'unread':
+				return m.nav.unreadItems;
 			case 'starred':
 				return m.nav.starred;
 			case 'hidden':
@@ -81,6 +83,8 @@
 	let mainWidth = $state(0);
 	// Before the page is laid out, as in tests, the width is not known yet.
 	const split = $derived(settings.view === 'split' && (mainWidth === 0 || mainWidth >= SPLIT_AT));
+	// The list as wide as it was left, unless the window has become too narrow for it.
+	const list = $derived(listFits(settings.listWidth, mainWidth));
 
 	// Whatever changes in the settings is kept with the account, where there is one.
 	$effect(() => reader.saveSettings({ ...settings }));
@@ -259,9 +263,11 @@
 					? { kind: 'home' }
 					: action === 'goAll'
 						? { kind: 'all' }
-						: action === 'goStarred'
-							? { kind: 'starred' }
-							: null;
+						: action === 'goUnread'
+							? { kind: 'unread' }
+							: action === 'goStarred'
+								? { kind: 'starred' }
+								: null;
 			if (target) {
 				event.preventDefault();
 				go(target);
@@ -363,17 +369,19 @@
 				<Toolbar {reader} {title} />
 				{#if split}
 					<div class="flex min-h-0 flex-1">
+						<!-- 60% is LIST_SHARE; it holds before the page is laid out and the
+							width beside the sidebar is known. -->
 						<div
 							class="flex w-[var(--list-width)] max-w-[60%] shrink-0 flex-col border-r border-line"
-							style:--list-width="{settings.listWidth}px"
+							style:--list-width="{list.width}px"
 							data-pane="list"
 						>
 							<ArticleList {reader} {now} onversions={compare} pane />
 						</div>
 						<Resizer
-							width={settings.listWidth}
+							width={list.width}
 							min={widths.list.min}
-							max={widths.list.max}
+							max={list.max}
 							fallback={widths.list.default}
 							label={m.list.resizeList}
 							onwidth={(width) => (settings.listWidth = width)}

@@ -37,6 +37,12 @@ describe('parseView', () => {
 		expect(parseView(stored(), 'fiona')).toEqual(left);
 	});
 
+	it('reads each of the lists the sidebar has', () => {
+		for (const kind of ['home', 'all', 'unread', 'starred', 'hidden'] as const) {
+			expect(parseView(stored({ stream: { kind } }), 'fiona')?.stream).toEqual({ kind });
+		}
+	});
+
 	it('is nothing for another account, another form, and what is not a view', () => {
 		expect(parseView(stored(), 'ada')).toBeNull();
 		expect(parseView(stored({ form: 2 }), 'fiona')).toBeNull();

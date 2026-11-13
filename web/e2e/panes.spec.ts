@@ -101,3 +101,27 @@ test('keeps how wide the sidebar and the list are, on this device', async ({ pag
 	await sidebarBar.dblclick();
 	await expect.poll(() => widthOf(sidebar(page))).toBe(wasSidebar);
 });
+
+test('moves the list at once in a window narrower than when it was pulled wide', async ({
+	page
+}) => {
+	await logIn(page, 'panes');
+	await open(page);
+	const listBar = page.getByRole('separator').last();
+	await listBar.press('End');
+	await expect.poll(() => widthOf(pane(page))).toBe(720);
+
+	// Narrower, the list takes what is left beside the article, not the 720 it was left at.
+	await page.setViewportSize({ width: 1300, height: 900 });
+	const room = await page.locator('main').evaluate((element) => element.clientWidth);
+	const seen = Math.floor(room * 0.6);
+	await expect.poll(() => widthOf(pane(page))).toBeLessThan(720);
+	expect(Math.abs((await widthOf(pane(page))) - seen)).toBeLessThan(1);
+
+	// The bar starts from what is seen, so pulling it and its keys move the list at once.
+	await pull(page, listBar, -100);
+	await expect.poll(() => widthOf(pane(page))).toBe(seen - 100);
+	await listBar.press('ArrowLeft');
+	await expect.poll(() => widthOf(pane(page))).toBe(seen - 116);
+	await expect(listBar).toHaveAttribute('aria-valuemax', String(seen));
+});

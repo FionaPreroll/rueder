@@ -143,6 +143,7 @@ export const serverId = (id: string) => Number(id.slice(id.lastIndexOf('-') + 1)
 const listPath = (stream: ListStream) => {
 	switch (stream.kind) {
 		case 'all':
+		case 'unread':
 			return '/articles';
 		case 'starred':
 			return '/starred';

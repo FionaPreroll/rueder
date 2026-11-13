@@ -131,6 +131,8 @@ export const nextLabelColor = (labels: number) => labelColors[labels % labelColo
 export type Stream =
 	| { kind: 'home' }
 	| { kind: 'all' }
+	/** All that is unread; an article read here goes once the reader leaves it. */
+	| { kind: 'unread' }
 	| { kind: 'starred' }
 	| { kind: 'hidden' }
 	| { kind: 'folder'; id: string }

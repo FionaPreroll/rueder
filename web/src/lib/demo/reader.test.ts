@@ -131,6 +131,54 @@ describe('the list', () => {
 		expect(reader.list).toHaveLength(length - 1);
 	});
 
+	it('shows the unread items, where what was read goes once the reader leaves it', () => {
+		const { reader } = setup();
+		reader.show({ kind: 'unread' });
+		const ids = reader.list.map((article) => article.id);
+		expect(ids.length).toBe(reader.totalUnread);
+		const shown = () => reader.list.map((article) => article.id);
+		reader.step(1);
+		expect(shown()).toEqual(ids);
+		reader.step(1);
+		expect(reader.open).toBe(ids[1]);
+		expect(shown()).toEqual(ids.slice(1));
+		// Closed, it goes, and the next step opens the one that took its place.
+		reader.toggleOpen(reader.list[0]);
+		expect(shown()).toEqual(ids.slice(2));
+		expect(reader.step(1)?.id).toBe(ids[2]);
+		// Nothing before it any more: a step back stays.
+		expect(reader.step(-1)).toBeNull();
+		// Marking all as read leaves the open one, until it is closed.
+		reader.markAllRead();
+		expect(shown()).toEqual([ids[2]]);
+		reader.open = null;
+		expect(reader.list).toEqual([]);
+		// The unread-only switch makes no difference here.
+		reader.unreadOnly = false;
+		expect(reader.list).toEqual([]);
+	});
+
+	it('shows the open article among the unread items again after a reload, though it is read', () => {
+		const { reader } = setup();
+		reader.show({ kind: 'unread' });
+		const article = reader.step(1)!;
+		const again = setup().reader;
+		again.setRead(article, true);
+		again.resume({
+			stream: { kind: 'unread' },
+			unreadOnly: false,
+			newestFirst: true,
+			cursor: article.id,
+			open: article.id,
+			wanted: []
+		});
+		expect(again.open).toBe(article.id);
+		expect(again.list[0].id).toBe(article.id);
+		// Leaving it, it goes.
+		again.open = null;
+		expect(again.list.map((a) => a.id)).not.toContain(article.id);
+	});
+
 	it('searches titles, texts and authors', () => {
 		const { reader } = setup();
 		reader.show({ kind: 'all' });
