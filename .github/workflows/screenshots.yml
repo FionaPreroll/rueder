@@ -1,0 +1,104 @@
+name: Screenshots
+
+# Pictures of every view, for looking at the design: the login, the reader
+# with its lists and views, menus, dialogs, the settings, the account's
+# settings and the status of the server, each on a desktop and on a phone,
+# light and dark, in the languages asked for. The built page runs in Chromium
+# against the real server with the made-up feeds of the draft (web/screenshots/).
+# Started by hand (Actions, Screenshots, Run workflow); the pictures are the
+# run's artifact "screenshots". A pull request that changes how the pictures
+# are taken runs it too, so that it is known to work before it is needed.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/screenshots.yml
+      - web/playwright.screenshots.config.ts
+      - web/screenshots/**
+  workflow_dispatch:
+    inputs:
+      languages:
+        description: Languages of the page
+        type: choice
+        options:
+          - en,de
+          - en
+          - de
+        default: en,de
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SQLX_OFFLINE: "true"
+      # Where the run makes its own database, rueder_e2e.
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # branch stable
+        with:
+          toolchain: stable
+      # Reads the cache the CI's job e2e keeps, without writing one of its own.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server
+          save-if: false
+      - run: cargo build
+        working-directory: server
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # The pnpm version pinned in package.json (packageManager).
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: web/package.json
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm run build
+        working-directory: web
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - run: pnpm run screenshots
+        working-directory: web
+        env:
+          # Empty for a pull request, which takes both.
+          SCREENSHOT_LANGUAGES: ${{ inputs.languages }}
+      # Also when some views failed: the others are there, and the report
+      # says which failed and why.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: screenshots
+          path: web/screenshots/out/
+          if-no-files-found: error
+          # PNG files are packed already.
+          compression-level: 0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: screenshots-report
+          path: |
+            web/playwright-report
+            web/test-results

@@ -18,6 +18,7 @@
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
 		"e2e": "playwright test",
+		"screenshots": "playwright test --config playwright.screenshots.config.ts",
 		"format": "prettier --write ."
 	},
 	"devDependencies": {
