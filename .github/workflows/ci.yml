@@ -258,6 +258,13 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
+          # Its own key, not the one of the Javadoc in pages.yml: whichever job
+          # saves a key first decides what is in it, and a cache without the
+          # test dependencies made every build fetch them from Maven Central.
+          cache-dependency-path: |
+            app/android/**/*.gradle*
+            app/android/**/gradle-wrapper.properties
+            app/pnpm-lock.yaml
       # Never with the signing key: this job runs the build scripts of every
       # pull request. The release build stays unsigned; app-release signs it.
       - name: Build

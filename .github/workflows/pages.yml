@@ -117,6 +117,13 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
+          # Its own key, not the one of the build in ci.yml, which needs more
+          # than the Javadoc (see there).
+          cache-dependency-path: |
+            app/android/**/*.gradle*
+            app/android/**/gradle-wrapper.properties
+            app/pnpm-lock.yaml
+            pages/javadoc.gradle
       - run: RUEDER_DOCS_FOOTER="$(node ../../pages/footer.js)" ./gradlew --no-daemon --init-script ../../pages/javadoc.gradle javadoc
         working-directory: app/android
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
