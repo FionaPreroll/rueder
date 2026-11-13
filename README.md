@@ -6,6 +6,10 @@ rueder is a self-hosted feed reader for a handful of people, in the spirit of
 Google Reader. It is one Rust server next to PostgreSQL, with a Svelte web page
 inside it and an Android app around that page.
 
+[Try the demo](https://fionapreroll.github.io/rueder/demo/) or read the
+[documentation](https://fionapreroll.github.io/rueder/): installing it, the
+Android app, and the code of the server and the web page.
+
 ![Temporary project logo: A red cartoon crab holding a newspaper titled 'rueder'](docs/images/logo.png)
 
 - **Reading:** a dense list, an expanded view, three panes (tree, list,
@@ -63,8 +67,9 @@ it asks for the address of your rueder at its first start.
 | [`web/`](web/README.md) | The web page: SvelteKit as a single-page app, Svelte 5, Tailwind CSS and TypeScript. The server serves it. |
 | [`app/`](app/README.md) | The Android app, Capacitor around a start page that opens your rueder. |
 | [`deploy/`](deploy/README.md), `Dockerfile` | The container image, the compose file with PostgreSQL, and how to install it. |
+| [`pages/`](pages/README.md) | The site on GitHub Pages: an overview, the demo and the documentation, put together from what the other parts build. |
 | [`docs/`](docs/implementation.md) | Plan, architecture and state of the work, in German. |
-| `.github/` | CI, CodeQL, gitleaks and Dependabot. |
+| `.github/` | CI, the site on GitHub Pages, CodeQL, gitleaks and Dependabot. |
 
 ## Developing
 
@@ -79,6 +84,8 @@ push:
   `pnpm check`, `pnpm test`, `pnpm build`, and `pnpm e2e` for the tests in a
   browser against the real server.
 - `app/`: Node 22, pnpm, Java 21 and the Android SDK.
+- `pages/`: Node 22 and pnpm; `pnpm lint` and `pnpm test`, and
+  `node build.js` once the other parts are built.
 
 How the system is built and why, what is done and what is still open is written
 down in German:

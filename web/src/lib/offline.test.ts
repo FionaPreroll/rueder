@@ -47,14 +47,19 @@ describe('filesToKeep', () => {
 describe('the manifest', () => {
 	it('names icons that are there, and the app as a whole', () => {
 		const manifest = JSON.parse(readFileSync('static/manifest.webmanifest', 'utf8'));
-		expect(manifest).toMatchObject({
-			name: 'rueder',
-			start_url: '/',
-			scope: '/',
-			display: 'standalone'
-		});
+		expect(manifest).toMatchObject({ name: 'rueder', id: '/', display: 'standalone' });
+		// Its addresses are relative to where it is: the whole site where a server
+		// serves the page, the demo's folder where the demo is (GitHub Pages).
+		const at = (path: string, base: string) => new URL(path, `${base}manifest.webmanifest`);
+		for (const base of [`${origin}/`, 'https://example.github.io/rueder/demo/']) {
+			expect(at(manifest.start_url, base).href).toBe(base);
+			expect(at(manifest.scope, base).href).toBe(base);
+		}
 		const icons = manifest.icons as { src: string; sizes: string; purpose: string }[];
-		for (const icon of icons) expect(() => readFileSync(`static${icon.src}`)).not.toThrow();
+		for (const icon of icons) {
+			expect(at(icon.src, `${origin}/`).origin).toBe(origin);
+			expect(() => readFileSync(`static${at(icon.src, `${origin}/`).pathname}`)).not.toThrow();
+		}
 		expect(icons.some((icon) => icon.sizes === '512x512' && icon.purpose === 'maskable')).toBe(
 			true
 		);

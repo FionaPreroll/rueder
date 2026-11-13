@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>rueder: a self-hosted feed reader</title>
+		<meta
+			name="description"
+			content="rueder is a self-hosted feed reader in the spirit of Google Reader. Try the demo, install it, or read its code."
+		/>
+		<link rel="icon" href="icon.svg" />
+		<link rel="stylesheet" href="style.css" />
+	</head>
+	<body>
+		<main class="overview">
+			<header class="hero">
+				<img
+					src="logo.png"
+					width="220"
+					height="168"
+					alt="A red cartoon crab holding a newspaper titled 'rueder'"
+				/>
+				<div>
+					<h1>rueder</h1>
+					<p>
+						A self-hosted feed reader for a handful of people, in the spirit of Google Reader: one
+						Rust server next to PostgreSQL, with a web page inside it and an Android app around that
+						page. Feed reader apps such as NetNewsWire and Read You connect to it through the Google
+						Reader API.
+					</p>
+					<p><a href="{{repo}}">The source code on GitHub</a></p>
+				</div>
+			</header>
+
+			<h2>Try it</h2>
+			<ul class="cards">
+				<li>
+					<a href="demo/">
+						<strong>Demo</strong>
+						<span>
+							The reader with made-up feeds, in your browser. No server is behind it: what you
+							change stays in this browser.
+						</span>
+					</a>
+				</li>
+			</ul>
+
+			<h2>Run it</h2>
+			<ul class="cards">
+				<li>
+					<a href="docs/self-hosting/">
+						<strong>Self-hosting</strong>
+						<span>
+							Installing rueder on a machine of your own: the container next to PostgreSQL, the
+							reverse proxy, settings, updates and backups.
+						</span>
+					</a>
+				</li>
+				<li>
+					<a href="docs/android-app/">
+						<strong>Android app</strong>
+						<span>
+							How the app works, how it updates itself and how it is built, with its Java code.
+						</span>
+					</a>
+				</li>
+			</ul>
+
+			<h2>Read the code</h2>
+			<ul class="cards">
+				<li>
+					<a href="docs/rust/">
+						<strong>Server (Rust)</strong>
+						<span>
+							The server’s modules, types and functions with their documentation, the private ones
+							included.
+						</span>
+					</a>
+				</li>
+				<li>
+					<a href="docs/frontend/">
+						<strong>Frontend (TypeScript)</strong>
+						<span>
+							The web page’s code: the Reader its components get their data from, the client of the
+							API, the demo’s data, settings and texts.
+						</span>
+					</a>
+				</li>
+			</ul>
+
+			<footer>{{footer}}</footer>
+		</main>
+	</body>
+</html>

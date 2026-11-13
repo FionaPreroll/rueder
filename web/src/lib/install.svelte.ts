@@ -70,7 +70,7 @@ export function watchInstall(win: Window = window): () => void {
 }
 
 /** What the Badging API adds to the navigator, where the browser has it. */
-type Badges = Pick<Navigator, 'setAppBadge' | 'clearAppBadge'>;
+export type Badges = Pick<Navigator, 'setAppBadge' | 'clearAppBadge'>;
 
 /**
  * Puts the number of unread articles on the app's icon, or takes it off at zero.

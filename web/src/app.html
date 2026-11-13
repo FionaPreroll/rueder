@@ -40,10 +40,13 @@
 				bars[i].removeAttribute('media');
 				bars[i].content = dark ? '#1c1f25' : '#f4f5f7';
 			}
-			if (dark) {
-				document
-					.querySelector('link[rel="manifest"]')
-					.setAttribute('href', '/manifest-dark.webmanifest');
+			// The dark one next to the light one, wherever the page is served from.
+			var manifest = document.querySelector('link[rel="manifest"]');
+			if (dark && manifest) {
+				manifest.setAttribute(
+					'href',
+					manifest.getAttribute('href').replace('manifest.webmanifest', 'manifest-dark.webmanifest')
+				);
 			}
 			if (look.accent) root.dataset.accent = look.accent;
 			if (look.density) root.dataset.density = look.density;

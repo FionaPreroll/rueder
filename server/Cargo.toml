@@ -62,6 +62,11 @@ tower = { version = "0.5.3", features = ["util"] }
 [lints.rust]
 unsafe_code = "forbid"
 
+# The documentation (cargo doc --document-private-items, on GitHub Pages) shows
+# the private items too, so a link to one leads somewhere.
+[lints.rustdoc]
+private_intra_doc_links = "allow"
+
 # Hashing a password is slow on purpose, and without optimization many times
 # slower: too slow for tests that log in.
 [profile.dev.package.argon2]

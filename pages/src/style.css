@@ -1,0 +1,217 @@
+/* The look of the overview and of the pages made from READMEs: the colors of
+   rueder's page (web/src/routes/layout.css), light or dark as the system is. */
+
+:root {
+	color-scheme: light dark;
+	--paper: #ffffff;
+	--panel: #f4f5f7;
+	--line: #dde1e6;
+	--ink: #1f2328;
+	--soft: #59626d;
+	--link: #1a55c4;
+	--accent: #c8402e;
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		Roboto,
+		sans-serif;
+	line-height: 1.55;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--paper: #15171b;
+		--panel: #1c1f25;
+		--line: #30353d;
+		--ink: #e7e9ec;
+		--soft: #a4acb8;
+		--link: #8cb4ff;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+}
+
+a {
+	color: var(--link);
+}
+
+a:focus-visible {
+	outline: 2px solid var(--link);
+	outline-offset: 2px;
+}
+
+img {
+	max-width: 100%;
+	height: auto;
+}
+
+footer {
+	color: var(--soft);
+	font-size: 0.875rem;
+}
+
+/* The overview */
+
+.overview {
+	max-width: 56rem;
+	margin: 0 auto;
+	padding: 2rem 1.25rem 3rem;
+}
+
+.hero {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1.5rem 2rem;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.hero > div {
+	flex: 1 1 20rem;
+}
+
+.hero h1 {
+	margin: 0 0 0.5rem;
+	font-size: 2.5rem;
+}
+
+.overview h2 {
+	margin: 2.25rem 0 0.75rem;
+	font-size: 1.25rem;
+}
+
+.cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+	gap: 1rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.cards a {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	height: 100%;
+	padding: 1rem 1.1rem;
+	border: 1px solid var(--line);
+	border-top: 3px solid var(--accent);
+	border-radius: 0.5rem;
+	background: var(--panel);
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.cards a:hover strong {
+	text-decoration: underline;
+}
+
+.cards strong {
+	color: var(--link);
+	font-size: 1.1rem;
+}
+
+.cards span {
+	color: var(--soft);
+}
+
+.overview footer {
+	margin-top: 3rem;
+}
+
+/* The pages made from READMEs */
+
+.bar {
+	padding: 0.6rem 1.25rem;
+	border-bottom: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.bar a {
+	display: inline-flex;
+	gap: 0.5rem;
+	align-items: center;
+	color: var(--ink);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.prose {
+	max-width: 48rem;
+	margin: 0 auto;
+	padding: 1.5rem 1.25rem 2rem;
+}
+
+.prose h1 {
+	font-size: 2rem;
+}
+
+.prose h2 {
+	margin-top: 2.25rem;
+	padding-bottom: 0.3rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.prose code {
+	padding: 0.1rem 0.3rem;
+	border-radius: 0.25rem;
+	background: var(--panel);
+	font-size: 0.9em;
+}
+
+.prose pre {
+	overflow-x: auto;
+	padding: 0.8rem 1rem;
+	border: 1px solid var(--line);
+	border-radius: 0.4rem;
+	background: var(--panel);
+}
+
+.prose pre code {
+	padding: 0;
+	background: none;
+}
+
+.prose table {
+	display: block;
+	overflow-x: auto;
+	border-collapse: collapse;
+}
+
+.prose th,
+.prose td {
+	padding: 0.35rem 0.7rem;
+	border: 1px solid var(--line);
+	text-align: left;
+	vertical-align: top;
+}
+
+.prose blockquote {
+	margin-left: 0;
+	padding-left: 1rem;
+	border-left: 3px solid var(--line);
+	color: var(--soft);
+}
+
+.aside {
+	padding: 0.6rem 0.9rem;
+	border-left: 3px solid var(--accent);
+	background: var(--panel);
+}
+
+.foot {
+	max-width: 48rem;
+	margin: 0 auto;
+	padding: 1rem 1.25rem 2rem;
+	border-top: 1px solid var(--line);
+}

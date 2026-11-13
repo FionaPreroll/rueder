@@ -3,6 +3,7 @@
 // before the server answers, and with a server also with the account, so every
 // device shows the same (see the reader's `saveSettings`).
 
+import { asset } from '$app/paths';
 import { languages, useLanguage, type Language } from './i18n/locale.svelte.ts';
 import { understoodKeys, type KeyChoices } from './keys.ts';
 
@@ -184,8 +185,8 @@ export const barColors = { light: '#f4f5f7', dark: '#1c1f25' } as const;
  * app only from it.
  */
 export const manifests = {
-	light: '/manifest.webmanifest',
-	dark: '/manifest-dark.webmanifest'
+	light: asset('manifest.webmanifest'),
+	dark: asset('manifest-dark.webmanifest')
 } as const;
 
 /** Gives the browser the colors of the theme for its bars. */
