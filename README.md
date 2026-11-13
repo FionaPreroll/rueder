@@ -26,6 +26,11 @@ inside it and an Android app around that page.
 - **Privacy:** the server removes ads, trackers and unsafe markup from every
   article before storing it, and images come through its own image proxy, so
   the browser talks to nothing but rueder.
+- **Other apps:** feed reader apps such as NetNewsWire and Read You read and
+  change an account through the Google Reader API. Settings, Apps walks you
+  through it: pick the app, make an app password for it, and enter the
+  address, name and app password the page shows; the page says when the app
+  has logged in. Each app has its own app password, which you can revoke.
 - **Running it:** local accounts with passwords or login through OpenID
   Connect, open or invitation-only registration, a status page for admins, and
   moving an account between rueder installations as one file.

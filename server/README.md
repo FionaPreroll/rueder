@@ -65,6 +65,11 @@ What is here:
   account's own goes with it, the feeds stay for their other readers.
   `rueder account disable <name>` keeps a misused account from logging in and
   ends its sessions; `enable` undoes it.
+- Apps of other makers (`src/greader/`, `src/app_passwords.rs`): the Google
+  Reader API under `/greader`, for apps such as NetNewsWire and Read You,
+  logged in with app passwords that readers make under Settings, Apps
+  (`/api/app-passwords`), never with the account's password. `APP_API=off`
+  switches it off.
 - Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
   readers report a feed or an article with a reason and a note, at most 20 a
   day; the status page lists the reported feeds with their address, never who
@@ -89,7 +94,8 @@ What is here:
   `rueder health`, which asks the running server whether it is well. How to
   install rueder with it is in [deploy/README.md](../deploy/README.md).
 
-- Fuzz targets for the cleaning, the reading of feeds and the image proxy
+- Fuzz targets for the cleaning, the reading of feeds, the image proxy and the
+  requests of the Google Reader API
   (`fuzz/`), whose corpus runs as an ordinary test, and a soak test of the
   whole program under the load of readers and fetching (`tests/soak.rs`).
 
@@ -269,17 +275,23 @@ Results and how they were measured are in
 ## Fuzzing
 
 The fuzz targets in `fuzz/` throw any bytes at the cleaning, at the reading of
-feeds and at the image proxy, and check what
+feeds, at the image proxy and at the reading of requests of the Google Reader
+API, and check what
 [docs/architecture.md](../docs/architecture.md#fuzzing) says must hold for
 every input: no panic, no script or foreign image address in a cleaned text,
-the limits of a feed, only the formats and sizes the proxy lets through. They
-need nightly Rust and `cargo install cargo-fuzz`:
+the limits of a feed, only the formats and sizes the proxy lets through, IDs
+of the Google Reader API that read back as themselves. They run on GitHub
+(`.github/workflows/fuzz.yml`): five minutes each on a pull request that
+touches them, half an hour each on Mondays, and as long as asked when started
+by hand; a finding fails the run and comes as an artifact. By hand they need
+nightly Rust and `cargo install cargo-fuzz`:
 
 ```sh
 cd fuzz
 cargo +nightly fuzz run -O cleaning -- -max_total_time=1800 -timeout=10 -max_len=131072
 cargo +nightly fuzz run -O feed -- -max_total_time=1800 -timeout=10 -max_len=131072
 cargo +nightly fuzz run -O image -- -max_total_time=1800 -timeout=10
+cargo +nightly fuzz run -O greader -- -max_total_time=1800 -timeout=10
 cargo +nightly fuzz cmin -O feed     # afterwards: keep only what adds coverage
 ```
 
