@@ -36,6 +36,7 @@ import {
 	type Abilities,
 	type Account,
 	type AppPassword,
+	type Connection,
 	type AppPasswordRefusal,
 	type AppPasswords,
 	type LegalLinks,
@@ -111,8 +112,13 @@ const AHEAD = 5;
 const PREVIEW_AFTER = 250;
 /** Events that come close together ask the server once, after this long. */
 const SETTLE_AFTER = 300;
-/** A connection for live updates that the server ended is opened anew after this long. */
-const RECONNECT_AFTER = 30_000;
+/**
+ * A connection for live updates that the server ended is opened anew after this
+ * long, longer each time it fails again, and then every minute.
+ */
+export const RECONNECT_AFTER = [2_000, 5_000, 15_000, 30_000, 60_000];
+/** A connection that is not up again after this long means the server does not answer. */
+export const UNREACHABLE_AFTER = 10_000;
 /** The longest list the server gives at once, for loading what is shown anew. */
 const MAX_PAGE = 200;
 /** A search is asked for once the typing has paused this long. */
@@ -332,6 +338,7 @@ export class ServerReader implements Reader {
 	private opened = $state<string | null>(null);
 	moved = $state(0);
 	notice = $state<Notice | null>(null);
+	connection = $state.raw<Connection>({ state: 'connecting' });
 
 	/** The words of the search, as typed. */
 	private words = $state('');
@@ -412,6 +419,12 @@ export class ServerReader implements Reader {
 	/** The connection was opened anew and may have missed events. */
 	private reopened = false;
 	private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+	/** How often in a row the connection was opened anew without coming up. */
+	private tries = 0;
+	/** Says the server does not answer, once the connection stayed away too long. */
+	private lostTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Stops listening to the browser for the network and the page coming back. */
+	private unwatch: (() => void) | null = null;
 	/** Asking anew for what events said changed, a moment after the last of them. */
 	private settling = new Map<string, ReturnType<typeof setTimeout>>();
 	/** The settings as the account has them; null until they are loaded, so none are sent before. */
@@ -462,6 +475,9 @@ export class ServerReader implements Reader {
 	 */
 	start() {
 		this.stopped = false;
+		this.connection = { state: 'connecting' };
+		this.waitForLive();
+		this.unwatch = this.watchNetwork();
 		this.connect();
 		void this.loadSettings();
 		void this.loadConsent();
@@ -475,6 +491,9 @@ export class ServerReader implements Reader {
 			this.events?.close();
 			this.events = null;
 			clearTimeout(this.reconnectTimer);
+			clearTimeout(this.lostTimer);
+			this.unwatch?.();
+			this.unwatch = null;
 			for (const timer of this.settling.values()) clearTimeout(timer);
 			this.settling.clear();
 		};
@@ -733,7 +752,15 @@ export class ServerReader implements Reader {
 	/** Says what went wrong, or ends the session if the server no longer knows it. */
 	private failed(error: unknown, notice: Notice) {
 		if (error instanceof ApiError && error.signedOut) this.session.expired();
-		else this.notice = notice;
+		// While the connection is away, the sign in the top bar says it already.
+		else if (
+			notice === 'unreachable' &&
+			error instanceof ApiError &&
+			error.status === 0 &&
+			this.connection.state !== 'live'
+		) {
+			this.lost();
+		} else this.notice = notice;
 		// What the server failed at, or a server that did not answer, is worth a
 		// report; what it refused is not an error of the page.
 		if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
@@ -1879,8 +1906,8 @@ export class ServerReader implements Reader {
 	/**
 	 * Opens the connection. The browser opens it again by itself after a break
 	 * and says the last event it got, so nothing is missed. One that the server
-	 * ended for good, refusing it, is opened anew after a while, and what came
-	 * meanwhile is asked for anew.
+	 * ended for good, refusing it, is opened anew after a while, longer each time,
+	 * and what came meanwhile is asked for anew.
 	 */
 	private connect() {
 		if (this.stopped) return;
@@ -1900,15 +1927,98 @@ export class ServerReader implements Reader {
 			});
 		}
 		events.onerror = () => {
-			if (events.readyState !== CLOSED || this.events !== events) return;
+			if (this.events !== events) return;
+			this.broke();
+			// Not closed, the browser opens it again by itself.
+			if (events.readyState !== CLOSED) return;
 			this.events = null;
 			// The server may have refused it because the session is over.
 			void this.checkSession();
 			clearTimeout(this.reconnectTimer);
+			const after = RECONNECT_AFTER[Math.min(this.tries, RECONNECT_AFTER.length - 1)];
+			this.tries += 1;
 			this.reconnectTimer = setTimeout(() => {
 				this.reopened = true;
 				this.connect();
-			}, RECONNECT_AFTER);
+			}, after);
+		};
+	}
+
+	/** Opens the connection anew at once, as when asked to or when the network is back. */
+	reconnect() {
+		const state = this.connection.state;
+		// Up, or still opening for the first time: nothing to try again.
+		if (this.stopped || state === 'live' || state === 'connecting') return;
+		clearTimeout(this.reconnectTimer);
+		const old = this.events;
+		// What the old one says from now on is not heard.
+		this.events = null;
+		old?.close();
+		this.reopened = true;
+		this.connect();
+	}
+
+	/** The connection broke off: it is being opened again, and the clock runs. */
+	private broke() {
+		if (this.connection.state !== 'live') return;
+		this.connection = { state: 'reconnecting', since: Date.now() };
+		this.waitForLive();
+	}
+
+	/** If the connection is not up in a while, the server does not answer. */
+	private waitForLive() {
+		clearTimeout(this.lostTimer);
+		this.lostTimer = setTimeout(() => {
+			if (!this.stopped && this.connection.state !== 'live') this.lost();
+		}, UNREACHABLE_AFTER);
+	}
+
+	/** The server does not answer, or the browser has no network. */
+	private lost(offline = typeof navigator !== 'undefined' && navigator.onLine === false) {
+		const was = this.connection;
+		if (was.state === 'live' || this.stopped) return;
+		const since =
+			was.state === 'reconnecting' || was.state === 'unreachable' ? was.since : Date.now();
+		this.connection = { state: 'unreachable', since, offline };
+	}
+
+	/** The connection is up: what was missed while it was away is asked for. */
+	private up() {
+		const back =
+			this.reopened ||
+			this.connection.state === 'reconnecting' ||
+			this.connection.state === 'unreachable';
+		this.reopened = false;
+		this.tries = 0;
+		clearTimeout(this.lostTimer);
+		this.connection = { state: 'live' };
+		if (back) this.catchUp();
+	}
+
+	/**
+	 * Listens to the browser: without a network the server cannot answer, and
+	 * when the network or the page is back, the connection is tried at once.
+	 */
+	private watchNetwork() {
+		if (typeof window === 'undefined') return () => {};
+		const offline = () => {
+			if (this.connection.state === 'live') {
+				this.connection = { state: 'reconnecting', since: Date.now() };
+			}
+			this.lost(true);
+		};
+		const online = () => this.reconnect();
+		const shown = () => {
+			if (document.visibilityState === 'visible') this.reconnect();
+		};
+		window.addEventListener('offline', offline);
+		window.addEventListener('online', online);
+		document.addEventListener('visibilitychange', shown);
+		if (navigator.onLine === false) offline();
+		return () => {
+			window.removeEventListener('offline', offline);
+			window.removeEventListener('online', online);
+			document.removeEventListener('visibilitychange', shown);
 		};
 	}
 
@@ -1960,10 +2070,7 @@ export class ServerReader implements Reader {
 		const own = 'by' in event.data && event.data.by === this.api.tab;
 		switch (event.event) {
 			case 'hello':
-				if (this.reopened) {
-					this.reopened = false;
-					this.catchUp();
-				}
+				this.up();
 				return;
 			case 'resync':
 				this.catchUp();

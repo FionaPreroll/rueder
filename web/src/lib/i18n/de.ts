@@ -154,6 +154,13 @@ const de: Messages = {
 		play: 'Abspielen'
 	},
 
+	connection: {
+		reconnecting: 'Verbindung wird wiederhergestellt …',
+		unreachable: (since: string) => `Der Server antwortet nicht, seit ${since}.`,
+		offline: (since: string) => `Kein Netz, seit ${since}.`,
+		retry: 'Jetzt versuchen'
+	},
+
 	notice: {
 		unreachable: 'Der Server antwortet nicht. Was du siehst, ist vielleicht nicht mehr aktuell.',
 		notSaved:

@@ -1,14 +1,15 @@
 <script lang="ts">
 	// The bar across the top: the sidebar switch, the name, the search, and on the
-	// right the keyboard help, the settings and who is logged in. The menu of the
-	// account holds the account's own settings and logging out. With made-up data
-	// there are the draft's own switches instead of an account, and they lead to
-	// what a reader with an account finds in its menu.
+	// right whether what is shown is live, the keyboard help, the settings and who
+	// is logged in. The menu of the account holds the account's own settings and
+	// logging out. With made-up data there are the draft's own switches instead of
+	// an account, and they lead to what a reader with an account finds in its menu.
 	import { tabsOf } from '#lib/account.ts';
 	import { APP_SETTINGS, inAndroidApp } from '#lib/app.ts';
 	import { install } from '#lib/install.svelte.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
+	import ConnectionSign from './ConnectionSign.svelte';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 
@@ -132,6 +133,7 @@
 		/>
 	</label>
 
+	<ConnectionSign {reader} />
 	{#if demo}
 		<button
 			type="button"

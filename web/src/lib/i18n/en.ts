@@ -159,6 +159,13 @@ const en = {
 		play: 'Play'
 	},
 
+	connection: {
+		reconnecting: 'Reconnecting …',
+		unreachable: (since: string) => `The server has not answered since ${since}.`,
+		offline: (since: string) => `No network since ${since}.`,
+		retry: 'Try again now'
+	},
+
 	notice: {
 		unreachable: 'The server does not answer. What you see may be out of date.',
 		notSaved: 'The server did not take your last change. It was undone here.'
