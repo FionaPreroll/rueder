@@ -19,6 +19,7 @@ Gebaut sind die Schritte 1 bis 3; das erste Security-Review (Paket 2.12) ist am 
 - [Umzug eines Kontos](#umzug-eines-kontos)
 - [Security](#security)
 - [API](#api)
+- [Apps anderer Anbieter](#apps-anderer-anbieter)
 - [Frontend](#frontend)
 - [Betrieb](#betrieb)
 - [Status für Admins](#status-für-admins)
@@ -649,7 +650,7 @@ Der Server verarbeitet unbeaufsichtigt Eingaben, die Fremde bestimmen. Tests von
 - Die Targets liegen in `server/fuzz/` und laufen mit `cargo-fuzz`, das Nightly-Rust braucht. Der Startkorpus sind die aufgezeichneten Feeds des alten Systems (früher `backend/test/data/`, jetzt `server/tests/data/`) und die Fälle der Cleaner-Tests, dazu ein paar Feeds in RSS, Atom und JSON Feed und kleine Bilder jedes Formats.
 - Was gelten muss, steht einmal in `server/fuzz/checks.rs`. Die Targets binden die Datei ein, und `server/tests/fuzz_corpus.rs` auch: Der gespeicherte Korpus läuft so in der CI als gewöhnlicher Test mit stabilem Rust und prüft dasselbe wie der Fuzzer. Jeder Fund kommt als Datei in den Korpus, mit einem Namen, der sagt, was er fand (`found-…`), und bleibt so als Test erhalten.
 - Die Bereinigung wird mit zwei Basisadressen geprüft, mit und ohne Seite des Artikels, und danach so, wie der Text ausgeliefert wird: Jedes Bild zeigt dann auf `/img/`. Beim Bild-Proxy sagt das erste Byte der Eingabe, für welche Größe; was herauskommt, muss das Format haben, das der Proxy nennt, und in diese Größe passen.
-- Richtig gefuzzt wird von Hand vor den beiden Security-Reviews, etwa eine halbe Stunde je Target.
+- Richtig gefuzzt wird von Hand vor den beiden Security-Reviews, etwa eine halbe Stunde je Target. Mit Paket 2.15 kommt ein Workflow dazu, der die Targets auf GitHub laufen lässt, nach Zeitplan und von Hand gestartet (siehe [Apps anderer Anbieter](#apps-anderer-anbieter)).
 - Für die Bereinigung gibt es seit Paket 2.3 schon einen Property-Test mit denselben Eigenschaften (`server/tests/cleaning.rs`): Er setzt Texte aus Bruchstücken von Auszeichnung zusammen. Das Fuzz-Target kommt dazu, es ersetzt ihn nicht.
 - Nicht gefuzzt werden die fremden Parser für sich und einmalige Eingaben (die alte Datenbank, der `localStorage` des alten Frontends). Für sie gelten Grenzen und Tests mit regelwidrigen Eingaben.
 
@@ -720,6 +721,37 @@ Was die API als JSON sendet und liest, gibt es als TypeScript-Typen in `web/src/
 - **Anhänge.** Die Dateien eines Artikels (`enclosures`) sind gespeichert, wie sie kamen: aus dem Feed mit der Größe als Zahl, aus dem alten rueder mit der Größe als Text. Hinaus gehen sie in einer Form (`url`, `type`, `length`, `inline`), höchstens 100 je Artikel, und nur mit Adressen, die mit `http` oder `https` beginnen.
 
 Ohne Typ bleiben die Einstellungen eines Kontos: Ihr Inhalt gehört dem Frontend, der Server speichert ihn als JSON und begrenzt nur die Größe. Welcher Endpunkt welchen Typ nimmt und gibt, steht im Kommentar am Typ; eine Tabelle, die das prüfbar festhält, gibt es nicht.
+
+
+## Apps anderer Anbieter
+
+Geplant in Paket 2.15 (A24), entschieden am 2026-11-13; noch nicht gebaut. Feedreader-Apps anderer Anbieter sollen ein rueder-Konto lesen und bedienen, ohne dass jemand eine eigene App schreibt. Was hier steht, ist der Entwurf; was der Bau ändert, wird hier nachgetragen.
+
+- **Protokoll: die Google-Reader-API.** FreshRSS, Miniflux, Inoreader und The Old Reader bieten sie an, und deshalb sprechen sie viele Apps: Reeder, ReadKit, Fiery Feeds, FeedMe, Read You, Fluent Reader, NewsFlash, NetNewsWire über das Konto „FreshRSS“. Sie kann alles, was eine App braucht: Lesestand, Sterne, Ordner, Labels und Abos. Verworfen sind Fever (der Schlüssel ist ein MD5 aus Name und Passwort, keine Verwaltung der Abos, keine Labels) und eine eigene API für Apps, die keine App spricht. Eine Spezifikation gibt es nicht; maßgeblich ist, was FreshRSS und Miniflux tun und was die Apps erwarten.
+- **Wo.** Unter einem eigenen Präfix, `/greader`: `POST /greader/accounts/ClientLogin` und `/greader/reader/api/0/…`. In der App trägt man `https://<rueder>/greader` als Server ein. `APP_API=off` nimmt das Präfix aus dem Router, der Reiter „Apps“ fehlt dann; eingeschaltet ist es als Standard.
+- **Anmeldung nur mit App-Passwörtern.** Ein App-Passwort sind 32 zufällige Byte wie eine Sitzung, gespeichert als SHA-256 in einer eigenen Tabelle mit Konto, Name und letzter Nutzung (`ON DELETE CASCADE` am Konto, damit es mit dem Konto geht). Erzeugt wird es mit `POST /api/app-passwords`, das das Passwort und, wo eingerichtet, einen Code des zweiten Faktors verlangt, gezählt wie beim Login; gezeigt wird es einmal. `GET /api/app-passwords` listet Name, Beginn und letzte Nutzung, `DELETE /api/app-passwords/{id}` widerruft. Höchstens 20 je Konto. `ClientLogin` nimmt Name und App-Passwort (`Email`, `Passwd`), zählt Fehlversuche wie der Login und antwortet mit `Auth=`; jede weitere Anfrage trägt `Authorization: GoogleLogin auth=…`. Das Passwort des Kontos gilt hier nie: So bleibt der zweite Faktor wirksam, Konten nur mit OpenID Connect können Apps nutzen, und eine verlorene App kostet nur ihr eigenes Passwort. Ein neues Passwort des Kontos, das Sperren und das Löschen beenden auch die App-Passwörter.
+- **Härtung.** Unter `/greader` gilt kein Cookie; ohne Cookie gibt es nichts, was eine fremde Seite ausnutzen könnte, deshalb prüft der Server dort die Herkunft nicht. Das Token `T`, das die Google-Reader-API für ändernde Anfragen kennt, gibt `/greader/reader/api/0/token` aus, für Apps, die eins verlangen; die Sicherheit trägt das App-Passwort im Header. Header, Grenzen je Adresse und die 256 KB je Anfrage gelten wie überall.
+- **Abbildung.**
+
+  | Google-Reader-API | rueder |
+  |---|---|
+  | Item-ID, 64 Bit, als Zahl oder `tag:google.com,2005:reader/item/<16 hex>` | `articles.id`, steigt mit dem Eintreffen über alle Feeds |
+  | `feed/<adresse>` | ein Abo; Titel ist der eigene Name im Konto |
+  | `user/-/label/<name>` an Feeds | ein Ordner; verschachtelte als Pfad, `News/Tech` |
+  | `user/-/label/<name>` an Artikeln | ein Label |
+  | `user/-/state/com.google/reading-list` | alle Artikel |
+  | `user/-/state/com.google/read` | Lesemarke und Ausnahmen; `mark-all-as-read` mit `ts` setzt die Lesemarke bis zu dieser Zeit |
+  | `user/-/state/com.google/kept-unread` | die Ausnahme „ungelesen halten“ über der Lesemarke |
+  | `user/-/state/com.google/starred` | Stern |
+
+  Ein Ordner und ein Label gleichen Namens sind kein Widerspruch: `tag/list` nennt beide mit ihrer Art, an Feeds ist es der Ordner, an Artikeln das Label. Legt eine App einen Feed in `A/B`, entstehen fehlende Ordner auf diesem Pfad, höchstens fünf Ebenen. Wie ein `/` im Namen eines Ordners erscheint, entscheidet der Bau und steht dann hier.
+- **Was nicht hinausgeht.** Wie in der Seite: Artikel, die eine Filterregel ausblendet, und gesperrte Feeds (siehe [Meldungen und gesperrte Feeds](#meldungen-und-gesperrte-feeds)). Ein neues Abo eines schon gelesenen Feeds beginnt wie in der Seite mit den neuesten ungelesen.
+- **Endpunkte.** Lesen: `user-info`, `subscription/list`, `tag/list`, `unread-count`, `stream/items/ids`, `stream/items/contents`, `stream/contents/<stream>`, jeweils mit `n` (höchstens 1000), `c` als Fortsetzung (der Anker wie bei den Listen), `ot` und `nt` als Zeitgrenzen, `xt` zum Ausschließen (etwa des Gelesenen) und `r=o` für das Älteste zuerst. Ändern: `edit-tag` (`a` und `r` für gelesen, Stern, ungelesen halten und Labels, höchstens 1000 `i` je Anfrage), `mark-all-as-read`, `subscription/edit` (abonnieren, abbestellen, umbenennen, Ordner wechseln), `subscription/quickadd`, `rename-tag`, `disable-tag` (ein Ordner geht, sein Inhalt bleibt; ein Label wird gelöscht). Abonnieren geht über die Feed-Suche und den gehärteten HTTP-Client und zählt gegen `rate::NEW_FEEDS` und die Grenzen je Konto wie in der Seite.
+- **Bilder.** Apps laden Bilder ohne Anmeldung, `/img/` antwortet aber nur mit Sitzung. Für Apps bekommt der Proxy deshalb Adressen, die für ein App-Passwort signiert sind: die Nummer des App-Passworts steht in der Adresse und geht in die Signatur ein, und der Proxy liefert nur, solange es das App-Passwort gibt. Mit dem Widerruf laden die Bilder nicht mehr. Die Texte gehen dafür durch `Signer::in_html` in einer Form für Apps. Bildadressen fremder Server gehen auch an Apps nie hinaus.
+- **Live.** Was eine App ändert, erreicht die offenen Tabs desselben Kontos als Ereignis; die Schicht um die API meldet es an der Adresse der Anfrage, dafür bekommt `events::changed` die Adressen unter `/greader`.
+- **Typen.** Die JSON-Typen der Google-Reader-API gehen an Apps, nicht an die Seite; sie stehen deshalb nicht in `web/src/lib/api/types.ts`. Die Endpunkte der App-Passwörter unter `/api` schon.
+- **Fuzzing.** Ein Target `greader` liest Anfragen, wie Apps sie schicken: Formular und Query, Stream-IDs, Item-IDs in allen drei Schreibweisen, Fortsetzung, Zeiten, `n`. Gelten muss: keine Panic; die Grenzen für Anzahl und Länge greifen; jede gelesene ID ergibt, wieder geschrieben und gelesen, dieselbe; ein Pfad hat höchstens fünf Teile, keiner davon leer. Die Fuzz-Targets laufen auf GitHub in einem eigenen Workflow mit Nightly-Rust, nach Zeitplan und von Hand gestartet, nicht in der Entwicklungsumgebung; ein Fund lässt den Lauf scheitern und hängt die Eingabe an, und wer ihn behebt, legt sie als `found-…` in den Korpus. Wie bei den anderen Targets läuft der Korpus als Test in jedem `cargo test` (siehe [Fuzzing](#fuzzing)).
+- **Getestet** wird jeder Endpunkt mit einem zweiten Konto und einem widerrufenen App-Passwort, die nichts sehen und nichts ändern. Die Abläufe von Read You und NetNewsWire, die quelloffen sind, werden als Tests nachgestellt; ob echte Apps damit zurechtkommen, prüft Fiona auf ihren Geräten.
 
 ## Frontend
 
