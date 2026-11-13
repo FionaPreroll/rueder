@@ -48,6 +48,27 @@ export const defaults: Settings = {
 
 const KEY = 'rueder.settings';
 
+/**
+ * The settings each device keeps for itself instead of the account: a text size
+ * that suits a phone may be too large on a desktop. They stay in the browser and
+ * are neither sent with the account's settings nor taken from them.
+ */
+export const perDevice = ['textSize'] as const satisfies readonly (keyof Settings)[];
+
+/** The settings as the account keeps them: without those of the device. */
+export function forAccount(settings: Settings): Partial<Settings> {
+	const shared: Partial<Settings> = { ...settings };
+	for (const key of perDevice) delete shared[key];
+	return shared;
+}
+
+/** The account's settings, with this device's own where it has its own. */
+export function onThisDevice(account: Settings, here: Settings): Settings {
+	const mine: Partial<Settings> = {};
+	for (const key of perDevice) Object.assign(mine, { [key]: here[key] });
+	return { ...account, ...mine };
+}
+
 const choices: { [K in keyof Settings]?: readonly string[] } = {
 	theme: themes,
 	accent: accents,

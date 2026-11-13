@@ -1909,13 +1909,37 @@ describe('settings', () => {
 		release();
 		await settle();
 		expect(settings.theme).toBe('light');
-		for (const textSize of ['small', 'large'] as const) {
-			settings.textSize = textSize;
+		for (const density of ['comfortable', 'compact', 'comfortable'] as const) {
+			settings.density = density;
 			reader.saveSettings({ ...settings });
 		}
 		await saved();
-		expect(puts().map((r) => (r.body as { textSize: string }).textSize)).toEqual(['large']);
-		expect(server.settings).toMatchObject({ theme: 'light', textSize: 'large' });
+		expect(puts().map((r) => (r.body as { density: string }).density)).toEqual(['comfortable']);
+		expect(server.settings).toMatchObject({ theme: 'light', density: 'comfortable' });
+	});
+
+	it('leave the text size to each device', async () => {
+		// The account has a size from another device; this one keeps its own.
+		server.settings = { theme: 'dark', textSize: 'small' };
+		settings.textSize = 'large';
+		const reader = await started();
+		expect([settings.theme, settings.textSize]).toEqual(['dark', 'large']);
+		// Changing it here sends nothing to the account.
+		settings.textSize = 'medium';
+		reader.saveSettings({ ...settings });
+		await saved();
+		expect(puts()).toEqual([]);
+		// What else changes goes without it.
+		settings.theme = 'light';
+		reader.saveSettings({ ...settings });
+		await saved();
+		expect(puts()).toHaveLength(1);
+		expect(puts()[0].body).not.toHaveProperty('textSize');
+		// Another tab's change of the account's settings leaves it too.
+		server.settings = { theme: 'dark', textSize: 'small' };
+		server.emit({ event: 'settings', data: { by: 'another-tab' } });
+		await settle();
+		expect([settings.theme, settings.textSize]).toEqual(['dark', 'medium']);
 	});
 
 	it('loads them anew when another tab changed them', async () => {

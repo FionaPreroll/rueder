@@ -23,7 +23,13 @@ import type {
 	TreeNode
 } from '#lib/model.ts';
 import type { FilterRule } from '#lib/filters.ts';
-import { settings as shown, understood, type Settings } from '#lib/settings.svelte.ts';
+import {
+	forAccount,
+	onThisDevice,
+	settings as shown,
+	understood,
+	type Settings
+} from '#lib/settings.svelte.ts';
 import {
 	MAX_ACCOUNT_FILE,
 	MAX_OPML,
@@ -1543,8 +1549,9 @@ export class ServerReader implements Reader {
 				return;
 			}
 			const settings = understood(stored);
-			this.savedSettings = JSON.stringify(settings);
-			Object.assign(shown, settings);
+			this.savedSettings = JSON.stringify(forAccount(settings));
+			// The text size and whatever else each device keeps for itself stay as they are here.
+			Object.assign(shown, onThisDevice(settings, shown));
 		} catch (error) {
 			this.failed(error, 'unreachable');
 		}
@@ -1553,7 +1560,9 @@ export class ServerReader implements Reader {
 	/** Sends changed settings once they rest a moment; nothing before the account's are loaded. */
 	saveSettings(settings: Settings) {
 		if (this.savedSettings === null) return;
-		const json = JSON.stringify(settings);
+		// What each device keeps for itself does not go to the account.
+		const shared = forAccount(settings);
+		const json = JSON.stringify(shared);
 		if (json === this.savedSettings) return;
 		this.soon(
 			'settings',
@@ -1561,7 +1570,7 @@ export class ServerReader implements Reader {
 				this.savedSettings = json;
 				this.write(
 					'settings',
-					() => this.api.saveSettings(settings),
+					() => this.api.saveSettings(shared),
 					() => {}
 				);
 			},

@@ -257,7 +257,7 @@ const en = {
 		},
 		density: 'Density of the list',
 		densities: { compact: 'Compact', comfortable: 'Comfortable' },
-		textSize: 'Text size of articles',
+		textSize: 'Text size of articles, on this device',
 		textSizes: { small: 'Small', medium: 'Medium', large: 'Large' },
 		readingFont: 'Font of articles',
 		readingFonts: { sans: 'Sans-serif', serif: 'Serif' },
