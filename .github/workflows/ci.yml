@@ -358,8 +358,11 @@ jobs:
           context: .
           tags: rueder:ci
           load: true
+          # The commit checked out above: for a pull request that is the merge
+          # of the branch into main (github.sha), not the branch's head, and the
+          # image is built from it. The branch is still the pull request's.
           build-args: |
-            RUEDER_COMMIT=${{ github.event.pull_request.head.sha || github.sha }}
+            RUEDER_COMMIT=${{ github.sha }}
             RUEDER_BRANCH=${{ github.head_ref || github.ref_name }}
             RUEDER_DIRTY=false
             RUEDER_CI_RUN=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -367,11 +370,11 @@ jobs:
           cache-to: type=gha,mode=max,scope=image-${{ matrix.platform }}
       # With RUEDER_IMAGE the test starts the image built above instead of
       # building one of its own; with RUEDER_COMMIT it also asks the image
-      # which commit it says it is of.
-      - run: deploy/smoke-test.sh
+      # which commit it says it is of. What it should say comes from git, not
+      # from the same expression as the build argument, so the two can differ.
+      - run: RUEDER_COMMIT="$(git rev-parse HEAD)" deploy/smoke-test.sh
         env:
           RUEDER_IMAGE: rueder:ci
-          RUEDER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
 
   # Every push to main that passed the jobs above becomes
   # ghcr.io/fionapreroll/rueder:latest and :sha-<commit>, for both

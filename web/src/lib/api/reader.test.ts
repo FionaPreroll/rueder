@@ -1180,6 +1180,33 @@ describe('the text of an article', () => {
 		expect(reader.visible[0]).toMatchObject({ html: null, changes: 1 });
 	});
 
+	it('says what changed as the text says it, when it is newer than the list', async () => {
+		const article = server.article(tech, 3)!;
+		Object.assign(article, {
+			version: 2,
+			updated_what: 'title',
+			updated_at: '2026-11-02T10:00:00Z'
+		});
+		const reader = await started();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		expect(reader.visible[0]).toMatchObject({ changes: 1, changed: 'title' });
+
+		// The feed corrects the text before the article is opened.
+		Object.assign(article, {
+			version: 3,
+			updated_what: 'text',
+			updated_at: '2026-11-03T10:00:00Z'
+		});
+		reader.load(reader.visible[0]);
+		await settle();
+		expect(reader.visible[0]).toMatchObject({
+			changes: 2,
+			changed: 'text',
+			updatedAt: Date.parse('2026-11-03T10:00:00Z')
+		});
+	});
+
 	it('comes with the files and the picture of the article', async () => {
 		const episode = { url: 'https://pod.example/1.mp3', type: 'audio/mpeg', length: 1200 };
 		Object.assign(server.article(lone, 1)!, {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { language } from '#lib/i18n/index.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
-import { applySettings, defaults, parse } from '#lib/settings.svelte.ts';
+import { applySettings, defaults, listFits, parse, widths } from '#lib/settings.svelte.ts';
 
 afterEach(() => {
 	localStorage.clear();
@@ -101,5 +101,23 @@ describe('applySettings', () => {
 		]);
 		expect(manifest()).toBe('/manifest.webmanifest');
 		document.head.innerHTML = '';
+	});
+});
+
+describe('listFits', () => {
+	it('keeps the width that was left while the room is wide enough for it', () => {
+		expect(listFits(500, 1600)).toEqual({ width: 500, max: widths.list.max });
+	});
+
+	it('says what is seen, and how far it may go, where the window became narrower', () => {
+		// 60% of 1,000 pixels: the list shows 600 of the 720 it was left at.
+		expect(listFits(720, 1000)).toEqual({ width: 600, max: 600 });
+		expect(listFits(400, 1000)).toEqual({ width: 400, max: 600 });
+		// Never narrower than the list can be.
+		expect(listFits(720, 300)).toEqual({ width: widths.list.min, max: widths.list.min });
+	});
+
+	it('takes the kept width before the page is laid out', () => {
+		expect(listFits(720, 0)).toEqual({ width: 720, max: widths.list.max });
 	});
 });

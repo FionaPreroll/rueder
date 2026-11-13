@@ -24,6 +24,21 @@ export const widths = {
 	list: { min: 260, max: 720, default: 384 }
 } as const;
 
+/** The share of the room beside the sidebar that the list may take; the article keeps the rest. */
+export const LIST_SHARE = 0.6;
+
+/**
+ * How wide the list beside an article is and may become, in a room this many
+ * pixels wide: the kept width, unless the room is too narrow for it. A room of
+ * 0 is not laid out yet. The bar starts from what is seen, so it moves the list
+ * at once in a window that shrank since the width was kept.
+ */
+export function listFits(kept: number, room: number): { width: number; max: number } {
+	const { min, max } = widths.list;
+	const fits = room > 0 ? Math.max(min, Math.min(max, Math.floor(room * LIST_SHARE))) : max;
+	return { width: Math.min(kept, fits), max: fits };
+}
+
 export interface Settings {
 	theme: (typeof themes)[number];
 	accent: (typeof accents)[number];
