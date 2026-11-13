@@ -1550,7 +1550,9 @@ export type StatusProblems = {
 export type StatusRequests = {
 	all: Durations,
 	/**
-	 * Answers by their first digit: 1xx to 5xx.
+	 * Answers by their first digit: 1xx to 5xx. An image whose source did
+	 * not deliver it counts as refused, not as an error of the server; the
+	 * image proxy counts it as "source failed".
 	 */
 	answers: [number,
 	number,

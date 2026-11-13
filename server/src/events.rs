@@ -755,25 +755,27 @@ pub fn changed(path: &str) -> Option<Changed> {
 }
 
 /// What a request of an app changes, by its address under `/greader` (see
-/// `greader`). Logging in and asking for texts change nothing; whatever else
-/// is not known counts as a change of the tree, as above.
+/// `greader`). Unlike the page's API, whatever is not known here changes
+/// nothing: the API answers every address it does not have with `[]`, and a
+/// new endpoint that changes something gets its line here.
 fn changed_by_app(path: &str) -> Option<Changed> {
     let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
-    Some(match parts.as_slice() {
-        ["accounts", ..] | ["img", ..] => return None,
-        ["reader", "api", "0", rest @ ..] => match rest {
-            ["edit-tag"] => Changed::Articles,
-            ["mark-all-as-read"] => Changed::Reading {
-                feed_id: None,
-                seq: None,
-            },
-            ["rename-tag"] | ["disable-tag"] => Changed::Names,
-            ["subscription", ..] => Changed::Area(Area::Tree),
-            ["stream", ..] | ["token"] | ["user-info"] | ["tag", "list"] | ["unread-count"] => {
-                return None;
-            }
-            _ => Changed::Area(Area::Tree),
+    // Logging in and images change nothing.
+    let ["reader", "api", "0", rest @ ..] = parts.as_slice() else {
+        return None;
+    };
+    Some(match rest {
+        ["edit-tag"] => Changed::Articles,
+        ["mark-all-as-read"] => Changed::Reading {
+            feed_id: None,
+            seq: None,
         },
-        _ => Changed::Area(Area::Tree),
+        ["rename-tag"] | ["disable-tag"] => Changed::Names,
+        ["subscription", "edit" | "quickadd"] => Changed::Area(Area::Tree),
+        // Everything else only reads, however it is sent, or is answered
+        // `[]` by the API without changing anything: an app asks for its
+        // lists every few minutes, and the tabs need not load anything anew
+        // for it.
+        _ => return None,
     })
 }

@@ -154,7 +154,9 @@ struct Counts {
 #[ts(rename = "StatusRequests")]
 struct Requests {
     all: Durations,
-    /// Answers by their first digit: 1xx to 5xx.
+    /// Answers by their first digit: 1xx to 5xx. An image whose source did
+    /// not deliver it counts as refused, not as an error of the server; the
+    /// image proxy counts it as "source failed".
     answers: [u64; 5],
     /// Answers that said "too many requests".
     limited: u64,

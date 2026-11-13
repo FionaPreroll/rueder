@@ -335,7 +335,7 @@ const de: Messages = {
 			back: 'Zurück',
 			how: {
 				netnewswire:
-					'Füge in NetNewsWire ein Konto hinzu (Einstellungen, Accounts, dann +) und wähle FreshRSS. Trage Serveradresse, Name und App-Passwort von unten ein.',
+					'Öffne in NetNewsWire die Einstellungen (Settings), dann Accounts, füge ein Konto hinzu (auf dem Mac mit +) und wähle FreshRSS. Trage unten den Namen als Login ein (auf iPhone und iPad: Username or Email), das App-Passwort als Password und die Serveradresse als API URL.',
 				readyou:
 					'Öffne in Read You Settings, Accounts, Add accounts, und wähle Google Reader. Trage die Serveradresse von unten als Server URL ein, den Namen als Username und das App-Passwort als Password.',
 				other:

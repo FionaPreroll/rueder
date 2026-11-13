@@ -37,6 +37,12 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
 
+use axum::{
+    Extension,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+
 use crate::{
     cleaning,
     http_client::{self, HttpClient, Request},
@@ -286,6 +292,24 @@ impl fmt::Display for Refused {
             Self::Source(why) => write!(f, "the source could not be fetched: {why}"),
             Self::NotAnImage => write!(f, "not an image the proxy lets through"),
             Self::TooLarge => write!(f, "the image is too large"),
+        }
+    }
+}
+
+/// Marks the answer for an image whose source did not deliver it: a 502,
+/// but the source's fault, not the server's. The status page counts it with
+/// the proxy as "source failed", not as an error of the server, and the log
+/// takes it for no error (see `monitor::time` and `crate::Failures`).
+#[derive(Clone, Copy, Debug)]
+pub struct SourceFailed;
+
+impl IntoResponse for Refused {
+    fn into_response(self) -> Response {
+        match self {
+            Self::NotFound => StatusCode::NOT_FOUND.into_response(),
+            Self::Source(_) => (StatusCode::BAD_GATEWAY, Extension(SourceFailed)).into_response(),
+            Self::NotAnImage => StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
+            Self::TooLarge => StatusCode::PAYLOAD_TOO_LARGE.into_response(),
         }
     }
 }
