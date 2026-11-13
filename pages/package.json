@@ -1,0 +1,20 @@
+{
+	"name": "rueder-pages",
+	"private": true,
+	"version": "0.0.1",
+	"description": "rueder's site on GitHub Pages: an overview, the demo and the documentation, put together from what the other parts build.",
+	"type": "module",
+	"packageManager": "pnpm@12.8.1",
+	"scripts": {
+		"build": "node build.js",
+		"footer": "node footer.js",
+		"test": "node --test test/*.test.js",
+		"lint": "prettier --check ."
+	},
+	"dependencies": {
+		"marked": "^18.2.0"
+	},
+	"devDependencies": {
+		"prettier": "^3.10.1"
+	}
+}

@@ -3,6 +3,9 @@
 // and changing is reproduced in server/tests/greader.rs from their source, or
 // they were set up on a device. Each link goes to the app's own page.
 
+import { asset } from '$app/paths';
+import type { AssetPath } from '$app/types';
+
 export type Platform = 'apple' | 'android';
 
 /** A picture of a step in an app: its size in pixels. */
@@ -36,8 +39,12 @@ export interface KnownApp {
 	shots: Shot[];
 }
 
-/** Where the picture of a step of an app is, from 1 on. */
-export const shot = (app: KnownApp, n: number) => `/apps/${app.id}-${n}.webp`;
+/**
+ * Where the picture of a step of an app is, from 1 on: below the address the
+ * page is served from, which is not always the top of the site (the demo on
+ * GitHub Pages is at /rueder/demo/).
+ */
+export const shot = (app: KnownApp, n: number) => asset(`apps/${app.id}-${n}.webp` as AssetPath);
 
 export const knownApps: KnownApp[] = [
 	{

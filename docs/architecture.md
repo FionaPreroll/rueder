@@ -987,3 +987,27 @@ Gebaut in Paket 3.11 (`app/`, beschrieben in [app/README.md](../app/README.md)).
 
 Abweichungen vom Vorbild: eigene Update-Logik statt `@fionapreroll/app-updates`, das nicht aus der npm-Registry kommt; kein Fortsetzen eines abgebrochenen Downloads über einen Neustart der App hinaus, das übernimmt der Download-Manager, soweit er es kann. Die Texte der App stehen nicht in `web/src/lib/i18n/`, weil sie nicht Teil der Seite sind: die der Startseite in `app/www/texts.js`, die nativen in `res/values*/strings.xml`, jeweils Englisch und Deutsch.
 
+
+## Seite auf GitHub Pages
+
+Gebaut in Paket 5.22 (`pages/`, beschrieben in [pages/README.md](../pages/README.md)), entschieden unter [Entscheidungen](plan.md#entscheidungen). Eine statische Seite unter `https://fionapreroll.github.io/rueder/`, nur auf Englisch, aus dem, was die Teile des Repositorys bauen:
+
+| Adresse | Was | Woraus |
+|---|---|---|
+| `/rueder/` | Übersicht der Unterseiten und wofür sie da sind | `pages/src/index.html` |
+| `/rueder/demo/` | der Leser mit erfundenen Daten | `pnpm build:single` in `web/` |
+| `/rueder/docs/self-hosting/` | die Anleitung zur Installation | `deploy/README.md` |
+| `/rueder/docs/android-app/` | die App, unter `code/` ihr Java-Code | `app/README.md`, Javadoc |
+| `/rueder/docs/rust/` | der Code des Servers, mit den privaten Teilen | rustdoc |
+| `/rueder/docs/frontend/` | das TypeScript der Seite | TypeDoc über `web/src/lib` |
+| `/rueder/docs/rest-api/` | die REST-API, die Google-Reader-API als eigene Gruppe | kommt mit Paket 5.23 |
+
+- **Bauen und veröffentlichen** (`.github/workflows/pages.yml`): je ein Job für Rust, das Web und die App gibt sein Ergebnis als Artefakt weiter, der Job `site` setzt sie mit `pages/build.js` zusammen. Jeder Pull Request baut die Seite und hängt sie als Artefakt `github-pages` an; veröffentlicht wird nur von `main` (Job `deploy`, Environment `github-pages`, die GitHub nur den Standard-Branch veröffentlichen lässt).
+- **Streng:** rustdoc mit `-D warnings` (ein Link ins Leere oder kaputtes HTML in einem Doc-Kommentar), TypeDoc mit `treatWarningsAsErrors`, Javadoc mit `-Xdoclint` und `-Werror`. `pages/links.js` prüft jede Adresse in `href` und `src` jeder Seite und in `@import` und `url()` jedes Stylesheets, die auf der Seite bleibt. Durch lässt sie nur Links fremder Crates, die rustdoc mit deren Doku an unseren Typen zeigt (`foreignLinks` in `pages/build.js`): Sie führen nur auf den Seiten dieser Crates irgendwohin.
+- **Stand:** Jede Seite nennt Commit und Tag, aus denen sie gebaut ist (`pages/footer.js`), auch die von rustdoc, TypeDoc und Javadoc. Die Seite zeigt immer `main`, ohne Versionen.
+- **Die READMEs als Seiten** (`pages/markdown.js`): Markdown wie auf GitHub, mit denselben Ankern an den Überschriften. Ein Link auf ein anderes README, das eine Seite ist, bleibt auf der Seite; jede andere Datei des Repositorys führt zu GitHub, beim Commit, aus dem gebaut wurde.
+- **Demo:** die Ein-Datei-Fassung, die ihre Seiten am Teil der Adresse hinter `#` findet und deshalb unter jedem Pfad läuft. Damit auch ihre Dateien dort gefunden werden, kommen die Bilder der App-Anleitung und die Manifeste über `asset()` aus `$app/paths`, die Adressen im Manifest sind relativ zu ihm (beim Server ergeben sie dieselben wie vorher, `id` bleibt `/`), und `build.js` lässt die Links im Kopf der Demo in ihrem Ordner beginnen. Wie das Produkt folgt sie der Sprache des Browsers. Sie teilt ihren Ursprung `fionapreroll.github.io` mit allen anderen Pages-Projekten des Kontos; das geht, weil sie nichts Geheimes hält, nur ihre Einstellungen in `localStorage`.
+- **Rust:** `cargo doc --no-deps --lib --document-private-items`, mit den privaten Teilen, weil der Server ein Programm ist und keine Bibliothek für andere. Die Startseite ist der Überblick in `server/src/lib.rs`. Der Lint `rustdoc::private_intra_doc_links` ist aus (`[lints.rustdoc]` in `server/Cargo.toml`), weil die Doku die privaten Teile zeigt und Links auf sie also irgendwohin führen.
+- **App:** Javadoc des Builds `github` mit seinen privaten Teilen. Die Aufgabe `javadoc` kommt aus dem Init-Skript `pages/javadoc.gradle`, nicht aus `app/android/app/build.gradle`: `app-changed` in `ci.yml` veröffentlicht die App bei jeder Änderung in `app/` neu, und eine Änderung an den Werkzeugen der Doku ist keine an der App. Wo das JDK die Schriften von Javadoc nicht mitbringt (Debian, Ubuntu), nimmt `build.js` ihren `@import` aus dem Stylesheet.
+- **Frontend:** TypeDoc über die TypeScript-Module in `web/src/lib`, mit `web/README.md` als Startseite. Die Komponenten fehlen, weil TypeDoc keine `.svelte`-Dateien liest; sie zeigt die Demo.
+- **Sicherheit:** Die Seite ist statisch und spricht mit keinem rueder. GitHub Pages setzt nicht die Header des Servers, auch keine Content-Security-Policy; das gilt auch für die Demo, die nichts lädt als ihre eigenen Dateien.
