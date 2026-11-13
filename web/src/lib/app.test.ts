@@ -35,6 +35,7 @@ describe('the account menu', () => {
 			sidebarOpen: true,
 			ontogglesidebar: () => {},
 			onsettings: () => {},
+			onaccount: () => {},
 			onhelp: () => {},
 			onstatus: () => {}
 		});

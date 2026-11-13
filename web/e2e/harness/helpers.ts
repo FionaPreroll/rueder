@@ -9,10 +9,10 @@ import { PASSWORD, SITE, database } from './ports.js';
 export { PASSWORD, SITE };
 
 /** Logs in through the login page and waits for the reader. */
-export async function logIn(page: Page, name: string) {
+export async function logIn(page: Page, name: string, password = PASSWORD) {
 	await page.goto('/');
 	await page.getByLabel('Name').fill(name);
-	await page.getByLabel('Password').fill(PASSWORD);
+	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Log in' }).click();
 	await expect(sidebar(page)).toBeVisible();
 }
@@ -55,6 +55,18 @@ export async function subscribe(page: Page, path: string, title: string) {
 	await dialog.getByRole('button', { name: `Subscribe: ${title}` }).click();
 	await expect(node(page, title)).toBeVisible();
 	if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Close' }).click();
+}
+
+/**
+ * Opens the settings of the account from the menu of the account, where logging
+ * out is, on the tab asked for, and gives the window back.
+ */
+export async function accountSettings(page: Page, tab: string) {
+	await page.getByRole('button', { name: /^Logged in as / }).click();
+	await page.getByRole('menuitem', { name: 'Account settings' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Account settings' });
+	await dialog.getByRole('tab', { name: tab }).click();
+	return dialog;
 }
 
 /**

@@ -935,6 +935,7 @@ describe('reading', () => {
 			invites: true,
 			reports: true,
 			secondFactor: true,
+			password: true,
 			remove: true,
 			reportContent: false,
 			apps: false

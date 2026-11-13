@@ -11,6 +11,7 @@ import { defaults, settings } from '#lib/settings.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
 import ReportDialog from './ReportDialog.svelte';
 import TopBar from './TopBar.svelte';
+import AccountDialog from './AccountDialog.svelte';
 import SettingsDialog from './SettingsDialog.svelte';
 import StatusDialog from './StatusDialog.svelte';
 import SubscribeDialog from './SubscribeDialog.svelte';
@@ -47,6 +48,21 @@ describe('SettingsDialog', () => {
 		});
 		await userEvent.selectOptions(screen.getByLabelText('Language'), 'de');
 		expect(settings.language).toBe('de');
+	});
+
+	it('keeps to the page and says where the account is settled', async () => {
+		const session = { signOut: () => {}, expired: () => {} };
+		vi.stubGlobal('fetch', new FakeServer().fetch);
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		render(SettingsDialog, { reader, onclose: () => {} });
+		expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual([
+			'Appearance',
+			'Reading',
+			'Filter rules',
+			'Keyboard'
+		]);
+		expect(screen.getByText(/under Account settings, in the menu of your account/)).toBeVisible();
+		vi.unstubAllGlobals();
 	});
 
 	it('has a tab for reading, for the rules and for the keys', async () => {
@@ -441,6 +457,7 @@ describe('The status with a server', () => {
 			sidebarOpen: true,
 			ontogglesidebar: () => {},
 			onsettings: () => {},
+			onaccount: () => {},
 			onhelp: () => {},
 			onstatus: () => {}
 		});
@@ -456,6 +473,23 @@ describe('The status with a server', () => {
 		expect(status?.counts.subscribed_feeds).toBe(31);
 	});
 
+	it('leads to the settings of the account, where there are any', async () => {
+		const onaccount = vi.fn();
+		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
+		render(TopBar, {
+			reader,
+			sidebarOpen: true,
+			ontogglesidebar: () => {},
+			onsettings: () => {},
+			onaccount,
+			onhelp: () => {},
+			onstatus: () => {}
+		});
+		await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Account settings' }));
+		expect(onaccount).toHaveBeenCalledOnce();
+	});
+
 	it('is not there for a reader, and the server would not tell', async () => {
 		server.admin = false;
 		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
@@ -467,7 +501,7 @@ describe('The status with a server', () => {
 	});
 });
 
-describe('Privacy in the settings', () => {
+describe('Privacy in the account settings', () => {
 	let server: FakeServer;
 	const session = { signOut: () => {}, expired: () => {} };
 
@@ -484,7 +518,7 @@ describe('Privacy in the settings', () => {
 		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
 		const stop = reader.start();
 		await vi.waitFor(() => expect(reader.reportsConsent).not.toBeNull());
-		render(SettingsDialog, { reader, onclose: () => {} });
+		render(AccountDialog, { reader, onclose: () => {} });
 		return { reader, stop };
 	}
 
@@ -508,12 +542,12 @@ describe('Privacy in the settings', () => {
 		expect(screen.queryByRole('tab', { name: 'Privacy' })).toBeNull();
 		stop();
 		cleanup();
-		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
 		expect(screen.queryByRole('tab', { name: 'Privacy' })).toBeNull();
 	});
 });
 
-describe('Moving the account in the settings', () => {
+describe('Moving the account in the account settings', () => {
 	let server: FakeServer;
 	const session = { signOut: () => {}, expired: () => {} };
 
@@ -531,7 +565,7 @@ describe('Moving the account in the settings', () => {
 		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
 		const stop = reader.start();
 		await vi.waitFor(() => expect(reader.reportsConsent).not.toBeNull());
-		render(SettingsDialog, { reader, onclose: () => {} });
+		render(AccountDialog, { reader, onclose: () => {} });
 		await userEvent.click(screen.getByRole('tab', { name: 'Move' }));
 		return { reader, stop };
 	}
@@ -599,12 +633,96 @@ describe('Moving the account in the settings', () => {
 	});
 
 	it('is not there with made-up data', () => {
-		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
 		expect(screen.queryByRole('tab', { name: 'Move' })).toBeNull();
 	});
 });
 
-describe('Deleting the account in the settings', () => {
+describe('The password in the account settings', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => vi.unstubAllGlobals());
+
+	function opened(password = true) {
+		const reader = new ServerReader({ name: 'fiona', admin: false, password }, session);
+		render(AccountDialog, { reader, onclose: () => {} });
+		return reader;
+	}
+
+	it('is the first tab and takes the one so far with the new one', async () => {
+		opened();
+		expect(screen.getByRole('tab', { name: 'Password' })).toHaveAttribute('aria-selected', 'true');
+		const button = screen.getByRole('button', { name: 'Change the password' });
+		expect(button).toBeDisabled();
+
+		await userEvent.type(screen.getByLabelText('Current password'), 'correct horse');
+		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
+		// Not until both of the new ones are the same.
+		expect(button).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secre');
+		expect(screen.getByText('The two do not match.')).toBeInTheDocument();
+		expect(button).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('New password again'), 't');
+		expect(button).toBeEnabled();
+
+		await userEvent.click(button);
+		expect(await screen.findByRole('status')).toHaveTextContent('The password is changed.');
+		expect(server.accounts.get('fiona')).toBe('a longer secret');
+		expect(server.requests.at(-1)?.body).toEqual({
+			current: 'correct horse',
+			new: 'a longer secret'
+		});
+		// The fields are empty again, so the next browser does not read them.
+		expect(screen.getByLabelText('Current password')).toHaveValue('');
+	});
+
+	it('says when the one so far is wrong, and when the new one is too short', async () => {
+		opened();
+		await userEvent.type(screen.getByLabelText('Current password'), 'wrong');
+		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
+		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secret{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'The current password is not right.'
+		);
+		expect(server.accounts.get('fiona')).toBe('correct horse');
+
+		// Shorter than the server takes: the page does not even send it.
+		await userEvent.clear(screen.getByLabelText('New password'));
+		await userEvent.type(screen.getByLabelText('New password'), 'short');
+		await userEvent.clear(screen.getByLabelText('New password again'));
+		await userEvent.type(screen.getByLabelText('New password again'), 'short');
+		expect(screen.getByRole('button', { name: 'Change the password' })).toBeDisabled();
+	});
+
+	it('sets a first one for an account that logs in through single sign-on', async () => {
+		server.accounts.delete('fiona');
+		const reader = opened(false);
+		expect(screen.getByRole('tab', { name: 'Password' })).toBeInTheDocument();
+		expect(screen.queryByLabelText('Current password')).toBeNull();
+		expect(screen.getByText(/logs in through single sign-on/)).toBeInTheDocument();
+		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
+		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secret');
+		await userEvent.click(screen.getByRole('button', { name: 'Set the password' }));
+		expect(await screen.findByRole('status')).toHaveTextContent('The password is set.');
+		expect(server.accounts.get('fiona')).toBe('a longer secret');
+		// From now on the account has one, so the form asks for it.
+		expect(reader.account.password).toBe(true);
+		expect(screen.getByLabelText('Current password')).toBeInTheDocument();
+	});
+
+	it('is not there with made-up data, which has no account', () => {
+		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Password' })).toBeNull();
+	});
+});
+
+describe('Deleting the account in the account settings', () => {
 	let server: FakeServer;
 
 	beforeEach(() => {
@@ -620,8 +738,8 @@ describe('Deleting the account in the settings', () => {
 		const removed = vi.fn();
 		const session = { signOut: () => {}, expired: () => {}, removed };
 		const reader = new ServerReader({ name: 'fiona', admin: false, password }, session);
-		render(SettingsDialog, { reader, onclose: () => {} });
-		await userEvent.click(screen.getByRole('tab', { name: 'Account' }));
+		render(AccountDialog, { reader, onclose: () => {} });
+		await userEvent.click(screen.getByRole('tab', { name: 'Delete account' }));
 		return removed;
 	}
 
@@ -668,8 +786,8 @@ describe('Deleting the account in the settings', () => {
 	});
 
 	it('is not there with made-up data', () => {
-		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
-		expect(screen.queryByRole('tab', { name: 'Account' })).toBeNull();
+		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Delete account' })).toBeNull();
 	});
 });
 
@@ -687,7 +805,7 @@ describe('Errors in browsers on the status page', () => {
 	});
 });
 
-describe('the second factor in the settings', () => {
+describe('the second factor in the account settings', () => {
 	let server: FakeServer;
 	const session = { signOut: () => {}, expired: () => {} };
 
@@ -703,13 +821,13 @@ describe('the second factor in the settings', () => {
 	function open(account = { name: 'fiona', admin: false }) {
 		onclose.mockClear();
 		const reader = new ServerReader(account, session);
-		render(SettingsDialog, { reader, tab: 'security', onclose });
+		render(AccountDialog, { reader, tab: 'security', onclose });
 		return reader;
 	}
 
 	/** A click beside the window, and Escape. */
 	async function dismiss() {
-		await userEvent.click(screen.getByRole('dialog', { name: 'Settings' }).parentElement!);
+		await userEvent.click(screen.getByRole('dialog', { name: 'Account settings' }).parentElement!);
 		await userEvent.keyboard('{Escape}');
 	}
 
@@ -803,7 +921,7 @@ describe('the second factor in the settings', () => {
 	});
 
 	it('has no tab where the reader cannot have one', () => {
-		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
 		expect(screen.queryByRole('tab', { name: 'Security' })).toBeNull();
 	});
 });
@@ -869,7 +987,7 @@ describe('ReportDialog', () => {
 	});
 });
 
-describe('Apps in the settings', () => {
+describe('Apps in the account settings', () => {
 	let server: FakeServer;
 	const session = { signOut: () => {}, expired: () => {} };
 	const onclose = vi.fn();
@@ -891,7 +1009,7 @@ describe('Apps in the settings', () => {
 	function open(account: Partial<{ appApi: boolean }> = { appApi: true }) {
 		const reader = new ServerReader({ name: 'fiona', admin: false, ...account }, session);
 		reader.start();
-		render(SettingsDialog, { reader, tab: 'apps', onclose });
+		render(AccountDialog, { reader, tab: 'apps', onclose });
 		return reader;
 	}
 
@@ -914,7 +1032,7 @@ describe('Apps in the settings', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
 		expect(await screen.findByRole('alert')).toHaveTextContent('The password is not right.');
 		// A click beside the window does not lose the setup.
-		await userEvent.click(screen.getByRole('dialog', { name: 'Settings' }).parentElement!);
+		await userEvent.click(screen.getByRole('dialog', { name: 'Account settings' }).parentElement!);
 		expect(onclose).not.toHaveBeenCalled();
 		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
 		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
@@ -989,12 +1107,12 @@ describe('Apps in the settings', () => {
 	it('is not there where the server lets no app in', async () => {
 		server.appApi = false;
 		const reader = new ServerReader({ name: 'fiona', admin: false, appApi: false }, session);
-		render(SettingsDialog, { reader, onclose });
+		render(AccountDialog, { reader, onclose });
 		expect(screen.queryByRole('tab', { name: 'Apps' })).toBeNull();
 	});
 
 	it('shows in the draft, with app passwords that open nothing', async () => {
-		render(SettingsDialog, { reader: new DemoReader(() => now), tab: 'apps', onclose });
+		render(AccountDialog, { reader: new DemoReader(() => now), tab: 'apps', onclose });
 		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
 		await userEvent.click(screen.getByRole('button', { name: 'NetNewsWire' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));

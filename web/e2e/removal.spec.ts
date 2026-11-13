@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { database, PASSWORD } from './harness/ports.js';
-import { logIn, node, sidebar, subscribe } from './harness/helpers.ts';
+import { accountSettings, logIn, node, sidebar, subscribe } from './harness/helpers.ts';
 
 /** Runs `rueder` on the command line against the database of the run. */
 function rueder(...args: string[]) {
@@ -20,12 +20,7 @@ function rueder(...args: string[]) {
 	});
 }
 
-const openAccount = async (page: Page) => {
-	await page.getByRole('button', { name: 'Settings' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Settings' });
-	await dialog.getByRole('tab', { name: 'Account' }).click();
-	return dialog;
-};
+const openAccount = (page: Page) => accountSettings(page, 'Delete account');
 
 const tryLogIn = async (page: Page, name: string, password: string) => {
 	await page.goto('/');

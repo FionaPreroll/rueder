@@ -5,6 +5,7 @@
 	// Where the feeds and articles come from is the business of the `reader` it is
 	// given.
 	import { onMount, tick, untrack } from 'svelte';
+	import type { AccountTab } from '#lib/account.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
 	import { sameStream, type Article, type ArticleVersion, type Stream } from '#lib/model.ts';
@@ -13,6 +14,7 @@
 	import { settings, widths } from '#lib/settings.svelte.ts';
 	import { closeView, dropSpots, noteView, openView } from '#lib/view.ts';
 	import { Journey } from '#lib/history.ts';
+	import AccountDialog from './AccountDialog.svelte';
 	import ArticleList from './ArticleList.svelte';
 	import ArticlePane from './ArticlePane.svelte';
 	import HomeOverview from './HomeOverview.svelte';
@@ -34,8 +36,10 @@
 	let now = $state(Date.now());
 
 	let sidebarOpen = $state(true);
-	let dialog: 'settings' | 'subscribe' | 'status' | null = $state(null);
+	let dialog: 'settings' | 'account' | 'subscribe' | 'status' | null = $state(null);
 	let settingsTab: 'look' | 'reading' | 'rules' | 'keys' = $state('look');
+	/** Which of the account's settings is open; it stays as it was left. */
+	let accountTab: AccountTab = $state('password');
 	/** The article whose versions are compared, by id: it is replaced when it changes. */
 	let comparing: { id: string; versions: ArticleVersion[] } | null = $state(null);
 
@@ -300,6 +304,7 @@
 		{sidebarOpen}
 		ontogglesidebar={() => (sidebarOpen = !sidebarOpen)}
 		onsettings={() => openSettings('look')}
+		onaccount={() => (dialog = 'account')}
 		onhelp={() => openSettings('keys')}
 		onstatus={() => (dialog = 'status')}
 	/>
@@ -436,6 +441,8 @@
 
 {#if dialog === 'settings'}
 	<SettingsDialog {reader} bind:tab={settingsTab} onclose={() => (dialog = null)} />
+{:else if dialog === 'account'}
+	<AccountDialog {reader} bind:tab={accountTab} onclose={() => (dialog = null)} />
 {:else if dialog === 'subscribe'}
 	<SubscribeDialog {reader} onclose={() => (dialog = null)} />
 {:else if dialog === 'status'}

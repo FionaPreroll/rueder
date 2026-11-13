@@ -3,16 +3,14 @@
 // password shown, reading, marking as read, images, and revoking it.
 
 import { expect, test } from '@playwright/test';
-import { logIn, node, PASSWORD, subscribe } from './harness/helpers.ts';
+import { accountSettings, logIn, node, PASSWORD, subscribe } from './harness/helpers.ts';
 
 test('an app is set up in the settings, syncs, and stops when revoked', async ({ page }) => {
 	await logIn(page, 'apps');
 	await subscribe(page, 'harbour-apps', 'Harbour Herald');
 	await expect(node(page, 'Harbour Herald')).toContainText('(12)');
 
-	await page.getByRole('button', { name: 'Settings' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Settings' });
-	await dialog.getByRole('tab', { name: 'Apps' }).click();
+	const dialog = await accountSettings(page, 'Apps');
 	await dialog.getByRole('button', { name: 'Set up an app' }).click();
 	await expect(dialog.getByRole('link', { name: 'Website of NetNewsWire' })).toHaveAttribute(
 		'href',
