@@ -1298,6 +1298,8 @@ export class ServerReader implements Reader {
 				...listed,
 				...text,
 				title: opened.title,
+				// The text may be newer than the list; then what changed is its, too.
+				changed: opened.updated_what,
 				updatedAt: opened.updated_at ? Date.parse(opened.updated_at) : null
 			}));
 		} catch (error) {
