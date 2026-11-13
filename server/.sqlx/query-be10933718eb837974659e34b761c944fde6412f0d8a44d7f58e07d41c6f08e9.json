@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM status_slots WHERE starts_at < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "be10933718eb837974659e34b761c944fde6412f0d8a44d7f58e07d41c6f08e9"
+}

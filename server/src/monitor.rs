@@ -1,7 +1,9 @@
 //! What the server notices about itself while it runs: how long requests take,
 //! how fetching, the feed search and the image proxy fare, and the warnings and
-//! errors it logs. All of it lives in memory, for the last hour, and is gone
-//! with a restart; the status page of the admins shows it ([`crate::status`]).
+//! errors it logs. It counts in memory, in parts of ten minutes, and shows the
+//! last hour from there; [`crate::history`] writes the parts to the database
+//! and reads them back after a restart, and counts over longer times from
+//! there. The status page of the admins shows it ([`crate::status`]).
 //!
 //! Nothing here keeps an address, a name or a text of anybody's: requests are
 //! counted by the route they took, not by the address they asked for, and the
@@ -20,6 +22,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use time::OffsetDateTime;
 use tower_http::classify::{
     ClassifiedResponse, ClassifyResponse, NeverClassifyEos, ServerErrorsAsFailures,
@@ -34,27 +37,56 @@ use tracing_subscriber::layer::{Context, Layer};
 use crate::{AppState, fetch::Pace, images::SourceFailed};
 
 /// How long one part of the hour is.
-const SLOT: Duration = Duration::from_secs(10 * 60);
+pub const SLOT: Duration = Duration::from_secs(10 * 60);
 /// How many parts the window has: an hour.
-const SLOTS: usize = 6;
+pub const SLOTS: usize = 6;
 /// How many routes are counted apart. Routes are what the code defines, so
 /// there are far fewer; the rest would count as one.
-const MAX_ROUTES: usize = 200;
+pub const MAX_ROUTES: usize = 200;
 /// How many different problems are kept.
-const MAX_PROBLEMS: usize = 100;
+pub const MAX_PROBLEMS: usize = 100;
 /// The longest text of a problem, in characters.
 const MAX_PROBLEM_TEXT: usize = 1000;
 
-/// When the parts of the hour are counted from: the first time anybody asked.
-static EPOCH: LazyLock<Instant> = LazyLock::new(Instant::now);
+/// The clock the parts of the hour go by: an instant and the time it was
+/// then. A part is numbered by the ten minutes since 1970 it falls in, so that
+/// the parts are the same in every process and can be read back after a
+/// restart.
+static CLOCK: LazyLock<(Instant, OffsetDateTime)> =
+    LazyLock::new(|| (Instant::now(), OffsetDateTime::now_utc()));
 
-/// The number of the part of the hour `now` falls in.
-fn slot(now: Instant) -> u64 {
-    now.saturating_duration_since(*EPOCH).as_secs() / SLOT.as_secs()
+/// The nanoseconds since 1970 at `now`.
+fn unix_ns(now: Instant) -> i128 {
+    let (then, at) = *CLOCK;
+    let at = at.unix_timestamp_nanos();
+    match now.checked_duration_since(then) {
+        Some(after) => at + after.as_nanos() as i128,
+        None => at - then.duration_since(now).as_nanos() as i128,
+    }
 }
 
-/// What can be counted in a window: two counts make one.
-pub trait Tally: Default + Clone {
+/// The number of the part of the hour `now` falls in.
+pub fn slot(now: Instant) -> u64 {
+    let part = i128::from(SLOT.as_secs()) * 1_000_000_000;
+    u64::try_from(unix_ns(now).div_euclid(part)).unwrap_or(0)
+}
+
+/// The number of the part of the hour `at` falls in.
+pub fn slot_at(at: OffsetDateTime) -> u64 {
+    u64::try_from(at.unix_timestamp()).unwrap_or(0) / SLOT.as_secs()
+}
+
+/// When the part with this number begins.
+pub fn slot_start(number: u64) -> OffsetDateTime {
+    i64::try_from(number.saturating_mul(SLOT.as_secs()))
+        .ok()
+        .and_then(|seconds| OffsetDateTime::from_unix_timestamp(seconds).ok())
+        .unwrap_or(OffsetDateTime::UNIX_EPOCH)
+}
+
+/// What can be counted in a window: two counts make one. It goes to the
+/// database as JSON and comes back from there.
+pub trait Tally: Default + Clone + Serialize + DeserializeOwned {
     fn add(&mut self, other: &Self);
 }
 
@@ -63,12 +95,15 @@ pub trait Tally: Default + Clone {
 #[derive(Clone)]
 pub struct Window<T> {
     slots: [(u64, T); SLOTS],
+    /// The parts that were counted in since they were last taken to be saved.
+    changed: [bool; SLOTS],
 }
 
 impl<T: Tally> Default for Window<T> {
     fn default() -> Self {
         Self {
             slots: std::array::from_fn(|_| (0, T::default())),
+            changed: [false; SLOTS],
         }
     }
 }
@@ -77,12 +112,45 @@ impl<T: Tally> Window<T> {
     /// The count of the part `now` falls in.
     pub fn at(&mut self, now: Instant) -> &mut T {
         let current = slot(now);
-        let (number, tally) = &mut self.slots[(current % SLOTS as u64) as usize];
+        let index = (current % SLOTS as u64) as usize;
+        let (number, tally) = &mut self.slots[index];
         if *number != current {
             *number = current;
             *tally = T::default();
         }
+        self.changed[index] = true;
         tally
+    }
+
+    /// The parts that were counted in since the last time, by their number,
+    /// to be saved. They count as unchanged afterwards.
+    pub fn take_changed(&mut self) -> Vec<(u64, T)> {
+        let mut changed = Vec::new();
+        for ((number, tally), was) in self.slots.iter().zip(&mut self.changed) {
+            if std::mem::take(was) && *number > 0 {
+                changed.push((*number, tally.clone()));
+            }
+        }
+        changed
+    }
+
+    /// Puts back a part that was saved, if it is within the hour before `now`.
+    /// What was counted in that part since is added to it, and the part then
+    /// counts as changed.
+    pub fn restore(&mut self, number: u64, saved: &T, now: Instant) {
+        let current = slot(now);
+        if number > current || number + SLOTS as u64 <= current {
+            return;
+        }
+        let index = (number % SLOTS as u64) as usize;
+        let (known, tally) = &mut self.slots[index];
+        if *known == number {
+            tally.add(saved);
+            self.changed[index] = true;
+        } else if *known < number {
+            *known = number;
+            *tally = saved.clone();
+        }
     }
 
     /// All that was counted in the hour before `now`.
@@ -111,11 +179,12 @@ fn bound(bucket: usize) -> f64 {
 /// How long things took: how many, the sum, the longest, and how many fell in
 /// each bucket, which is enough to tell the median and the 95th percentile to
 /// within a quarter.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Timing {
     pub count: u64,
     total_us: u64,
     max_us: u64,
+    #[serde(with = "buckets")]
     buckets: [u64; BUCKETS],
 }
 
@@ -132,12 +201,44 @@ impl Default for Timing {
 
 impl Tally for Timing {
     fn add(&mut self, other: &Self) {
-        self.count += other.count;
+        add(&mut self.count, other.count);
         self.total_us = self.total_us.saturating_add(other.total_us);
         self.max_us = self.max_us.max(other.max_us);
         for (mine, theirs) in self.buckets.iter_mut().zip(other.buckets) {
-            *mine += theirs;
+            add(mine, theirs);
         }
+    }
+}
+
+/// Adds a count to another. Counts read back from the database are not
+/// trusted to be small, so this never overflows.
+fn add(to: &mut u64, more: u64) {
+    *to = to.saturating_add(more);
+}
+
+/// The buckets of a [`Timing`] as they are saved: without the empty ones at
+/// the end, which are most of them.
+mod buckets {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    use super::BUCKETS;
+
+    pub fn serialize<S: Serializer>(buckets: &[u64; BUCKETS], to: S) -> Result<S::Ok, S::Error> {
+        let used = buckets
+            .iter()
+            .rposition(|&n| n > 0)
+            .map_or(0, |last| last + 1);
+        to.collect_seq(&buckets[..used])
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(from: D) -> Result<[u64; BUCKETS], D::Error> {
+        let saved = Vec::<u64>::deserialize(from)?;
+        if saved.len() > BUCKETS {
+            return Err(D::Error::custom("more buckets than a timing has"));
+        }
+        let mut buckets = [0; BUCKETS];
+        buckets[..saved.len()].copy_from_slice(&saved);
+        Ok(buckets)
     }
 }
 
@@ -150,7 +251,7 @@ impl Timing {
         let bucket = (0..BUCKETS)
             .find(|&bucket| us as f64 <= bound(bucket))
             .unwrap_or(BUCKETS - 1);
-        self.buckets[bucket] += 1;
+        add(&mut self.buckets[bucket], 1);
     }
 
     /// The time in milliseconds that the share `q` of all took at most, as the
@@ -181,7 +282,7 @@ impl Timing {
 }
 
 /// The requests to one route.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Requests {
     pub timing: Timing,
     /// Answers by their first digit: 1xx to 5xx. An image whose source did
@@ -195,14 +296,14 @@ impl Tally for Requests {
     fn add(&mut self, other: &Self) {
         self.timing.add(&other.timing);
         for (mine, theirs) in self.answers.iter_mut().zip(other.answers) {
-            *mine += theirs;
+            add(mine, theirs);
         }
-        self.limited += other.limited;
+        add(&mut self.limited, other.limited);
     }
 }
 
 /// How fetching went.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Fetches {
     /// How long a fetch took, from asking the site to having stored it.
     pub timing: Timing,
@@ -221,11 +322,11 @@ pub struct Fetches {
 impl Tally for Fetches {
     fn add(&mut self, other: &Self) {
         self.timing.add(&other.timing);
-        self.fetched += other.fetched;
-        self.unchanged += other.unchanged;
-        self.failed += other.failed;
-        self.broken += other.broken;
-        self.new_articles += other.new_articles;
+        add(&mut self.fetched, other.fetched);
+        add(&mut self.unchanged, other.unchanged);
+        add(&mut self.failed, other.failed);
+        add(&mut self.broken, other.broken);
+        add(&mut self.new_articles, other.new_articles);
     }
 }
 
@@ -247,7 +348,7 @@ pub struct Round {
 }
 
 /// How the feed search went: what a reader typed was looked at for feeds.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Lookups {
     pub timing: Timing,
     /// Lookups that found at least one feed.
@@ -263,10 +364,10 @@ pub struct Lookups {
 impl Tally for Lookups {
     fn add(&mut self, other: &Self) {
         self.timing.add(&other.timing);
-        self.found += other.found;
-        self.none += other.none;
-        self.failed += other.failed;
-        self.limited += other.limited;
+        add(&mut self.found, other.found);
+        add(&mut self.none, other.none);
+        add(&mut self.failed, other.failed);
+        add(&mut self.limited, other.limited);
     }
 }
 
@@ -280,7 +381,7 @@ pub enum Looked {
 }
 
 /// What the image proxy served.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Images {
     /// How long images took that were not in the cache.
     pub timing: Timing,
@@ -301,12 +402,12 @@ pub struct Images {
 impl Tally for Images {
     fn add(&mut self, other: &Self) {
         self.timing.add(&other.timing);
-        self.cached += other.cached;
-        self.fetched += other.fetched;
-        self.not_found += other.not_found;
-        self.source_failed += other.source_failed;
-        self.not_image += other.not_image;
-        self.too_large += other.too_large;
+        add(&mut self.cached, other.cached);
+        add(&mut self.fetched, other.fetched);
+        add(&mut self.not_found, other.not_found);
+        add(&mut self.source_failed, other.source_failed);
+        add(&mut self.not_image, other.not_image);
+        add(&mut self.too_large, other.too_large);
     }
 }
 
@@ -449,6 +550,66 @@ impl Monitor {
             .map(|window| window.last_hour(now))
             .unwrap_or_default()
     }
+
+    /// The parts of the hour that were counted in since the last time, to be
+    /// saved. The images are the proxy's to say ([`crate::images::ImageProxy`]).
+    pub fn take_changed(&self) -> Changed {
+        let mut changed = Changed::default();
+        if let Ok(mut routes) = self.requests.lock() {
+            for (route, window) in routes.iter_mut() {
+                for (number, requests) in window.take_changed() {
+                    changed.requests.push((number, route.clone(), requests));
+                }
+            }
+        }
+        if let Ok(mut window) = self.fetches.lock() {
+            changed.fetches = window.take_changed();
+        }
+        if let Ok(mut window) = self.lookups.lock() {
+            changed.lookups = window.take_changed();
+        }
+        changed.problems = self.problems.take_changed_counts();
+        changed
+    }
+
+    /// Puts back the requests to a route that were saved, within the hour
+    /// before `now` and the limit of routes.
+    pub fn restore_requests(&self, number: u64, route: &str, saved: &Requests, now: Instant) {
+        let Ok(mut routes) = self.requests.lock() else {
+            return;
+        };
+        let route = if routes.contains_key(route) || routes.len() < MAX_ROUTES {
+            route
+        } else {
+            "other"
+        };
+        routes
+            .entry(route.to_owned())
+            .or_default()
+            .restore(number, saved, now);
+    }
+
+    pub fn restore_fetches(&self, number: u64, saved: &Fetches, now: Instant) {
+        if let Ok(mut window) = self.fetches.lock() {
+            window.restore(number, saved, now);
+        }
+    }
+
+    pub fn restore_lookups(&self, number: u64, saved: &Lookups, now: Instant) {
+        if let Ok(mut window) = self.lookups.lock() {
+            window.restore(number, saved, now);
+        }
+    }
+}
+
+/// What was counted since it was last saved, by the number of its part of
+/// the hour.
+#[derive(Default, Debug)]
+pub struct Changed {
+    pub requests: Vec<(u64, String, Requests)>,
+    pub fetches: Vec<(u64, Fetches)>,
+    pub lookups: Vec<(u64, Lookups)>,
+    pub problems: Vec<(u64, ProblemCount)>,
 }
 
 /// Around everything the server answers: counts the request for its route,
@@ -530,7 +691,7 @@ pub struct Problem {
     pub last: OffsetDateTime,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct ProblemCount {
     pub warnings: u64,
     pub errors: u64,
@@ -538,8 +699,8 @@ pub struct ProblemCount {
 
 impl Tally for ProblemCount {
     fn add(&mut self, other: &Self) {
-        self.warnings += other.warnings;
-        self.errors += other.errors;
+        add(&mut self.warnings, other.warnings);
+        add(&mut self.errors, other.errors);
     }
 }
 
@@ -554,6 +715,14 @@ pub struct Problems {
 struct Kept {
     problems: VecDeque<Problem>,
     counts: Window<ProblemCount>,
+    /// Whether the list changed since it was last taken to be saved.
+    changed: bool,
+}
+
+impl Problem {
+    fn same(&self, other: &Problem) -> bool {
+        self.severity == other.severity && self.target == other.target && self.text == other.text
+    }
 }
 
 impl Problems {
@@ -568,6 +737,7 @@ impl Problems {
         }
         let text = shortened(text);
         let at = OffsetDateTime::now_utc();
+        kept.changed = true;
         let known = kept.problems.iter().position(|problem| {
             problem.severity == severity && problem.target == target && problem.text == text
         });
@@ -604,6 +774,60 @@ impl Problems {
             .lock()
             .map(|kept| kept.counts.last_hour(now))
             .unwrap_or_default()
+    }
+
+    /// The list, if it changed since the last time, to be saved.
+    pub fn take_changed(&self) -> Option<Vec<Problem>> {
+        let mut kept = self.kept.lock().ok()?;
+        std::mem::take(&mut kept.changed).then(|| kept.problems.iter().cloned().collect())
+    }
+
+    /// The parts of the hour of the counts that changed since the last time.
+    pub fn take_changed_counts(&self) -> Vec<(u64, ProblemCount)> {
+        self.kept
+            .lock()
+            .map(|mut kept| kept.counts.take_changed())
+            .unwrap_or_default()
+    }
+
+    /// Puts back a list that was saved, behind what was logged since the
+    /// start; the same problem in both is one.
+    pub fn restore(&self, saved: Vec<Problem>) {
+        let Ok(mut kept) = self.kept.lock() else {
+            return;
+        };
+        if !kept.problems.is_empty() {
+            kept.changed = true;
+        }
+        for mut problem in saved {
+            problem.text = shortened(&problem.text);
+            match kept.problems.iter_mut().find(|known| known.same(&problem)) {
+                Some(known) => {
+                    known.count = known.count.saturating_add(problem.count);
+                    known.first = known.first.min(problem.first);
+                }
+                None => kept.problems.push_back(problem),
+            }
+        }
+        kept.problems.truncate(MAX_PROBLEMS);
+    }
+
+    /// Puts back the counts of a part of the hour that were saved.
+    pub fn restore_counts(&self, number: u64, saved: &ProblemCount, now: Instant) {
+        if let Ok(mut kept) = self.kept.lock() {
+            kept.counts.restore(number, saved, now);
+        }
+    }
+
+    /// Forgets the problems that last happened before `cutoff`.
+    pub fn forget_before(&self, cutoff: OffsetDateTime) {
+        if let Ok(mut kept) = self.kept.lock() {
+            let before = kept.problems.len();
+            kept.problems.retain(|problem| problem.last >= cutoff);
+            if kept.problems.len() != before {
+                kept.changed = true;
+            }
+        }
     }
 
     /// What gathers the warnings and errors of the log here.
@@ -691,10 +915,121 @@ mod tests {
     use super::*;
     use axum::response::IntoResponse;
 
+    /// The instant the part after the one of now begins, so that a test does
+    /// not depend on the clock.
+    fn next_part() -> Instant {
+        let now = Instant::now();
+        let part = i128::from(SLOT.as_secs()) * 1_000_000_000;
+        let wait = part - unix_ns(now).rem_euclid(part);
+        now + Duration::from_nanos(u64::try_from(wait).unwrap())
+    }
+
+    #[test]
+    fn parts_of_the_hour_fall_on_the_clock() {
+        let start = next_part();
+        let number = slot(start);
+        assert_eq!(slot(start - Duration::from_millis(1)), number - 1);
+        assert_eq!(slot(start + SLOT - Duration::from_millis(1)), number);
+        let begins = slot_start(number);
+        assert_eq!(begins.unix_timestamp() % 600, 0);
+        assert_eq!(slot_at(begins), number);
+        assert_eq!(slot_at(begins + time::Duration::minutes(9)), number);
+        // A time far off neither panics nor wraps around.
+        assert_eq!(slot_start(u64::MAX), OffsetDateTime::UNIX_EPOCH);
+        assert_eq!(slot_at(OffsetDateTime::UNIX_EPOCH - time::Duration::DAY), 0);
+    }
+
+    #[test]
+    fn a_window_says_what_changed_and_takes_back_what_was_saved() {
+        let start = next_part();
+        let mut window = Window::<Lookups>::default();
+        assert!(window.take_changed().is_empty());
+        window.at(start).found += 1;
+        window.at(start + SLOT).found += 2;
+        let changed = window.take_changed();
+        assert_eq!(
+            changed
+                .iter()
+                .map(|(number, lookups)| (*number - slot(start), lookups.found))
+                .collect::<Vec<_>>(),
+            [(0, 1), (1, 2)]
+        );
+        assert!(window.take_changed().is_empty());
+
+        // After a restart: what was saved comes back, and what was counted
+        // in the same part since is added to it.
+        let now = start + SLOT + Duration::from_secs(60);
+        let mut again = Window::<Lookups>::default();
+        again.at(now).found += 10;
+        let _ = again.take_changed();
+        for (number, lookups) in &changed {
+            again.restore(*number, lookups, now);
+        }
+        assert_eq!(again.last_hour(now).found, 13);
+        // Only the part with something of its own changes: the other one is
+        // in the database as it is.
+        let changed = again.take_changed();
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].1.found, 12);
+        // What is older than an hour, or later than now, stays out.
+        again.restore(slot(now) - SLOTS as u64, &changed[0].1, now);
+        again.restore(slot(now) + 1, &changed[0].1, now);
+        assert_eq!(again.last_hour(now).found, 13);
+    }
+
+    #[test]
+    fn a_timing_is_saved_without_its_empty_buckets() {
+        let mut timing = Timing::default();
+        timing.note(Duration::from_millis(3));
+        timing.note(Duration::from_millis(40));
+        let json = serde_json::to_value(&timing).unwrap();
+        assert!(json["buckets"].as_array().unwrap().len() < BUCKETS / 2);
+        let back: Timing = serde_json::from_value(json).unwrap();
+        assert_eq!(back, timing);
+        let too_many = serde_json::json!({
+            "count": 1, "total_us": 1, "max_us": 1, "buckets": vec![1; BUCKETS + 1]
+        });
+        assert!(serde_json::from_value::<Timing>(too_many).is_err());
+        // Counts that do not fit stop at the largest number.
+        let mut big = Lookups {
+            found: u64::MAX,
+            ..Lookups::default()
+        };
+        big.add(&big.clone());
+        assert_eq!(big.found, u64::MAX);
+    }
+
+    #[test]
+    fn problems_that_were_saved_come_back_behind_the_new_ones() {
+        let problems = Problems::default();
+        let now = Instant::now();
+        assert!(problems.take_changed().is_none());
+        problems.note(Severity::Error, "rueder", "the database is gone", now);
+        problems.note(Severity::Warning, "rueder", "slow", now);
+        let saved = problems.take_changed().unwrap();
+        assert!(problems.take_changed().is_none());
+
+        let again = Problems::default();
+        again.note(Severity::Warning, "rueder", "slow", now);
+        again.note(Severity::Warning, "rueder", "new", now);
+        let _ = again.take_changed();
+        again.restore(saved);
+        let list = again.list();
+        let texts: Vec<_> = list.iter().map(|p| (p.text.as_str(), p.count)).collect();
+        assert_eq!(
+            texts,
+            [("new", 1), ("slow", 2), ("the database is gone", 1)]
+        );
+        assert!(again.take_changed().is_some());
+
+        again.forget_before(OffsetDateTime::now_utc() + time::Duration::SECOND);
+        assert!(again.list().is_empty());
+        assert!(again.take_changed().is_some());
+    }
+
     #[test]
     fn a_window_forgets_what_is_older_than_an_hour() {
-        // The start of a part, so that the test does not depend on the clock.
-        let start = *EPOCH;
+        let start = next_part();
         let mut window = Window::<Lookups>::default();
         window.at(start).found += 1;
         window.at(start + Duration::from_secs(30 * 60)).found += 2;

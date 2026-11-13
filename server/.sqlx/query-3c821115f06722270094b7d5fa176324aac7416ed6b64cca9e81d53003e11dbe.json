@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE retention SET status_days = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3c821115f06722270094b7d5fa176324aac7416ed6b64cca9e81d53003e11dbe"
+}
