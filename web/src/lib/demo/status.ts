@@ -18,6 +18,19 @@ export function demoStatus(now: number): ServerStatus {
 	const uptime = 26 * 60 * 60 + 17 * 60;
 	return {
 		version: '0.1.0',
+		build: {
+			version: '0.1.0',
+			commit: '9f1c2d4e5a6b7c8d9e0f1a2b3c4d5e6f70819293',
+			branch: 'main',
+			tag: 'v0.1.0',
+			dirty: false,
+			built_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, 'Z'),
+			target: 'x86_64-unknown-linux-gnu',
+			profile: 'release',
+			opt_level: '3',
+			ci_run: 'https://github.com/FionaPreroll/rueder/actions/runs/1234567890',
+			container: true
+		},
 		started_at: ago(uptime),
 		uptime_s: uptime,
 		memory_bytes: 74 * 1024 * 1024,

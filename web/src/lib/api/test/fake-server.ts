@@ -51,6 +51,7 @@ export interface FakeArticle {
 	url: string | null;
 	published_at: string;
 	updated_at: string | null;
+	updated_what: ApiListItem['updated_what'];
 	version: number;
 	html: string;
 	tags: string[];
@@ -255,6 +256,7 @@ export class FakeServer {
 				url: `https://feed-${feedId}.example/${seq}`,
 				published_at: new Date(START + id * MINUTE).toISOString(),
 				updated_at: null,
+				updated_what: null,
 				version: 1,
 				html: `<p>Text ${seq} of feed ${feedId}.</p>`,
 				tags: ['news'],
@@ -1092,6 +1094,7 @@ function listed(a: FakeArticle): ApiListItem {
 		id: a.id,
 		published_at: a.published_at,
 		updated_at: a.updated_at,
+		updated_what: a.updated_what,
 		version: a.version,
 		title: a.title,
 		teaser: a.teaser,

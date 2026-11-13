@@ -32,6 +32,7 @@ pub mod subscribe;
 pub mod transfer;
 pub mod tree;
 pub mod typescript;
+pub mod version;
 
 use std::{path::Path, sync::Arc, time::Duration};
 

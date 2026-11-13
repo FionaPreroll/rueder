@@ -20,7 +20,7 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    reclean, registration, reports, router, second_factor, sessions, transfer,
+    reclean, registration, reports, router, second_factor, sessions, transfer, version,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -37,7 +37,9 @@ const LISTEN_ADDR: &str = "127.0.0.1:3000";
 
 /// rueder server. Configured through DATABASE_URL, LISTEN_ADDR and STATIC_DIR.
 #[derive(Parser)]
-#[command(version)]
+// Not only the version: which commit it was built from and when, so that a
+// report about a server says which rueder it is about.
+#[command(version = version::LINE)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,

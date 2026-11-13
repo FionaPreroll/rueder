@@ -787,6 +787,7 @@ export class DemoReader implements Reader {
 		const revised: DemoArticle = {
 			...before,
 			changes: before.versions.length + 1,
+			changed: 'text',
 			versions: [
 				...before.versions,
 				{

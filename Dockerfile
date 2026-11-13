@@ -21,7 +21,21 @@ RUN pnpm run build
 # the build needs no database.
 FROM rust:1-trixie@sha256:8a4e90c7946b74626488b1446f712c0fe0ed1a596cbd3d871684bc9c5433ae07 AS server
 WORKDIR /src/server
-ENV SQLX_OFFLINE=true
+# Which commit this image is of, for the status page: the build context holds
+# server/ and web/ and no git directory, so whoever builds passes it in. CI
+# does (see .github/workflows/ci.yml); a build by hand may leave it out, and
+# the status then says it does not know.
+ARG RUEDER_COMMIT=""
+ARG RUEDER_BRANCH=""
+ARG RUEDER_TAG=""
+ARG RUEDER_DIRTY=""
+ARG RUEDER_CI_RUN=""
+ENV SQLX_OFFLINE=true \
+    RUEDER_COMMIT=$RUEDER_COMMIT \
+    RUEDER_BRANCH=$RUEDER_BRANCH \
+    RUEDER_TAG=$RUEDER_TAG \
+    RUEDER_DIRTY=$RUEDER_DIRTY \
+    RUEDER_CI_RUN=$RUEDER_CI_RUN
 COPY server/ ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/server/target \
@@ -45,7 +59,8 @@ COPY --from=server --chown=nonroot:nonroot /var/cache/rueder /var/cache/rueder
 # come from the environment when the container starts, never from the image.
 ENV LISTEN_ADDR=0.0.0.0:3000 \
     STATIC_DIR=/usr/share/rueder/web \
-    IMAGE_CACHE_DIR=/var/cache/rueder
+    IMAGE_CACHE_DIR=/var/cache/rueder \
+    RUEDER_CONTAINER=1
 VOLUME /var/cache/rueder
 EXPOSE 3000
 USER nonroot
