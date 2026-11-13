@@ -1,10 +1,15 @@
 name: gitleaks
+# Every commit of a pull request, and what lands on main. Pushes to other
+# branches are checked with their pull request; GitHub's push protection
+# stops known kinds of secrets before they reach the repository at all (see
+# "Einstellungen des Repositorys" in docs/implementation.md). Nothing runs on
+# a schedule: the history does not change, and gitleaks only finds something
+# new in it with a new version, which comes with an update of the action.
 on:
   pull_request:
   push:
+    branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: "0 5 * * *" # run once a day at 5 AM
 
 jobs:
   scan:
@@ -18,6 +23,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
+      # The version of gitleaks is the one the action names at this commit
+      # (8.24.3 in v2.3.9), so Dependabot raises it with the action. The
+      # action downloads it from gitleaks' releases without a checksum; the
+      # job can only read, so a bad download could at worst miss a secret.
       - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
+          # For the list of a pull request's commits.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The token may not comment; a finding fails the check instead.
+          GITLEAKS_ENABLE_COMMENTS: "false"
