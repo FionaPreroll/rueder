@@ -7,6 +7,8 @@
 		down: 'M6 9l6 6 6-6',
 		up: 'M6 15l6-6 6 6',
 		list: 'M4 6h16M4 12h16M4 18h16',
+		filter: 'M4 6h16M7 12h10M10 18h4',
+		unread: 'M4 6h16M7 12h10M10 18h4M19 17a2 2 0 1 0 0-.01',
 		expanded: 'M4 5h16v5H4zM4 14h16v5H4z',
 		split: 'M3 5h18v14H3zM8 5v14M14 5v14M10 9h2M10 12h2M10 15h2',
 		magazine: 'M3 4h18v8H3zM3 15h5v5H3zM10 15h4v5h-4zM16 15h5v5h-5z',
