@@ -158,13 +158,16 @@ const de: Messages = {
 		reconnecting: 'Verbindung wird wiederhergestellt …',
 		unreachable: (since: string) => `Der Server antwortet nicht, seit ${since}.`,
 		offline: (since: string) => `Kein Netz, seit ${since}.`,
-		retry: 'Jetzt versuchen'
+		retry: 'Jetzt versuchen',
+		unsent: (count: number) =>
+			plural(count, { one: '1 Änderung wartet.', other: `${n(count)} Änderungen warten.` })
 	},
 
 	notice: {
 		unreachable: 'Der Server antwortet nicht. Was du siehst, ist vielleicht nicht mehr aktuell.',
 		notSaved:
-			'Der Server hat deine letzte Änderung nicht angenommen. Sie wurde hier zurückgenommen.'
+			'Der Server hat deine letzte Änderung nicht angenommen. Sie wurde hier zurückgenommen.',
+		tooManyUnsent: 'Es warten so viele Änderungen auf den Server, dass diese zurückgenommen wurde.'
 	},
 
 	login: {

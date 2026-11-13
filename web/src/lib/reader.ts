@@ -200,7 +200,9 @@ export type Notice =
 	/** The server did not answer, or not with what was asked for. */
 	| 'unreachable'
 	/** The server refused a change; it was taken back. */
-	| 'notSaved';
+	| 'notSaved'
+	/** So many changes wait for the server that one more was taken back. */
+	| 'tooManyUnsent';
 
 /** What a reader can do. The page leaves out the controls for the rest. */
 export interface Abilities {
@@ -408,6 +410,8 @@ export interface Reader {
 	readonly connection: Connection;
 	/** Tries to reach the server again now, instead of after a while. */
 	reconnect(): void;
+	/** How many changes wait for the server, which did not answer; they go once it does. */
+	readonly unsentChanges: number;
 
 	readonly can: Abilities;
 	/** Who is logged in; null where there is nobody to log in. */

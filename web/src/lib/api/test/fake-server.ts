@@ -231,6 +231,8 @@ export class FakeServer {
 	now = () => Date.now();
 	/** The server is not there at all: `fetch` fails. */
 	down = false;
+	/** Every change of an article's state the server took, in its order. */
+	stateChanges: { seq: number; read?: unknown; starred?: unknown }[] = [];
 	/** Connections for live updates open, but the server says nothing on them, not even `hello`. */
 	silent = false;
 	private refusals: Refusal[] = [];
@@ -612,6 +614,7 @@ export class FakeServer {
 			}
 			if (method === 'GET' && one[3] === '/versions') return json({ versions: article.versions });
 			if (method === 'PUT' && one[3] === '/state') {
+				this.stateChanges.push({ seq: article.seq, ...data });
 				if (typeof data.read === 'boolean') article.read = data.read;
 				if (typeof data.starred === 'boolean') article.starred = data.starred;
 				return empty();
