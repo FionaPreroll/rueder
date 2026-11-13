@@ -4,10 +4,11 @@
 	// article, where there is room for both. The keyboard shortcuts are handled here, for the whole page.
 	// Where the feeds and articles come from is the business of the `reader` it is
 	// given.
-	import { onMount, tick, untrack } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import type { AccountTab } from '#lib/account.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
+	import { showOnIcon } from '#lib/install.svelte.ts';
 	import { sameStream, type Article, type ArticleVersion, type Stream } from '#lib/model.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { keyMap, type Action } from '#lib/keys.ts';
@@ -296,6 +297,15 @@
 		}
 		if (handled) event.preventDefault();
 	}
+
+	// The number of unread articles is on the icon of the installed app, too, and
+	// leaves with the account. The made-up articles are nobody's.
+	$effect(() => {
+		if (!reader.demo) showOnIcon(reader.totalUnread);
+	});
+	onDestroy(() => {
+		if (!reader.demo) showOnIcon(0);
+	});
 </script>
 
 <svelte:head>

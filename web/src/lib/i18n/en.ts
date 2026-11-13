@@ -59,6 +59,9 @@ const en = {
 		account: (name: string) => `Logged in as ${name}`,
 		logout: 'Log out',
 		appSettings: 'Server and app updates',
+		install: 'Install as an app',
+		installSafari:
+			'To install rueder as an app: File › Add to Dock on a Mac, Share › Add to Home Screen on an iPhone or iPad.',
 		unread: (count: number) => `${n(count)} unread`,
 		fetchFailed: (reason: string) => `The last fetch failed: ${reason}`,
 		waiting: 'Not fetched yet',

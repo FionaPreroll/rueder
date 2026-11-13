@@ -152,6 +152,32 @@ describe('the page with a server', () => {
 		expect(await screen.findByRole('button', { name: /Article 3 of feed/ })).toBeInTheDocument();
 	});
 
+	it('puts the unread articles on the icon of the app, and takes them off when logging out', async () => {
+		const badges = {
+			setAppBadge: vi.fn(async (_count?: number) => {}),
+			clearAppBadge: vi.fn(async () => {})
+		};
+		for (const [name, call] of Object.entries(badges)) {
+			Object.defineProperty(navigator, name, { value: call, configurable: true });
+		}
+		const shown = () => badges.setAppBadge.mock.lastCall?.[0];
+		try {
+			await reading();
+			await vi.waitFor(() => expect(shown()).toBe(4));
+			// What arrives counts, as it does in the title.
+			server.addArticles(tech, 2);
+			server.emit({ event: 'articles', data: { feed_id: tech, last_seq: 5, new: 2 } });
+			await vi.waitFor(() => expect(shown()).toBe(6));
+			badges.clearAppBadge.mockClear();
+			await userEvent.click(screen.getByRole('button', { name: 'Logged in as fiona' }));
+			await userEvent.click(screen.getByRole('menuitem', { name: 'Log out' }));
+			expect(await screen.findByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+			expect(badges.clearAppBadge).toHaveBeenCalled();
+		} finally {
+			for (const name of Object.keys(badges)) Reflect.deleteProperty(navigator, name);
+		}
+	});
+
 	it('goes back to the login when the session runs out', async () => {
 		render(Page);
 		expect(await screen.findByText('New in your subscriptions')).toBeInTheDocument();
