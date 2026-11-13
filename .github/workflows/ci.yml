@@ -106,8 +106,10 @@ jobs:
           fail-on-severity: low
           fail-on-scopes: runtime, development, unknown
           # deepmerge 4.3.1, which @sveltejs/vite-plugin-svelte needs and for
-          # which there is no fix; see docs/implementation.md.
-          allow-ghsas: GHSA-gcqx-w48m-w2h4
+          # which there is no fix, and minimatch 10, which TypeDoc needs and
+          # whose fix only came with minimatch 11, which TypeDoc cannot take
+          # yet. Both run only while building; see docs/implementation.md.
+          allow-ghsas: GHSA-gcqx-w48m-w2h4, GHSA-g3hv-75wg-m249
 
   # The workflows themselves: zizmor looks for what makes a workflow unsafe,
   # such as text from outside in a script, a token that may do more than it
