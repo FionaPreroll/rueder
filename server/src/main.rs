@@ -748,6 +748,11 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             .context("CLIENT_IP_HEADER is not the name of a header")?;
         state = state.with_client_ip_header(name);
     }
+    // APP_API=off lets no app of another maker log in (see `greader`).
+    if env::var("APP_API").is_ok_and(|value| value == "off") {
+        tracing::info!("apps of other makers cannot log in (APP_API=off)");
+        state = state.without_app_api();
+    }
     // CONTENT_REPORTS=on lets readers report feeds and articles to the admins.
     if env::var("CONTENT_REPORTS").is_ok_and(|value| value == "on") {
         tracing::info!("readers may report feeds and articles (CONTENT_REPORTS=on)");

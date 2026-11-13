@@ -187,6 +187,8 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/second-factor", area(Area::Session)),
         ("/api/second-factor/confirm", area(Area::Session)),
         ("/api/terms", area(Area::Session)),
+        ("/api/app-passwords", area(Area::Apps)),
+        ("/api/app-passwords/4", area(Area::Apps)),
         ("/api/tree/move", area(Area::Tree)),
         ("/api/folders", area(Area::Tree)),
         ("/api/folders/2", area(Area::Tree)),

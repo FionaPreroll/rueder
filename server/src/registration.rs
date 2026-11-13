@@ -458,7 +458,7 @@ async fn register(
     }
     let token = sessions::start(&state.db, id, false).await?;
     let me =
-        Me::new(id, new.username.trim().to_owned(), false, true).reporting(state.content_reports);
+        Me::new(id, new.username.trim().to_owned(), false, true).offering(&state);
     let cookie = [(header::SET_COOKIE, sessions::cookie(&token))];
     Ok((StatusCode::CREATED, cookie, Json(me)).into_response())
 }

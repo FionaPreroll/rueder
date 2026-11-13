@@ -109,6 +109,9 @@ pub enum Area {
     Rules,
     /// A session of the account ended.
     Session,
+    /// App passwords were made or revoked, or an app logged in with one for
+    /// the first time.
+    Apps,
 }
 
 impl Change {
@@ -144,6 +147,8 @@ impl Change {
 /// - `rules`: filter rules changed. They hide articles and mark them as read,
 ///   so the unread counts may have changed with them.
 /// - `session`: a session of the account ended.
+/// - `apps`: app passwords were made or revoked, or an app logged in with one
+///   for the first time.
 ///
 /// `by` is the name the tab that made the change gave itself in the header
 /// `X-Rueder-Tab`, if it did, so that a tab knows its own change when it
@@ -201,6 +206,11 @@ enum Sent {
     Session {
         by: Option<String>,
     },
+    /// App passwords were made or revoked, or an app logged in with one for
+    /// the first time.
+    Apps {
+        by: Option<String>,
+    },
 }
 
 impl From<&Change> for Sent {
@@ -224,6 +234,7 @@ impl From<&Change> for Sent {
                 Area::Settings => Self::Settings { by },
                 Area::Rules => Self::Rules { by },
                 Area::Session => Self::Session { by },
+                Area::Apps => Self::Apps { by },
             },
         }
     }
@@ -696,6 +707,7 @@ pub fn changed(path: &str) -> Option<Changed> {
         ["second-factor", ..] => Changed::Area(Area::Session),
         // Agreeing to the terms ends the question in the other tabs.
         ["terms"] => Changed::Area(Area::Session),
+        ["app-passwords", ..] => Changed::Area(Area::Apps),
         // A report changes nothing a reader's tabs show.
         ["feeds", _, "report"] | ["feeds", _, "articles", _, "report"] => return None,
         ["settings", ..] => Changed::Area(Area::Settings),
