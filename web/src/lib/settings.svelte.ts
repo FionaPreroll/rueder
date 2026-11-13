@@ -14,6 +14,16 @@ export const readingFonts = ['sans', 'serif'] as const;
 export const counterStyles = ['parens', 'badge'] as const;
 export const views = ['list', 'expanded', 'split', 'magazine'] as const;
 
+/**
+ * How wide the sidebar and, in the view of three panes, the list may be, in
+ * pixels. Each device keeps its own: a window on a large screen has room for
+ * more than a laptop's.
+ */
+export const widths = {
+	sidebar: { min: 180, max: 560, default: 288 },
+	list: { min: 260, max: 720, default: 384 }
+} as const;
+
 export interface Settings {
 	theme: (typeof themes)[number];
 	accent: (typeof accents)[number];
@@ -23,6 +33,10 @@ export interface Settings {
 	counters: (typeof counterStyles)[number];
 	language: 'auto' | Language;
 	view: (typeof views)[number];
+	/** How wide the sidebar is, in pixels (see `widths`). */
+	sidebarWidth: number;
+	/** How wide the list is beside an article, in pixels (see `widths`). */
+	listWidth: number;
 	markOnScroll: boolean;
 	teasers: boolean;
 	/** Keep the screen on while the page is in sight (see wakelock.ts). */
@@ -40,6 +54,8 @@ export const defaults: Settings = {
 	counters: 'parens',
 	language: 'auto',
 	view: 'list',
+	sidebarWidth: widths.sidebar.default,
+	listWidth: widths.list.default,
 	markOnScroll: true,
 	teasers: true,
 	wakeLock: false,
@@ -53,7 +69,11 @@ const KEY = 'rueder.settings';
  * that suits a phone may be too large on a desktop. They stay in the browser and
  * are neither sent with the account's settings nor taken from them.
  */
-export const perDevice = ['textSize'] as const satisfies readonly (keyof Settings)[];
+export const perDevice = [
+	'textSize',
+	'sidebarWidth',
+	'listWidth'
+] as const satisfies readonly (keyof Settings)[];
 
 /** The settings as the account keeps them: without those of the device. */
 export function forAccount(settings: Settings): Partial<Settings> {
@@ -68,6 +88,12 @@ export function onThisDevice(account: Settings, here: Settings): Settings {
 	for (const key of perDevice) Object.assign(mine, { [key]: here[key] });
 	return { ...account, ...mine };
 }
+
+/** The settings that are a number, with what they may be. */
+const spans: { [K in keyof Settings]?: { min: number; max: number } } = {
+	sidebarWidth: widths.sidebar,
+	listWidth: widths.list
+};
 
 const choices: { [K in keyof Settings]?: readonly string[] } = {
 	theme: themes,
@@ -101,7 +127,15 @@ export function understood(stored: unknown): Settings {
 		if (key === 'keys') continue;
 		const value = found[key];
 		const allowed = choices[key];
-		if (allowed ? allowed.includes(value as string) : typeof value === typeof defaults[key]) {
+		const span = spans[key];
+		if (span) {
+			// A width from another screen, or nonsense: what fits here.
+			if (typeof value === 'number' && Number.isFinite(value)) {
+				settings[key] = Math.min(span.max, Math.max(span.min, Math.round(value)));
+			}
+		} else if (
+			allowed ? allowed.includes(value as string) : typeof value === typeof defaults[key]
+		) {
 			settings[key] = value;
 		}
 	}

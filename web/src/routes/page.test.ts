@@ -27,7 +27,7 @@ afterEach(() => {
 const press = (keys: string) => userEvent.keyboard(keys);
 const heading = () => screen.getByRole('heading', { level: 1 });
 const openArticle = () =>
-	document.querySelector<HTMLElement>('[aria-expanded="true"][class*="py-"]');
+	document.querySelector<HTMLElement>('[data-article] [aria-expanded="true"][class*="py-"]');
 const allItems = () => screen.getByRole('button', { name: /^All items \(/ });
 const unreadInTitle = () => Number(/^\((\d+)\) rueder$/.exec(document.title)?.[1]);
 

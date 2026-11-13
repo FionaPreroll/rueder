@@ -25,9 +25,16 @@
 
 	let hold: Hold | null = null;
 
+	/**
+	 * Which article is open, by its id alone. The article itself is a new object
+	 * whenever the list is read anew or its text arrives, and the pane must not
+	 * scroll back to the top for that: only another article does that.
+	 */
+	const openId = $derived(reader.open);
+
 	// Another article starts at its top, not where the last one was left.
 	$effect(() => {
-		const id = article?.id;
+		const id = openId;
 		void tick().then(() => {
 			hold?.stop();
 			hold = null;

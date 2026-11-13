@@ -10,13 +10,14 @@
 	import { sameStream, type Article, type ArticleVersion, type Stream } from '#lib/model.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { keyMap, type Action } from '#lib/keys.ts';
-	import { settings } from '#lib/settings.svelte.ts';
+	import { settings, widths } from '#lib/settings.svelte.ts';
 	import { closeView, dropSpots, noteView, openView } from '#lib/view.ts';
 	import { Journey } from '#lib/history.ts';
 	import ArticleList from './ArticleList.svelte';
 	import ArticlePane from './ArticlePane.svelte';
 	import HomeOverview from './HomeOverview.svelte';
 	import Icon from './Icon.svelte';
+	import Resizer from './Resizer.svelte';
 	import SettingsDialog from './SettingsDialog.svelte';
 	import StatusDialog from './StatusDialog.svelte';
 	import TermsDialog from './TermsDialog.svelte';
@@ -313,7 +314,8 @@
 				onclick={() => (sidebarOpen = false)}
 			></button>
 			<aside
-				class="w-72 shrink-0 border-r border-line max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:w-[min(20rem,85vw)] max-md:shadow-xl"
+				class="w-[var(--sidebar-width)] shrink-0 border-r border-line max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:w-[min(20rem,85vw)] max-md:shadow-xl"
+				style:--sidebar-width="{settings.sidebarWidth}px"
 			>
 				<Sidebar
 					{reader}
@@ -321,6 +323,14 @@
 					onpick={() => narrow() && (sidebarOpen = false)}
 				/>
 			</aside>
+			<Resizer
+				width={settings.sidebarWidth}
+				min={widths.sidebar.min}
+				max={widths.sidebar.max}
+				fallback={widths.sidebar.default}
+				label={m.nav.resizeSidebar}
+				onwidth={(width) => (settings.sidebarWidth = width)}
+			/>
 		{/if}
 
 		<main class="flex min-w-0 flex-1 flex-col" bind:clientWidth={mainWidth}>
@@ -349,11 +359,20 @@
 				{#if split}
 					<div class="flex min-h-0 flex-1">
 						<div
-							class="flex w-[clamp(20rem,36%,30rem)] shrink-0 flex-col border-r border-line"
+							class="flex w-[var(--list-width)] max-w-[60%] shrink-0 flex-col border-r border-line"
+							style:--list-width="{settings.listWidth}px"
 							data-pane="list"
 						>
 							<ArticleList {reader} {now} onversions={compare} pane />
 						</div>
+						<Resizer
+							width={settings.listWidth}
+							min={widths.list.min}
+							max={widths.list.max}
+							fallback={widths.list.default}
+							label={m.list.resizeList}
+							onwidth={(width) => (settings.listWidth = width)}
+						/>
 						<ArticlePane {reader} {now} onversions={compare} />
 					</div>
 				{:else}

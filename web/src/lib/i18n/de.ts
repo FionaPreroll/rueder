@@ -59,6 +59,7 @@ const de: Messages = {
 		waiting: 'Noch nicht abgerufen',
 		blocked: 'Vom Betreiber dieses rueder gesperrt',
 		moveHint: 'Zum Sortieren ziehen, oder Alt mit den Pfeiltasten drücken',
+		resizeSidebar: 'Wie breit die Seitenleiste ist: ziehen, oder die Pfeiltasten nehmen',
 		tooDeep: (levels) => `Ordner lassen sich höchstens ${levels} Ebenen tief verschachteln.`
 	},
 
@@ -108,6 +109,7 @@ const de: Messages = {
 		loadingList: 'Wird geladen …',
 		toTop: 'Zurück nach oben',
 		pick: 'Einen Artikel wählen, um ihn hier zu lesen.',
+		resizeList: 'Wie breit die Liste ist: ziehen, oder die Pfeiltasten nehmen',
 		closeArticle: 'Artikel schließen',
 		blockedFeed:
 			'Der Betreiber dieses rueder hat diesen Feed gesperrt. Er wird nicht abgerufen, und seine Artikel werden nicht gezeigt.',
@@ -422,6 +424,8 @@ const de: Messages = {
 		color: 'Farbe',
 		colors: ['Rot', 'Orange', 'Gelb', 'Grün', 'Türkis', 'Blau', 'Lila', 'Grau'],
 		remove: 'Label löschen',
+		show: 'Labels anzeigen',
+		hide: 'Labels ausblenden',
 		forArticle: 'Labels',
 		set: (title) => `Label: ${title}`
 	},
