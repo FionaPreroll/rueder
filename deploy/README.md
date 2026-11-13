@@ -168,6 +168,8 @@ a change, `docker compose up --detach` starts the containers anew.
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
+| `LEGAL_IMPRINT_URL`, `LEGAL_PRIVACY_URL`, `LEGAL_TERMS_URL` | Where your imprint, privacy policy and terms of use are, on your own website. rueder links to them on the login page, in the account menu and in the app; without them it shows none. |
+| `TERMS_VERSION` | A name for the version of your terms of use, such as `2026-11`. Registering then takes the agreement to it, and every account is asked to agree to a new one at its next visit. Needs `LEGAL_TERMS_URL`. |
 | `ADMIN_SECOND_FACTOR` | `required` makes admins admins only after logging in with a second factor (an authenticator app); readers set one up under Settings, Security. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | Login through an OpenID Connect provider. |
 

@@ -20,6 +20,10 @@
 	let registering = $state(false);
 	let again = $state('');
 	let refusal: RegisterFailure | null = $state(null);
+	/** The reader agreed to the terms of use, where the server names a version of them. */
+	let agreed = $state(false);
+	const legal = $derived(session.ways.legal);
+	const needsAgreement = $derived(legal.terms_version !== null && legal.terms !== null);
 
 	const invitation = $derived(session.invitation);
 	const mayRegister = $derived(session.ways.registration || invitation?.valid === true);
@@ -36,7 +40,10 @@
 	const MIN_PASSWORD = 8;
 	const mismatch = $derived(again !== '' && again !== password);
 	const ready = $derived(
-		name.trim() !== '' && password.length >= MIN_PASSWORD && again === password
+		name.trim() !== '' &&
+			password.length >= MIN_PASSWORD &&
+			again === password &&
+			(agreed || !needsAgreement)
 	);
 
 	function refused(refusal: RegisterFailure) {
@@ -49,6 +56,8 @@
 				return m.register.full;
 			case 'today':
 				return m.register.today;
+			case 'terms':
+				return m.register.terms;
 			case 'taken':
 				return m.register.taken;
 			case 'invalid':
@@ -117,7 +126,7 @@
 		busy = true;
 		refusal = null;
 		try {
-			refusal = await session.register(name, password);
+			refusal = await session.register(name, password, agreed);
 			// The invitation did its work; the address no longer needs to carry it.
 			if (!refusal) history.replaceState(history.state, '', location.pathname);
 		} finally {
@@ -222,6 +231,26 @@
 				{#if mismatch}
 					<p id="password-mismatch" class="-mt-2 text-xs text-warn">{m.register.mismatch}</p>
 				{/if}
+				{#if needsAgreement && legal.terms}
+					<p class="flex items-start gap-2 text-sm">
+						<input
+							id="agree"
+							type="checkbox"
+							class="mt-0.5 rounded text-accent"
+							required
+							bind:checked={agreed}
+						/>
+						<label for="agree">{m.legal.agree}</label>
+						<a
+							class="ml-auto shrink-0 text-link hover:underline"
+							href={legal.terms}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{m.legal.terms}
+						</a>
+					</p>
+				{/if}
 				<button
 					type="submit"
 					class="w-full cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
@@ -315,4 +344,14 @@
 			{/if}
 		{/if}
 	</div>
+	{#if legal.imprint || legal.privacy || legal.terms}
+		<!-- The operator's texts, as the server names them. -->
+		<nav class="fixed inset-x-0 bottom-0 flex justify-center gap-4 p-3 text-xs text-soft">
+			{#each [[legal.imprint, m.legal.imprint], [legal.privacy, m.legal.privacy], [legal.terms, m.legal.terms]] as [href, label] (label)}
+				{#if href}
+					<a class="hover:underline" {href} target="_blank" rel="noopener noreferrer">{label}</a>
+				{/if}
+			{/each}
+		</nav>
+	{/if}
 </main>

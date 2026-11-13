@@ -4,7 +4,7 @@
 	// article, where there is room for both. The keyboard shortcuts are handled here, for the whole page.
 	// Where the feeds and articles come from is the business of the `reader` it is
 	// given.
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
 	import { sameStream, type Article, type ArticleVersion, type Stream } from '#lib/model.ts';
@@ -12,12 +12,14 @@
 	import { keyMap, type Action } from '#lib/keys.ts';
 	import { settings } from '#lib/settings.svelte.ts';
 	import { closeView, dropSpots, noteView, openView } from '#lib/view.ts';
+	import { Journey } from '#lib/history.ts';
 	import ArticleList from './ArticleList.svelte';
 	import ArticlePane from './ArticlePane.svelte';
 	import HomeOverview from './HomeOverview.svelte';
 	import Icon from './Icon.svelte';
 	import SettingsDialog from './SettingsDialog.svelte';
 	import StatusDialog from './StatusDialog.svelte';
+	import TermsDialog from './TermsDialog.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import SubscribeDialog from './SubscribeDialog.svelte';
 	import Toolbar from './Toolbar.svelte';
@@ -99,6 +101,40 @@
 		if (reader.resuming) return;
 		if (kept && !sameStream(now.stream, kept.stream)) dropSpots();
 		noteView(now);
+		// What the reader did, not what back or forward brought, makes an entry.
+		if (!returning) journey.note({ stream: now.stream, open: now.open });
+	});
+
+	// The browser's back and forward, and the back button of a phone, go through
+	// the lists and articles the reader went through (`#lib/history.ts`).
+	const journey = new Journey();
+	let returning = false;
+	/** The article of a list that back or forward went to, opened once the list has it. */
+	let waitingOpen = $state<string | null>(null);
+
+	function popped(event: PopStateEvent) {
+		const place = journey.returned(event.state);
+		if (!place) return;
+		returning = true;
+		if (!sameStream(place.stream, reader.stream)) {
+			reader.show(place.stream);
+			waitingOpen = place.open;
+		} else if (place.open === null) {
+			waitingOpen = null;
+			reader.open = null;
+		} else if (place.open !== reader.open) {
+			waitingOpen = place.open;
+		}
+		void tick().then(() => (returning = false));
+	}
+
+	$effect(() => {
+		const id = waitingOpen;
+		if (!id) return;
+		const article = reader.visible.find((listed) => listed.id === id);
+		if (!article) return;
+		waitingOpen = null;
+		untrack(() => reader.select(article));
 	});
 
 	onMount(() => {
@@ -202,7 +238,7 @@
 
 	function keydown(event: KeyboardEvent) {
 		if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-		if (dialog || comparing || typing(event.target)) return;
+		if (dialog || comparing || reader.account?.termsToAccept || typing(event.target)) return;
 
 		const key = event.key;
 		const article = reader.current;
@@ -255,7 +291,7 @@
 	<title>{reader.totalUnread > 0 ? `(${formatNumber(reader.totalUnread)}) ` : ''}rueder</title>
 </svelte:head>
 
-<svelte:window onkeydown={keydown} />
+<svelte:window onkeydown={keydown} onpopstate={popped} />
 
 <div class="flex h-dvh flex-col bg-paper text-ink">
 	<TopBar
@@ -373,6 +409,10 @@
 			<ArticlePane {reader} {now} onversions={compare} />
 		</div>
 	</div>
+{/if}
+
+{#if reader.account?.termsToAccept}
+	<TermsDialog {reader} />
 {/if}
 
 {#if dialog === 'settings'}

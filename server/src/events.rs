@@ -694,6 +694,8 @@ pub fn changed(path: &str) -> Option<Changed> {
         // second factor on or off changes what the sessions may.
         ["second-factor", "setup"] => return None,
         ["second-factor", ..] => Changed::Area(Area::Session),
+        // Agreeing to the terms ends the question in the other tabs.
+        ["terms"] => Changed::Area(Area::Session),
         ["settings", ..] => Changed::Area(Area::Settings),
         // Whether the account sends reports of errors is one of its settings;
         // the reports themselves are nothing its tabs show.

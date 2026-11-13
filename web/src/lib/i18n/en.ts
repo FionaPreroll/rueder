@@ -147,6 +147,19 @@ const en = {
 		note: 'There is no sign-up. Accounts are made by whoever runs this rueder.'
 	},
 
+	legal: {
+		imprint: 'Imprint',
+		privacy: 'Privacy policy',
+		terms: 'Terms of use',
+		agree: 'I agree to the terms of use',
+		changed: 'The terms of use have changed',
+		changedIntro: 'Please read the new terms of use. To go on using rueder, agree to them.',
+		read: 'Read the terms of use',
+		accept: 'I agree',
+		decline: 'Log out',
+		notSaved: 'That did not work. Try again in a moment.'
+	},
+
 	register: {
 		title: 'Make an account',
 		invited: 'You were invited to this rueder. Pick a name and a password.',
@@ -161,6 +174,7 @@ const en = {
 		full: 'There is no room for another account here.',
 		today: 'Enough accounts were made here for one day. Try again tomorrow.',
 		taken: 'There is an account with this name already.',
+		terms: 'Agree to the terms of use to make an account.',
 		invalid: (reason: string) => `That cannot be an account. The server says: ${reason}`
 	},
 
@@ -243,7 +257,7 @@ const en = {
 		},
 		density: 'Density of the list',
 		densities: { compact: 'Compact', comfortable: 'Comfortable' },
-		textSize: 'Text size of articles',
+		textSize: 'Text size of articles, on this device',
 		textSizes: { small: 'Small', medium: 'Medium', large: 'Large' },
 		readingFont: 'Font of articles',
 		readingFonts: { sans: 'Sans-serif', serif: 'Serif' },

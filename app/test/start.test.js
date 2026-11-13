@@ -3,6 +3,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { MAX_ADDRESS, serverAddress } from '../www/address.js';
+import { MAX_URL, MAX_WAYS, legalLinks } from '../www/legal.js';
 import { catalogs, textsFor } from '../www/texts.js';
 
 test('takes the address of an https page, as its origin', () => {
@@ -49,4 +50,51 @@ test('has every text in English and in German', () => {
 	assert.equal(textsFor('de-AT'), catalogs.de);
 	assert.equal(textsFor('fr'), catalogs.en);
 	assert.equal(textsFor(undefined), catalogs.en);
+});
+
+test('links to the legal texts the server names, and to nothing else', () => {
+	const ways = (legal) => JSON.stringify({ oidc: false, registration: false, legal });
+	assert.deepEqual(
+		legalLinks(
+			ways({
+				imprint: 'https://operator.example/imprint',
+				privacy: null,
+				terms: 'http://operator.example/terms?v=2',
+				terms_version: '2026-11'
+			})
+		),
+		[
+			{ kind: 'imprint', href: 'https://operator.example/imprint' },
+			{ kind: 'terms', href: 'http://operator.example/terms?v=2' }
+		]
+	);
+	// A server without them, or one from before them.
+	assert.deepEqual(legalLinks(ways({ imprint: null, privacy: null, terms: null })), []);
+	assert.deepEqual(legalLinks(JSON.stringify({ oidc: false, registration: false })), []);
+	for (const wrong of [
+		'',
+		'not json',
+		'null',
+		'[]',
+		JSON.stringify({ legal: 'https://operator.example/' }),
+		'x'.repeat(MAX_WAYS + 1),
+		undefined
+	]) {
+		assert.deepEqual(legalLinks(wrong), [], String(wrong).slice(0, 40));
+	}
+	// What is no web address is left out.
+	assert.deepEqual(
+		legalLinks(
+			ways({
+				imprint: 'javascript:alert(1)',
+				privacy: 'file:///etc/passwd',
+				terms: `https://operator.example/${'a'.repeat(MAX_URL)}`
+			})
+		),
+		[]
+	);
+	assert.deepEqual(
+		legalLinks(ways({ imprint: 42, privacy: ['x'], terms: 'operator.example' })),
+		[]
+	);
 });

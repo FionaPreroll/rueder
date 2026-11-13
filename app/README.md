@@ -17,6 +17,8 @@ and its Content-Security-Policy stay as they are.
   `ServerClient`, which keeps the server's pages in the app and opens every other
   address in the browser, and `RuederPlugin`, which answers only the start page: the
   server's page runs in the same WebView and must not change where the app goes.
+  It also asks the saved server where its operator's imprint, privacy policy and
+  terms of use are, which the start page links to (`www/legal.js`).
 - **Updates**, for the build from GitHub only: if you agreed, the app reads
   `version.json` from the release
   [`android-latest`](https://github.com/FionaPreroll/rueder/releases/tag/android-latest)

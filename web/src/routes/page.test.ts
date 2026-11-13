@@ -599,3 +599,43 @@ describe('the layout', () => {
 		expect(listeners.size).toBe(0);
 	});
 });
+
+describe('the history of the browser', () => {
+	/** Back or forward to an entry the page made, as the browser would do it. */
+	const goTo = (state: unknown) => window.dispatchEvent(new PopStateEvent('popstate', { state }));
+
+	it('goes back and forward through the lists and articles the reader went through', async () => {
+		render(Page);
+		await press('ga');
+		expect(heading()).toHaveTextContent('All items');
+		const list = history.state;
+		await press('j');
+		const opened = openArticle()?.textContent;
+		expect(opened).toBeTruthy();
+		const article = history.state;
+		expect(article).not.toEqual(list);
+		await press('gs');
+		expect(heading()).toHaveTextContent('Starred items');
+
+		const entries = history.length;
+
+		// Back: all items again, with the article open that was open.
+		goTo(article);
+		await vi.waitFor(() => expect(heading()).toHaveTextContent('All items'));
+		await vi.waitFor(() => expect(openArticle()?.textContent).toBe(opened));
+		// Back again: the list, without it.
+		goTo(list);
+		await vi.waitFor(() => expect(openArticle()).toBeNull());
+		expect(heading()).toHaveTextContent('All items');
+		// Going there made no entries of its own.
+		expect(history.length).toBe(entries);
+	});
+
+	it('leaves entries alone that are not its own', async () => {
+		render(Page);
+		await press('ga');
+		goTo({ somebody: 'else' });
+		goTo(null);
+		expect(heading()).toHaveTextContent('All items');
+	});
+});

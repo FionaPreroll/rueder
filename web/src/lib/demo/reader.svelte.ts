@@ -160,6 +160,11 @@ export class DemoReader implements Reader {
 	readonly demo = this;
 	dismissNotice() {}
 	signOut() {}
+	/** The draft has no operator, so no legal texts and no terms. */
+	readonly legal = null;
+	async acceptTerms() {
+		return true;
+	}
 	/** The draft has no accounts, so nothing to secure. */
 	async secondFactor() {
 		return null;

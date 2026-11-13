@@ -3,13 +3,21 @@
 	// show, mark all as read, the views, previous and next.
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import { settings } from '#lib/settings.svelte.ts';
+	import { settings, views } from '#lib/settings.svelte.ts';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
 
 	let { reader, title }: { reader: Reader; title: string } = $props();
 
 	const DAY = 86_400_000;
+
+	/** The icon of each view, as its button has it. */
+	const viewIcons = {
+		expanded: 'expanded',
+		list: 'list',
+		split: 'split',
+		magazine: 'magazine'
+	} as const;
 </script>
 
 {#snippet option(label: string, on: boolean, pick: () => void)}
@@ -21,8 +29,11 @@
 	</button>
 {/snippet}
 
-<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line px-3 py-2">
-	<h1 class="mr-auto min-w-0 truncate text-lg font-semibold">{title}</h1>
+<div
+	class="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 border-b border-line px-3 py-2 sm:gap-x-2"
+>
+	<!-- On a phone the title has a line of its own, so the buttons below stay where they are whatever its length. -->
+	<h1 class="min-w-0 truncate text-lg font-semibold max-sm:w-full sm:mr-auto">{title}</h1>
 
 	<button
 		type="button"
@@ -34,9 +45,13 @@
 		<Icon name="refresh" />
 	</button>
 
-	<Menu title={m.toolbar.show}>
+	<!-- On a phone only its icon, so the row does not break differently for each choice. -->
+	<Menu title={m.toolbar.show} label={reader.unreadOnly ? m.toolbar.showUnread : m.toolbar.showAll}>
 		{#snippet button()}
-			{reader.unreadOnly ? m.toolbar.showUnread : m.toolbar.showAll}
+			<span class="max-sm:hidden">
+				{reader.unreadOnly ? m.toolbar.showUnread : m.toolbar.showAll}
+			</span>
+			<Icon name={reader.unreadOnly ? 'unread' : 'filter'} class="size-4 sm:hidden" />
 			<Icon name="down" class="size-3.5" />
 		{/snippet}
 		{@render option(m.toolbar.showAll, !reader.unreadOnly, () => (reader.unreadOnly = false))}
@@ -99,7 +114,23 @@
 		{/if}
 	</div>
 
-	<div class="flex" role="group" aria-label={m.settings.view}>
+	<!-- On a phone the four views are one menu, so the row of buttons fits. -->
+	<div class="sm:hidden">
+		<Menu label={m.settings.view} title={m.settings.view}>
+			{#snippet button()}
+				<Icon name={viewIcons[settings.view]} />
+				<Icon name="down" class="size-3.5" />
+			{/snippet}
+			{#each views as view (view)}
+				{@render option(
+					m.settings.views[view],
+					settings.view === view,
+					() => (settings.view = view)
+				)}
+			{/each}
+		</Menu>
+	</div>
+	<div class="flex max-sm:hidden" role="group" aria-label={m.settings.view}>
 		<button
 			type="button"
 			class="tool rounded-r-none"
@@ -142,7 +173,7 @@
 		</button>
 	</div>
 
-	<div class="flex">
+	<div class="flex max-sm:ml-auto">
 		<button
 			type="button"
 			class="tool rounded-r-none"

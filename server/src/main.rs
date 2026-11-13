@@ -708,6 +708,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         }
         Ok(other) => anyhow::bail!("ADMIN_SECOND_FACTOR must be required or off, not {other:?}"),
     }
+    // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:
+    // the operator's legal texts, and the terms an account has to agree to.
+    state = state.with_legal(rueder::legal::Legal::from_env()?);
     let app = router(state, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on http://{listen_addr}");

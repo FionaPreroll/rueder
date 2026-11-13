@@ -45,6 +45,11 @@ export type Me = {
 	 * server wants one of admins.
 	 */
 	admin_needs_second_factor: boolean,
+	/**
+	 * The version of the terms of use the account has yet to agree to, where
+	 * the server names one; the page asks before anything else.
+	 */
+	terms_to_accept: string | null,
 };
 
 /**
@@ -61,6 +66,26 @@ export type LoginWays = {
 	 * Anybody can make an account for themselves, at `/api/register`.
 	 */
 	registration: boolean,
+	/**
+	 * The operator's legal texts, for the login page to link to.
+	 */
+	legal: LegalLinks,
+};
+
+/**
+ * Where the operator's texts are, and which version of the terms counts.
+ *
+ * `GET /api/login/ways` answers with it, to anybody.
+ */
+export type LegalLinks = {
+	imprint: string | null,
+	privacy: string | null,
+	terms: string | null,
+	/**
+	 * The version of the terms an account has to agree to; none if nobody
+	 * has to.
+	 */
+	terms_version: string | null,
 };
 
 /**
@@ -206,6 +231,15 @@ export type RecoveryCodes = {
 };
 
 /**
+ * The version of the terms the reader agrees to.
+ *
+ * `PUT /api/terms` reads it.
+ */
+export type TermsAgreement = {
+	version: string,
+};
+
+/**
  * The query of `GET /api/register`.
  */
 export type AskedInvite = {
@@ -237,9 +271,10 @@ export type Registering = {
  * What `POST /api/register` reads. It answers with `Me` and sets the
  * session's cookie, as a login does.
  *
- * A refusal is 403 with one word: `closed` (no invitation, and registration
- * is not open), `invite` (the invitation cannot be used), `full` (no room for
- * another account) or `today` (enough accounts for one day). A name or a
+ * A refusal is 403 with one word: `terms` (the terms of use the server names
+ * were not agreed to), `closed` (no invitation, and registration is not open),
+ * `invite` (the invitation cannot be used), `full` (no room for another
+ * account) or `today` (enough accounts for one day). A name or a
  * password that cannot be one is 400 with the reason, a name that is taken
  * 409.
  */
@@ -250,6 +285,10 @@ export type NewRegistration = {
 	 * The token of an invitation.
 	 */
 	invite?: string,
+	/**
+	 * The version of the terms of use agreed to, where the server names one.
+	 */
+	accepted_terms?: string,
 };
 
 /**

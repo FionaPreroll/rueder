@@ -22,7 +22,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AppError, AppState, accounts, registration, second_factor,
+    AppError, AppState, accounts,
+    legal::Legal,
+    registration, second_factor,
     sessions::{self, Session},
 };
 
@@ -261,6 +263,9 @@ pub struct Me {
     /// An admin whose right waits for a login with a second factor, where the
     /// server wants one of admins.
     admin_needs_second_factor: bool,
+    /// The version of the terms of use the account has yet to agree to, where
+    /// the server names one; the page asks before anything else.
+    terms_to_accept: Option<String>,
 }
 
 impl Me {
@@ -271,17 +276,20 @@ impl Me {
             is_admin,
             has_password,
             admin_needs_second_factor: false,
+            terms_to_accept: None,
         }
     }
 
-    /// Who the session is, and whether its account has a password.
-    pub(crate) fn of(session: Session, has_password: bool) -> Self {
+    /// Who the session is, whether its account has a password, and the terms
+    /// it has yet to agree to.
+    pub(crate) fn of(session: Session, has_password: bool, legal: &Legal) -> Self {
         Self {
             id: session.account_id,
             username: session.username,
             is_admin: session.is_admin,
             has_password,
             admin_needs_second_factor: session.admin_needs_second_factor,
+            terms_to_accept: legal.to_accept(session.terms_version.as_deref()),
         }
     }
 }
@@ -296,6 +304,8 @@ pub struct Ways {
     oidc: bool,
     /// Anybody can make an account for themselves, at `/api/register`.
     registration: bool,
+    /// The operator's legal texts, for the login page to link to.
+    legal: Legal,
 }
 
 /// What the login page asks before anybody is logged in, to know whether to
@@ -304,6 +314,7 @@ pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError>
     Ok(Json(Ways {
         oidc: state.oidc.is_some(),
         registration: registration::is_open(&state.db).await?,
+        legal: (*state.legal).clone(),
     }))
 }
 
@@ -362,14 +373,25 @@ pub async fn login(
         sessions::end(&state.db, old).await?;
     }
     let token = sessions::start(&state.db, account.id, second_factor).await?;
+    let terms_version = sqlx::query_scalar!(
+        "SELECT terms_version FROM accounts WHERE id = $1",
+        account.id
+    )
+    .fetch_one(&state.db)
+    .await?;
     let session = Session {
         account_id: account.id,
         username: account.username,
         is_admin: account.is_admin,
         second_factor,
         admin_needs_second_factor: false,
+        terms_version,
     };
-    let me = Me::of(session.for_admins(state.admin_second_factor), true);
+    let me = Me::of(
+        session.for_admins(state.admin_second_factor),
+        true,
+        &state.legal,
+    );
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -395,7 +417,7 @@ pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<
     .fetch_optional(&state.db)
     .await?
     .unwrap_or(false);
-    Ok(Json(Me::of(session, has_password)))
+    Ok(Json(Me::of(session, has_password, &state.legal)))
 }
 
 #[cfg(test)]

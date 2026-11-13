@@ -27,7 +27,8 @@ describe('Session', () => {
 			name: 'fiona',
 			admin: true,
 			password: true,
-			adminNeedsSecondFactor: false
+			adminNeedsSecondFactor: false,
+			termsToAccept: null
 		});
 	});
 
@@ -38,7 +39,7 @@ describe('Session', () => {
 		await session.check();
 		expect(session.state).toBe('out');
 		expect(session.reader).toBeNull();
-		await vi.waitFor(() => expect(session.ways).toEqual({ oidc: true, registration: false }));
+		await vi.waitFor(() => expect(session.ways).toMatchObject({ oidc: true, registration: false }));
 	});
 
 	it('takes a server that does not say for one without other ways', async () => {
@@ -47,7 +48,7 @@ describe('Session', () => {
 		const session = new Session();
 		await session.check();
 		await vi.waitFor(() => expect(server.requests.at(-1)?.path).toBe('/login/ways'));
-		expect(session.ways).toEqual({ oidc: false, registration: false });
+		expect(session.ways).toMatchObject({ oidc: false, registration: false });
 	});
 
 	it('says when the server does not answer, and can ask again', async () => {
@@ -69,7 +70,7 @@ describe('Session', () => {
 		await session.check();
 		expect(await session.login('Fiona', 'correct horse')).toBeNull();
 		expect(session.state).toBe('in');
-		expect(server.requests.at(-1)).toMatchObject({
+		expect(server.requests.find((request) => request.path === '/login')).toMatchObject({
 			method: 'POST',
 			path: '/login',
 			body: { username: 'Fiona', password: 'correct horse' }
@@ -204,9 +205,10 @@ describe('registering', () => {
 			name: 'grace',
 			admin: false,
 			password: true,
-			adminNeedsSecondFactor: false
+			adminNeedsSecondFactor: false,
+			termsToAccept: null
 		});
-		expect(server.requests.at(-1)).toMatchObject({
+		expect(server.requests.find((request) => request.method === 'POST')).toMatchObject({
 			method: 'POST',
 			path: '/register',
 			body: { username: ' Grace ', password: 'a long password' }
@@ -222,7 +224,8 @@ describe('registering', () => {
 		expect(session.ways.registration).toBe(false);
 
 		expect(await session.register('grace', 'a long password')).toBeNull();
-		expect(server.requests.at(-1)?.body).toMatchObject({ invite: 'a-token' });
+		const made = server.requests.find((r) => r.method === 'POST' && r.path === '/register');
+		expect(made?.body).toMatchObject({ invite: 'a-token' });
 		expect(invite.uses).toBe(1);
 		expect(session.invitation).toBeNull();
 	});
