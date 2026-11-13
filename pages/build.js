@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { brokenLinks } from './links.js';
-import { render } from './markdown.js';
+import { escapeHtml, render } from './markdown.js';
 import { fill, footer, origin, repoUrl, sitePath } from './site.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -120,7 +120,13 @@ export function build({ repo, out, from }) {
 		mkdirSync(join(out, readme.to), { recursive: true });
 		writeFileSync(
 			join(out, readme.to, 'index.html'),
-			fill(page, { title, root, aside: readme.aside, content: html, footer: foot })
+			fill(page, {
+				title: escapeHtml(title),
+				root,
+				aside: readme.aside,
+				content: html,
+				footer: foot
+			})
 		);
 	}
 

@@ -48,7 +48,7 @@ function madeUp() {
 	);
 	put(
 		'app/README.md',
-		'# rueder for Android\n\n## Building\n\nBack to [installing](../deploy/README.md).\n'
+		'# rueder > Android & "co"\n\n## Building\n\nBack to [installing](../deploy/README.md).\n'
 	);
 	put('web/static/icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
 	put('docs/images/logo.png', 'png');
@@ -110,6 +110,8 @@ describe('build', () => {
 			)
 		);
 		const app = read('docs/android-app/index.html');
+		// The heading's text is escaped in the title, as in the page.
+		assert.ok(app.includes('<title>rueder &gt; Android &amp; &quot;co&quot; · rueder</title>'));
 		assert.ok(app.includes('<h2 id="building">Building</h2>'));
 		assert.ok(app.includes('href="code/"'));
 		assert.ok(app.includes('href="../self-hosting/"'));

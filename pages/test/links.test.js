@@ -12,6 +12,16 @@ describe('linksOf', () => {
 			<script src="d.js"></script><link rel="stylesheet" href = "e.css">`;
 		assert.deepEqual(linksOf(html), ['a.html', 'b.png', 'c?x=1&y=2', 'e.css']);
 	});
+
+	it('passes over scripts and comments however they end', () => {
+		const html = `<script>x('<a href="a.html">')</script ><a href="b.html">b</a>
+			<SCRIPT type="module">y('<img src="c.png">')</SCRIPT\n x><!-- <a href="d.html"> --!><a href='e.html'>
+			<!-- <a href="f.html"> unclosed`;
+		assert.deepEqual(linksOf(html), ['b.html', 'e.html']);
+		assert.deepEqual(linksOf('<a href="g.html"><script>never closed <a href="h.html">'), [
+			'g.html'
+		]);
+	});
 });
 
 describe('linksOfStyle', () => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
-import { address, render, slug } from '../markdown.js';
+import { address, escapeHtml, render, slug } from '../markdown.js';
 
 const commit = '0123456789abcdef0123456789abcdef01234567';
 const from = { repo: 'someone/rueder', commit, day: '2026-11-13' };
@@ -77,6 +77,16 @@ describe('render', () => {
 		assert.ok(html.includes(`<a href="${blob}/server/README.md">the server</a>`));
 		assert.ok(html.includes('<table>'));
 		assert.ok(html.includes('<code class="language-sh">docker compose up'));
+	});
+
+	it('takes a heading’s text from its words, never from its HTML', () => {
+		const { title, html } = render('# A <b>bold</b> `x` & &lt;/title&gt; [y](#z)\n', at);
+		assert.equal(title, 'A bold x & &lt;/title&gt; y');
+		assert.ok(html.includes(' id="a-bold-x--lttitlegt-y"'));
+		assert.equal(
+			escapeHtml('</title><script>"&\''),
+			'&lt;/title&gt;&lt;script&gt;&quot;&amp;&#39;'
+		);
 	});
 
 	it('refuses a README without a heading', () => {

@@ -16,11 +16,24 @@ export function slug(text) {
 		.replace(/\s/g, '-');
 }
 
-const entities = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
+/**
+ * The text of a heading from its tokens, as GitHub makes its anchor from it:
+ * the words, of code too, without the markup and without inline HTML.
+ */
+export function textOf(tokens) {
+	return tokens
+		.map((token) => {
+			if (token.type === 'html') return '';
+			if (token.tokens) return textOf(token.tokens);
+			return token.text ?? '';
+		})
+		.join('');
+}
 
-/** The text of a piece of HTML, as a heading shows it. */
-const textOf = (html) =>
-	html.replace(/<[^>]*>/g, '').replace(/&(amp|lt|gt|quot|#39);/g, (_, name) => entities[name]);
+const escapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+/** Text as it may stand in HTML, as in the page's <title>. */
+export const escapeHtml = (text) => text.replace(/[&<>"']/g, (char) => escapes[char]);
 
 /**
  * Where a link of the README `file` leads on the site: an address with a
@@ -44,7 +57,8 @@ export function address(href, { file, pages, from, image = false }) {
 
 /**
  * Turns the README `file` into HTML. Returns its title, the text of its first
- * heading, and the HTML.
+ * heading (as text, not HTML: escape it before it goes into a page), and the
+ * HTML.
  */
 export function render(markdown, { file, pages, from }) {
 	const seen = new Map();
@@ -59,7 +73,7 @@ export function render(markdown, { file, pages, from }) {
 		renderer: {
 			heading({ tokens, depth }) {
 				const html = this.parser.parseInline(tokens);
-				const text = textOf(html);
+				const text = textOf(tokens);
 				title ??= text;
 				// The same heading twice gets -1, -2, … as on GitHub.
 				const base = slug(text);

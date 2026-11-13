@@ -30,14 +30,20 @@ export function linksOfStyle(css) {
 	return links;
 }
 
-/** The addresses in the href and src attributes of a page. */
+/**
+ * The page in one pass: a comment (to `-->` or `--!>`), a script element (to
+ * its end tag, however that is written), or an href or src with its address.
+ * Comments and scripts are passed over, so what they hold is not read as a link.
+ */
+const pieces =
+	/<!--[\s\S]*?(?:--!?>|$)|<script\b[\s\S]*?(?:<\/script\b[^>]*>|$)|\s(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+
+/** The addresses in the href and src attributes of a page, outside its scripts and comments. */
 export function linksOf(html) {
-	const text = html
-		.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-		.replace(/<!--[\s\S]*?-->/g, '');
 	const links = [];
-	for (const match of text.matchAll(/\s(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
-		links.push((match[1] ?? match[2]).replace(/&amp;/g, '&'));
+	for (const match of html.matchAll(pieces)) {
+		const address = match[1] ?? match[2];
+		if (address !== undefined) links.push(address.replace(/&amp;/g, '&'));
 	}
 	return links;
 }
