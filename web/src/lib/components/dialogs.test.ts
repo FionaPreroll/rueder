@@ -947,6 +947,26 @@ describe('Apps in the settings', () => {
 		expect(server.appPasswords).toEqual([]);
 	});
 
+	it('shows the way in NetNewsWire on the Mac in pictures', async () => {
+		open();
+		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
+		await userEvent.click(screen.getByRole('button', { name: 'NetNewsWire' }));
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));
+
+		// Its fields by their names, and the address without a slash.
+		expect(await screen.findByText(/^In NetNewsWire, open Settings/)).toBeInTheDocument();
+		expect(screen.getByText(`${location.origin}/greader`)).toBeInTheDocument();
+		await userEvent.click(screen.getByText('Step by step, with pictures'));
+		const pictures = screen.getAllByRole('img', { name: /^NetNewsWire, step / });
+		const files = [1, 2, 3].map((n) => `/apps/netnewswire-${n}.webp`);
+		expect(pictures.map((picture) => picture.getAttribute('src'))).toEqual(files);
+		// Each opens large, and is shown at half its size in pixels.
+		expect(pictures.map((picture) => picture.closest('a')?.getAttribute('href'))).toEqual(files);
+		expect(pictures[0].closest('li')).toHaveStyle({ width: '320px' });
+		expect(screen.getByText(/^3\. Enter the name as Login/)).toBeInTheDocument();
+	});
+
 	it('asks for a code where the account has a second factor', async () => {
 		server.secondFactor = { code: server.appCode, recovery: [] };
 		open();

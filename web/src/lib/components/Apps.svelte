@@ -242,22 +242,25 @@
 	{:else if made}
 		<h3 class="font-semibold">{appName(chosen)}</h3>
 		<p>{how(chosen)}</p>
-		{#if chosen !== null && chosen !== 'other' && chosen.shots > 0}
+		{#if chosen !== null && chosen !== 'other' && chosen.shots.length > 0}
 			{@const app = chosen}
 			<details class="rounded border border-line">
 				<summary class="cursor-pointer px-3 py-2 font-medium">{texts.shotsTitle}</summary>
-				<ol class="flex gap-3 overflow-x-auto px-3 pb-3">
-					{#each texts.shots[app.id] as caption, i (i)}
-						<li class="w-40 shrink-0 text-xs">
-							<img
-								class="w-40 rounded border border-line"
-								src={shot(app, i + 1)}
-								alt={texts.shotAlt(app.name, i + 1)}
-								width="360"
-								height="718"
-								loading="lazy"
-							/>
-							<p class="mt-1">{i + 1}. {caption}</p>
+				<ol class="flex items-start gap-3 overflow-x-auto px-3 pb-3">
+					{#each app.shots as size, i (i)}
+						<!-- At half its size in pixels, so that it stays sharp. -->
+						<li class="shrink-0 text-xs" style:width="{size.width / 2}px">
+							<a href={shot(app, i + 1)} target="_blank" rel="noopener noreferrer">
+								<img
+									class="w-full rounded border border-line"
+									src={shot(app, i + 1)}
+									alt={texts.shotAlt(app.name, i + 1)}
+									width={size.width}
+									height={size.height}
+									loading="lazy"
+								/>
+							</a>
+							<p class="mt-1">{i + 1}. {texts.shots[app.id][i]}</p>
 						</li>
 					{/each}
 				</ol>

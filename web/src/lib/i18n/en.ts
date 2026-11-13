@@ -351,7 +351,11 @@ const en = {
 					'Choose Google Reader.',
 					'Enter the server address as Server URL, the name as Username and the app password as Password, then tap Add.'
 				],
-				netnewswire: []
+				netnewswire: [
+					'On the Mac: open Settings (⌘,), then Accounts, and click + at the bottom left.',
+					'Choose FreshRSS and click Continue.',
+					'Enter the name as Login, the app password as Password and the server address as API URL, then click Create.'
+				]
 			},
 			shotAlt: (app: string, step: number) => `${app}, step ${n(step)}`,
 			server: 'Server address',

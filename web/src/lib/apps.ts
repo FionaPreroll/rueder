@@ -5,6 +5,12 @@
 
 export type Platform = 'apple' | 'android';
 
+/** A picture of a step in an app: its size in pixels. */
+export interface Shot {
+	width: number;
+	height: number;
+}
+
 export interface KnownApp {
 	id: 'netnewswire' | 'readyou';
 	name: string;
@@ -16,11 +22,12 @@ export interface KnownApp {
 	 */
 	slash: boolean;
 	/**
-	 * How many pictures show the way in the app, step by step: screenshots in
+	 * The pictures that show the way in the app, step by step: screenshots in
 	 * `static/apps/<id>-<n>.webp`, from 1 on, each with its caption in the
-	 * texts. None where there are none yet.
+	 * texts. None where there are none yet. They are made at twice the size
+	 * they are shown at.
 	 */
-	shots: number;
+	shots: Shot[];
 }
 
 /** Where the picture of a step of an app is, from 1 on. */
@@ -33,7 +40,12 @@ export const knownApps: KnownApp[] = [
 		platforms: ['apple'],
 		url: 'https://netnewswire.com/',
 		slash: false,
-		shots: 0
+		// On the Mac.
+		shots: [
+			{ width: 640, height: 585 },
+			{ width: 640, height: 775 },
+			{ width: 640, height: 406 }
+		]
 	},
 	{
 		id: 'readyou',
@@ -41,7 +53,7 @@ export const knownApps: KnownApp[] = [
 		platforms: ['android'],
 		url: 'https://f-droid.org/packages/me.ash.reader/',
 		slash: true,
-		shots: 5
+		shots: Array.from({ length: 5 }, () => ({ width: 360, height: 718 }))
 	}
 ];
 
