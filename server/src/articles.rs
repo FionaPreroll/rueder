@@ -164,15 +164,21 @@ pub(crate) async fn write(conn: &mut PgConnection, placed: &[Placed<'_>]) -> any
     let authors: Vec<_> = articles().map(NewArticle::author).collect();
     let urls: Vec<_> = articles().map(|a| a.original.url.clone()).collect();
     let thumbnails: Vec<_> = articles().map(|a| a.thumbnail_url.clone()).collect();
+    // When rueder first had it, which its first version records too: what the
+    // retention counts its age from. The import gives the time the old rueder
+    // first fetched it.
+    let arrived: Vec<_> = articles().map(|a| a.fetched_at).collect();
     sqlx::query!(
         "INSERT INTO articles
-             (feed_id, seq, id, published_at, title, teaser, author, url, thumbnail_url)
+             (feed_id, seq, id, published_at, title, teaser, author, url, thumbnail_url,
+              arrived_at)
          SELECT n.feed_id, n.seq, coalesce(n.id, nextval('articles_id_seq')), n.published_at,
-                n.title, n.teaser, n.author, n.url, n.thumbnail_url
+                n.title, n.teaser, n.author, n.url, n.thumbnail_url, n.arrived_at
          FROM unnest($1::integer[], $2::integer[], $3::bigint[], $4::timestamptz[], $5::text[],
-                     $6::text[], $7::text[], $8::text[], $9::text[])
+                     $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[])
               WITH ORDINALITY
-              AS n (feed_id, seq, id, published_at, title, teaser, author, url, thumbnail_url, ord)
+              AS n (feed_id, seq, id, published_at, title, teaser, author, url, thumbnail_url,
+                    arrived_at, ord)
          ORDER BY n.ord",
         &feed_ids,
         &seqs,
@@ -183,6 +189,7 @@ pub(crate) async fn write(conn: &mut PgConnection, placed: &[Placed<'_>]) -> any
         &authors,
         &urls as &[Option<String>],
         &thumbnails as &[Option<String>],
+        &arrived,
     )
     .execute(&mut *conn)
     .await?;
@@ -408,6 +415,21 @@ pub(crate) async fn current_original(
     raw.map(|raw| Original::decompress(&raw)).transpose()
 }
 
+/// The title an article has now, if there is such an article.
+pub(crate) async fn title_of(
+    conn: &mut PgConnection,
+    feed_id: i32,
+    seq: i32,
+) -> anyhow::Result<Option<String>> {
+    Ok(sqlx::query_scalar!(
+        "SELECT title FROM articles WHERE feed_id = $1 AND seq = $2",
+        feed_id,
+        seq,
+    )
+    .fetch_optional(&mut *conn)
+    .await?)
+}
+
 /// Puts the text of an article's current version in place again, cleaned
 /// anew. Nothing about the article changed, only the rules it is cleaned by,
 /// so it gets no new version.
@@ -535,9 +557,12 @@ pub async fn page(
             r#"
         WITH RECURSIVE subs AS MATERIALIZED (
             SELECT s.feed_id, s.read_upto,
+                   -- The newest article at or below the mark: where the
+                   -- retention cleared the feed, the one at the mark is gone.
                    CASE WHEN $5 THEN coalesce(
                        (SELECT m.id FROM articles m
-                        WHERE m.feed_id = s.feed_id AND m.seq = s.read_upto), 0)
+                        WHERE m.feed_id = s.feed_id AND m.seq <= s.read_upto
+                        ORDER BY m.seq DESC LIMIT 1), 0)
                    ELSE 0 END AS floor
             FROM subscriptions s
             WHERE s.account_id = $1 AND s.feed_id = ANY($2)
@@ -623,9 +648,12 @@ pub async fn page(
             r#"
         WITH RECURSIVE subs AS MATERIALIZED (
             SELECT s.feed_id, s.read_upto,
+                   -- The newest article at or below the mark: where the
+                   -- retention cleared the feed, the one at the mark is gone.
                    CASE WHEN $5 THEN coalesce(
                        (SELECT m.id FROM articles m
-                        WHERE m.feed_id = s.feed_id AND m.seq = s.read_upto), 0)
+                        WHERE m.feed_id = s.feed_id AND m.seq <= s.read_upto
+                        ORDER BY m.seq DESC LIMIT 1), 0)
                    ELSE 0 END AS floor
             FROM subscriptions s
             WHERE s.account_id = $1 AND s.feed_id = ANY($2)
@@ -816,6 +844,9 @@ pub struct Opened {
     pub enclosures: serde_json::Value,
     pub image_url: Option<String>,
     pub image_title: Option<String>,
+    /// The retention took its text and left its line in the lists: `html` is
+    /// empty, and the original is where `url` points.
+    pub text_dropped: bool,
 }
 
 /// An article with its text, if the account subscribes to its feed.
@@ -829,7 +860,8 @@ pub async fn open(
         Opened,
         r#"SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at,
                 a.updated_what AS "updated_what: Changed", a.version, a.title,
-                a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title
+                a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title,
+                c.text_dropped
          FROM subscriptions s
          JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          JOIN articles a ON a.feed_id = s.feed_id

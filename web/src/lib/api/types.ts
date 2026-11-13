@@ -742,6 +742,11 @@ export type Article = {
 	tags: Array<string>,
 	image_url: string | null,
 	image_title: string | null,
+	/**
+	 * The retention took its text and left its line in the lists: `html` is
+	 * empty, and the original is where `url` points.
+	 */
+	text_dropped: boolean,
 };
 
 /**

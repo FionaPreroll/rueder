@@ -110,6 +110,8 @@ const de: Messages = {
 			`Die Überschrift wurde neu geschrieben, der Text ist wie er war; ${n(count)} ${plural(count, { one: 'frühere Version', other: 'frühere Versionen' })}`,
 		compare: 'Versionen vergleichen',
 		hiddenBy: (rule) => `Ausgeblendet von der Regel: ${rule}`,
+		textDropped: 'Dieser Server bewahrt den Text dieses Artikels nicht mehr auf, weil er alt ist.',
+		textDroppedOriginal: 'An der Quelle lesen',
 		loading: 'Der Text wird geladen …',
 		loadingList: 'Wird geladen …',
 		toTop: 'Zurück nach oben',

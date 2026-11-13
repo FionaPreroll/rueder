@@ -89,6 +89,7 @@ Die Tabellen im Überblick. Die genauen Spalten stehen in den Migrationen, `serv
 | Regeln | `filter_rules` | Filterregeln je Konto, siehe [Filterregeln](#filterregeln). |
 | Labels | `labels`, `article_labels` | Labels mit Farbe je Konto und ihre Zuordnung zu Artikeln. Der Stern ist kein Label, sondern eine Ausnahme in `article_states`. |
 | Fehlerberichte | `client_reports` | Fehler aus den Browsern der User, die zustimmen, je Konto und Fingerabdruck gezählt, siehe [Fehlerberichte aus dem Browser](#fehlerberichte-aus-dem-browser). |
+| Aufbewahrung | `retention`, `article_tombstones`, `feeds.cut_seq`, `articles.arrived_at` | Wie lange was bleibt, die Kennungen ganz gelöschter Artikel und die Grenze, bis zu der ein Feed aufgeräumt ist, siehe [Aufbewahrung](#aufbewahrung). |
 
 Schlüssel sind fortlaufende Zahlen, keine UUIDs, `bigint` für Artikel und Fehlerberichte, `integer` für alles andere (Konten, Feeds, Ordner, Regeln, Labels, Einladungen): Sie halten Zeilen und Indizes schmal, und neue Artikel liegen im Index beieinander. Feeds und Konten behalten ihre alte UUID in einer Spalte `legacy_id`, Artikel in der Tabelle `legacy_articles`, damit der Import weiß, was er schon übernommen hat, und Lesestand und Labels aus dem Browser zugeordnet werden können. Die Tabelle statt einer Spalte hält die heiße Artikeltabelle schmal und kann nach dem Umstieg weg.
 
@@ -113,7 +114,7 @@ So greifen die Teile ineinander:
 
 Regeln, auf die sich der Rest verlässt:
 
-- **Nummern sind lückenlos und werden nie neu vergeben.** Ein Feed vergibt `last_seq + 1` in derselben Transaktion, in der der Artikel eingefügt wird; je Feed läuft immer nur ein Abruf. Die Ungelesen-Zahl rechnet mit `last_seq`, eine Lücke würde als ungelesener Artikel zählen.
+- **Nummern sind lückenlos und werden nie neu vergeben.** Ein Feed vergibt `last_seq + 1` in derselben Transaktion, in der der Artikel eingefügt wird; je Feed läuft immer nur ein Abruf. Die Ungelesen-Zahl rechnet mit `last_seq`, eine Lücke würde als ungelesener Artikel zählen. Lücken gibt es deshalb nur unter der Grenze, bis zu der die [Aufbewahrung](#aufbewahrung) einen Feed aufgeräumt hat, und keine Lesemarke steht darunter.
 - **Ein Artikel wird über seine Kennung im Feed wiedererkannt** (GUID, ersatzweise der Link), eindeutig je Feed.
 - **Eine neue Version ändert den Lesestand nicht.** Der Artikel bleibt gelesen; die heiße Zeile bekommt die neue Versionsnummer und den Zeitpunkt, daraus macht die Oberfläche den Hinweis „aktualisiert“. Dazu hält `articles.updated_what` fest, was anders war: `title`, `text` oder `both`. Verglichen werden die beiden Texte, aus denen auch die Prüfsumme entsteht, Titel und bereinigter Text, und Leerraum zählt wie dort nicht mit. Schreibt ein Feed nur die Überschrift um, sagt die Liste „neue Überschrift“ statt „aktualisiert“: Sonst sucht, wer den Artikel öffnet, im Text nach einer Änderung, die es dort nicht gibt. Leer bleibt die Spalte bei jeder Version von vor Paket 5.12; die Oberfläche sagt dann wie bisher „aktualisiert“.
 - **Höchstens 20 Versionen je Artikel.** Bei der 21. bleiben die Erstfassung und die 19 neuesten, die zweitälteste fällt weg.
@@ -154,6 +155,32 @@ Die Operationen:
 Das maßgebliche Modell mit Tests ist `web/src/lib/unread.ts`. Der Server bildet genau dieses Verhalten nach und wird mit denselben Fällen geprüft, am besten mit Property-Tests gegen ein einfaches Modell („eine Menge gelesener Nummern“).
 
 Der Lesestand hängt an (Konto, Feed, Nummer) und nicht an der ID des Artikels. Die Liste eines Feeds und seine Zählung kommen dadurch ohne Verbund mit der Artikeltabelle aus.
+
+## Aufbewahrung
+
+Gebaut in Paket 5.3 (A21, E4; `server/src/retention.rs`, Migration `0017_retention_articles.sql`, in der Tabelle `retention`, die mit Paket 5.14 für den Status entstand). Was alt ist, darf gehen, wenn der Betreiber es einstellt; als Standard bleibt alles, wie bisher, und der Lauf tut dann nichts. `rueder retention set` stellt ein, `show` zeigt es, `run` räumt sofort alles auf, statt auf den Server zu warten:
+
+| Einstellung | Was geht | Wie |
+|---|---|---|
+| `--articles <Monate> --remove article` | Artikel, die vor so vielen Monaten ankamen, ganz: aus Listen, Ungelesen-Zahlen und Suche | Vom ältesten Artikel eines Feeds an aufwärts, siehe unten |
+| `--articles <Monate> --remove text` | Nur ihr Text und ihre Versionen; die Zeile in der Liste bleibt, mit Titel und Anriss, und zählt weiter | `article_content.html` wird leer, `text_dropped` gesetzt; Schlagwörter, Anhänge und Bild bleiben, so bleibt eine Podcast-Folge abspielbar |
+| `--versions <Monate>` | Versionen, nach ganzen Monaten | Die Monatspartitionen von `article_versions` fallen mit `DROP TABLE` (Funktion `drop_versions_partitions`); wartet die Sperre der Tabelle länger als fünf Sekunden, ist der nächste Lauf dran |
+| `--orphans <Tage>` | Feeds, die so lange kein Abo haben, samt Artikeln | Der Lauf merkt sich in `feeds.orphaned_at`, seit wann er keinen Leser sah, und löscht danach Portion für Portion |
+
+Fiona hat am 2026-11-13 entschieden: Ob ganze Artikel oder nur Texte gehen, wählt der Betreiber je Instanz, und er muss es nennen (`--remove`), weil beides unerwartet sein kann; das Alter zählt ab der Ankunft in rueder; gesperrte Feeds bekommen keine Sonderregel.
+
+- **Was bleibt.** Artikel mit Stern oder Label irgendeines Kontos bleiben, mit ihrem Text. Was beim Aufräumen einen Stern hatte und ihn später verliert, bleibt trotzdem; ein Lauf sieht nur über der Grenze nach. Ein gesperrter Feed ohne Abonnenten verliert seine Artikel, behält aber seine Zeile und damit die Sperre, sonst könnte jemand seine Adresse neu abonnieren (eigene Entscheidung).
+- **Das Alter** ist `articles.arrived_at`, die Zeit des ersten Abrufs, die auch die erste Version trägt. Ein Feed kann einen Artikel rückdatieren, und der Import des alten rueder bringt Artikel mit altem Datum; mit der Ankunft verliert keiner einen Artikel, den er gerade erst bekam. Der Import setzt die Zeit, zu der der alte rueder den Artikel zuerst abrief. Artikel von vor der Migration haben deren Zeit; die Produktion ruft erst seit dem 2026-11-12 ab, das ist bis auf Tage genau, und die Tabelle wird dafür nicht neu geschrieben.
+- **Lesestand ohne Zählen.** Ein Feed wird von seinem ältesten Artikel an aufgeräumt, bis zu einer Grenze `feeds.cut_seq`, und in derselben Transaktion rückt jede Lesemarke des Feeds auf diese Grenze vor. Was darunter stehen bleibt, die markierten Artikel, behält für jeden Leser seinen Stand: ungelesen wird zur Ausnahme „ungelesen gehalten“, gelesen braucht keine Zeile mehr, ausgeblendet bleibt ausgeblendet. Ausnahmen zu gelöschten Artikeln fallen weg. So bleibt die Formel aus [Lesestand und Ungelesen-Zahlen](#lesestand-und-ungelesen-zahlen) richtig, ohne Artikel zu zählen. Ein neues Abo beginnt nie unter der Grenze: Ein Trigger auf `subscriptions` hebt die Marke an, wer es auch anlegt (Abonnieren, Umzug, Import), und wartet dafür mit `FOR KEY SHARE`, falls gerade aufgeräumt wird. Lesen, Stern und Ausblenden lehnen eine Nummer unter der Grenze ab, wenn der Artikel nicht mehr da ist, sonst zählte eine Ausnahme ohne Artikel als ungelesen.
+- **Kein Artikel kommt zurück.** Steht ein ganz gelöschter Artikel noch im Feed, wie bei Podcasts mit allen Folgen, erkennt der Abruf ihn an seiner Kennung in `article_tombstones` (SHA-256 der Kennung, 16 Byte, rund 60 Byte je Zeile, sie gehen mit dem Feed) und legt ihn nicht neu an. Einen Artikel ohne Text lässt der Abruf in Ruhe, auch wenn die Quelle ihn ändert. Ist zu einem Artikel keine Version mehr da, gilt ein anders bereinigter Text nicht als neue Version, eine neue Überschrift aber schon, weil sonst Titel und Text auseinanderliefen.
+- **Portionen.** Eine Transaktion räumt höchstens 500 Artikel eines Feeds und sperrt dafür den Feed, seine Abos und diese Artikel, wie es ein Abruf auch tut. Der Server räumt stündlich, höchstens fünf Minuten lang; was übrig bleibt, kommt beim nächsten Lauf. Gehen ganze Artikel, hören die offenen Tabs der Leser davon als Ereignis `reading` ohne Feed und laden Zahlen und Liste neu.
+- **Was sich dafür an anderer Stelle änderte.** Die Liste „nur ungelesen“ nimmt als Untergrenze den neuesten Artikel an oder unter der Lesemarke, nicht den an der Marke, der nach dem Aufräumen fehlen kann; sonst las sie den ganzen Feed und zeigte markierte Artikel doppelt. Der Umzug eines Kontos nennt für eine Marke an der Grenze den Artikel, der dort stand, wie ihn der Feed sich beim Aufräumen gemerkt hat (`cut_guid`, `cut_url`, `cut_published_at`); ohne ihn wüsste die andere Instanz nicht, bis wohin gelesen ist.
+- **Für die Apps** anderer Anbieter ist ein Artikel ohne Text einer mit leerem Text.
+
+Offen:
+
+- **E13, inaktive Konten** nach zwei Mails löschen: rueder speichert keine E-Mail-Adressen und verschickt keine Mails. Das braucht ein eigenes Paket.
+- Wer Lesestand und Labels aus dem alten Browser übernehmen will (Paket 4.6), schaltet die Aufbewahrung erst danach ein: Die Übernahme findet Artikel über `legacy_articles`, die mit ihren Artikeln gehen.
 
 ## Ordner und Abos
 

@@ -85,16 +85,46 @@ pub async fn unread_of(
     Ok(counts)
 }
 
-/// Locks the subscription for the rest of the transaction and returns its mark
-/// and the feed's newest number, or `None` if the account does not subscribe to
-/// the feed.
+/// A subscription, locked for the rest of the transaction.
+struct Locked {
+    /// Its mark.
+    mark: i32,
+    /// The feed's newest number.
+    last: i32,
+    /// Up to where the retention cleared the feed (`crate::retention`): at or
+    /// below it only the articles it kept are still there.
+    cut: i32,
+}
+
+impl Locked {
+    /// Whether the feed has an article of this number: every one above the
+    /// cut up to the newest, and at or below it those the retention kept.
+    async fn has(&self, conn: &mut PgConnection, feed_id: i32, seq: i32) -> anyhow::Result<bool> {
+        if seq < 1 || seq > self.last {
+            return Ok(false);
+        }
+        if seq > self.cut {
+            return Ok(true);
+        }
+        Ok(sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM articles WHERE feed_id = $1 AND seq = $2) AS "has!""#,
+            feed_id,
+            seq,
+        )
+        .fetch_one(conn)
+        .await?)
+    }
+}
+
+/// Locks the subscription for the rest of the transaction, or `None` if the
+/// account does not subscribe to the feed.
 async fn lock(
     conn: &mut PgConnection,
     account_id: i32,
     feed_id: i32,
-) -> anyhow::Result<Option<(i32, i32)>> {
+) -> anyhow::Result<Option<Locked>> {
     let row = sqlx::query!(
-        "SELECT s.read_upto, f.last_seq
+        "SELECT s.read_upto, f.last_seq, f.cut_seq
          FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
          WHERE s.account_id = $1 AND s.feed_id = $2
          FOR UPDATE OF s",
@@ -103,7 +133,11 @@ async fn lock(
     )
     .fetch_optional(&mut *conn)
     .await?;
-    Ok(row.map(|row| (row.read_upto, row.last_seq)))
+    Ok(row.map(|row| Locked {
+        mark: row.read_upto,
+        last: row.last_seq,
+        cut: row.cut_seq,
+    }))
 }
 
 /// Changes flags of one article's state. The row comes and goes with its flags,
@@ -206,16 +240,36 @@ pub async fn set_many_on(
     seqs: &[i32],
     change: Many,
 ) -> anyhow::Result<bool> {
-    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
+    let Some(locked) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
+    let mark = locked.mark;
     let mut seqs: Vec<i32> = seqs
         .iter()
         .copied()
-        .filter(|seq| (1..=last).contains(seq))
+        .filter(|seq| (1..=locked.last).contains(seq))
         .collect();
     seqs.sort_unstable();
     seqs.dedup();
+    // At or below the cut only the articles the retention kept are there; a
+    // mark on one that went would count as unread for nothing.
+    let below: Vec<i32> = seqs
+        .iter()
+        .copied()
+        .filter(|seq| *seq <= locked.cut)
+        .collect();
+    if !below.is_empty() {
+        let kept: std::collections::HashSet<i32> = sqlx::query_scalar!(
+            "SELECT seq FROM articles WHERE feed_id = $1 AND seq = ANY($2)",
+            feed_id,
+            &below,
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .collect();
+        seqs.retain(|seq| *seq > locked.cut || kept.contains(seq));
+    }
     match change {
         Many::Starred(on) => {
             set_flags_many(conn, account_id, feed_id, &seqs, Change::Starred(on)).await?;
@@ -409,12 +463,13 @@ pub async fn set_read_on(
     seq: i32,
     read: bool,
 ) -> anyhow::Result<bool> {
-    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
+    let Some(locked) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
-    if seq < 1 || seq > last {
+    if !locked.has(conn, feed_id, seq).await? {
         return Ok(false);
     }
+    let mark = locked.mark;
     if seq <= mark {
         set_flags(conn, account_id, feed_id, seq, Change::KeptUnread(!read)).await?;
     } else {
@@ -448,7 +503,7 @@ pub async fn mark_all_read_on(
     feed_id: i32,
     upto: i32,
 ) -> anyhow::Result<bool> {
-    let Some((mark, last)) = lock(&mut *tx, account_id, feed_id).await? else {
+    let Some(Locked { mark, last, .. }) = lock(&mut *tx, account_id, feed_id).await? else {
         return Ok(false);
     };
     let upto = upto.min(last);
@@ -519,7 +574,7 @@ pub async fn mark_older_read_on(
     upto: i32,
     cutoff: OffsetDateTime,
 ) -> anyhow::Result<bool> {
-    let Some((mark, last)) = lock(&mut *tx, account_id, feed_id).await? else {
+    let Some(Locked { mark, last, .. }) = lock(&mut *tx, account_id, feed_id).await? else {
         return Ok(false);
     };
     let upto = upto.min(last);
@@ -648,10 +703,10 @@ pub async fn set_starred(
     starred: bool,
 ) -> anyhow::Result<bool> {
     let mut tx = db.begin().await?;
-    let Some((_, last)) = lock(&mut tx, account_id, feed_id).await? else {
+    let Some(locked) = lock(&mut tx, account_id, feed_id).await? else {
         return Ok(false);
     };
-    if seq < 1 || seq > last {
+    if !locked.has(&mut tx, feed_id, seq).await? {
         return Ok(false);
     }
     set_flags(&mut tx, account_id, feed_id, seq, Change::Starred(starred)).await?;
@@ -683,12 +738,13 @@ pub async fn set_hidden_on(
     seq: i32,
     hidden: bool,
 ) -> anyhow::Result<bool> {
-    let Some((mark, last)) = lock(conn, account_id, feed_id).await? else {
+    let Some(locked) = lock(conn, account_id, feed_id).await? else {
         return Ok(false);
     };
-    if seq < 1 || seq > last {
+    if !locked.has(conn, feed_id, seq).await? {
         return Ok(false);
     }
+    let mark = locked.mark;
     set_flags(conn, account_id, feed_id, seq, Change::Hidden(hidden)).await?;
     if hidden {
         compact(conn, account_id, feed_id, mark).await?;

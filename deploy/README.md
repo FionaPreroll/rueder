@@ -227,6 +227,7 @@ docker compose exec rueder rueder account disable mallory  # no login, sessions 
 docker compose exec rueder rueder account remove mallory   # deletes the account and all that is its own
 docker compose exec rueder rueder feed block https://spam.example/feed.xml   # not fetched, hidden for all, its images gone; `unblock` undoes it
 docker compose exec rueder rueder reclean                  # after the cleaning's rules changed
+docker compose exec rueder rueder retention show           # how long what is kept, see below
 docker compose exec -T rueder rueder account export fiona > fiona.json            # move an account away
 docker compose exec -T rueder rueder account import fiona /dev/stdin < fiona.json  # and in, here or elsewhere
 docker compose logs --follow rueder
@@ -254,9 +255,37 @@ docker compose exec rueder rueder registration set --admin-invite-accounts 20
 ```
 
 `none` lifts a limit (`--max-accounts none`), `registration show` says what is
-set and how many accounts there are. Readers make their links in the settings
-under "Invitations". There is no confirmation by email and no CAPTCHA: if you
+set and how many accounts there are. Readers make their links in the account
+settings, in the menu of their account, under "Invitations". There is no confirmation by email and no CAPTCHA: if you
 open registration to everybody, set `--per-day`.
+
+## Keeping old articles, or not
+
+Out of the box rueder keeps everything for good. A large instance can let old
+things go, each on its own, and the server clears them within the hour, a
+little at a time:
+
+```sh
+# Articles that arrived more than 24 months ago. Say what goes of them:
+# `article` takes them from the lists, the unread counts and the search;
+# `text` takes only their text and leaves their line in the lists.
+docker compose exec rueder rueder retention set --articles 24 --remove text
+
+# Versions after 12 months, by whole months; feeds nobody has subscribed to
+# for 90 days, with their articles.
+docker compose exec rueder rueder retention set --versions 12 --orphans 90
+
+# Clear it all now instead of waiting for the server.
+docker compose exec rueder rueder retention run
+```
+
+Articles a reader starred or labelled stay, with their text. `never` keeps
+something for good again (`--articles never`), and `retention show` says what
+is set. Age counts from when rueder first fetched an article, not from the date
+its feed gives it. A blocked feed nobody reads loses its articles but keeps its
+block. If you bring over read state and labels from the old rueder's browsers,
+do that first: the takeover finds the old articles, which the retention may
+take away.
 
 ## Updates
 

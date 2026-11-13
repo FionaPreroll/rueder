@@ -42,6 +42,19 @@ async function reading() {
 }
 
 describe('the page with a server', () => {
+	it("says when the server no longer keeps an article's text, and links its source", async () => {
+		const old = server.article(tech, 1)!;
+		Object.assign(old, { html: '', text_dropped: true });
+		await reading();
+		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
+		await userEvent.click(await screen.findByRole('button', { name: /Article 1 of feed/ }));
+		expect(await screen.findByText(/no longer keeps the text of this article/)).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Read it at its source' })).toHaveAttribute(
+			'href',
+			old.url
+		);
+	});
+
 	it('asks who is there, and shows the login to nobody', async () => {
 		server.signedIn = null;
 		const release = server.hold(/^\/me$/);

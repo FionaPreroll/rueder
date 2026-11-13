@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE article_states st SET read = false FROM subscriptions s\n         WHERE s.feed_id = $1 AND st.account_id = s.account_id AND st.feed_id = s.feed_id\n           AND st.seq > s.read_upto AND st.seq <= $2 AND st.read",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bced39216068ba1c6d00d2f80fb7ac68629ac15006677d4161bda1d671eecf24"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds SET text_cut_seq = greatest(text_cut_seq, $2) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc4ebe28b91a49e75988929d7f7f9fdccf946aac460ec79e013f2c65b9001c4c"
+}

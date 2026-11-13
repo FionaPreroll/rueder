@@ -118,7 +118,8 @@ describe('the types of the API', () => {
 				{ url: 'https://a.example/1.mp3', type: 'audio/mpeg', length: 123, inline: false }
 			],
 			labels: [],
-			hidden_by: null
+			hidden_by: null,
+			text_dropped: false
 		};
 		const rule: Rule = {
 			id: 1,

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT $1::timestamptz - make_interval(months => $2) AS \"before!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "before!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6b09bd2cf126b7bec50ab036dca558e1d628fa7c3070d7e201a9cc5d65a55c6c"
+}

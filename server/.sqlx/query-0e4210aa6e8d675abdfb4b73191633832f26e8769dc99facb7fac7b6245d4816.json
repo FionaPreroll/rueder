@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE article_content SET html = '', text_dropped = true\n         WHERE feed_id = $1 AND seq = ANY($2) AND NOT text_dropped",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e4210aa6e8d675abdfb4b73191633832f26e8769dc99facb7fac7b6245d4816"
+}

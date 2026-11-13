@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds f\n         SET cut_seq = $2, cut_guid = c.guid, cut_url = a.url, cut_published_at = a.published_at\n         FROM articles a JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n         WHERE f.id = $1 AND a.feed_id = $1 AND a.seq = $2 AND f.cut_seq < $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "76926382c0b50e8e97a62cd253599a365d34fa843f9d7a06d2c4f6e9e311f47a"
+}
