@@ -19,16 +19,17 @@
 //! count.
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{delete, get},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{AppError, AppState, passkeys, second_factor, sessions::Session, tree};
 
@@ -42,10 +43,10 @@ const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 /// in seconds.
 const TOUCH_AFTER: f64 = 3600.0;
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/app-passwords", get(list).post(create))
-        .route("/app-passwords/{id}", delete(revoke))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(list, create))
+        .routes(routes!(revoke))
 }
 
 /// The types of this module for the frontend.
@@ -54,22 +55,25 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
 }
 
 /// An app password as the list shows it: never the password itself.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "AppPassword")]
+#[schema(as = AppPassword)]
 pub struct Listed {
     id: i32,
     name: String,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     created_at: OffsetDateTime,
     /// When an app last logged in with it, to the hour; null until one did.
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
     used_at: Option<OffsetDateTime>,
 }
 
 /// What `GET /api/app-passwords` answers.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct AppPasswords {
     app_passwords: Vec<Listed>,
     /// How many the account can have.
@@ -79,15 +83,18 @@ struct AppPasswords {
 /// What `POST /api/app-passwords` reads: a name for it, and the account's
 /// password and, where the second factor is on, one of its codes; or a
 /// passkey instead of both.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "NewAppPassword")]
+#[schema(as = NewAppPassword)]
 struct New {
     name: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     password: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     code: String,
     #[serde(default)]
     #[ts(optional)]
@@ -95,8 +102,9 @@ struct New {
 }
 
 /// What `POST /api/app-passwords` answers: the app password, this once.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "CreatedAppPassword")]
+#[schema(as = CreatedAppPassword)]
 struct Created {
     #[serde(flatten)]
     listed: Listed,
@@ -208,6 +216,16 @@ pub async fn counts(db: &PgPool, id: i32) -> anyhow::Result<bool> {
     Ok(found.is_some())
 }
 
+/// The account's app passwords: name, when made and when last used, never the
+/// password itself.
+#[utoipa::path(
+    get,
+    path = "/app-passwords",
+    operation_id = "list_app_passwords",
+    tag = "Account",
+    security(("session" = [])),
+    responses((status = OK, body = AppPasswords), crate::openapi::NeedsSession),
+)]
 async fn list(
     State(state): State<AppState>,
     session: Session,
@@ -233,6 +251,14 @@ async fn list(
 /// factor is on, one of its codes: a stolen session must not be enough for a
 /// way in that outlasts it. Without a code the answer is 403 with `second
 /// factor needed`; wrong ones count like wrong passwords at login.
+#[utoipa::path(
+    post,
+    path = "/app-passwords",
+    tag = "Account",
+    request_body = New,
+    security(("session" = [])),
+    responses((status = CREATED, description = "Made; the password is in the answer this once.", body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No name, or one that is too long, or as many app passwords as an account may have (20)."), (status = FORBIDDEN, description = "A wrong password or code, or `second factor needed`."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+)]
 async fn create(
     State(state): State<AppState>,
     session: Session,
@@ -277,6 +303,15 @@ async fn create(
 
 /// Revokes an app password: the app it was for is logged out, and the images
 /// in what it fetched stop loading.
+#[utoipa::path(
+    delete,
+    path = "/app-passwords/{id}",
+    operation_id = "revoke_app_password",
+    tag = "Account",
+    params(("id" = i32, Path, description = "The app password, as the list names it.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such app password of the account.")),
+)]
 async fn revoke(
     State(state): State<AppState>,
     session: Session,

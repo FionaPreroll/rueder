@@ -17,15 +17,16 @@
 //!   ([`unblock`]).
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    routing::post,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{AppError, AppState, cleaning, images, sessions::Session};
 
@@ -35,9 +36,10 @@ pub const MAX_NOTE: usize = 500;
 pub const LISTED: i64 = 50;
 
 /// Why something is reported.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename = "ReportReason")]
+#[schema(as = ReportReason)]
 pub enum Reason {
     /// Against the law: hate, violence, abuse of children, terror.
     Illegal,
@@ -77,19 +79,22 @@ impl Reason {
 ///
 /// `POST /api/feeds/{id}/report` and `POST /api/feeds/{id}/articles/{seq}/report`
 /// read it and answer 204.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "ContentReport")]
+#[schema(as = ContentReport)]
 pub struct Report {
     reason: Reason,
     /// What the reader adds, at most 500 characters.
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     note: String,
 }
 
 /// A feed readers reported, for the status page: its address, never who.
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, ToSchema)]
 #[ts(rename = "ReportedFeed")]
+#[schema(as = ReportedFeed)]
 pub struct Reported {
     pub feed_id: i32,
     pub url: String,
@@ -99,24 +104,23 @@ pub struct Reported {
     pub reasons: Vec<ReasonCount>,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub last_at: OffsetDateTime,
     pub blocked: bool,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, ToSchema)]
 #[ts(rename = "ReportReasonCount")]
+#[schema(as = ReportReasonCount)]
 pub struct ReasonCount {
     pub reason: Reason,
     pub reports: i64,
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/feeds/{feed_id}/report", post(report_feed))
-        .route(
-            "/feeds/{feed_id}/articles/{seq}/report",
-            post(report_article),
-        )
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(report_feed))
+        .routes(routes!(report_article))
 }
 
 /// The types this module sends and reads, for the frontend.
@@ -124,6 +128,17 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
     types.add::<Report>().add::<Reported>();
 }
 
+/// Reports a feed to the operator, with a reason from the list and a short
+/// note. An account reports a feed once; a second report replaces the first.
+#[utoipa::path(
+    post,
+    path = "/feeds/{feed_id}/report",
+    tag = "Reports",
+    params(("feed_id" = i32, Path, description = "The feed.")),
+    request_body = Report,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A reason not on the list, or a note that is too long."), (status = NOT_FOUND, description = "This server takes no reports (`CONTENT_REPORTS` is not on), or the account does not read this feed or article."), (status = TOO_MANY_REQUESTS, description = "Too many reports from this account.")),
+)]
 async fn report_feed(
     State(state): State<AppState>,
     session: Session,
@@ -133,6 +148,16 @@ async fn report_feed(
     file(&state, &session, feed_id, None, report).await
 }
 
+/// Reports one article of a feed, as `report_feed` does the feed.
+#[utoipa::path(
+    post,
+    path = "/feeds/{feed_id}/articles/{seq}/report",
+    tag = "Reports",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed.")),
+    request_body = Report,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A reason not on the list, or a note that is too long."), (status = NOT_FOUND, description = "This server takes no reports (`CONTENT_REPORTS` is not on), or the account does not read this feed or article."), (status = TOO_MANY_REQUESTS, description = "Too many reports from this account.")),
+)]
 async fn report_article(
     State(state): State<AppState>,
     session: Session,

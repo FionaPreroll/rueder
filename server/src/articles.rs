@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
 
 /// An article keeps at most this many versions: the first and the newest ones.
 pub const MAX_VERSIONS: i64 = 20;
@@ -456,7 +457,7 @@ pub(crate) async fn recleaned(
 /// What was different about an article when it last got a new version. A feed
 /// that only rewrites a headline says nothing in the text, and the reader would
 /// look for a change in vain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, ToSchema, sqlx::Type)]
 #[serde(rename_all = "lowercase")]
 #[sqlx(type_name = "text", rename_all = "lowercase")]
 pub enum Changed {
@@ -481,7 +482,7 @@ impl Changed {
 }
 
 /// One line of a list.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, ToSchema)]
 pub struct ListItem {
     pub feed_id: i32,
     pub seq: i32,
@@ -489,10 +490,12 @@ pub struct ListItem {
     pub id: i64,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub published_at: OffsetDateTime,
     /// When the current version replaced the one before, if it ever did.
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
     pub updated_at: Option<OffsetDateTime>,
     /// What was different then; null for a change from before rueder noted it.
     pub updated_what: Option<Changed>,
@@ -818,16 +821,18 @@ pub async fn marked(
 }
 
 /// An article opened for reading: the cleaned text of its current version.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, ToSchema)]
 pub struct Opened {
     pub feed_id: i32,
     pub seq: i32,
     pub id: i64,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub published_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
     pub updated_at: Option<OffsetDateTime>,
     /// What was different then; null for a change from before rueder noted it.
     pub updated_what: Option<Changed>,
@@ -841,6 +846,7 @@ pub struct Opened {
     /// kept them. The API sends them out in one shape, see `api::Enclosure`.
     #[serde(skip)]
     #[ts(skip)]
+    #[schema(ignore)]
     pub enclosures: serde_json::Value,
     pub image_url: Option<String>,
     pub image_title: Option<String>,

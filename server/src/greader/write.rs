@@ -15,8 +15,9 @@ use axum::{
 };
 use serde_json::json;
 
+use super::described;
 use super::{
-    App, Form, ok,
+    App, Fields, ok,
     parse::{self, Params, State as Mark, Stream},
     read::{self, Folders, Source, feed_of, source},
 };
@@ -60,10 +61,18 @@ fn tag(stream: &str, add: bool) -> Result<Tag, AppError> {
 
 /// `POST /reader/api/0/edit-tag`: adds (`a`) and removes (`r`) tags on the
 /// articles of the IDs `i`: read, kept unread, starred, labels.
+#[utoipa::path(
+    post,
+    path = "/reader/api/0/edit-tag",
+    tag = "Google Reader API",
+    request_body(content = described::EditTag, content_type = "application/x-www-form-urlencoded"),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`OK`, as plain text.", content_type = "text/plain"), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn edit_tag(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let session = &login.session;
     counted(&state, session)?;
@@ -201,10 +210,18 @@ async fn label_articles(
 
 /// `POST /reader/api/0/mark-all-as-read`: marks a stream as read, up to what
 /// had arrived at `ts`, if the app says; what came after stays unread.
+#[utoipa::path(
+    post,
+    path = "/reader/api/0/mark-all-as-read",
+    tag = "Google Reader API",
+    request_body(content = described::MarkAllRead, content_type = "application/x-www-form-urlencoded"),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`OK`, as plain text.", content_type = "text/plain"), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn mark_all_read(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let session = &login.session;
     counted(&state, session)?;
@@ -299,10 +316,18 @@ async fn place(
 /// the feed's address), unsubscribes (`ac=unsubscribe`, every `s`) or
 /// changes a subscription (`ac=edit`): a name (`t`), a folder to go into
 /// (`a`) or to leave for the top level (`r`).
+#[utoipa::path(
+    post,
+    path = "/reader/api/0/subscription/edit",
+    tag = "Google Reader API",
+    request_body(content = described::EditSubscription, content_type = "application/x-www-form-urlencoded"),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`OK`, as plain text.", content_type = "text/plain"), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), (status = FORBIDDEN, description = "The operator blocked this feed."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn edit_subscription(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let session = &login.session;
     counted(&state, session)?;
@@ -381,10 +406,18 @@ async fn rename(
 
 /// `POST /reader/api/0/subscription/quickadd`: subscribes to the feed at an
 /// address, or to the first one a web page names.
+#[utoipa::path(
+    post,
+    path = "/reader/api/0/subscription/quickadd",
+    tag = "Google Reader API",
+    request_body(content = described::QuickAdd, content_type = "application/x-www-form-urlencoded"),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`numResults`, and for a feed found, `query` and `streamId`.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn quick_add(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let session = &login.session;
     counted(&state, session)?;
@@ -411,10 +444,18 @@ pub(super) async fn quick_add(
 
 /// `POST /reader/api/0/rename-tag`: renames a folder (`s`, `dest`: paths
 /// that differ in their last part) or a label.
+#[utoipa::path(
+    post,
+    path = "/reader/api/0/rename-tag",
+    tag = "Google Reader API",
+    request_body(content = described::RenameTag, content_type = "application/x-www-form-urlencoded"),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`OK`, as plain text.", content_type = "text/plain"), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn rename_tag(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let session = &login.session;
     counted(&state, session)?;
@@ -476,10 +517,18 @@ pub(super) async fn rename_tag(
 
 /// `POST /reader/api/0/disable-tag`: takes folders out, whose feeds move up
 /// to where they were, and deletes labels.
+#[utoipa::path(
+    post,
+    path = "/reader/api/0/disable-tag",
+    tag = "Google Reader API",
+    request_body(content = described::DisableTag, content_type = "application/x-www-form-urlencoded"),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`OK`, as plain text.", content_type = "text/plain"), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn disable_tag(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let session = &login.session;
     counted(&state, session)?;

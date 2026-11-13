@@ -26,18 +26,22 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use axum::{
-    Json, Router,
+    Json,
     body::Bytes,
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use ts_rs::TS;
 use url::Url;
+use utoipa::ToSchema;
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 
 use crate::{
     AppError, AppState,
@@ -69,17 +73,17 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
     types.add::<Export>().add::<Imported>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/export", get(export_file)).route(
-        "/import",
-        post(import_file).layer(DefaultBodyLimit::max(MAX_FILE)),
-    )
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(export_file))
+        .routes(routes!(import_file).layer(DefaultBodyLimit::max(MAX_FILE)))
 }
 
 /// An account as a file, for another rueder. `GET /api/export` answers with
 /// it, and `POST /api/import` reads it.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 #[ts(rename = "AccountExport")]
+#[schema(as = AccountExport)]
 pub struct Export {
     /// Always "rueder-account".
     pub format: String,
@@ -87,10 +91,12 @@ pub struct Export {
     pub version: u32,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub exported_at: OffsetDateTime,
     /// The settings of the interface, as `GET /api/settings` gives them.
     #[serde(default)]
     #[ts(type = "Record<string, unknown>")]
+    #[schema(value_type = Object)]
     pub settings: serde_json::Value,
     /// Folders and feeds from the top down, in their order: a folder before
     /// what is in it.
@@ -104,9 +110,10 @@ pub struct Export {
 }
 
 /// A folder or a feed of the tree.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 #[ts(rename = "ExportedNode")]
+#[schema(as = ExportedNode)]
 pub enum Node {
     /// A folder, by its name and the names of the folders it is in, from the
     /// top down.
@@ -117,16 +124,17 @@ pub enum Node {
 }
 
 /// Who a feed is fetched as.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(rename = "ExportedAgent")]
+#[schema(as = ExportedAgent)]
 pub enum Agent {
     Rueder,
     Browser,
 }
 
 /// A subscription, with what the reader did in it.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 pub struct ExportedFeed {
     /// The feed's number on the server the file comes from.
     pub id: i32,
@@ -161,7 +169,7 @@ fn rueder() -> Agent {
 }
 
 /// An article, as it can be found on another server.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 pub struct ArticleRef {
     /// Its number in its feed on the server the file comes from; with the
     /// feed's number its id in that server's API.
@@ -172,17 +180,19 @@ pub struct ArticleRef {
     pub url: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub published_at: OffsetDateTime,
 }
 
 /// An article the reader did something with.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 pub struct ExportedArticle {
     pub seq: i32,
     pub guid: String,
     pub url: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub published_at: OffsetDateTime,
     #[serde(default)]
     pub title: String,
@@ -196,13 +206,13 @@ pub struct ExportedArticle {
     pub labels: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 pub struct ExportedLabel {
     pub title: String,
     pub color: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 pub struct ExportedRule {
     pub enabled: bool,
     pub scope: ExportedScope,
@@ -214,7 +224,7 @@ pub struct ExportedRule {
 }
 
 /// Where a rule holds: a folder by its path, a feed by its address.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ExportedScope {
     All,
@@ -223,8 +233,9 @@ pub enum ExportedScope {
 }
 
 /// What an import did. `POST /api/import` answers with it.
-#[derive(Debug, Default, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, TS, ToSchema)]
 #[ts(rename = "AccountImported")]
+#[schema(as = AccountImported)]
 pub struct Imported {
     /// Feeds the account reads now and did not before.
     pub feeds: usize,
@@ -500,6 +511,17 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
 }
 
 /// `GET /api/export`: the account as a file to save.
+///
+/// Everything the reader made of the account: settings, folders and feeds, what
+/// was read, stars, labels and filter rules, without passwords, sessions or app
+/// passwords.
+#[utoipa::path(
+    get,
+    path = "/export",
+    tag = "Account",
+    security(("session" = [])),
+    responses((status = OK, description = "The file, to download.", body = Export), crate::openapi::NeedsSession),
+)]
 async fn export_file(
     State(state): State<AppState>,
     session: Session,
@@ -693,6 +715,17 @@ fn plan(file: Export, rules: &Rules) -> Result<Plan, AppError> {
 
 /// `POST /api/import`: a file of `GET /api/export`, from this rueder or
 /// another, into the account.
+///
+/// It only adds: feeds are recognized by their address, articles by their id
+/// and address; what the account has already stays. Up to 32 MiB.
+#[utoipa::path(
+    post,
+    path = "/import",
+    tag = "Account",
+    request_body(content = Export, description = "A file of `GET /api/export`."),
+    security(("session" = [])),
+    responses((status = OK, body = Imported), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Not such a file, or more than it may hold."), (status = PAYLOAD_TOO_LARGE, description = "Over 32 MiB."), (status = UNSUPPORTED_MEDIA_TYPE, description = "Not sent as JSON.")),
+)]
 async fn import_file(
     State(state): State<AppState>,
     session: Session,

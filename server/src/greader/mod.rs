@@ -19,6 +19,7 @@
 //!   password (`Signer::app_address`), which load without a session as long
 //!   as the app password counts.
 
+mod described;
 pub mod parse;
 mod read;
 mod write;
@@ -30,11 +31,13 @@ use axum::{
     http::{HeaderMap, HeaderName, StatusCode, header, request::Parts},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{any, get, post},
+    routing::any,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::time::Instant;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, MAX_BODY,
@@ -47,54 +50,44 @@ use parse::Params;
 /// How the API's paths begin, under `/greader`.
 pub const API: &str = "/reader/api/0";
 
-pub fn router(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route("/accounts/ClientLogin", post(client_login))
-        // What only reads takes GET and POST: an app that sends a read as a
-        // form, as NetNewsWire does with an app password that no longer
-        // counts, is told to log in again (401), not 405.
-        .route("/reader/api/0/token", get(token).post(token))
-        .route("/reader/api/0/user-info", get(user_info).post(user_info))
-        .route(
-            "/reader/api/0/subscription/list",
-            get(read::subscriptions).post(read::subscriptions),
-        )
-        .route("/reader/api/0/tag/list", get(read::tags).post(read::tags))
-        .route(
-            "/reader/api/0/unread-count",
-            get(read::unread_counts).post(read::unread_counts),
-        )
-        .route(
-            "/reader/api/0/stream/items/ids",
-            get(read::item_ids).post(read::item_ids),
-        )
-        .route(
-            "/reader/api/0/stream/items/contents",
-            get(read::item_contents).post(read::item_contents),
-        )
-        .route(
-            "/reader/api/0/stream/contents",
-            get(read::stream_contents).post(read::stream_contents),
-        )
-        .route(
-            "/reader/api/0/stream/contents/{*stream}",
-            get(read::stream_contents_of).post(read::stream_contents_of),
-        )
-        .route("/reader/api/0/edit-tag", post(write::edit_tag))
-        .route("/reader/api/0/mark-all-as-read", post(write::mark_all_read))
-        .route(
-            "/reader/api/0/subscription/edit",
-            post(write::edit_subscription),
-        )
-        .route(
-            "/reader/api/0/subscription/quickadd",
-            post(write::quick_add),
-        )
-        .route("/reader/api/0/rename-tag", post(write::rename_tag))
-        .route("/reader/api/0/disable-tag", post(write::disable_tag))
+/// The routes of the API, with their description, without what goes around
+/// them ([`around`]). What only reads takes GET and POST: an app that sends a
+/// read as a form, as NetNewsWire does with an app password that no longer
+/// counts, is told to log in again (401), not 405.
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(client_login))
+        .routes(routes!(token))
+        .routes(routes!(user_info))
+        .routes(routes!(read::subscriptions))
+        .routes(routes!(read::tags))
+        .routes(routes!(read::unread_counts))
+        .routes(routes!(read::item_ids))
+        .routes(routes!(read::item_contents))
+        .routes(routes!(read::stream_contents))
+        .routes(routes!(read::stream_contents_of))
+        .routes(routes!(write::edit_tag))
+        .routes(routes!(write::mark_all_read))
+        .routes(routes!(write::edit_subscription))
+        .routes(routes!(write::quick_add))
+        .routes(routes!(write::rename_tag))
+        .routes(routes!(write::disable_tag))
+        .routes(routes!(image))
+}
+
+/// What goes around the API: whatever else an app asks of it answers `[]`,
+/// nothing without `APP_API`, the app password is found once and handed on,
+/// and what a request changes is announced to the account's open tabs.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the catch-all is no operation; the group's text in the description says what it answers"
+)]
+pub fn around(routes: Router<AppState>, state: &AppState) -> Router<AppState> {
+    routes
+        // Not an operation of its own, so not in the description, which says
+        // in the group's text what it answers.
         .route("/reader/api/0/{*rest}", any(unknown))
-        .route("/img/{app}/{signature}/{size}/{address}", get(image))
-        .layer(middleware::from_fn_with_state(state.clone(), around))
+        .layer(middleware::from_fn_with_state(state.clone(), around_each))
         .layer(DefaultBodyLimit::max(MAX_BODY))
 }
 
@@ -137,10 +130,10 @@ fn auth_token(headers: &HeaderMap) -> Option<&str> {
     (!token.is_empty()).then_some(token)
 }
 
-/// Around all of the API: nothing without `APP_API`, the app password is
-/// found once and handed on, and what a request changes is announced to the
-/// account's open tabs.
-async fn around(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
+/// Around each request of the API: nothing without `APP_API`, the app
+/// password is found once and handed on, and what a request changes is
+/// announced to the account's open tabs.
+async fn around_each(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
     if !state.app_api {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -177,9 +170,9 @@ fn connected(state: &AppState, account_id: i32) {
 
 /// The parameters of a request: its query and its form body, as apps send
 /// them (see [`Params`]).
-pub struct Form(pub Params);
+pub struct Fields(pub Params);
 
-impl FromRequest<AppState> for Form {
+impl FromRequest<AppState> for Fields {
     type Rejection = Response;
 
     async fn from_request(request: Request, state: &AppState) -> Result<Self, Response> {
@@ -249,10 +242,17 @@ struct Tokens {
 /// Logs an app in with the account's name and an app password. Wrong ones
 /// count like wrong passwords at the page's login. The token is the app
 /// password as it is compared, without dashes: apps read it up to an `=`.
+#[utoipa::path(
+    post,
+    path = "/accounts/ClientLogin",
+    tag = "Google Reader API",
+    request_body(content = described::ClientLogin, content_type = "application/x-www-form-urlencoded"),
+    responses((status = OK, description = "`SID=`, `LSID=` and `Auth=` with the token, each on a line of plain text; as JSON with `output=json`.", content_type = "text/plain"), (status = UNAUTHORIZED, description = "`Error=BadAuthentication`: a wrong name or app password."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries for this name or from this sender; see `Retry-After`.")),
+)]
 async fn client_login(
     State(state): State<AppState>,
     Sender(ip): Sender,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Response, AppError> {
     let name = params.one("Email").unwrap_or_default();
     let secret = params.one("Passwd").unwrap_or_default();
@@ -286,6 +286,13 @@ async fn client_login(
 /// The token `T` for changes. It proves nothing here, the app password in
 /// the header does; it is handed out for apps that want one, and is not the
 /// app password.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/token",
+    tag = "Google Reader API",
+    security(("app_password" = [])),
+    responses((status = OK, description = "The token, as plain text.", content_type = "text/plain"), crate::openapi::NeedsAppPassword),
+)]
 async fn token(App(login): App) -> Response {
     let digest = Sha256::digest(format!("rueder-greader-token-{}", login.id).as_bytes());
     let token: String = digest.iter().take(20).map(|b| format!("{b:02x}")).collect();
@@ -293,7 +300,8 @@ async fn token(App(login): App) -> Response {
 }
 
 /// Who is logged in, as `GET /reader/api/0/user-info` answers.
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
+#[schema(as = GreaderUserInfo)]
 #[serde(rename_all = "camelCase")]
 struct UserInfo {
     user_id: String,
@@ -302,6 +310,14 @@ struct UserInfo {
     user_email: String,
 }
 
+/// Who is logged in: the account's number and name.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/user-info",
+    tag = "Google Reader API",
+    security(("app_password" = [])),
+    responses((status = OK, body = UserInfo), crate::openapi::NeedsAppPassword),
+)]
 async fn user_info(App(login): App) -> Json<UserInfo> {
     let id = login.session.account_id.to_string();
     Json(UserInfo {
@@ -320,6 +336,14 @@ async fn unknown(App(_): App) -> Response {
 
 /// An image through the proxy for an app: no session, the address proves
 /// that the server made it for an app password, which has to still count.
+#[utoipa::path(
+    get,
+    path = "/img/{app}/{signature}/{size}/{address}",
+    operation_id = "app_image",
+    tag = "Google Reader API",
+    params(("app" = i32, Path, description = "The app password the address was made for."), ("signature" = String, Path, description = "Proves that the server made the address for it."), ("size" = String, Path, description = "`icon`, `thumbnail` or `image`."), ("address" = String, Path, description = "The image's own address, encoded.")),
+    responses((status = OK, description = "The image.", content_type = "image/*"), (status = NOT_FOUND, description = "No such image, an address the server did not make, an app password that no longer counts, or no image proxy."), (status = BAD_GATEWAY, description = "The image's own server did not deliver it, or not as an image.")),
+)]
 async fn image(
     State(state): State<AppState>,
     Path((app, signature, size, address)): Path<(i32, String, String, String)>,

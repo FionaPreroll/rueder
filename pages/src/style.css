@@ -215,3 +215,25 @@ footer {
 	padding: 1rem 1.25rem 2rem;
 	border-top: 1px solid var(--line);
 }
+
+/* The REST API: Swagger UI has no dark theme, so its page stays light. */
+
+body.light {
+	color-scheme: light;
+	--paper: #ffffff;
+	--panel: #f4f5f7;
+	--line: #dde1e6;
+	--ink: #1f2328;
+	--soft: #59626d;
+	--link: #1a55c4;
+}
+
+.api {
+	max-width: 72rem;
+	margin: 0 auto;
+	padding: 1.5rem 1.25rem 2rem;
+}
+
+.api .aside {
+	margin: 0 20px;
+}

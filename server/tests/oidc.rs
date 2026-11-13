@@ -71,6 +71,10 @@ async fn token(
 }
 
 /// A server with a provider next to it. Returns the provider's address too.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
 async fn setup(db: &PgPool) -> (AppState, Shared, String) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let issuer = format!("http://{}", listener.local_addr().unwrap());

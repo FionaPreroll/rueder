@@ -41,6 +41,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
+use utoipa::IntoParams;
 
 use crate::{
     AppState, accounts,
@@ -399,8 +400,12 @@ fn back(outcome: Option<&str>) -> Response {
         .into_response()
 }
 
-#[derive(Deserialize)]
+/// What `GET /api/oidc/start` reads.
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct Start {
+    /// Present to link the provider's account to the one logged in, instead
+    /// of logging in.
     link: Option<String>,
 }
 
@@ -427,6 +432,19 @@ async fn linking(state: &AppState, headers: &HeaderMap) -> anyhow::Result<Option
     Ok(session.map(|session| session.account_id))
 }
 
+/// Starts logging in through the OpenID Connect provider: sends the browser
+/// there. With `link`, from the logged-in reader's own page, the provider's
+/// account is linked to this one instead.
+#[utoipa::path(
+    get,
+    path = "/oidc/start",
+    tag = "Session",
+    params(Start),
+    responses(
+        (status = SEE_OTHER, description = "On to the provider, or back to the page if linking is refused."),
+        (status = NOT_FOUND, description = "This server has no OpenID Connect."),
+    ),
+)]
 pub async fn start(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -465,13 +483,31 @@ pub async fn start(
     }
 }
 
-#[derive(Deserialize)]
+/// What the provider sends back to `GET /api/oidc/callback`.
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct Callback {
+    /// The code to exchange for the provider's answer.
     code: Option<String>,
+    /// The flow it belongs to, as the start gave it.
     state: Option<String>,
+    /// What the provider says went wrong, instead of a code.
     error: Option<String>,
 }
 
+/// Where the provider sends the browser back: logs in the account linked to the
+/// provider's, or links it, and sends the browser on to the page, which says
+/// how it went.
+#[utoipa::path(
+    get,
+    path = "/oidc/callback",
+    tag = "Session",
+    params(Callback),
+    responses(
+        (status = SEE_OTHER, description = "Back to the page, logged in, or with what went wrong."),
+        (status = NOT_FOUND, description = "This server has no OpenID Connect."),
+    ),
+)]
 pub async fn callback(
     State(state): State<AppState>,
     headers: HeaderMap,

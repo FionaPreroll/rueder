@@ -2,4 +2,6 @@
 # workspace). As in web/ and app/: a day before a freshly published version is
 # installed, and no build scripts that are not decided on below.
 engineStrict: true
-allowBuilds: {}
+allowBuilds:
+  # Swagger UI's dependency would report the install to its makers; not run.
+  '@scarf/scarf': false

@@ -168,6 +168,18 @@ pub fn statement(apps: &[AndroidApp]) -> Value {
 
 /// `GET /.well-known/assetlinks.json`, for anybody: Android reads it without a
 /// session. Not there without passkeys or without apps.
+///
+/// The Digital Asset Links of this site: which Android apps, by package and
+/// signing key, may open its addresses and use its passkeys.
+#[utoipa::path(
+    get,
+    path = "/.well-known/assetlinks.json",
+    tag = "Android",
+    responses(
+        (status = OK, description = "One statement per app, as Android reads them.", body = Vec<serde_json::Value>),
+        (status = NOT_FOUND, description = "No passkeys on this server, or no app named for them."),
+    ),
+)]
 pub async fn serve(State(state): State<AppState>) -> Response {
     let Some(passkeys) = &state.passkeys else {
         return StatusCode::NOT_FOUND.into_response();

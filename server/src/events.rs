@@ -40,6 +40,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio::{sync::broadcast, time::Instant};
 use ts_rs::TS;
+use utoipa::ToSchema;
 
 use crate::{
     AppError, AppState,
@@ -153,9 +154,10 @@ impl Change {
 /// `by` is the name the tab that made the change gave itself in the header
 /// `X-Rueder-Tab`, if it did, so that a tab knows its own change when it
 /// comes back.
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, ToSchema)]
 #[serde(tag = "event", content = "data", rename_all = "lowercase")]
 #[ts(rename = "ServerEvent")]
+#[schema(as = ServerEvent)]
 enum Sent {
     /// The connection is up, and what is loaded from now on misses nothing.
     Hello {},
@@ -551,6 +553,24 @@ impl Serving {
 }
 
 /// `GET /api/events`: the account's events as they happen.
+///
+/// A stream of server-sent events, one for each change of the account,
+/// whichever tab, app or fetch made it. An event names what changed; the page
+/// then asks the API for it again. With `Last-Event-ID`, the events since that
+/// one come first, as far as the server still has them; otherwise an event says
+/// to load everything anew.
+#[utoipa::path(
+    get,
+    path = "/events",
+    tag = "Live updates",
+    params(("Last-Event-ID" = Option<String>, Header, description = "The last event the browser had, to go on from there.")),
+    security(("session" = [])),
+    responses(
+        (status = OK, description = "The events, as `text/event-stream`, until the session ends.", content_type = "text/event-stream"),
+        crate::openapi::NeedsSession,
+        (status = TOO_MANY_REQUESTS, description = "Too many open streams for this account."),
+    ),
+)]
 pub async fn stream(
     State(state): State<AppState>,
     session: Session,

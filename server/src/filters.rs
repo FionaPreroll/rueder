@@ -14,15 +14,16 @@
 use std::collections::{HashMap, HashSet};
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, post, put},
 };
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{AppError, AppState, articles::Opened, reading, sessions::Session, tree::bad};
 
@@ -46,19 +47,20 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<AllHits>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/rules", get(rules).post(add))
-        .route("/rules/order", post(order))
-        .route("/rules/preview", post(preview))
-        .route("/rules/hits", get(hits))
-        .route("/rules/{id}", put(change).delete(remove))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(rules, add))
+        .routes(routes!(order))
+        .routes(routes!(preview))
+        .routes(routes!(hits))
+        .routes(routes!(change, remove))
 }
 
 /// The part of an article a rule looks at.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(rename = "RuleField")]
+#[schema(as = RuleField)]
 pub enum Field {
     Any,
     Title,
@@ -69,9 +71,10 @@ pub enum Field {
 
 /// How a rule's pattern is read: as text that stands anywhere, as a whole
 /// word, or as a regular expression.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(rename = "RuleMatch")]
+#[schema(as = RuleMatch)]
 pub enum Match {
     Contains,
     Word,
@@ -79,9 +82,10 @@ pub enum Match {
 }
 
 /// What a rule does with an article it matches.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(rename = "RuleAction")]
+#[schema(as = RuleAction)]
 pub enum Action {
     Hide,
     Read,
@@ -89,9 +93,10 @@ pub enum Action {
 
 /// Where a rule holds: everywhere, in a folder with all that is in it, or in
 /// one feed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(tag = "kind", content = "id", rename_all = "lowercase")]
 #[ts(rename = "RuleScope")]
+#[schema(as = RuleScope)]
 pub enum Scope {
     All,
     Folder(i32),
@@ -439,8 +444,9 @@ async fn verdicts(tests: Vec<Test>, candidates: Vec<Candidate>) -> anyhow::Resul
 }
 
 /// What a look at the articles changed.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, TS, ToSchema)]
 #[ts(rename = "RuleChanged")]
+#[schema(as = RuleChanged)]
 pub struct Changed {
     /// Articles that are hidden now and were not.
     pub hidden: usize,
@@ -646,7 +652,7 @@ pub async fn tree_changed(db: &PgPool, account_id: i32) -> anyhow::Result<()> {
 /// `GET /api/rules` answers with a list of them. `POST /api/rules`,
 /// `PUT /api/rules/{id}` and `POST /api/rules/preview` read one; there the `id`
 /// counts for nothing, and a rule without `enabled` is enabled.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
 pub struct Rule {
     #[serde(default, skip_deserializing)]
     pub id: i32,
@@ -705,6 +711,14 @@ impl Rule {
     }
 }
 
+/// The account's rules, in their order.
+#[utoipa::path(
+    get,
+    path = "/rules",
+    tag = "Filter rules",
+    security(("session" = [])),
+    responses((status = OK, body = Vec<Rule>), crate::openapi::NeedsSession),
+)]
 async fn rules(
     State(state): State<AppState>,
     session: Session,
@@ -741,13 +755,25 @@ async fn rules(
 /// What a change to the rules did to the articles that are there.
 ///
 /// `POST /api/rules`, `PUT` and `DELETE /api/rules/{id}` answer with it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "RuleOutcome")]
+#[schema(as = RuleOutcome)]
 struct Outcome {
     id: i32,
     changed: Changed,
 }
 
+/// A new rule. It applies to what arrives from now on and to what is there
+/// already, and the answer says how many articles it caught.
+#[utoipa::path(
+    post,
+    path = "/rules",
+    operation_id = "add_rule",
+    tag = "Filter rules",
+    request_body = Rule,
+    security(("session" = [])),
+    responses((status = CREATED, body = Outcome), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A rule that does not hold: no such field or action, a pattern that is no regular expression or over 200 characters, a scope that is not the account's, or 200 rules already.")),
+)]
 async fn add(
     State(state): State<AppState>,
     session: Session,
@@ -781,6 +807,17 @@ async fn add(
     Ok((StatusCode::CREATED, Json(Outcome { id, changed })))
 }
 
+/// Replaces a rule. What it hid before and does not hide now comes back.
+#[utoipa::path(
+    put,
+    path = "/rules/{id}",
+    operation_id = "change_rule",
+    tag = "Filter rules",
+    params(("id" = i32, Path, description = "The rule.")),
+    request_body = Rule,
+    security(("session" = [])),
+    responses((status = OK, body = Outcome), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A rule that does not hold: no such field or action, a pattern that is no regular expression or over 200 characters, a scope that is not the account's, or 200 rules already."), (status = NOT_FOUND, description = "No such rule of the account.")),
+)]
 async fn change(
     State(state): State<AppState>,
     session: Session,
@@ -815,6 +852,16 @@ async fn change(
     Ok(Json(Outcome { id, changed }))
 }
 
+/// Takes a rule away; what only it hid comes back.
+#[utoipa::path(
+    delete,
+    path = "/rules/{id}",
+    operation_id = "remove_rule",
+    tag = "Filter rules",
+    params(("id" = i32, Path, description = "The rule.")),
+    security(("session" = [])),
+    responses((status = OK, body = Outcome), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such rule of the account.")),
+)]
 async fn remove(
     State(state): State<AppState>,
     session: Session,
@@ -837,13 +884,22 @@ async fn remove(
 }
 
 /// A new order: every number once, in the order they shall stand in.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct Order {
     ids: Vec<i32>,
 }
 
 /// Puts the rules in this order, for the list of them: what they decide does
 /// not depend on it. Rules that are not named come after the named ones.
+#[utoipa::path(
+    post,
+    path = "/rules/order",
+    operation_id = "order_rules",
+    tag = "Filter rules",
+    request_body = Order,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession),
+)]
 async fn order(
     State(state): State<AppState>,
     session: Session,
@@ -875,8 +931,9 @@ async fn order(
 /// How many articles a rule would catch.
 ///
 /// What `POST /api/rules/preview` answers.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "RulePreview")]
+#[schema(as = RulePreview)]
 struct Preview {
     /// The articles the rule matches,
     matches: usize,
@@ -886,6 +943,14 @@ struct Preview {
 
 /// Tries a rule on what is there without storing it or changing anything.
 /// This is also how the interface learns whether a pattern is one.
+#[utoipa::path(
+    post,
+    path = "/rules/preview",
+    tag = "Filter rules",
+    request_body = Rule,
+    security(("session" = [])),
+    responses((status = OK, body = Preview), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A rule that does not hold: no such field or action, a pattern that is no regular expression or over 200 characters, a scope that is not the account's, or 200 rules already.")),
+)]
 async fn preview(
     State(state): State<AppState>,
     session: Session,
@@ -923,8 +988,9 @@ async fn preview(
 }
 
 /// What one of the stored rules finds.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "RuleHits")]
+#[schema(as = RuleHits)]
 struct Hits {
     id: i32,
     /// The articles the rule matches, whether it is switched on or not,
@@ -935,14 +1001,22 @@ struct Hits {
 
 /// What `GET /api/rules/hits` answers: for every rule of the account what it
 /// finds among the articles that are there, as a preview of it would say.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "RulesHits")]
+#[schema(as = RulesHits)]
 struct AllHits {
     hits: Vec<Hits>,
 }
 
 /// Counts what each of the account's rules finds. Every article is read once,
 /// however many rules there are.
+#[utoipa::path(
+    get,
+    path = "/rules/hits",
+    tag = "Filter rules",
+    security(("session" = [])),
+    responses((status = OK, body = AllHits), crate::openapi::NeedsSession, (status = TOO_MANY_REQUESTS, description = "The account asks for too much at once; see `Retry-After`.")),
+)]
 async fn hits(State(state): State<AppState>, session: Session) -> Result<Json<AllHits>, AppError> {
     // Looks at many articles: one of only a few at a time (see `rate`).
     let _turn = state.rates.heavy(session.account_id).await?;

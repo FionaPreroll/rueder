@@ -16,4 +16,9 @@ disallowed-methods = [
     { path = "html5ever::parse_document", reason = "use rueder::cleaning" },
     { path = "html5ever::driver::parse_fragment", reason = "use rueder::cleaning" },
     { path = "html5ever::driver::parse_document", reason = "use rueder::cleaning" },
+    # Routes are registered with utoipa_axum's routes! from each handler's
+    # #[utoipa::path], so that the server serves nothing its description
+    # (server/openapi.json) does not list.
+    { path = "axum::routing::Router::route", reason = "use OpenApiRouter::routes(routes!(handler)) with #[utoipa::path]" },
+    { path = "utoipa_axum::router::OpenApiRouter::route", reason = "use OpenApiRouter::routes(routes!(handler)) with #[utoipa::path]" },
 ]

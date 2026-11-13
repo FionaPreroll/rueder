@@ -14,12 +14,11 @@ use std::{
 };
 
 use axum::{
-    Json, Router,
+    Json,
     body::Bytes,
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use quick_xml::{Reader, XmlVersion, events::BytesStart, events::Event};
 use serde::{Deserialize, Serialize};
@@ -27,6 +26,11 @@ use sqlx::PgConnection;
 use time::OffsetDateTime;
 use ts_rs::TS;
 use url::Url;
+use utoipa::ToSchema;
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 
 use crate::{
     AppError, AppState,
@@ -71,16 +75,12 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Imported>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/feeds", post(subscribe))
-        .route("/feeds/find", post(find))
-        .route(
-            "/opml",
-            get(export)
-                .post(import)
-                .layer(DefaultBodyLimit::max(MAX_OPML)),
-        )
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(subscribe))
+        .routes(routes!(find))
+        // An OPML file may be larger than what the API is sent otherwise.
+        .routes(routes!(export, import).layer(DefaultBodyLimit::max(MAX_OPML)))
 }
 
 /// The address a reader typed, as one that can be fetched. Without a scheme
@@ -125,15 +125,17 @@ fn rules(state: &AppState) -> anyhow::Result<Arc<Rules>> {
 
 /// What `POST /api/feeds/find` reads: the address of a feed or of a page that
 /// names its feeds.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "FindFeeds")]
+#[schema(as = FindFeeds)]
 pub(crate) struct Find {
     pub(crate) url: String,
 }
 
 /// A feed found at an address.
-#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, PartialEq, Eq, Serialize, TS, ToSchema)]
 #[ts(rename = "FeedCandidate")]
+#[schema(as = FeedCandidate)]
 pub(crate) struct Candidate {
     pub(crate) url: String,
     pub(crate) title: String,
@@ -142,8 +144,9 @@ pub(crate) struct Candidate {
 }
 
 /// What `POST /api/feeds/find` answers.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "FoundFeeds")]
+#[schema(as = FoundFeeds)]
 pub(crate) struct Found {
     pub(crate) feeds: Vec<Candidate>,
     /// Where the site sent the request on to, if it did: a site that turns
@@ -230,6 +233,14 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
 
 /// Looks at an address for feeds. An address that is a feed is the one feed;
 /// a web page has the feeds it names, which nobody has looked at yet.
+#[utoipa::path(
+    post,
+    path = "/feeds/find",
+    tag = "Subscribing",
+    request_body = Find,
+    security(("session" = [])),
+    responses((status = OK, body = Found), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Not an address, or one the server does not go to (inside its own network, not http or https)."), (status = TOO_MANY_REQUESTS, description = "Too many lookups of addresses from this account or sender; see `Retry-After`."), (status = SERVICE_UNAVAILABLE, description = "This server does not fetch feeds.")),
+)]
 pub(crate) async fn find(
     State(state): State<AppState>,
     session: Session,
@@ -294,15 +305,16 @@ async fn look(state: &AppState, session: &Session, url: Url) -> Result<Json<Foun
 }
 
 /// What `POST /api/feeds` reads. It answers with `Subscribed`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "NewSubscription", optional_fields = nullable)]
+#[schema(as = NewSubscription)]
 pub(crate) struct New {
     pub(crate) url: String,
     pub(crate) folder_id: Option<i32>,
 }
 
 /// The answer to subscribing: the number of the feed.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 pub(crate) struct Subscribed {
     pub(crate) id: i32,
 }
@@ -430,6 +442,14 @@ async fn own_folder(conn: &mut PgConnection, account_id: i32, id: i32) -> Result
 /// Subscribes to the feed at an address: 201 with its number, or 200 if the
 /// reader has it already. The address has to be the feed itself; `find` says
 /// which feeds a web page has.
+#[utoipa::path(
+    post,
+    path = "/feeds",
+    tag = "Subscribing",
+    request_body = New,
+    security(("session" = [])),
+    responses((status = CREATED, description = "Subscribed.", body = Subscribed), (status = OK, description = "The account reads this feed already.", body = Subscribed), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Not a feed, an address the server does not go to, or as many feeds as an account may have (2,000)."), (status = FORBIDDEN, description = "The operator blocked this feed."), (status = TOO_MANY_REQUESTS, description = "Too many lookups of addresses; see `Retry-After`.")),
+)]
 pub(crate) async fn subscribe(
     State(state): State<AppState>,
     session: Session,
@@ -506,6 +526,13 @@ enum Entry {
 
 /// The account's subscriptions as an OPML file, folders as outlines around
 /// their feeds.
+#[utoipa::path(
+    get,
+    path = "/opml",
+    tag = "Subscribing",
+    security(("session" = [])),
+    responses((status = OK, description = "The OPML file, to download.", content_type = "text/x-opml"), crate::openapi::NeedsSession),
+)]
 async fn export(State(state): State<AppState>, session: Session) -> Result<Response, AppError> {
     let rows = sqlx::query!(
         r#"SELECT true AS "folder!", id AS "id!", parent_id AS parent, title AS "title!",
@@ -703,8 +730,9 @@ pub fn outline(file: &str) -> Result<Outline, &'static str> {
 /// What an import did.
 ///
 /// `POST /api/opml` answers with it; the request is the file itself.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "OpmlImported")]
+#[schema(as = OpmlImported)]
 struct Imported {
     /// Feeds the account reads now and did not before.
     feeds: usize,
@@ -719,6 +747,16 @@ struct Imported {
 /// Takes the subscriptions of an OPML file, sent as the body. Folders are
 /// found by their name or made; feeds the account reads already stay where
 /// they are. The feeds are not fetched here: the next round does that.
+///
+/// Up to 1 MiB and 2,000 feeds.
+#[utoipa::path(
+    post,
+    path = "/opml",
+    tag = "Subscribing",
+    request_body(content = String, content_type = "text/x-opml", description = "The OPML file, as `text/x-opml` or XML."),
+    security(("session" = [])),
+    responses((status = OK, body = Imported), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Not OPML, or more than it may hold."), (status = PAYLOAD_TOO_LARGE, description = "Over 1 MiB."), (status = UNSUPPORTED_MEDIA_TYPE, description = "Not sent as `text/x-opml` or XML.")),
+)]
 async fn import(
     State(state): State<AppState>,
     session: Session,

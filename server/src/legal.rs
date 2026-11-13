@@ -9,9 +9,11 @@
 //! none, is asked again at its next visit (`Me::terms_to_accept`, `PUT
 //! /api/terms`). Without the settings rueder shows none of it.
 
-use axum::{Json, Router, extract::State, http::StatusCode, routing::put};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{AppError, AppState, sessions::Session};
 
@@ -23,8 +25,9 @@ pub const MAX_VERSION: usize = 64;
 /// Where the operator's texts are, and which version of the terms counts.
 ///
 /// `GET /api/login/ways` answers with it, to anybody.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS, ToSchema)]
 #[ts(rename = "LegalLinks")]
+#[schema(as = LegalLinks)]
 pub struct Legal {
     pub imprint: Option<String>,
     pub privacy: Option<String>,
@@ -87,8 +90,8 @@ impl Legal {
     }
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/terms", put(accept))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(accept))
 }
 
 /// The types this module sends and reads, for the frontend.
@@ -99,14 +102,23 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
 /// The version of the terms the reader agrees to.
 ///
 /// `PUT /api/terms` reads it.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "TermsAgreement")]
+#[schema(as = TermsAgreement)]
 pub struct Agreement {
     version: String,
 }
 
 /// Notes that the account agreed to the version of the terms that counts now.
 /// Another version is 409: the terms changed while the page asked.
+#[utoipa::path(
+    put,
+    path = "/terms",
+    tag = "Legal",
+    request_body = Agreement,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "The operator set no terms."), (status = CONFLICT, description = "Another version of the terms counts now.")),
+)]
 async fn accept(
     State(state): State<AppState>,
     session: Session,

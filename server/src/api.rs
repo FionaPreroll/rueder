@@ -13,15 +13,16 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use ts_rs::TS;
 use url::Url;
+use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState,
@@ -51,22 +52,22 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<SearchHits>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/tree", get(tree))
-        .route("/articles", get(all_articles))
-        .route("/starred", get(starred_articles))
-        .route("/hidden", get(hidden_articles))
-        .route("/labels/{label_id}/articles", get(label_articles))
-        .route("/read", post(read_all))
-        .route("/feeds/{feed_id}/articles", get(feed_articles))
-        .route("/feeds/{feed_id}/read", post(read_feed))
-        .route("/feeds/{feed_id}/articles/{seq}", get(article))
-        .route("/feeds/{feed_id}/articles/{seq}/versions", get(versions))
-        .route("/feeds/{feed_id}/articles/{seq}/state", put(set_state))
-        .route("/folders/{folder_id}/articles", get(folder_articles))
-        .route("/folders/{folder_id}/read", post(read_folder))
-        .route("/search", get(search_articles))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(tree))
+        .routes(routes!(all_articles))
+        .routes(routes!(starred_articles))
+        .routes(routes!(hidden_articles))
+        .routes(routes!(label_articles))
+        .routes(routes!(read_all))
+        .routes(routes!(feed_articles))
+        .routes(routes!(read_feed))
+        .routes(routes!(article))
+        .routes(routes!(versions))
+        .routes(routes!(set_state))
+        .routes(routes!(folder_articles))
+        .routes(routes!(read_folder))
+        .routes(routes!(search_articles))
 }
 
 impl AppState {
@@ -89,7 +90,7 @@ impl AppState {
 }
 
 /// A folder of the tree. `parent_id` is the folder it lies in, null at the top.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Folder {
     id: i32,
     parent_id: Option<i32>,
@@ -100,7 +101,7 @@ struct Folder {
 /// A subscription with what the tree shows of its feed.
 ///
 /// `folder_id` is the folder it lies in, null at the top.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Feed {
     id: i32,
     folder_id: Option<i32>,
@@ -113,6 +114,7 @@ struct Feed {
     site_url: Option<String>,
     icon_url: Option<String>,
     #[ts(as = "crate::tree::FetchAgent")]
+    #[schema(value_type = crate::tree::FetchAgent)]
     fetch_agent: String,
     /// Why the last fetch failed, if it did.
     error: Option<String>,
@@ -130,7 +132,7 @@ struct Feed {
 /// What `GET /api/tree` answers: the account's folders and subscriptions, each
 /// as a plain list. `parent_id` and `folder_id` say what lies where, `position`
 /// in which order.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Tree {
     folders: Vec<Folder>,
     feeds: Vec<Feed>,
@@ -152,6 +154,15 @@ pub(crate) fn shown_title(own: Option<String>, feed: &str, url: &str) -> String 
     }
 }
 
+/// The tree of folders and feeds the account subscribes to, each feed with its
+/// unread count and how far it was read, and how many articles filters hid.
+#[utoipa::path(
+    get,
+    path = "/tree",
+    tag = "Reading",
+    security(("session" = [])),
+    responses((status = OK, body = Tree), crate::openapi::NeedsSession),
+)]
 async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tree>, AppError> {
     let folders = sqlx::query_as!(
         Folder,
@@ -224,26 +235,31 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
 /// The query of every list: `GET /api/articles`, `/api/starred`, `/api/hidden`,
 /// `/api/feeds/{id}/articles`, `/api/folders/{id}/articles` and
 /// `/api/labels/{id}/articles`. Each answers with `List`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema, IntoParams)]
 #[ts(optional_fields)]
+#[into_params(parameter_in = Query)]
 struct ListQuery {
     /// Only what arrived before the article of this `id`.
     before: Option<i64>,
     /// Only what arrived after the article of this `id`, the oldest first; 0
     /// starts at the oldest article there is. Not together with `before`.
     after: Option<i64>,
+    /// How many articles at most: 50 if not said, 200 at most.
     limit: Option<i64>,
     /// Leave out what was read.
     #[serde(default)]
     #[ts(as = "Option<bool>")]
+    #[schema(value_type = Option<bool>)]
     unread: bool,
 }
 
 /// A line of a list, with the labels the reader gave the article.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "ListItem")]
+#[schema(as = ListItem)]
 struct Item {
     #[serde(flatten)]
+    #[schema(inline)]
     article: ListItem,
     labels: Vec<i32>,
 }
@@ -252,7 +268,7 @@ struct Item {
 /// with `before` set to the `id` of the last article of this one. A list asked
 /// for with `after` has the oldest article first and goes on the same way,
 /// with `after`.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct List {
     articles: Vec<Item>,
 }
@@ -348,6 +364,15 @@ async fn marked(
     listed(state, session, articles).await
 }
 
+/// The articles the reader starred.
+#[utoipa::path(
+    get,
+    path = "/starred",
+    tag = "Reading",
+    params(ListQuery),
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession),
+)]
 async fn starred_articles(
     State(state): State<AppState>,
     session: Session,
@@ -356,6 +381,15 @@ async fn starred_articles(
     marked(&state, &session, Marked::Starred, query).await
 }
 
+/// The articles the reader's filter rules hid.
+#[utoipa::path(
+    get,
+    path = "/hidden",
+    tag = "Reading",
+    params(ListQuery),
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession),
+)]
 async fn hidden_articles(
     State(state): State<AppState>,
     session: Session,
@@ -364,6 +398,15 @@ async fn hidden_articles(
     marked(&state, &session, Marked::Hidden, query).await
 }
 
+/// The articles with one of the reader's labels.
+#[utoipa::path(
+    get,
+    path = "/labels/{label_id}/articles",
+    tag = "Reading",
+    params(("label_id" = i32, Path, description = "The label."), ListQuery),
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such label of the account.")),
+)]
 async fn label_articles(
     State(state): State<AppState>,
     session: Session,
@@ -452,6 +495,15 @@ pub(crate) async fn subscribed(
     }
 }
 
+/// All articles of the account's feeds, a page at a time.
+#[utoipa::path(
+    get,
+    path = "/articles",
+    tag = "Reading",
+    params(ListQuery),
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession),
+)]
 async fn all_articles(
     State(state): State<AppState>,
     session: Session,
@@ -461,6 +513,15 @@ async fn all_articles(
     list(&state, &session, &feeds, query).await
 }
 
+/// The articles of the feeds in one folder and the folders inside it.
+#[utoipa::path(
+    get,
+    path = "/folders/{folder_id}/articles",
+    tag = "Reading",
+    params(("folder_id" = i32, Path, description = "The folder."), ListQuery),
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such folder of the account.")),
+)]
 async fn folder_articles(
     State(state): State<AppState>,
     session: Session,
@@ -473,6 +534,15 @@ async fn folder_articles(
     list(&state, &session, &feeds, query).await
 }
 
+/// The articles of one feed the account subscribes to.
+#[utoipa::path(
+    get,
+    path = "/feeds/{feed_id}/articles",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."), ListQuery),
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
 async fn feed_articles(
     State(state): State<AppState>,
     session: Session,
@@ -485,8 +555,9 @@ async fn feed_articles(
 
 /// A search through the articles of the account's feeds: `GET /api/search`.
 /// Answers with `SearchHits`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema, IntoParams)]
 #[ts(optional_fields)]
+#[into_params(parameter_in = Query)]
 struct SearchQuery {
     /// The words. An article is found if it has all of them in its title, its
     /// author, its tags or its text; a word of three letters or more also
@@ -499,15 +570,17 @@ struct SearchQuery {
     folder: Option<i32>,
     /// Only what arrived before this `id`: `next` of the page before.
     before: Option<i64>,
+    /// How many articles at most: 50 if not said, 200 at most.
     limit: Option<i64>,
     /// Leave out what was read.
     #[serde(default)]
     #[ts(as = "Option<bool>")]
+    #[schema(value_type = Option<bool>)]
     unread: bool,
 }
 
 /// A page of what a search found, the newest first.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct SearchHits {
     articles: Vec<Item>,
     /// Where the next page begins, as `before`; null if nothing older is
@@ -516,6 +589,16 @@ struct SearchHits {
     next: Option<i64>,
 }
 
+/// Searches the articles of the account's feeds for words: in the title,
+/// the author, the tags and the text. A page at a time, the newest first.
+#[utoipa::path(
+    get,
+    path = "/search",
+    tag = "Reading",
+    params(SearchQuery),
+    security(("session" = [])),
+    responses((status = OK, body = SearchHits), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No words, or `feed` and `folder` together.")),
+)]
 async fn search_articles(
     State(state): State<AppState>,
     session: Session,
@@ -549,9 +632,10 @@ async fn search_articles(
 /// An article for reading, with the labels the reader gave it.
 ///
 /// `GET /api/feeds/{id}/articles/{seq}` answers with it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Article {
     #[serde(flatten)]
+    #[schema(inline)]
     article: Opened,
     enclosures: Vec<Enclosure>,
     labels: Vec<i32>,
@@ -561,7 +645,7 @@ struct Article {
 }
 
 /// A file that comes with an article, like the episode of a podcast.
-#[derive(Debug, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, PartialEq, Eq, Serialize, TS, ToSchema)]
 pub(crate) struct Enclosure {
     pub(crate) url: String,
     /// Its media type, such as `audio/mpeg`, if the feed says.
@@ -609,6 +693,15 @@ pub(crate) fn enclosures(stored: &serde_json::Value) -> Vec<Enclosure> {
         .collect()
 }
 
+/// One article with its text, as the reader opens it.
+#[utoipa::path(
+    get,
+    path = "/feeds/{feed_id}/articles/{seq}",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."),),
+    security(("session" = [])),
+    responses((status = OK, body = Article), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such article in a feed of the account.")),
+)]
 async fn article(
     State(state): State<AppState>,
     session: Session,
@@ -630,12 +723,14 @@ async fn article(
 }
 
 /// One version of an article, cleaned for reading like the current one.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "ArticleVersion")]
+#[schema(as = ArticleVersion)]
 struct Version {
     version: i16,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     fetched_at: OffsetDateTime,
     title: String,
     html: String,
@@ -646,11 +741,21 @@ struct Version {
 
 /// What `GET /api/feeds/{id}/articles/{seq}/versions` answers: the versions of
 /// the article that are kept, oldest first.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Versions {
     versions: Vec<Version>,
 }
 
+/// The earlier versions of an article, when its feed changed it: up to 20, the
+/// newest first.
+#[utoipa::path(
+    get,
+    path = "/feeds/{feed_id}/articles/{seq}/versions",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."),),
+    security(("session" = [])),
+    responses((status = OK, body = Versions), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such article in a feed of the account.")),
+)]
 async fn versions(
     State(state): State<AppState>,
     session: Session,
@@ -704,13 +809,23 @@ async fn versions(
 /// What to change about one article; what is left out stays.
 ///
 /// What `PUT /api/feeds/{id}/articles/{seq}/state` reads.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(optional_fields = nullable)]
 struct StateChange {
     read: Option<bool>,
     starred: Option<bool>,
 }
 
+/// Marks one article read or unread, starred or not.
+#[utoipa::path(
+    put,
+    path = "/feeds/{feed_id}/articles/{seq}/state",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."),),
+    request_body = StateChange,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Changed."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Nothing to change."), (status = NOT_FOUND, description = "No such article in a feed of the account.")),
+)]
 async fn set_state(
     State(state): State<AppState>,
     session: Session,
@@ -741,7 +856,7 @@ async fn set_state(
 ///
 /// What `POST /api/feeds/{id}/read`, `/api/folders/{id}/read` and `/api/read`
 /// read.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(optional_fields = nullable)]
 struct Upto {
     upto: Option<i32>,
@@ -815,6 +930,16 @@ pub(crate) async fn read_upto_id(
     Ok(())
 }
 
+/// Marks a feed read, as far as `Upto` says.
+#[utoipa::path(
+    post,
+    path = "/feeds/{feed_id}/read",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."),),
+    request_body = Upto,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Marked read."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "An age out of range."), (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
 async fn read_feed(
     State(state): State<AppState>,
     session: Session,
@@ -851,6 +976,17 @@ async fn read_many(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Marks the feeds of a folder and the folders inside it read, as far as `Upto`
+/// says.
+#[utoipa::path(
+    post,
+    path = "/folders/{folder_id}/read",
+    tag = "Reading",
+    params(("folder_id" = i32, Path, description = "The folder.")),
+    request_body = Upto,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Marked read."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "An age out of range."), (status = NOT_FOUND, description = "No such folder of the account.")),
+)]
 async fn read_folder(
     State(state): State<AppState>,
     session: Session,
@@ -860,6 +996,15 @@ async fn read_folder(
     read_many(&state, &session, Some(folder_id), upto).await
 }
 
+/// Marks everything of the account read, as far as `Upto` says.
+#[utoipa::path(
+    post,
+    path = "/read",
+    tag = "Reading",
+    request_body = Upto,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Marked read."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "An age out of range.")),
+)]
 async fn read_all(
     State(state): State<AppState>,
     session: Session,

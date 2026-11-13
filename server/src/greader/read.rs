@@ -19,8 +19,9 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 
+use super::described;
 use super::{
-    App, Form,
+    App, Fields,
     parse::{self, FeedRef, Params, State as Mark, Stream},
 };
 use crate::{
@@ -378,10 +379,20 @@ fn usec(at: OffsetDateTime) -> String {
 
 /// `GET /reader/api/0/stream/items/ids`: the IDs of a list, newest first or
 /// with `r=o` oldest first, at most [`MAX_IDS`] at a time.
+///
+/// The parameters may come in the query or as a form.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/stream/items/ids",
+    tag = "Google Reader API",
+    params(described::StreamPage),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`itemRefs` (each `id` as a number, with `directStreamIds` and `timestampUsec`) and, if there is more, `continuation`.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn item_ids(
     State(state): State<AppState>,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Json<Value>, AppError> {
     let session = &login.session;
     let stream = stream_of(&params)?;
@@ -593,11 +604,21 @@ fn contents(id: &str, items: Vec<Value>, next: Option<i64>) -> Json<Value> {
 
 /// `POST /reader/api/0/stream/items/contents`: the items of these IDs (`i`),
 /// at most [`MAX_ITEMS`]. What the account cannot see is left out.
+///
+/// The IDs may come in the query or as a form (`i`, once per item).
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/stream/items/contents",
+    tag = "Google Reader API",
+    params(("i" = Vec<String>, Query, description = "The ID of an item, long or short; once per item.")),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`items`: each with `id`, `title`, `published`, `author`, `canonical`, `alternate`, `summary.content` (the cleaned text), `categories` (read, starred, labels) and `origin` (its feed).", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn item_contents(
     State(state): State<AppState>,
     headers: HeaderMap,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Json<Value>, AppError> {
     let keys: Vec<(i32, i32)> = params.all("i").filter_map(parse::item).collect();
     if keys.len() > MAX_ITEMS {
@@ -612,23 +633,45 @@ pub(super) async fn item_contents(
 
 /// `GET /reader/api/0/stream/contents/<stream>`: a page of a list with the
 /// items' texts, at most [`MAX_ITEMS`].
+///
+/// The stream is the rest of the path, slashes included, such as `feed/12` or
+/// `user/-/state/com.google/reading-list`; the other parameters may come in the
+/// query or as a form.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/stream/contents/{*stream}",
+    tag = "Google Reader API",
+    params(("*stream" = String, Path, description = "The stream, slashes included."), described::StreamPage),
+    security(("app_password" = [])),
+    responses((status = OK, description = "As `stream/contents` answers.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn stream_contents_of(
     State(state): State<AppState>,
     headers: HeaderMap,
     App(login): App,
     Path(stream): Path<String>,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Json<Value>, AppError> {
     let stream_id = stream.trim_start_matches('/').to_owned();
     contents_of(&state, &headers, &login, &stream_id, &params).await
 }
 
 /// `GET /reader/api/0/stream/contents?s=<stream>`, the same.
+///
+/// The parameters may come in the query or as a form.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/stream/contents",
+    tag = "Google Reader API",
+    params(described::StreamPage),
+    security(("app_password" = [])),
+    responses((status = OK, description = "`items` as `stream/items/contents` has them, and, if there is more, `continuation`.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn stream_contents(
     State(state): State<AppState>,
     headers: HeaderMap,
     App(login): App,
-    Form(params): Form,
+    Fields(params): Fields,
 ) -> Result<Json<Value>, AppError> {
     let stream_id = params
         .one("s")
@@ -666,6 +709,13 @@ fn category(name: &str) -> Value {
 
 /// `GET /reader/api/0/subscription/list`: the account's feeds, each with its
 /// folder.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/subscription/list",
+    tag = "Google Reader API",
+    security(("app_password" = [])),
+    responses((status = OK, description = "`subscriptions`: each feed with `id` (`feed/<id>`), `title`, `url`, `htmlUrl`, `iconUrl` and its folder in `categories`.", body = serde_json::Value), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn subscriptions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -717,6 +767,13 @@ pub(super) async fn subscriptions(
 
 /// `GET /reader/api/0/tag/list`: the star, the folders by their paths and the
 /// labels.
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/tag/list",
+    tag = "Google Reader API",
+    security(("app_password" = [])),
+    responses((status = OK, description = "`tags`: the star, each folder and each label, by `id`.", body = serde_json::Value), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn tags(
     State(state): State<AppState>,
     App(login): App,
@@ -739,6 +796,13 @@ pub(super) async fn tags(
 
 /// `GET /reader/api/0/unread-count`: the unread count of each feed, folder
 /// and of all, worked out like the page's (`reading::unread_counts`).
+#[utoipa::path(
+    method(get, post),
+    path = "/reader/api/0/unread-count",
+    tag = "Google Reader API",
+    security(("app_password" = [])),
+    responses((status = OK, description = "`max` and `unreadcounts`: per feed, folder and for all, with `id`, `count` and `newestItemTimestampUsec`.", body = serde_json::Value), crate::openapi::NeedsAppPassword),
+)]
 pub(super) async fn unread_counts(
     State(state): State<AppState>,
     App(login): App,

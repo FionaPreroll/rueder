@@ -1,13 +1,14 @@
 //! Labels: a reader's own marks for articles, each with a name and a color.
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState,
@@ -28,19 +29,16 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Order>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/labels", get(labels).post(add))
-        .route("/labels/order", post(order))
-        .route("/labels/{id}", patch(change).delete(remove))
-        .route(
-            "/feeds/{feed_id}/articles/{seq}/labels/{id}",
-            put(attach).delete(detach),
-        )
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(labels, add))
+        .routes(routes!(order))
+        .routes(routes!(change, remove))
+        .routes(routes!(attach, detach))
 }
 
 /// A label. `GET /api/labels` answers with a list of them.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Label {
     id: i32,
     title: String,
@@ -68,6 +66,14 @@ fn taken(err: sqlx::Error) -> AppError {
     }
 }
 
+/// The account's labels, in their order.
+#[utoipa::path(
+    get,
+    path = "/labels",
+    tag = "Labels",
+    security(("session" = [])),
+    responses((status = OK, body = Vec<Label>), crate::openapi::NeedsSession),
+)]
 async fn labels(
     State(state): State<AppState>,
     session: Session,
@@ -84,19 +90,28 @@ async fn labels(
 }
 
 /// What `POST /api/labels` reads. It answers with `Created`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 pub(crate) struct NewLabel {
     pub(crate) title: String,
     pub(crate) color: String,
 }
 
 /// The answer to making something: the number it got.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 pub(crate) struct Created {
     pub(crate) id: i32,
 }
 
 /// A new label, after the ones that are there.
+#[utoipa::path(
+    post,
+    path = "/labels",
+    operation_id = "add_label",
+    tag = "Labels",
+    request_body = NewLabel,
+    security(("session" = [])),
+    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No title, a title the account has already, a color that is not one of the list, or 100 labels already.")),
+)]
 pub(crate) async fn add(
     State(state): State<AppState>,
     session: Session,
@@ -123,13 +138,25 @@ pub(crate) async fn add(
 /// What to change about a label; what is left out stays.
 ///
 /// What `PATCH /api/labels/{id}` reads.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "LabelChange", optional_fields = nullable)]
+#[schema(as = LabelChange)]
 pub(crate) struct Change {
     pub(crate) title: Option<String>,
     pub(crate) color: Option<String>,
 }
 
+/// Changes a label's title or color; what is left out stays.
+#[utoipa::path(
+    patch,
+    path = "/labels/{id}",
+    operation_id = "change_label",
+    tag = "Labels",
+    params(("id" = i32, Path, description = "The label.")),
+    request_body = Change,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A title the account has already, or a color that is not one of the list."), (status = NOT_FOUND, description = "No such label of the account.")),
+)]
 pub(crate) async fn change(
     State(state): State<AppState>,
     session: Session,
@@ -159,6 +186,15 @@ pub(crate) async fn change(
 }
 
 /// Takes a label away, from every article that had it too.
+#[utoipa::path(
+    delete,
+    path = "/labels/{id}",
+    operation_id = "remove_label",
+    tag = "Labels",
+    params(("id" = i32, Path, description = "The label.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such label of the account.")),
+)]
 pub(crate) async fn remove(
     State(state): State<AppState>,
     session: Session,
@@ -178,13 +214,22 @@ pub(crate) async fn remove(
 }
 
 /// A new order: every number once, in the order they shall stand in.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct Order {
     ids: Vec<i32>,
 }
 
 /// Puts the labels in this order. Labels that are not named keep their place
 /// among themselves, after the named ones.
+#[utoipa::path(
+    post,
+    path = "/labels/order",
+    operation_id = "order_labels",
+    tag = "Labels",
+    request_body = Order,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "More ids than labels an account can have.")),
+)]
 async fn order(
     State(state): State<AppState>,
     session: Session,
@@ -211,6 +256,14 @@ async fn order(
 }
 
 /// Puts a label on an article the reader can read.
+#[utoipa::path(
+    put,
+    path = "/feeds/{feed_id}/articles/{seq}/labels/{id}",
+    tag = "Labels",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."), ("id" = i32, Path, description = "The label.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such label of the account, or no such article in a feed of the account.")),
+)]
 async fn attach(
     State(state): State<AppState>,
     session: Session,
@@ -244,6 +297,14 @@ async fn attach(
 
 /// Takes a label off an article. Taking off what is not on is no error, as
 /// long as the label is the reader's.
+#[utoipa::path(
+    delete,
+    path = "/feeds/{feed_id}/articles/{seq}/labels/{id}",
+    tag = "Labels",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."), ("id" = i32, Path, description = "The label.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such label of the account.")),
+)]
 async fn detach(
     State(state): State<AppState>,
     session: Session,

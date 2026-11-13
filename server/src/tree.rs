@@ -9,14 +9,15 @@
 //! are the database's; see the trigger in the first migration.
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, patch, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgConnection;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{AppError, AppState, filters, sessions::Session};
 
@@ -42,20 +43,21 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<NewAgent>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/tree/move", post(move_node))
-        .route("/folders", post(add_folder))
-        .route("/folders/{id}", patch(rename_folder).delete(remove_folder))
-        .route("/feeds/{id}", patch(rename_feed).delete(unsubscribe))
-        .route("/feeds/{id}/agent", put(set_agent))
-        .route("/settings", get(settings).put(set_settings))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(move_node))
+        .routes(routes!(add_folder))
+        .routes(routes!(rename_folder, remove_folder))
+        .routes(routes!(rename_feed, unsubscribe))
+        .routes(routes!(set_agent))
+        .routes(routes!(settings, set_settings))
 }
 
 /// A folder or a subscription, as the tree's changes name them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS, ToSchema)]
 #[serde(tag = "kind", content = "id", rename_all = "lowercase")]
 #[ts(rename = "NodeRef")]
+#[schema(as = NodeRef)]
 pub enum Node {
     Folder(i32),
     Feed(i32),
@@ -269,9 +271,10 @@ async fn renumber(
 
 /// The side of the node it is dropped on that a node lands on: before it,
 /// after it or, for a folder, inside it.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(rename = "DropPosition")]
+#[schema(as = DropPosition)]
 enum Drop {
     Before,
     After,
@@ -282,13 +285,24 @@ enum Drop {
 /// interface's own model of the tree.
 ///
 /// What `POST /api/tree/move` reads.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct Move {
     node: Node,
     target: Node,
     position: Drop,
 }
 
+/// Moves a folder or a feed: before or after another node, or into a folder at
+/// its end. A folder does not go into itself, and folders nest at most five
+/// levels deep.
+#[utoipa::path(
+    post,
+    path = "/tree/move",
+    tag = "Feeds and folders",
+    request_body = Move,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A move the tree does not allow."), (status = NOT_FOUND, description = "A node that is not the account's.")),
+)]
 async fn move_node(
     State(state): State<AppState>,
     session: Session,
@@ -353,7 +367,7 @@ async fn move_node(
 }
 
 /// What `POST /api/folders` reads. It answers with `Created`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(optional_fields = nullable)]
 pub(crate) struct NewFolder {
     pub(crate) title: String,
@@ -361,12 +375,20 @@ pub(crate) struct NewFolder {
 }
 
 /// The answer to making something: the number it got.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 pub(crate) struct Created {
     pub(crate) id: i32,
 }
 
 /// A new, empty folder at the end of its level.
+#[utoipa::path(
+    post,
+    path = "/folders",
+    tag = "Feeds and folders",
+    request_body = NewFolder,
+    security(("session" = [])),
+    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No title, a title over 100 characters, too deep, or 100 folders already."), (status = NOT_FOUND, description = "No such parent folder of the account.")),
+)]
 pub(crate) async fn add_folder(
     State(state): State<AppState>,
     session: Session,
@@ -412,12 +434,22 @@ pub(crate) async fn add_folder(
 
 /// What `PATCH /api/folders/{id}` and `PATCH /api/feeds/{id}` read. A
 /// subscription without a title of its own goes by its feed's.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(optional_fields = nullable)]
 pub(crate) struct Rename {
     pub(crate) title: Option<String>,
 }
 
+/// Gives a folder another title.
+#[utoipa::path(
+    patch,
+    path = "/folders/{id}",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The folder.")),
+    request_body = Rename,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No title, or one over 100 characters."), (status = NOT_FOUND, description = "No such folder of the account.")),
+)]
 pub(crate) async fn rename_folder(
     State(state): State<AppState>,
     session: Session,
@@ -440,6 +472,14 @@ pub(crate) async fn rename_folder(
 }
 
 /// Takes a folder out. What was in it moves to where the folder was.
+#[utoipa::path(
+    delete,
+    path = "/folders/{id}",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The folder.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such folder of the account.")),
+)]
 pub(crate) async fn remove_folder(
     State(state): State<AppState>,
     session: Session,
@@ -488,6 +528,15 @@ pub(crate) async fn remove_folder(
 
 /// Gives a subscription a name of the reader's own, or, without one, the
 /// feed's name back.
+#[utoipa::path(
+    patch,
+    path = "/feeds/{id}",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The feed.")),
+    request_body = Rename,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A title over 100 characters."), (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
 pub(crate) async fn rename_feed(
     State(state): State<AppState>,
     session: Session,
@@ -514,7 +563,7 @@ pub(crate) async fn rename_feed(
 
 /// Who a feed is fetched as: as rueder, or as a browser, for sites that turn
 /// readers like rueder away.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum FetchAgent {
     Rueder,
@@ -522,7 +571,7 @@ pub(crate) enum FetchAgent {
 }
 
 /// What `PUT /api/feeds/{id}/agent` reads.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct NewAgent {
     agent: FetchAgent,
 }
@@ -530,6 +579,15 @@ struct NewAgent {
 /// Says as what a feed is fetched: as rueder, or as a browser for sites that
 /// turn rueder away. The feed is one for all who read it, so this holds for
 /// all of them, and any of them can say it. The next fetch comes at once.
+#[utoipa::path(
+    put,
+    path = "/feeds/{id}/agent",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The feed.")),
+    request_body = NewAgent,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
 async fn set_agent(
     State(state): State<AppState>,
     session: Session,
@@ -559,6 +617,14 @@ async fn set_agent(
 /// Ends a subscription, and with it what the reader read, starred and
 /// labelled there.
 /// The feed and its articles stay for whoever else reads it.
+#[utoipa::path(
+    delete,
+    path = "/feeds/{id}",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The feed.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
 pub(crate) async fn unsubscribe(
     State(state): State<AppState>,
     session: Session,
@@ -588,6 +654,15 @@ pub(crate) async fn unsubscribe(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// The reader's settings, as the interface last stored them: the same on every
+/// device.
+#[utoipa::path(
+    get,
+    path = "/settings",
+    tag = "Feeds and folders",
+    security(("session" = [])),
+    responses((status = OK, description = "Whatever the interface stored, or an empty object.", body = serde_json::Value), crate::openapi::NeedsSession),
+)]
 async fn settings(
     State(state): State<AppState>,
     session: Session,
@@ -603,6 +678,14 @@ async fn settings(
 
 /// Replaces the settings. What is in them is the interface's business; the
 /// server only keeps them, within a size.
+#[utoipa::path(
+    put,
+    path = "/settings",
+    tag = "Feeds and folders",
+    request_body = serde_json::Value,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Settings over 16 KiB.")),
+)]
 async fn set_settings(
     State(state): State<AppState>,
     session: Session,

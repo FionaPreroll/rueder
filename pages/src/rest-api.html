@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>REST API · rueder</title>
+		<link rel="icon" href="{{root}}icon.svg" />
+		<link rel="stylesheet" href="{{root}}style.css" />
+		<link rel="stylesheet" href="swagger-ui/swagger-ui.css" />
+	</head>
+	<body class="light">
+		<header class="bar">
+			<a href="{{root}}"><img src="{{root}}icon.svg" width="24" height="24" alt="" /> rueder</a>
+		</header>
+		<main class="api">
+			<p class="aside">
+				Every route of a rueder server, written from its code: the page's API under
+				<code>/api</code> and the Google Reader API for feed reader apps under
+				<code>/greader</code>. To read, not to try: no server is behind this page. The description
+				as a file: <a href="openapi.json">openapi.json</a> (OpenAPI 3.1).
+			</p>
+			<div id="swagger-ui"></div>
+		</main>
+		<footer class="foot">{{footer}}</footer>
+		<script src="swagger-ui/swagger-ui-bundle.js"></script>
+		<script src="rest-api.js"></script>
+	</body>
+</html>

@@ -5,6 +5,7 @@
 //   node build.js [--out <folder>]    (default: ../_site)
 
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { brokenLinks } from './links.js';
@@ -12,6 +13,18 @@ import { escapeHtml, render } from './markdown.js';
 import { fill, footer, origin, repoUrl, sitePath } from './site.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** Where Swagger UI is, as npm brought it. */
+const swaggerUi = dirname(createRequire(import.meta.url).resolve('swagger-ui-dist/package.json'));
+
+/**
+ * The description of the HTTP interface, which the server's tests keep current
+ * (`UPDATE_API_TYPES=1 cargo test --test api_types` in server/).
+ */
+export const description = 'server/openapi.json';
+
+/** What the REST API's page takes of Swagger UI: the bundle, its look, and its license. */
+export const swaggerFiles = ['swagger-ui-bundle.js', 'swagger-ui.css', 'LICENSE', 'NOTICE'];
 
 /** What the other parts build, where it goes on the site, and how it is built. */
 export const parts = [
@@ -75,7 +88,10 @@ export const withoutFonts = (css) =>
 
 /** Puts the site together in `out` from the repository in `repo`. */
 export function build({ repo, out, from }) {
-	const missing = parts.filter((part) => !existsSync(join(repo, part.from)));
+	const missing = [
+		...parts,
+		{ from: description, how: 'UPDATE_API_TYPES=1 cargo test --test api_types in server/' }
+	].filter((part) => !existsSync(join(repo, part.from)));
 	if (missing.length) {
 		throw new Error(
 			'build these first:\n' + missing.map((part) => `  ${part.from}: ${part.how}`).join('\n')
@@ -107,6 +123,15 @@ export function build({ repo, out, from }) {
 	writeFileSync(join(out, 'index.html'), fill(overview, { repo: repoUrl(from), footer: foot }));
 	const missingPage = readFileSync(join(here, 'src/404.html'), 'utf8');
 	writeFileSync(join(out, '404.html'), fill(missingPage, { root: sitePath(from), footer: foot }));
+
+	// The REST API: the description, shown by Swagger UI.
+	const api = join(out, 'docs/rest-api');
+	mkdirSync(join(api, 'swagger-ui'), { recursive: true });
+	cpSync(join(repo, description), join(api, 'openapi.json'));
+	for (const file of swaggerFiles) cpSync(join(swaggerUi, file), join(api, 'swagger-ui', file));
+	cpSync(join(here, 'src/rest-api.js'), join(api, 'rest-api.js'));
+	const apiPage = readFileSync(join(here, 'src/rest-api.html'), 'utf8');
+	writeFileSync(join(api, 'index.html'), fill(apiPage, { root: '../../', footer: foot }));
 
 	const page = readFileSync(join(here, 'src/page.html'), 'utf8');
 	for (const readme of readmes) {

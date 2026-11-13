@@ -11,7 +11,13 @@
  * What `GET /api/health` answers.
  */
 export type Health = {
+	/**
+	 * Always `ok`: the server answers and its database too.
+	 */
 	status: string,
+	/**
+	 * How many feeds the server knows.
+	 */
 	feeds: number,
 };
 
@@ -658,6 +664,9 @@ export type ListQuery = {
 	 * starts at the oldest article there is. Not together with `before`.
 	 */
 	after?: number,
+	/**
+	 * How many articles at most: 50 if not said, 200 at most.
+	 */
 	limit?: number,
 	/**
 	 * Leave out what was read.
@@ -838,6 +847,9 @@ export type SearchQuery = {
 	 * Only what arrived before this `id`: `next` of the page before.
 	 */
 	before?: number,
+	/**
+	 * How many articles at most: 50 if not said, 200 at most.
+	 */
 	limit?: number,
 	/**
 	 * Leave out what was read.

@@ -205,34 +205,46 @@ settings:
   excludeLinksFromLockfile: false
 
 importers:
+
   .:
     dependencies:
       marked:
         specifier: ^18.2.0
         version: 18.2.0
+      swagger-ui-dist:
+        specifier: ^5.34.1
+        version: 5.34.1
     devDependencies:
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
 
 packages:
+
+  '@scarf/scarf@1.4.0':
+    resolution: {integrity: sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==}
+
   marked@18.2.0:
-    resolution:
-      {
-        integrity: sha512-KaeL+tAbtvI930q7HE2PN5lYXYdT8EiSmxHlN6F3rsfb57wd5mp5W5TLazpdj4inTQBJdgjYwbs40W/0VUGU+Q==
-      }
-    engines: { node: '>= 20' }
+    resolution: {integrity: sha512-KaeL+tAbtvI930q7HE2PN5lYXYdT8EiSmxHlN6F3rsfb57wd5mp5W5TLazpdj4inTQBJdgjYwbs40W/0VUGU+Q==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   prettier@3.10.1:
-    resolution:
-      {
-        integrity: sha512-70vp3ZUYoPlFbF9uiTdXHUUCGEIp7d4+6p+8DYbkm2jP7x/3i/paXVF6dopSI3zd/CEitrZN1rc4i85xWmmXlg==
-      }
-    engines: { node: '>=14' }
+    resolution: {integrity: sha512-70vp3ZUYoPlFbF9uiTdXHUUCGEIp7d4+6p+8DYbkm2jP7x/3i/paXVF6dopSI3zd/CEitrZN1rc4i85xWmmXlg==}
+    engines: {node: '>=14'}
     hasBin: true
 
+  swagger-ui-dist@5.34.1:
+    resolution: {integrity: sha512-VSr8fXfI93obYaQicLJbLUKGRxDojj/SfRJDDLCioGTUBj4BK/Nj4eE9jCeCAnJxVLi7iS+08PbiZLyrQKBkJQ==}
+
 snapshots:
+
+  '@scarf/scarf@1.4.0': {}
+
   marked@18.2.0: {}
 
   prettier@3.10.1: {}
+
+  swagger-ui-dist@5.34.1:
+    dependencies:
+      '@scarf/scarf': 1.4.0
