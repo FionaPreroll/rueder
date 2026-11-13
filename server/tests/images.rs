@@ -329,6 +329,10 @@ async fn file(
 }
 
 /// Starts the site and returns where it is.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
 async fn site(files: &[(&str, StatusCode, &'static str, Vec<u8>)]) -> (String, Shared) {
     let site: Shared = Arc::default();
     for (name, status, kind, bytes) in files {

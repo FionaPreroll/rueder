@@ -13,12 +13,13 @@ use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
 
 /// How far the mark looks ahead in one go when it moves up.
 const COMPACT_CHUNK: i64 = 1000;
 
 /// A subscription's numbers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, ToSchema)]
 pub struct FeedUnread {
     pub feed_id: i32,
     /// The number of the feed's newest article.

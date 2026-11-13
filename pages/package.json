@@ -12,7 +12,8 @@
 		"lint": "prettier --check ."
 	},
 	"dependencies": {
-		"marked": "^18.2.0"
+		"marked": "^18.2.0",
+		"swagger-ui-dist": "^5.34.1"
 	},
 	"devDependencies": {
 		"prettier": "^3.10.1"

@@ -8,7 +8,7 @@ inside it and an Android app around that page.
 
 [Try the demo](https://fionapreroll.github.io/rueder/demo/) or read the
 [documentation](https://fionapreroll.github.io/rueder/): installing it, the
-Android app, and the code of the server and the web page.
+Android app, the REST API, and the code of the server and the web page.
 
 ![Temporary project logo: A red cartoon crab holding a newspaper titled 'rueder'](docs/images/logo.png)
 

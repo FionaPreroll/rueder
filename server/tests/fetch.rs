@@ -77,6 +77,10 @@ fn rss(entries: &[(&str, &str, &str)]) -> String {
 }
 
 /// Starts the site and returns the address of its feed.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
 async fn site(entries: &[(&str, &str, &str)]) -> (String, Shared) {
     let site = Arc::new(Mutex::new(Site {
         body: rss(entries),

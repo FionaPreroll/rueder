@@ -168,6 +168,10 @@ fn gzip(bytes: &[u8]) -> Vec<u8> {
     encoder.finish().unwrap()
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
 fn site() -> Router {
     Router::new()
         .route("/feed", get(feed))

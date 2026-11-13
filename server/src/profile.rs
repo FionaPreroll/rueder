@@ -5,15 +5,16 @@
 use std::time::Instant;
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{delete, get, put},
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, accounts,
@@ -33,34 +34,43 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Created>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/sessions", get(own_sessions).delete(end_others))
-        .route("/sessions/{id}", delete(end_one))
-        .route("/password", put(change_password))
-        .route("/account", delete(remove_account))
-        .route("/accounts", get(all_accounts).post(add_account))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(own_sessions, end_others))
+        .routes(routes!(end_one))
+        .routes(routes!(change_password))
+        .routes(routes!(remove_account))
+        .routes(routes!(all_accounts, add_account))
 }
 
 /// One place a reader is logged in.
 ///
 /// `GET /api/sessions` answers with a list of them; `DELETE /api/sessions/{id}`
 /// ends one, `DELETE /api/sessions` all but the one that asks.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Device {
     /// A name for the session that is not its token and leads to none.
     id: String,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     last_seen_at: OffsetDateTime,
     /// The session that asks.
     current: bool,
 }
 
 /// The reader's sessions, the one last used first.
+#[utoipa::path(
+    get,
+    path = "/sessions",
+    tag = "Account",
+    security(("session" = [])),
+    responses((status = OK, body = Vec<Device>), crate::openapi::NeedsSession),
+)]
 async fn own_sessions(
     State(state): State<AppState>,
     session: Session,
@@ -82,6 +92,14 @@ async fn own_sessions(
 }
 
 /// Ends one of the reader's sessions, by the name the list gave it.
+#[utoipa::path(
+    delete,
+    path = "/sessions/{id}",
+    tag = "Account",
+    params(("id" = String, Path, description = "The session, as the list names it.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such session of the account.")),
+)]
 async fn end_one(
     State(state): State<AppState>,
     session: Session,
@@ -102,6 +120,13 @@ async fn end_one(
 }
 
 /// Ends all sessions of the reader but the one that asks.
+#[utoipa::path(
+    delete,
+    path = "/sessions",
+    tag = "Account",
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession),
+)]
 async fn end_others(
     State(state): State<AppState>,
     session: Session,
@@ -119,17 +144,26 @@ async fn end_others(
 }
 
 /// What `PUT /api/password` reads.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct NewPassword {
     /// The password so far. An account that has none needs none.
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     current: String,
     new: String,
 }
 
 /// Gives the reader a new password. That ends every session of the account;
 /// the browser that asks gets a new one.
+#[utoipa::path(
+    put,
+    path = "/password",
+    tag = "Account",
+    request_body = NewPassword,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Changed; the answer sets the new session's cookie."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A new password that is too short or too long."), (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+)]
 async fn change_password(
     State(state): State<AppState>,
     session: Session,
@@ -166,18 +200,21 @@ async fn change_password(
 }
 
 /// What `DELETE /api/account` reads: proof that the reader means it.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct Farewell {
     /// The account's password. An account that has none sends its name.
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     password: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     name: String,
     /// A code of the app or a recovery code, where the second factor is on.
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     code: String,
     /// A passkey of the account, instead of all the above.
     #[serde(default)]
@@ -192,6 +229,14 @@ struct Farewell {
 /// takes a code as well, as at login: without one the answer is 403 with
 /// `second factor needed`, and a wrong one counts like a wrong password. A
 /// passkey of the account stands for all of it.
+#[utoipa::path(
+    delete,
+    path = "/account",
+    tag = "Account",
+    request_body = Farewell,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Deleted; the answer clears the cookie."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "The name typed to confirm is not the account's."), (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+)]
 async fn remove_account(
     State(state): State<AppState>,
     session: Session,
@@ -263,8 +308,9 @@ pub(crate) fn admin(session: &Session) -> Result<(), AppError> {
 /// An account as an admin sees it.
 ///
 /// `GET /api/accounts` answers with a list of them, for admins only.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "Account")]
+#[schema(as = Account)]
 struct Listed {
     id: i32,
     username: String,
@@ -274,10 +320,18 @@ struct Listed {
     disabled: bool,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     created_at: OffsetDateTime,
 }
 
 /// All accounts, for an admin. Nothing of what they read.
+#[utoipa::path(
+    get,
+    path = "/accounts",
+    tag = "Admin",
+    security(("session" = [])),
+    responses((status = OK, body = Vec<Listed>), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it.")),
+)]
 async fn all_accounts(
     State(state): State<AppState>,
     session: Session,
@@ -296,23 +350,32 @@ async fn all_accounts(
 }
 
 /// What `POST /api/accounts` reads, for admins only. It answers with `Created`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct NewAccount {
     username: String,
     /// The first password, which the admin hands over and the reader changes.
     password: String,
     #[serde(default)]
     #[ts(as = "Option<bool>", optional)]
+    #[schema(value_type = Option<bool>)]
     is_admin: bool,
 }
 
 /// The answer to making something: the number it got.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Created {
     id: i32,
 }
 
 /// Makes an account, as an admin.
+#[utoipa::path(
+    post,
+    path = "/accounts",
+    tag = "Admin",
+    request_body = NewAccount,
+    security(("session" = [])),
+    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A name that is taken or not allowed, or a password that is too short or too long."), (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it.")),
+)]
 async fn add_account(
     State(state): State<AppState>,
     session: Session,

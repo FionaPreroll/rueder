@@ -44,11 +44,10 @@ use std::{
 };
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::Response,
-    routing::{delete, get, post},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
@@ -56,6 +55,8 @@ use serde_json::Value;
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 use webauthn_rs::prelude::{
     AuthenticationResult, CreationChallengeResponse, DiscoverableAuthentication, Passkey,
     PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential, RegisterPublicKeyCredential,
@@ -238,12 +239,12 @@ fn random<const N: usize>() -> anyhow::Result<[u8; N]> {
     Ok(bytes)
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/passkeys", get(list).post(finish_registration))
-        .route("/passkeys/register", post(start_registration))
-        .route("/passkeys/proof", post(start_proof))
-        .route("/passkeys/{id}", delete(remove))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(list, finish_registration))
+        .routes(routes!(start_registration))
+        .routes(routes!(start_proof))
+        .routes(routes!(remove))
 }
 
 /// The types of this module for the frontend.
@@ -260,23 +261,27 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
 }
 
 /// A passkey as the list shows it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "Passkey")]
+#[schema(as = Passkey)]
 pub struct Listed {
     id: i32,
     name: String,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     created_at: OffsetDateTime,
     /// When it last logged in or showed it was the owner; null until then.
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
     used_at: Option<OffsetDateTime>,
 }
 
 /// What `GET /api/passkeys` answers.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "Passkeys")]
+#[schema(as = Passkeys)]
 struct List {
     passkeys: Vec<Listed>,
     /// How many the account can have.
@@ -285,14 +290,16 @@ struct List {
 
 /// What `POST /api/passkeys/register` reads: a name for the passkey, and what
 /// shows that the owner is there (see [`second_factor::prove`]).
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 pub struct NewPasskey {
     name: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     password: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     code: String,
     #[serde(default)]
     #[ts(optional)]
@@ -302,39 +309,46 @@ pub struct NewPasskey {
 /// What a ceremony asks the device: the options for
 /// `navigator.credentials.create()` or `.get()`, in WebAuthn's JSON, with the
 /// name of the ceremony to send the answer back with.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "PasskeyChallenge")]
+#[schema(as = PasskeyChallenge)]
 pub struct Challenge {
     ceremony: String,
     #[ts(type = "unknown")]
+    #[schema(value_type = Value)]
     options: Value,
 }
 
 /// The device's answer to a ceremony that asked for a passkey, which logs in
 /// or shows that the owner is there.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "PasskeyAnswer")]
+#[schema(as = PasskeyAnswer)]
 pub struct Answer {
     ceremony: String,
     #[ts(type = "unknown")]
+    #[schema(value_type = Value)]
     credential: Box<PublicKeyCredential>,
 }
 
 /// The device's answer to a ceremony that made a new passkey.
 ///
 /// `POST /api/passkeys` reads it.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "PasskeyRegistration")]
+#[schema(as = PasskeyRegistration)]
 pub struct Registration {
     ceremony: String,
     #[ts(type = "unknown")]
+    #[schema(value_type = Value)]
     credential: Box<RegisterPublicKeyCredential>,
 }
 
 /// What `POST /api/passkeys` answers: the new passkey, and the recovery codes
 /// where it turned the second factor on.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "RegisteredPasskey")]
+#[schema(as = RegisteredPasskey)]
 pub struct Registered {
     passkey: Listed,
     #[ts(optional)]
@@ -343,13 +357,15 @@ pub struct Registered {
 }
 
 /// What `DELETE /api/passkeys/{id}` reads: what shows that the owner is there.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 pub struct RemovePasskey {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     password: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     code: String,
     #[serde(default)]
     #[ts(optional)]
@@ -439,6 +455,15 @@ fn request_options(mut rcr: RequestChallengeResponse) -> anyhow::Result<Value> {
     Ok(serde_json::to_value(&rcr)?)
 }
 
+/// The account's passkeys: name, when made and when last used.
+#[utoipa::path(
+    get,
+    path = "/passkeys",
+    operation_id = "list_passkeys",
+    tag = "Account",
+    security(("session" = [])),
+    responses((status = OK, body = List), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "This server has no passkeys (`PUBLIC_URL` is not set).")),
+)]
 async fn list(State(state): State<AppState>, session: Session) -> Result<Json<List>, AppError> {
     passkeys(&state)?;
     let passkeys = sqlx::query_as!(
@@ -470,6 +495,25 @@ async fn is_fresh(db: &PgPool, headers: &HeaderMap) -> anyhow::Result<bool> {
     .unwrap_or(false))
 }
 
+/// Starts adding a passkey on this device: the owner confirms with password and
+/// code, or a passkey; the answer is what `navigator.credentials.create()`
+/// takes. Finished with `POST /api/passkeys`, within five minutes and in the
+/// same session.
+#[utoipa::path(
+    post,
+    path = "/passkeys/register",
+    tag = "Account",
+    request_body = NewPasskey,
+    security(("session" = [])),
+    responses(
+        (status = OK, body = Challenge),
+        crate::openapi::NeedsSession,
+        (status = BAD_REQUEST, description = "The account has as many passkeys as it may (10)."),
+        (status = FORBIDDEN, description = "The proof of the owner is wrong, or an account without password and second factor has to log in again first."),
+        (status = NOT_FOUND, description = "This server has no passkeys (`PUBLIC_URL` is not set)."),
+        (status = TOO_MANY_REQUESTS, description = "Too many passkey ceremonies open from this sender."),
+    ),
+)]
 async fn start_registration(
     State(state): State<AppState>,
     session: Session,
@@ -540,6 +584,22 @@ async fn start_registration(
     Ok(Json(Challenge { ceremony, options }))
 }
 
+/// Adds the passkey the device made. The account's first second factor brings
+/// ten recovery codes, shown this once.
+#[utoipa::path(
+    post,
+    path = "/passkeys",
+    tag = "Account",
+    request_body = Registration,
+    security(("session" = [])),
+    responses(
+        (status = CREATED, body = Registered),
+        crate::openapi::NeedsSession,
+        (status = BAD_REQUEST, description = "The device's answer does not hold: another challenge, origin or site, no user verification, or a ceremony that ended."),
+        (status = CONFLICT, description = "This passkey is known already."),
+        (status = NOT_FOUND, description = "This server has no passkeys (`PUBLIC_URL` is not set)."),
+    ),
+)]
 async fn finish_registration(
     State(state): State<AppState>,
     session: Session,
@@ -632,6 +692,22 @@ fn no_ceremony() -> AppError {
 }
 
 /// Starts showing, in a session, that the account's owner is there.
+///
+/// The answer is what `navigator.credentials.get()` takes; the device's answer
+/// then goes with the change that asks for the owner (as `passkey`).
+#[utoipa::path(
+    post,
+    path = "/passkeys/proof",
+    tag = "Account",
+    security(("session" = [])),
+    responses(
+        (status = OK, body = Challenge),
+        crate::openapi::NeedsSession,
+        (status = CONFLICT, description = "The account has no passkey."),
+        (status = NOT_FOUND, description = "This server has no passkeys (`PUBLIC_URL` is not set)."),
+        (status = TOO_MANY_REQUESTS, description = "Too many passkey ceremonies open from this sender."),
+    ),
+)]
 async fn start_proof(
     State(state): State<AppState>,
     session: Session,
@@ -718,6 +794,23 @@ pub(crate) async fn check_proof(
     Ok(())
 }
 
+/// Removes one of the account's passkeys; the owner confirms. Without passkeys
+/// and without the app, the second factor is off again.
+#[utoipa::path(
+    delete,
+    path = "/passkeys/{id}",
+    operation_id = "remove_passkey",
+    tag = "Account",
+    params(("id" = i32, Path, description = "The passkey, as the list names it.")),
+    request_body = RemovePasskey,
+    security(("session" = [])),
+    responses(
+        (status = NO_CONTENT, description = "Removed."),
+        crate::openapi::NeedsSession,
+        (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong."),
+        (status = NOT_FOUND, description = "No such passkey of the account, or no passkeys on this server."),
+    ),
+)]
 async fn remove(
     State(state): State<AppState>,
     session: Session,
@@ -746,6 +839,19 @@ async fn remove(
 }
 
 /// Starts a login with a passkey, for anybody: the device says whose it is.
+///
+/// The answer is what `navigator.credentials.get()` takes; finished with `POST
+/// /api/login/passkey/finish`.
+#[utoipa::path(
+    post,
+    path = "/login/passkey",
+    tag = "Session",
+    responses(
+        (status = OK, body = Challenge),
+        (status = NOT_FOUND, description = "This server has no passkeys (`PUBLIC_URL` is not set)."),
+        (status = TOO_MANY_REQUESTS, description = "Too many passkey ceremonies open from this sender."),
+    ),
+)]
 pub async fn start_login(
     State(state): State<AppState>,
     Sender(ip): Sender,
@@ -768,6 +874,19 @@ pub async fn start_login(
 
 /// Finishes a login with a passkey: the answer of `POST /api/login`, with the
 /// session's cookie, and the session counts as one with a second factor.
+#[utoipa::path(
+    post,
+    path = "/login/passkey/finish",
+    tag = "Session",
+    request_body = Answer,
+    responses(
+        (status = OK, description = "Logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me),
+        (status = UNAUTHORIZED, description = "The passkey is wrong, or belongs to no account here."),
+        (status = FORBIDDEN, description = "The account is disabled."),
+        (status = NOT_FOUND, description = "This server has no passkeys (`PUBLIC_URL` is not set)."),
+        (status = TOO_MANY_REQUESTS, description = "Too many wrong tries from this sender; see `Retry-After`."),
+    ),
+)]
 pub async fn finish_login(
     State(state): State<AppState>,
     Sender(ip): Sender,

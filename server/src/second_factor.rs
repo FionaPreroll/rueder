@@ -30,10 +30,9 @@
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use axum::{
-    Json, Router,
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
 };
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
@@ -41,6 +40,8 @@ use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, accounts,
@@ -68,11 +69,11 @@ const CODE_LEN: usize = 10;
 /// The longest code that is looked at: anything longer is wrong anyway.
 const MAX_CODE: usize = 32;
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/second-factor", get(status).delete(switch_off))
-        .route("/second-factor/setup", post(set_up))
-        .route("/second-factor/confirm", post(confirm))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(status, switch_off))
+        .routes(routes!(set_up))
+        .routes(routes!(confirm))
 }
 
 /// The types this module sends and reads, for the frontend.
@@ -90,7 +91,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
 /// how many recovery codes it has left.
 ///
 /// `GET /api/second-factor` answers with it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 pub struct SecondFactor {
     /// Whether the second factor is on: the app or a passkey.
     on: bool,
@@ -107,14 +108,17 @@ pub struct SecondFactor {
 /// has none does without, and where the second factor is on already through
 /// passkeys, a recovery code; or a passkey instead of both. Otherwise a
 /// password that got out with a session could add an app of its own.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "SecondFactorPassword")]
+#[schema(as = SecondFactorPassword)]
 pub struct Password {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     password: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     code: String,
     #[serde(default)]
     #[ts(optional)]
@@ -123,14 +127,17 @@ pub struct Password {
 
 /// What switching off reads: the password, as for setting up, and a code from
 /// the app or a recovery code; or a passkey instead of both.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "SecondFactorSwitchOff")]
+#[schema(as = SecondFactorSwitchOff)]
 pub struct SwitchOff {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     password: String,
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
     code: String,
     #[serde(default)]
     #[ts(optional)]
@@ -140,8 +147,9 @@ pub struct SwitchOff {
 /// A new secret for the app, waiting for a code to confirm it.
 ///
 /// `POST /api/second-factor/setup` answers with it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "SecondFactorSetup")]
+#[schema(as = SecondFactorSetup)]
 pub struct Setup {
     /// The secret in base32, to type into an app by hand.
     secret: String,
@@ -154,8 +162,9 @@ pub struct Setup {
 /// A code from the app.
 ///
 /// `POST /api/second-factor/confirm` reads it.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "SecondFactorCode")]
+#[schema(as = SecondFactorCode)]
 pub struct Code {
     code: String,
 }
@@ -163,7 +172,7 @@ pub struct Code {
 /// The recovery codes, shown once.
 ///
 /// `POST /api/second-factor/confirm` answers with them.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 pub struct RecoveryCodes {
     codes: Vec<String>,
 }
@@ -477,6 +486,16 @@ pub async fn switch_off_named(db: &PgPool, name: &str) -> anyhow::Result<bool> {
     Ok(true)
 }
 
+/// Whether the account has the second factor, by the authenticator app or by
+/// passkeys, and how many recovery codes it has left.
+#[utoipa::path(
+    get,
+    path = "/second-factor",
+    operation_id = "second_factor",
+    tag = "Account",
+    security(("session" = [])),
+    responses((status = OK, body = SecondFactor), crate::openapi::NeedsSession),
+)]
 async fn status(
     State(state): State<AppState>,
     session: Session,
@@ -524,6 +543,16 @@ pub(crate) async fn tried_password(
     Ok(())
 }
 
+/// Starts setting up the authenticator app: a new secret, as text and as an
+/// address for a QR code, which counts once `confirm` has a right code from it.
+#[utoipa::path(
+    post,
+    path = "/second-factor/setup",
+    tag = "Account",
+    request_body = Password,
+    security(("session" = [])),
+    responses((status = OK, body = Setup), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong."), (status = CONFLICT, description = "The app is set up already."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+)]
 async fn set_up(
     State(state): State<AppState>,
     session: Session,
@@ -559,6 +588,16 @@ async fn set_up(
     }))
 }
 
+/// Confirms the app with a code from it. Where the account had no second factor
+/// yet, the answer has its ten recovery codes, shown this once.
+#[utoipa::path(
+    post,
+    path = "/second-factor/confirm",
+    tag = "Account",
+    request_body = Code,
+    security(("session" = [])),
+    responses((status = OK, body = RecoveryCodes), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "The code is wrong, or no setup is waiting."), (status = TOO_MANY_REQUESTS, description = "Too many wrong codes; see `Retry-After`.")),
+)]
 async fn confirm(
     State(state): State<AppState>,
     session: Session,
@@ -610,6 +649,16 @@ async fn confirm(
     Ok(Json(RecoveryCodes { codes }))
 }
 
+/// Switches the authenticator app off; the owner confirms. Without passkeys,
+/// the second factor and its recovery codes go with it.
+#[utoipa::path(
+    delete,
+    path = "/second-factor",
+    tag = "Account",
+    request_body = SwitchOff,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+)]
 async fn switch_off(
     State(state): State<AppState>,
     session: Session,

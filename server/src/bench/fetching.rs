@@ -123,6 +123,10 @@ async fn feed(State(source): State<Source>, Path(n): Path<u32>, headers: HeaderM
 }
 
 /// Starts the source under `hosts` names; it answers until the run ends.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the made-up sites of the measurement, not a route of rueder"
+)]
 async fn serve(options: &Options) -> anyhow::Result<JoinSet<()>> {
     let app = Router::new()
         .route("/feed/{n}", get(feed))

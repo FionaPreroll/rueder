@@ -15,10 +15,9 @@
 use std::{sync::LazyLock, time::Instant};
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
-    routing::{get, post},
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -26,6 +25,11 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use utoipa_axum::{
+    router::{OpenApiRouter, UtoipaMethodRouterExt},
+    routes,
+};
 
 use crate::{AppError, AppState, sessions::Session};
 
@@ -51,18 +55,16 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Reports>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/reports",
-            post(receive).layer(DefaultBodyLimit::max(MAX_BODY)),
-        )
-        .route("/reports/consent", get(consent).put(set_consent))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(receive).layer(DefaultBodyLimit::max(MAX_BODY)))
+        .routes(routes!(consent, set_consent))
 }
 
 /// What `GET /api/reports/consent` answers.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "ReportsConsent")]
+#[schema(as = ReportsConsent)]
 struct Consent {
     /// Whether this server takes reports at all.
     available: bool,
@@ -71,16 +73,18 @@ struct Consent {
 }
 
 /// What `PUT /api/reports/consent` reads. Off deletes what the account sent.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "ReportsConsentChange")]
+#[schema(as = ReportsConsentChange)]
 struct ConsentChange {
     on: bool,
 }
 
 /// What kind of error a report is about.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename = "ReportKind")]
+#[schema(as = ReportKind)]
 pub enum Kind {
     /// An error nothing caught.
     Error,
@@ -113,8 +117,9 @@ impl Kind {
 }
 
 /// One error, as the browser saw it.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "ClientReport")]
+#[schema(as = ClientReport)]
 struct Report {
     kind: Kind,
     message: String,
@@ -122,6 +127,7 @@ struct Report {
     /// "_app/immutable/chunks/x.js:12:34", one a line.
     #[serde(default)]
     #[ts(optional, as = "Option<String>")]
+    #[schema(value_type = Option<String>)]
     stack: String,
     /// The version of the frontend.
     version: String,
@@ -130,12 +136,22 @@ struct Report {
 }
 
 /// What `POST /api/reports` reads: at most twenty reports. It answers 204.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 #[ts(rename = "ClientReports")]
+#[schema(as = ClientReports)]
 struct Reports {
     reports: Vec<Report>,
 }
 
+/// Whether the reader agreed to send reports of errors in their browser, and
+/// whether this server takes them.
+#[utoipa::path(
+    get,
+    path = "/reports/consent",
+    tag = "Reports",
+    security(("session" = [])),
+    responses((status = OK, body = Consent), crate::openapi::NeedsSession),
+)]
 async fn consent(
     State(state): State<AppState>,
     session: Session,
@@ -156,6 +172,15 @@ async fn sends(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
     Ok(on.unwrap_or(false))
 }
 
+/// Agrees to send reports of errors, or takes it back.
+#[utoipa::path(
+    put,
+    path = "/reports/consent",
+    tag = "Reports",
+    request_body = ConsentChange,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "This server takes no reports of errors.")),
+)]
 async fn set_consent(
     State(state): State<AppState>,
     session: Session,
@@ -189,6 +214,16 @@ fn not_taken() -> AppError {
     AppError::Status(StatusCode::NOT_FOUND, message.into())
 }
 
+/// Reports of errors in the reader's browser, from an account that agreed: up
+/// to 32 KiB and 20 reports at once.
+#[utoipa::path(
+    post,
+    path = "/reports",
+    tag = "Reports",
+    request_body = Reports,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Too many reports at once."), (status = FORBIDDEN, description = "This account did not agree to send reports."), (status = NOT_FOUND, description = "This server takes no reports of errors.")),
+)]
 async fn receive(
     State(state): State<AppState>,
     session: Session,
@@ -316,8 +351,9 @@ pub async fn sweep(db: &PgPool) -> anyhow::Result<u64> {
 }
 
 /// The errors in browsers, for the status page.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusBrowserErrors")]
+#[schema(as = StatusBrowserErrors)]
 pub struct Summary {
     /// Whether the server takes reports at all.
     pub available: bool,
@@ -327,8 +363,9 @@ pub struct Summary {
     pub errors: Vec<BrowserError>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusBrowserError")]
+#[schema(as = StatusBrowserError)]
 pub struct BrowserError {
     pub kind: Kind,
     pub message: String,
@@ -342,9 +379,11 @@ pub struct BrowserError {
     pub browsers: Vec<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub first: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub last: OffsetDateTime,
 }
 

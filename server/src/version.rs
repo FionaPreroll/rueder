@@ -11,6 +11,7 @@ use std::path::Path;
 
 use serde::Serialize;
 use ts_rs::TS;
+use utoipa::ToSchema;
 
 /// The version of the crate, which is what `rueder --version` says.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -23,8 +24,9 @@ const MARKS: [&str; 2] = ["/.dockerenv", "/run/.containerenv"];
 /// How this rueder was built and where it runs.
 ///
 /// Part of what `GET /api/status` answers, for admins only.
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS, ToSchema)]
 #[ts(rename = "BuildInfo")]
+#[schema(as = BuildInfo)]
 pub struct Build {
     /// The version of the crate.
     pub version: &'static str,

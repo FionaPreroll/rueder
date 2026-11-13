@@ -1,6 +1,8 @@
 //! The API's types in TypeScript (work package 2.8): the file the frontend
 //! reads them from is what the Rust types say today, and no type of the API
-//! is missing from it.
+//! is missing from it. And the description of the HTTP interface (OpenAPI,
+//! work package 5.23) in `server/openapi.json`, which GitHub Pages shows, is
+//! what the code says today too.
 
 use std::{fs, path::Path};
 
@@ -13,11 +15,30 @@ use rueder::typescript::{FILE, generate};
 fn the_committed_types_are_current() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(FILE);
     let generated = generate().expect("the types have names of their own");
+    assert_current(&path, &generated);
+}
+
+/// Fails when a route, its description or a type it sends or reads changed
+/// and `server/openapi.json` did not. Run with `UPDATE_API_TYPES=1` to write
+/// the file anew.
+#[test]
+fn the_committed_description_is_current() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("openapi.json");
+    let generated = rueder::description()
+        .to_pretty_json()
+        .expect("the description is JSON")
+        + "\n";
+    assert_current(&path, &generated);
+}
+
+/// Writes the file with `UPDATE_API_TYPES`, and fails where it differs from
+/// what the code says.
+fn assert_current(path: &Path, generated: &str) {
     if std::env::var_os("UPDATE_API_TYPES").is_some() {
         fs::create_dir_all(path.parent().expect("the file lies in a directory")).expect("mkdir");
-        fs::write(&path, &generated).expect("the file can be written");
+        fs::write(path, generated).expect("the file can be written");
     }
-    let committed = fs::read_to_string(&path).unwrap_or_default();
+    let committed = fs::read_to_string(path).unwrap_or_default();
     let lines = committed.lines().zip(generated.lines()).enumerate();
     let differs = lines
         .clone()

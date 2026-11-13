@@ -19,17 +19,18 @@
 //! days, and whoever made it can take it back.
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{delete, get},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, accounts, legal,
@@ -56,11 +57,11 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<MadeInvite>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/register", get(registering).post(register))
-        .route("/invites", get(invites).post(invite))
-        .route("/invites/{id}", delete(revoke))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(registering, register))
+        .routes(routes!(invites, invite))
+        .routes(routes!(revoke))
 }
 
 /// What the operator set.
@@ -365,7 +366,7 @@ pub async fn make(
 ///
 /// `GET /api/register` answers with it, to anybody; with `?invite=<token>` it
 /// also says whether that invitation can be used.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Registering {
     /// Anybody can register, and there is room.
     open: bool,
@@ -377,13 +378,23 @@ struct Registering {
 }
 
 /// The query of `GET /api/register`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema, IntoParams)]
 #[ts(optional_fields)]
+#[into_params(parameter_in = Query)]
 struct AskedInvite {
     /// The token of an invitation to ask about.
     invite: Option<String>,
 }
 
+/// Whether anybody can register now, and whether an invitation link is good,
+/// for the page that offers it; for anybody, with or without a session.
+#[utoipa::path(
+    get,
+    path = "/register",
+    tag = "Registration",
+    params(AskedInvite),
+    responses((status = OK, body = Registering)),
+)]
 async fn registering(
     State(state): State<AppState>,
     Query(asked): Query<AskedInvite>,
@@ -415,7 +426,7 @@ pub(crate) async fn is_open(db: &PgPool) -> anyhow::Result<bool> {
 /// account) or `today` (enough accounts for one day). A name or a
 /// password that cannot be one is 400 with the reason, a name that is taken
 /// 409.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct NewRegistration {
     username: String,
     password: String,
@@ -429,6 +440,15 @@ struct NewRegistration {
     accepted_terms: Option<String>,
 }
 
+/// Makes an account: through open registration, or with an invitation; the new
+/// account is logged in at once.
+#[utoipa::path(
+    post,
+    path = "/register",
+    tag = "Registration",
+    request_body = NewRegistration,
+    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = BAD_REQUEST, description = "A name or password that is not allowed."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, or the terms were not agreed to (`terms`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from this sender; see `Retry-After`.")),
+)]
 async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -464,7 +484,7 @@ async fn register(
 
 /// An invitation as the one who made it sees it. The link itself is shown
 /// once, when it is made.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Invite {
     id: i32,
     /// For how many accounts it is, and how many it brought.
@@ -472,9 +492,11 @@ struct Invite {
     uses: i32,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     expires_at: OffsetDateTime,
     revoked: bool,
     /// It can still be used: not taken back, not run out, not used up.
@@ -484,7 +506,7 @@ struct Invite {
 /// The reader's invitations and how many more they can make.
 ///
 /// `GET /api/invites` answers with it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Invites {
     /// The newest first.
     invites: Vec<Invite>,
@@ -520,6 +542,14 @@ async fn left(
     Ok((quota - row.taken).clamp(0, i32::MAX.into()) as i32)
 }
 
+/// The invitations the reader made, and how many more they may make.
+#[utoipa::path(
+    get,
+    path = "/invites",
+    tag = "Registration",
+    security(("session" = [])),
+    responses((status = OK, body = Invites), crate::openapi::NeedsSession),
+)]
 async fn invites(
     State(state): State<AppState>,
     session: Session,
@@ -547,7 +577,7 @@ async fn invites(
 }
 
 /// What `POST /api/invites` reads. It answers with `MadeInvite`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 struct NewInvite {
     /// For how many accounts the link is; one if left out.
     #[serde(default)]
@@ -557,17 +587,26 @@ struct NewInvite {
 
 /// A new invitation, with its token, which is never shown again. The link is
 /// the page's address with `?invite=<token>`.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct MadeInvite {
     id: i32,
     token: String,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     expires_at: OffsetDateTime,
 }
 
 /// Makes an invitation. An admin's is always made and counts in the admins'
 /// pool; a reader's takes from their quota.
+#[utoipa::path(
+    post,
+    path = "/invites",
+    tag = "Registration",
+    request_body = NewInvite,
+    security(("session" = [])),
+    responses((status = CREATED, description = "Made; the link is in the answer this once.", body = MadeInvite), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "More uses than allowed, or too many links."), (status = FORBIDDEN, description = "The reader has no invitations left.")),
+)]
 async fn invite(
     State(state): State<AppState>,
     session: Session,
@@ -635,6 +674,15 @@ async fn invite(
 }
 
 /// Takes an invitation back. What it brought so far stays.
+#[utoipa::path(
+    delete,
+    path = "/invites/{id}",
+    operation_id = "revoke_invite",
+    tag = "Registration",
+    params(("id" = i32, Path, description = "The invitation.")),
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such invitation of the account.")),
+)]
 async fn revoke(
     State(state): State<AppState>,
     session: Session,

@@ -20,6 +20,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use utoipa::ToSchema;
 
 use crate::{
     AppError, AppState, accounts,
@@ -237,7 +238,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
 /// What `POST /api/login` reads. It answers with `Me` and sets the session's
 /// cookie. An account with a second factor needs `code` too, from the app or
 /// a recovery code; without it, the answer is 401 with `second factor needed`.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema)]
 pub struct Credentials {
     username: String,
     password: String,
@@ -252,7 +253,7 @@ pub const CODE_NEEDED: &str = "second factor needed";
 /// Who is logged in, as the API says it.
 ///
 /// `GET /api/me` and `POST /api/login` answer with it.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 pub struct Me {
     id: i32,
     username: String,
@@ -328,8 +329,9 @@ impl Me {
 /// The ways to log in this server has besides name and password.
 ///
 /// `GET /api/login/ways` answers with it, to anybody.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "LoginWays")]
+#[schema(as = LoginWays)]
 pub struct Ways {
     /// Through the OpenID Connect provider, at `/api/oidc/start`.
     oidc: bool,
@@ -343,6 +345,12 @@ pub struct Ways {
 
 /// What the login page asks before anybody is logged in, to know whether to
 /// offer the way through the provider. It says nothing about any account.
+#[utoipa::path(
+    get,
+    path = "/login/ways",
+    tag = "Session",
+    responses((status = OK, body = Ways)),
+)]
 pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError> {
     Ok(Json(Ways {
         oidc: state.oidc.is_some(),
@@ -352,6 +360,21 @@ pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError>
     }))
 }
 
+/// Logs in with name and password, and with the code of the second factor where
+/// the account has one. Answers with who is logged in and sets the session's
+/// cookie; a session the browser had before ends.
+#[utoipa::path(
+    post,
+    path = "/login",
+    tag = "Session",
+    request_body = Credentials,
+    responses(
+        (status = OK, description = "Logged in; the answer sets the cookie `__Host-rueder`.", body = Me),
+        (status = UNAUTHORIZED, description = "A wrong name or password (the same answer for both), a wrong code, or `second factor needed`."),
+        (status = FORBIDDEN, description = "The account is disabled; said only after the right password."),
+        (status = TOO_MANY_REQUESTS, description = "Too many wrong tries for this name or from this sender; see `Retry-After`."),
+    ),
+)]
 pub async fn login(
     State(state): State<AppState>,
     Sender(ip): Sender,
@@ -440,6 +463,13 @@ pub(crate) async fn start_session(
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
+/// Ends the session of the request, if it has one, and takes the cookie away.
+#[utoipa::path(
+    post,
+    path = "/logout",
+    tag = "Session",
+    responses((status = NO_CONTENT, description = "Logged out; the answer clears the cookie.")),
+)]
 pub async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -454,6 +484,15 @@ pub async fn logout(
         .into_response())
 }
 
+/// Who is logged in: the account, what it may do, and what the server offers
+/// it.
+#[utoipa::path(
+    get,
+    path = "/me",
+    tag = "Session",
+    security(("session" = [])),
+    responses((status = OK, body = Me), crate::openapi::NeedsSession),
+)]
 pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<Me>, AppError> {
     let has_password = sqlx::query_scalar!(
         r#"SELECT password_hash IS NOT NULL AS "has!" FROM accounts WHERE id = $1"#,

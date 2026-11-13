@@ -52,6 +52,7 @@ function madeUp() {
 	);
 	put('web/static/icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
 	put('docs/images/logo.png', 'png');
+	put('server/openapi.json', '{"openapi": "3.1.0"}');
 }
 
 describe('build', () => {
@@ -69,7 +70,13 @@ describe('build', () => {
 			'docs/rust/rueder/index.html',
 			'docs/self-hosting/index.html',
 			'docs/android-app/index.html',
-			'docs/android-app/code/index.html'
+			'docs/android-app/code/index.html',
+			'docs/rest-api/index.html',
+			'docs/rest-api/openapi.json',
+			'docs/rest-api/rest-api.js',
+			'docs/rest-api/swagger-ui/swagger-ui-bundle.js',
+			'docs/rest-api/swagger-ui/swagger-ui.css',
+			'docs/rest-api/swagger-ui/NOTICE'
 		]) {
 			assert.ok(existsSync(join(out, page)), page);
 		}
@@ -77,6 +84,7 @@ describe('build', () => {
 			'demo/',
 			'docs/self-hosting/',
 			'docs/android-app/',
+			'docs/rest-api/',
 			'docs/rust/',
 			'docs/frontend/'
 		]) {

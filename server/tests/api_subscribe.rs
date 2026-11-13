@@ -50,6 +50,10 @@ const PAGE: &str = r#"<!doctype html><html><head><title>A blog</title>
 
 /// Starts a site with a feed, a page that names feeds and a page without,
 /// and returns its address and the count of the requests it saw.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
 async fn site() -> (String, Arc<AtomicUsize>) {
     let requests = Arc::new(AtomicUsize::new(0));
     let feed = async |State(requests): State<Arc<AtomicUsize>>| {

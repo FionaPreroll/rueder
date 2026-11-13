@@ -270,6 +270,10 @@ struct Source {
 }
 
 impl Source {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the made-up site of the test, not a route of rueder"
+    )]
     async fn start() -> Self {
         let images = IMAGES
             .iter()

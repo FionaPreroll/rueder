@@ -55,6 +55,7 @@ pub mod login;
 pub mod moderation;
 pub mod monitor;
 pub mod oidc;
+pub mod openapi;
 pub mod passkeys;
 pub mod profile;
 pub mod rate;
@@ -81,11 +82,12 @@ use axum::{
     http::{HeaderName, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use serde::Serialize;
 use sqlx::PgPool;
 use ts_rs::TS;
+use utoipa::{OpenApi, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     cleaning::Rules, events::Events, hardening::Policies, http_client::HttpClient,
@@ -267,18 +269,30 @@ impl AppState {
     }
 }
 
-/// The whole app: JSON API under `/api`, everything else is the SvelteKit SPA.
+/// Where the page's API is, in the router and in its description alike.
+const API: &str = "/api";
+/// Where the Google Reader API is.
+const GREADER: &str = "/greader";
+
+/// The whole app: the page's API under `/api`, the Google Reader API under
+/// `/greader`, the image proxy, and everything else is the SvelteKit SPA.
+///
+/// The routes come from the same functions as their description
+/// ([`description`]): each is registered with `utoipa_axum::routes!` from the
+/// handler's `#[utoipa::path]`, so nothing is served that is not described.
 pub fn router(state: AppState, static_dir: &Path) -> Router {
     // Unknown paths get index.html so client-side routes survive a reload.
     let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
 
     let policies = Arc::new(Policies::for_frontend(static_dir));
+    let (api_routes, _) = api_routes().split_for_parts();
+    let (greader_routes, _) = greader::routes().split_for_parts();
+    let (other_routes, _) = other_routes().split_for_parts();
 
     Router::new()
-        .nest("/api", api(&state))
-        .nest("/greader", greader::router(&state))
-        .route("/img/{signature}/{size}/{address}", get(image))
-        .route("/.well-known/assetlinks.json", get(asset_links::serve))
+        .nest(API, api(api_routes, &state))
+        .nest(GREADER, greader::around(greader_routes, &state))
+        .merge(other_routes)
         .fallback_service(spa)
         // Around everything, from the inside out: a change asked for by a
         // page of another site is refused, every request counts for its
@@ -292,19 +306,86 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
         .with_state(state)
 }
 
-fn api(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route("/health", get(health))
-        .route("/events", get(events::stream))
-        .route("/login", post(login::login))
-        .route("/logout", post(login::logout))
-        .route("/me", get(login::me))
+/// The description of every route the server answers (OpenAPI), from the
+/// same routes as [`router`] serves; see [`openapi`]. `server/openapi.json`
+/// is it as a file.
+pub fn description() -> utoipa::openapi::OpenApi {
+    let (_, mut description) = OpenApiRouter::with_openapi(openapi::ApiDoc::openapi())
+        .nest(API, api_routes())
+        .nest(GREADER, greader::routes())
+        .merge(other_routes())
+        .split_for_parts();
+    // What takes GET and POST alike is one operation under two methods. Its
+    // id is the GET's; the POST's gets `_post`, as every id is one of a kind.
+    for item in description.paths.paths.values_mut() {
+        if let (Some(get), Some(post)) = (&item.get, &mut item.post)
+            && get.operation_id == post.operation_id
+        {
+            post.operation_id = get.operation_id.as_ref().map(|id| format!("{id}_post"));
+        }
+        // An answer that works and says no more than its body: what its
+        // status is called. Every refusal says why in its own words.
+        let operations = [
+            &mut item.get,
+            &mut item.post,
+            &mut item.put,
+            &mut item.patch,
+            &mut item.delete,
+        ];
+        for operation in operations.into_iter().flatten() {
+            // A summary is one line, whichever lines its comment had.
+            if let Some(summary) = &mut operation.summary {
+                *summary = summary.split_whitespace().collect::<Vec<_>>().join(" ");
+            }
+            // Where the handler's comment begins with its route, as
+            // "`GET /api/events`: the account's events", the route stands
+            // next to it already: the summary is what follows.
+            if let Some(summary) = &mut operation.summary
+                && let Some((route, said)) = summary
+                    .strip_prefix('`')
+                    .and_then(|rest| rest.split_once("`: "))
+                && route.split_once(' ').is_some_and(|(method, _)| {
+                    !method.is_empty() && method.chars().all(|c| c.is_ascii_uppercase())
+                })
+            {
+                let mut chars = said.chars();
+                *summary = chars
+                    .next()
+                    .map(|first| first.to_uppercase().chain(chars).collect())
+                    .unwrap_or_default();
+            }
+            for (status, response) in &mut operation.responses.responses {
+                let reason = status
+                    .parse()
+                    .ok()
+                    .filter(|status: &u16| (200..300).contains(status))
+                    .and_then(|status| StatusCode::from_u16(status).ok())
+                    .and_then(|status| status.canonical_reason());
+                if let (utoipa::openapi::RefOr::T(response), Some(reason)) = (response, reason)
+                    && response.description.is_empty()
+                {
+                    response.description = reason.to_owned();
+                }
+            }
+        }
+    }
+    description
+}
+
+/// The routes of the page's API, without what goes around them ([`api()`]).
+fn api_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(health))
+        .routes(routes!(events::stream))
+        .routes(routes!(login::login))
+        .routes(routes!(login::logout))
+        .routes(routes!(login::me))
         // What the login page asks before anybody is logged in.
-        .route("/login/ways", get(login::ways))
-        .route("/login/passkey", post(passkeys::start_login))
-        .route("/login/passkey/finish", post(passkeys::finish_login))
-        .route("/oidc/start", get(oidc::start))
-        .route("/oidc/callback", get(oidc::callback))
+        .routes(routes!(login::ways))
+        .routes(routes!(passkeys::start_login))
+        .routes(routes!(passkeys::finish_login))
+        .routes(routes!(oidc::start))
+        .routes(routes!(oidc::callback))
         .merge(api::routes())
         .merge(tree::routes())
         .merge(labels::routes())
@@ -320,6 +401,11 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(status::routes())
         .merge(reports::routes())
         .merge(transfer::routes())
+}
+
+/// What goes around the page's API.
+fn api(routes: Router<AppState>, state: &AppState) -> Router<AppState> {
+    routes
         .fallback(|| async { StatusCode::NOT_FOUND })
         // Around all of the API: whatever a request changes is announced to
         // the account's other tabs.
@@ -332,18 +418,35 @@ fn api(state: &AppState) -> Router<AppState> {
         .layer(DefaultBodyLimit::max(MAX_BODY))
 }
 
+/// The routes outside the two APIs: the image proxy and what Android asks.
+fn other_routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(image))
+        .routes(routes!(asset_links::serve))
+}
+
 /// The types of this module for the frontend, see [`typescript`].
 pub(crate) fn types(types: &mut typescript::Types) {
     types.add::<Health>();
 }
 
 /// What `GET /api/health` answers.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Health {
+    /// Always `ok`: the server answers and its database too.
     status: &'static str,
+    /// How many feeds the server knows.
     feeds: i64,
 }
 
+/// Whether the server and its database answer, for a health check (also
+/// `rueder health` on the command line).
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Admin",
+    responses((status = OK, body = Health)),
+)]
 async fn health(State(state): State<AppState>) -> Result<Json<Health>, AppError> {
     let feeds = sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM feeds"#)
         .fetch_one(&state.db)
@@ -356,6 +459,28 @@ async fn health(State(state): State<AppState>) -> Result<Json<Health>, AppError>
 
 /// An image through the proxy, for logged-in readers only. The address says
 /// which one and proves that the server itself asked for it; see [`images`].
+///
+/// The page never makes such an address: it comes in what the API sends.
+/// The answer is the image in a format the browser shows, made smaller where
+/// the size asks for it, never anything that runs.
+#[utoipa::path(
+    get,
+    path = "/img/{signature}/{size}/{address}",
+    operation_id = "image",
+    tag = "Images",
+    params(
+        ("signature" = String, Path, description = "Proves that the server made the address."),
+        ("size" = String, Path, description = "What the image is for, and so how large it may be: `icon`, `thumbnail` or `image`."),
+        ("address" = String, Path, description = "The image's own address, encoded."),
+    ),
+    security(("session" = [])),
+    responses(
+        (status = OK, description = "The image.", content_type = "image/*"),
+        openapi::NeedsSession,
+        (status = NOT_FOUND, description = "No such image, a signature that does not fit, or no image proxy on this server."),
+        (status = BAD_GATEWAY, description = "The image's own server did not deliver it, or not as an image."),
+    ),
+)]
 async fn image(
     State(state): State<AppState>,
     _session: Session,

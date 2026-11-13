@@ -20,13 +20,14 @@
 use std::{fs, time::Instant};
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::get,
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, history, moderation,
@@ -44,8 +45,8 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Status>();
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/status", get(status))
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(status))
 }
 
 /// How many routes the status lists, the slowest first.
@@ -60,8 +61,9 @@ const SLOW_MS: f64 = 500.0;
 const OVERDUE_S: f64 = 10.0 * 60.0;
 
 /// What `GET /api/status` takes.
-#[derive(Deserialize, TS)]
+#[derive(Deserialize, TS, ToSchema, IntoParams)]
 #[ts(optional_fields)]
+#[into_params(parameter_in = Query)]
 struct StatusQuery {
     /// Over how many hours to count, up to the days the counts are kept;
     /// 1 if not said.
@@ -69,8 +71,9 @@ struct StatusQuery {
 }
 
 /// What `GET /api/status` answers, for admins only.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "ServerStatus")]
+#[schema(as = ServerStatus)]
 struct Status {
     /// The version of the server.
     version: &'static str,
@@ -78,6 +81,7 @@ struct Status {
     build: version::Build,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     started_at: OffsetDateTime,
     uptime_s: u64,
     /// The memory the server holds, if the system says.
@@ -106,7 +110,7 @@ struct Status {
 
 /// How long things took in the hours counted, in milliseconds. The times are null
 /// when nothing was timed.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 struct Durations {
     count: u64,
     mean_ms: Option<f64>,
@@ -128,9 +132,10 @@ impl From<&Timing> for Durations {
 }
 
 /// Something on the status page that wants looking at.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(rename = "StatusHint")]
+#[schema(as = StatusHint)]
 enum Hint {
     /// Requests to a route take long.
     SlowRoute { route: String, p95_ms: f64 },
@@ -164,8 +169,9 @@ enum Hint {
 }
 
 /// How much there is.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusCounts")]
+#[schema(as = StatusCounts)]
 struct Counts {
     accounts: i64,
     feeds: i64,
@@ -178,8 +184,9 @@ struct Counts {
 }
 
 /// The requests of the hours counted.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusRequests")]
+#[schema(as = StatusRequests)]
 struct Requests {
     all: Durations,
     /// Answers by their first digit: 1xx to 5xx. An image whose source did
@@ -192,8 +199,9 @@ struct Requests {
     routes: Vec<Route>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusRoute")]
+#[schema(as = StatusRoute)]
 struct Route {
     /// The method and the route, such as "GET /api/feeds/{id}/articles".
     route: String,
@@ -203,8 +211,9 @@ struct Route {
 }
 
 /// The database.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusDatabase")]
+#[schema(as = StatusDatabase)]
 struct Database {
     /// The connections of the server: open, idle, at most.
     pool_size: u32,
@@ -221,8 +230,9 @@ struct Database {
     tables: Vec<Table>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusTable")]
+#[schema(as = StatusTable)]
 struct Table {
     name: String,
     /// With its indexes and, for a table in parts, all of them.
@@ -232,8 +242,9 @@ struct Table {
 }
 
 /// Fetching feeds.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusFetcher")]
+#[schema(as = StatusFetcher)]
 struct Fetcher {
     /// Whether the server fetches feeds at all.
     running: bool,
@@ -246,6 +257,7 @@ struct Fetcher {
     behind_s: f64,
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
     last_round_at: Option<OffsetDateTime>,
     last_round_feeds: Option<usize>,
     last_round_s: Option<f64>,
@@ -267,8 +279,9 @@ struct Fetcher {
 }
 
 /// How fast feeds are fetched (`FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`).
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusFetchPace")]
+#[schema(as = StatusFetchPace)]
 struct FetchPace {
     round: i64,
     at_once: usize,
@@ -278,9 +291,10 @@ struct FetchPace {
 }
 
 /// Why fetches fail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename = "FetchFailure")]
+#[schema(as = FetchFailure)]
 enum Failure {
     /// The site answered with an error.
     Status,
@@ -298,8 +312,9 @@ enum Failure {
     Other,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusFailing")]
+#[schema(as = StatusFailing)]
 struct Failing {
     failure: Failure,
     /// The status the site answered with, for `status`.
@@ -308,8 +323,9 @@ struct Failing {
 }
 
 /// The feed search, in the hours counted.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusFinder")]
+#[schema(as = StatusFinder)]
 struct Finder {
     /// Whether the server looks at addresses at all.
     on: bool,
@@ -321,8 +337,9 @@ struct Finder {
 }
 
 /// The image proxy.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusImages")]
+#[schema(as = StatusImages)]
 struct Images {
     on: bool,
     cache_bytes: u64,
@@ -340,8 +357,9 @@ struct Images {
 }
 
 /// The warnings and errors of the log.
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusProblems")]
+#[schema(as = StatusProblems)]
 struct Problems {
     /// In the hours counted.
     errors: u64,
@@ -350,8 +368,9 @@ struct Problems {
     recent: Vec<Problem>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusProblem")]
+#[schema(as = StatusProblem)]
 struct Problem {
     error: bool,
     /// Where in the server it comes from, such as "rueder::fetch".
@@ -360,12 +379,27 @@ struct Problem {
     count: u64,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     first: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     last: OffsetDateTime,
 }
 
+/// The status of the server, for admins: requests and how long they took, the
+/// server's own warnings and errors, the fetching of feeds, the feed search,
+/// the image proxy, the database and the reported feeds, over the hours asked
+/// for. Nothing in it names an account.
+#[utoipa::path(
+    get,
+    path = "/status",
+    operation_id = "server_status",
+    tag = "Admin",
+    params(StatusQuery),
+    security(("session" = [])),
+    responses((status = OK, body = Status), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it.")),
+)]
 async fn status(
     State(state): State<AppState>,
     session: Session,

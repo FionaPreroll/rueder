@@ -899,6 +899,10 @@ async fn feed_xml(State(site): State<Arc<Mutex<Site>>>) -> (StatusCode, String) 
 }
 
 #[sqlx::test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
 async fn the_readers_of_a_feed_hear_what_a_round_of_fetching_finds(db: PgPool) {
     let site: Arc<Mutex<Site>> = Arc::default();
     site.lock().unwrap().entries = vec![("b", "two"), ("a", "one")];
