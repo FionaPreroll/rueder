@@ -364,6 +364,38 @@ describe('StatusDialog', () => {
 		expect(screen.getByText(/^2 times, last/)).toBeInTheDocument();
 	});
 
+	it('says what this build is and links the run that built it', async () => {
+		const reader = new DemoReader(() => now);
+		render(StatusDialog, { reader, onclose: () => {} });
+		expect(await screen.findByRole('heading', { name: 'Build' })).toBeInTheDocument();
+		expect(screen.getByText('9f1c2d4e5a6b')).toBeInTheDocument();
+		expect(screen.getByText('main')).toBeInTheDocument();
+		expect(screen.getByText('v0.1.0')).toBeInTheDocument();
+		expect(screen.getByText('in a container')).toBeInTheDocument();
+		expect(screen.getByText('x86_64-unknown-linux-gnu')).toBeInTheDocument();
+		expect(screen.getByText('release, optimization 3')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'a run of the CI' })).toHaveAttribute(
+			'href',
+			'https://github.com/FionaPreroll/rueder/actions/runs/1234567890'
+		);
+	});
+
+	it('says when a build came from a working tree of its own, built by hand', async () => {
+		const reader = new DemoReader(() => now);
+		const built = demoStatus(now).build;
+		vi.spyOn(reader, 'status').mockResolvedValue({
+			...demoStatus(now),
+			build: { ...built, dirty: true, tag: '', ci_run: '', container: false }
+		});
+		render(StatusDialog, { reader, onclose: () => {} });
+		expect(await screen.findByText('9f1c2d4e5a6b, with changes of its own')).toBeInTheDocument();
+		expect(screen.getByText('on the machine itself')).toBeInTheDocument();
+		expect(screen.getByText('hand')).toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: 'a run of the CI' })).toBeNull();
+		expect(screen.queryByText('v0.1.0')).toBeNull();
+		vi.restoreAllMocks();
+	});
+
 	it('asks again when told to, and says so when the server does not answer', async () => {
 		const reader = new DemoReader(() => now);
 		const asked = vi.spyOn(reader, 'status');

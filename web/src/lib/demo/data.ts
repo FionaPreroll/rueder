@@ -2,7 +2,7 @@
 // publication. The same seed and time give the same data, so tests and screenshots
 // come out the same every time.
 
-import type { Article, ArticleVersion, Feed, TreeNode } from '#lib/model.ts';
+import type { Article, ArticleVersion, Changed, Feed, TreeNode } from '#lib/model.ts';
 
 const HOUR = 3_600_000;
 
@@ -447,25 +447,32 @@ function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): DemoArti
 	// A feed of recordings gives its picture beside the text, not in it.
 	const image = seed.recorded ? null : drawn;
 
-	// Some articles changed after they were first fetched.
+	// Some articles changed after they were first fetched: most in their text, a
+	// few in their headline as well, and a few in nothing but their headline.
 	const versions: ArticleVersion[] = [];
 	let updatedAt: number | null = null;
+	let changed: Changed | null = null;
 	let current = paras;
 	if (!isAd && seq % 6 === 0) {
 		const rounds = 1 + (seq % 3);
+		const rewritten = seq % 12 === 0 || seq % 18 === 0;
+		const retold = seq % 18 !== 0;
 		for (let rev = 1; rev <= rounds; rev++) {
-			const before = [...current];
+			const last = rev === rounds;
 			versions.push({
 				rev,
 				fetchedAt: publishedAt + (rev - 1) * 2 * HOUR,
-				title: rev === 1 && seq % 12 === 0 ? `${title}?` : title,
-				html: toHtml(before, image, title)
+				// What it was called then; the last version is the one before this.
+				title: last && rewritten ? `${title}?` : title,
+				html: toHtml(current, image, title)
 			});
+			if (last && !retold) break;
 			current = [...current];
 			current[1 % current.length] = paragraphs(rng, lang, 1)[0];
-			if (rev === rounds) current.push(update[lang]);
+			if (last) current.push(update[lang]);
 		}
 		updatedAt = publishedAt + rounds * 2 * HOUR;
+		changed = rewritten ? (retold ? 'both' : 'title') : 'text';
 	}
 
 	return {
@@ -485,6 +492,7 @@ function makeArticle(seed: FeedSeed, seq: number, publishedAt: number): DemoArti
 		image: seed.recorded && drawn ? { url: drawn, title } : null,
 		thumbnail: drawn,
 		changes: versions.length,
+		changed,
 		versions,
 		updatedAt
 	};

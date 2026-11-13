@@ -34,7 +34,7 @@ use std::time::{Duration, Instant};
 
 use sqlx::PgPool;
 
-use crate::articles::ListItem;
+use crate::articles::{Changed, ListItem};
 
 /// The longest search, in characters, and the most words in it.
 pub const MAX_CHARS: usize = 200;
@@ -481,7 +481,8 @@ async fn read(
     sqlx::query_as!(
         ListItem,
         r#"
-        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
+        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at,
+               a.updated_what AS "updated_what: Changed", a.version, a.title,
                a.teaser, a.author, a.url, a.thumbnail_url,
                CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
                     ELSE coalesce(st.read, false) END AS "read!",

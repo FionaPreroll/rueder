@@ -508,6 +508,13 @@ export type List = {
 };
 
 /**
+ * What was different about an article when it last got a new version. A feed
+ * that only rewrites a headline says nothing in the text, and the reader would
+ * look for a change in vain.
+ */
+export type Changed = "title" | "text" | "both";
+
+/**
  * A line of a list, with the labels the reader gave the article.
  */
 export type ListItem = {
@@ -523,6 +530,10 @@ export type ListItem = {
 	 * When the current version replaced the one before, if it ever did.
 	 */
 	updated_at: string | null,
+	/**
+	 * What was different then; null for a change from before rueder noted it.
+	 */
+	updated_what: Changed | null,
 	version: number,
 	title: string,
 	teaser: string,
@@ -551,6 +562,10 @@ export type Article = {
 	id: number,
 	published_at: string,
 	updated_at: string | null,
+	/**
+	 * What was different then; null for a change from before rueder noted it.
+	 */
+	updated_what: Changed | null,
 	version: number,
 	title: string,
 	author: string,
@@ -1070,6 +1085,55 @@ export type FeedUnread = {
 };
 
 /**
+ * How this rueder was built and where it runs.
+ *
+ * Part of what `GET /api/status` answers, for admins only.
+ */
+export type BuildInfo = {
+	/**
+	 * The version of the crate.
+	 */
+	version: string,
+	/**
+	 * The commit it was built from; empty where there was no git directory.
+	 */
+	commit: string,
+	/**
+	 * The branch that commit was on.
+	 */
+	branch: string,
+	/**
+	 * The tag on that commit, if it has one.
+	 */
+	tag: string,
+	/**
+	 * Something was changed and not committed when this was built.
+	 */
+	dirty: boolean,
+	/**
+	 * When it was built, as `2026-11-13T09:12:00Z`.
+	 */
+	built_at: string,
+	/**
+	 * The machine it was built for, as `x86_64-unknown-linux-gnu`.
+	 */
+	target: string,
+	/**
+	 * `release` or `debug`, and how hard the compiler tried (`3`, `z`, `0`).
+	 */
+	profile: string,
+	opt_level: string,
+	/**
+	 * The run of the CI that built it, as an address; empty for a build by hand.
+	 */
+	ci_run: string,
+	/**
+	 * It runs in a container, as the image of the project does.
+	 */
+	container: boolean,
+};
+
+/**
  * What `GET /api/status` answers, for admins only.
  */
 export type ServerStatus = {
@@ -1077,6 +1141,10 @@ export type ServerStatus = {
 	 * The version of the server.
 	 */
 	version: string,
+	/**
+	 * What this build is: commit, branch, when and how it was built.
+	 */
+	build: BuildInfo,
 	started_at: string,
 	uptime_s: number,
 	/**

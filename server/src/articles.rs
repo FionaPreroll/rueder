@@ -287,6 +287,17 @@ pub async fn add_version(
     article: &NewArticle,
 ) -> anyhow::Result<Option<i16>> {
     let checksum = article.checksum();
+    // What the article says now, to tell afterwards what the new version
+    // changed. Only the two texts the checksum is made of count.
+    let before = sqlx::query!(
+        "SELECT a.title, c.html FROM articles a
+         JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
+         WHERE a.feed_id = $1 AND a.seq = $2",
+        feed_id,
+        seq,
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
     let changed = sqlx::query_scalar!(
         "UPDATE article_content
          SET checksum = $3, html = $4,
@@ -309,10 +320,16 @@ pub async fn add_version(
         return Ok(None);
     }
 
+    let what = before.and_then(|before| {
+        Changed::between(
+            (&before.title, &before.html),
+            (&article.original.title, &article.html),
+        )
+    });
     let version = sqlx::query_scalar!(
         "UPDATE articles
          SET version = version + 1, updated_at = $3, title = $4, teaser = $5, author = $6,
-             url = $7, thumbnail_url = $8
+             url = $7, thumbnail_url = $8, updated_what = $9
          WHERE feed_id = $1 AND seq = $2
          RETURNING version",
         feed_id,
@@ -323,6 +340,7 @@ pub async fn add_version(
         article.author(),
         article.original.url,
         article.thumbnail_url,
+        what as Option<Changed>,
     )
     .fetch_one(&mut *conn)
     .await?;
@@ -400,6 +418,33 @@ pub(crate) async fn recleaned(
     Ok(())
 }
 
+/// What was different about an article when it last got a new version. A feed
+/// that only rewrites a headline says nothing in the text, and the reader would
+/// look for a change in vain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, sqlx::Type)]
+#[serde(rename_all = "lowercase")]
+#[sqlx(type_name = "text", rename_all = "lowercase")]
+pub enum Changed {
+    Title,
+    Text,
+    Both,
+}
+
+impl Changed {
+    /// What is different between two versions, if anything. Whitespace does not
+    /// count, as it does not for the checksum that decides about a version.
+    fn between(before: (&str, &str), after: (&str, &str)) -> Option<Self> {
+        let differ =
+            |before: &str, after: &str| !before.split_whitespace().eq(after.split_whitespace());
+        match (differ(before.0, after.0), differ(before.1, after.1)) {
+            (true, true) => Some(Self::Both),
+            (true, false) => Some(Self::Title),
+            (false, true) => Some(Self::Text),
+            (false, false) => None,
+        }
+    }
+}
+
 /// One line of a list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct ListItem {
@@ -414,6 +459,8 @@ pub struct ListItem {
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
     pub updated_at: Option<OffsetDateTime>,
+    /// What was different then; null for a change from before rueder noted it.
+    pub updated_what: Option<Changed>,
     pub version: i16,
     pub title: String,
     pub teaser: String,
@@ -532,7 +579,8 @@ pub async fn page(
             ORDER BY id
             LIMIT $4
         )
-        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
+        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at,
+               a.updated_what AS "updated_what: Changed", a.version, a.title,
                a.teaser, a.author, a.url, a.thumbnail_url,
                CASE WHEN a.seq <= subs.read_upto THEN NOT coalesce(st.kept_unread, false)
                     ELSE coalesce(st.read, false) END AS "read!",
@@ -620,7 +668,8 @@ pub async fn page(
             ORDER BY id DESC
             LIMIT $4
         )
-        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
+        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at,
+               a.updated_what AS "updated_what: Changed", a.version, a.title,
                a.teaser, a.author, a.url, a.thumbnail_url,
                CASE WHEN a.seq <= subs.read_upto THEN NOT coalesce(st.kept_unread, false)
                     ELSE coalesce(st.read, false) END AS "read!",
@@ -689,7 +738,8 @@ pub async fn marked(
             WHERE $2 = 'label' AND l.account_id = $1 AND l.id = $3
         )
         SELECT a.feed_id AS "feed_id!", a.seq AS "seq!", a.id AS "id!",
-               a.published_at AS "published_at!", a.updated_at, a.version AS "version!",
+               a.published_at AS "published_at!", a.updated_at,
+               a.updated_what AS "updated_what: Changed", a.version AS "version!",
                a.title AS "title!", a.teaser AS "teaser!", a.author AS "author!", a.url,
                a.thumbnail_url,
                CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
@@ -738,6 +788,8 @@ pub struct Opened {
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
     pub updated_at: Option<OffsetDateTime>,
+    /// What was different then; null for a change from before rueder noted it.
+    pub updated_what: Option<Changed>,
     pub version: i16,
     pub title: String,
     pub author: String,
@@ -762,13 +814,14 @@ pub async fn open(
 ) -> anyhow::Result<Option<Opened>> {
     let opened = sqlx::query_as!(
         Opened,
-        "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,
+        r#"SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at,
+                a.updated_what AS "updated_what: Changed", a.version, a.title,
                 a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title
          FROM subscriptions s
          JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
          JOIN articles a ON a.feed_id = s.feed_id
          JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
-         WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
+         WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3"#,
         account_id,
         feed_id,
         seq,

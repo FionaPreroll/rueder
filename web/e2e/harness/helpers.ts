@@ -57,8 +57,15 @@ export async function subscribe(page: Page, path: string, title: string) {
 	if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Close' }).click();
 }
 
-/** Changes what the made-up site serves: `publish` a new article, `revise` the newest, `reset`. */
-export async function site(change: 'publish' | 'revise' | 'reset', feed = '', text = '') {
+/**
+ * Changes what the made-up site serves: `publish` a new article, `revise` the
+ * newest, `rename` its headline, `reset`.
+ */
+export async function site(
+	change: 'publish' | 'revise' | 'rename' | 'reset',
+	feed = '',
+	text = ''
+) {
 	const query = new URLSearchParams({ feed, text });
 	const answer = await fetch(`${SITE}/_control/${change}?${query}`, { method: 'POST' });
 	if (!answer.ok) throw new Error(`the made-up site answered ${answer.status} to ${change}`);

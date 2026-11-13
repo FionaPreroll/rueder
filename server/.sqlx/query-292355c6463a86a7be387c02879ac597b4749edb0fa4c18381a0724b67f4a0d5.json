@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at, a.version, a.title,\n               a.teaser, a.author, a.url, a.thumbnail_url,\n               CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                    ELSE coalesce(st.read, false) END AS \"read!\",\n               coalesce(st.starred, false) AS \"starred!\"\n        FROM unnest($2::int[], $3::int[]) AS k (feed_id, seq)\n        JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id\n        JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq\n        LEFT JOIN article_states st\n            ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n        ORDER BY a.id DESC\n        ",
+  "query": "SELECT a.feed_id, a.seq, a.id, a.published_at, a.updated_at,\n                a.updated_what AS \"updated_what: Changed\", a.version, a.title,\n                a.author, a.url, c.html, c.tags, c.enclosures, c.image_url, c.image_title\n         FROM subscriptions s\n         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL\n         JOIN articles a ON a.feed_id = s.feed_id\n         JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq = $3",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,17 @@
       },
       {
         "ordinal": 5,
+        "name": "updated_what: Changed",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_what"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "version",
         "type_info": "Int2",
         "origin": {
@@ -70,24 +81,13 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "title",
         "type_info": "Text",
         "origin": {
           "Table": {
             "table": "articles",
             "name": "title"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
-        "name": "teaser",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "articles",
-            "name": "teaser"
           }
         }
       },
@@ -115,33 +115,65 @@
       },
       {
         "ordinal": 10,
-        "name": "thumbnail_url",
+        "name": "html",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "articles",
-            "name": "thumbnail_url"
+            "table": "article_content",
+            "name": "html"
           }
         }
       },
       {
         "ordinal": 11,
-        "name": "read!",
-        "type_info": "Bool",
-        "origin": "Expression"
+        "name": "tags",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "tags"
+          }
+        }
       },
       {
         "ordinal": 12,
-        "name": "starred!",
-        "type_info": "Bool",
-        "origin": "Expression"
+        "name": "enclosures",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "enclosures"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "image_url"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "image_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "image_title"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
         "Int4",
-        "Int4Array",
-        "Int4Array"
+        "Int4",
+        "Int4"
       ]
     },
     "nullable": [
@@ -150,15 +182,17 @@
       false,
       false,
       true,
-      false,
+      true,
       false,
       false,
       false,
       true,
+      false,
+      false,
+      false,
       true,
-      null,
-      null
+      true
     ]
   },
-  "hash": "cc18e5cdf71bfcc16b0af3bf0901a243a2fc4ed232d148ab8fb78c53c69cf70b"
+  "hash": "292355c6463a86a7be387c02879ac597b4749edb0fa4c18381a0724b67f4a0d5"
 }

@@ -85,6 +85,25 @@
 		}
 	}
 
+	/** What this build is, as rows for the card: what is not known is left out. */
+	function built(build: ServerStatus['build']): [string, string, string?][] {
+		const b = m.status.build;
+		const short = build.commit.slice(0, 12);
+		const rows: [string, string, string?][] = [
+			[b.commit, build.commit ? (build.dirty ? b.dirty(short) : short) : empty]
+		];
+		if (build.branch) rows.push([b.branch, build.branch]);
+		if (build.tag) rows.push([b.tag, build.tag]);
+		rows.push(
+			[b.built, build.built_at ? formatFull(Date.parse(build.built_at)) : empty],
+			[b.where, build.container ? b.container : b.host],
+			[b.target, build.target || empty],
+			[b.profile, b.profileValue(build.profile, build.opt_level)],
+			[b.ci, build.ci_run ? b.ciValue : b.byHand, build.ci_run || undefined]
+		);
+		return rows;
+	}
+
 	const failure = (failing: ServerStatus['fetcher']['failing'][number]) => {
 		const failures = m.status.fetcher.failures;
 		return failing.failure === 'status'
@@ -93,13 +112,19 @@
 	};
 </script>
 
-{#snippet facts(title: string, rows: [string, string][])}
+{#snippet facts(title: string, rows: [string, string, string?][])}
 	<section class="rounded border border-line p-3">
 		<h3 class="text-sm font-semibold">{title}</h3>
 		<dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-			{#each rows as [label, value] (label)}
+			{#each rows as [label, value, href] (label)}
 				<dt class="text-soft">{label}</dt>
-				<dd class="min-w-0 break-words">{value}</dd>
+				<dd class="min-w-0 break-words">
+					{#if href}
+						<a class="underline" {href} target="_blank" rel="noopener noreferrer">{value}</a>
+					{:else}
+						{value}
+					{/if}
+				</dd>
 			{/each}
 		</dl>
 	</section>
@@ -193,6 +218,7 @@
 				[m.status.server.articles, m.status.server.articlesValue(s.counts.articles)],
 				[m.status.server.live, formatNumber(s.counts.live_connections)]
 			])}
+			{@render facts(m.status.build.title, built(s.build))}
 			{@render facts(m.status.database.title, [
 				[
 					m.status.database.pool,

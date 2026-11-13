@@ -104,8 +104,12 @@ const en = {
 		from: 'from',
 		by: (author: string) => `by ${author}`,
 		updated: 'updated',
+		/** The headline was rewritten and the text left alone. */
+		updatedHeadline: 'new headline',
 		updatedTitle: (count: number) =>
 			`Changed since it was first fetched; ${n(count)} earlier ${plural(count, { one: 'version', other: 'versions' })}`,
+		updatedHeadlineTitle: (count: number) =>
+			`Its headline was rewritten, its text is as it was; ${n(count)} earlier ${plural(count, { one: 'version', other: 'versions' })}`,
 		compare: 'Compare versions',
 		hiddenBy: (rule: string) => `Hidden by the rule: ${rule}`,
 		loading: 'Loading the text …',
@@ -569,6 +573,24 @@ const en = {
 				`Browsers reported ${n(count)} ${plural(count, { one: 'error', other: 'different errors' })} in the last day.`,
 			reportedFeeds: (count: number) =>
 				`Readers reported ${n(count)} ${plural(count, { one: 'feed', other: 'feeds' })} that ${plural(count, { one: 'is', other: 'are' })} not blocked.`
+		},
+		build: {
+			title: 'Build',
+			commit: 'Commit',
+			/** The build had changes that were never committed, so the commit says little. */
+			dirty: (commit: string) => `${commit}, with changes of its own`,
+			branch: 'Branch',
+			tag: 'Tag',
+			built: 'Built',
+			where: 'Runs',
+			container: 'in a container',
+			host: 'on the machine itself',
+			target: 'For',
+			profile: 'Compiled',
+			profileValue: (profile: string, level: string) => `${profile}, optimization ${level}`,
+			ci: 'Built by',
+			ciValue: 'a run of the CI',
+			byHand: 'hand'
 		},
 		server: {
 			title: 'Server',

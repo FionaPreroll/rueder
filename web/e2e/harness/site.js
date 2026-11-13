@@ -155,6 +155,11 @@ const controls = {
 	revise: (feed, _path, text) => {
 		const newest = feed.articles.at(-1);
 		newest.text += ` ${text || 'Update: one more sentence.'}`;
+	},
+	/** The newest article gets another headline; its text stays as it is. */
+	rename: (feed, _path, text) => {
+		const newest = feed.articles.at(-1);
+		newest.title = text || `${newest.title}, corrected`;
 	}
 };
 

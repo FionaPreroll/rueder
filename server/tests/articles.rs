@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use common::{Random, account, add, article, feed, reader, subscribe};
 use rueder::{
-    articles::{self, ListItem, MAX_VERSIONS, Page},
+    articles::{self, Changed, ListItem, MAX_VERSIONS, Page},
     reading,
 };
 use sqlx::PgPool;
@@ -213,6 +213,7 @@ async fn a_changed_article_gets_a_version_and_stays_read(db: PgPool) {
     assert_eq!(items[0].title, "Article 2, corrected");
     assert_eq!(items[0].version, 2);
     assert_eq!(items[0].updated_at, Some(changed.fetched_at));
+    assert_eq!(items[0].updated_what, Some(Changed::Both));
     assert!(items[0].read, "an updated article stays read");
     let unread = reading::unread_counts(&db, account_id).await.unwrap();
     assert_eq!(unread[0].unread, 0);
@@ -245,6 +246,57 @@ async fn a_changed_article_gets_a_version_and_stays_read(db: PgPool) {
         partitions,
         ["article_versions_2026_03", "article_versions_2026_04"]
     );
+}
+
+/// A feed that rewrites a headline and leaves the text alone, or the other way
+/// round: the list says which it was, so nobody looks for a change in vain.
+#[sqlx::test]
+async fn what_a_new_version_changed_is_noted(db: PgPool) {
+    let (account_id, feed_id) = reader(&db, "a", 1).await;
+    let what = async |db: &PgPool| {
+        articles::page(db, account_id, &[feed_id], ALL)
+            .await
+            .unwrap()[0]
+            .updated_what
+    };
+    // Nothing changed yet, so there is nothing to say.
+    assert_eq!(what(&db).await, None);
+
+    let version = async |db: &PgPool, article: &articles::NewArticle| {
+        let mut tx = db.begin().await.unwrap();
+        let version = articles::add_version(&mut tx, feed_id, 1, article)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        version
+    };
+
+    // Only the headline.
+    let mut renamed = article(1);
+    renamed.original.title = "Article 1, with a better headline".into();
+    assert_eq!(version(&db, &renamed).await, Some(2));
+    assert_eq!(what(&db).await, Some(Changed::Title));
+
+    // Only the text. Line breaks alone are no change, here as for the version.
+    let mut rewritten = renamed.clone();
+    rewritten.original.content = "<p>Another text.</p>".into();
+    rewritten.html = "<p>Another  text.</p>".into();
+    assert_eq!(version(&db, &rewritten).await, Some(3));
+    assert_eq!(what(&db).await, Some(Changed::Text));
+
+    // Both at once.
+    let mut again = rewritten.clone();
+    again.original.title = "Article 1, once more".into();
+    again.html = "<p>A third text.</p>".into();
+    assert_eq!(version(&db, &again).await, Some(4));
+    assert_eq!(what(&db).await, Some(Changed::Both));
+
+    // The open article says it too.
+    let opened = articles::open(&db, account_id, feed_id, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(opened.updated_what, Some(Changed::Both));
 }
 
 #[sqlx::test]
