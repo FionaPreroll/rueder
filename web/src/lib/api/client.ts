@@ -51,6 +51,7 @@ import type {
 	SecondFactor,
 	SecondFactorCode,
 	SecondFactorPassword,
+	SecondFactorSwitchOff,
 	SecondFactorSetup,
 	TermsAgreement,
 	ServerStatus,
@@ -391,8 +392,8 @@ export const api = {
 		} satisfies SecondFactorPassword),
 	confirmSecondFactor: (code: string) =>
 		call<RecoveryCodes>('POST', '/second-factor/confirm', { code } satisfies SecondFactorCode),
-	switchOffSecondFactor: (password: string) =>
-		call<void>('DELETE', '/second-factor', { password } satisfies SecondFactorPassword),
+	switchOffSecondFactor: (password: string, code: string) =>
+		call<void>('DELETE', '/second-factor', { password, code } satisfies SecondFactorSwitchOff),
 
 	reportsConsent: () => call<ReportsConsent>('GET', '/reports/consent'),
 	setReportsConsent: (on: boolean) =>

@@ -1,6 +1,8 @@
 <script lang="ts">
 	// A window over the page: the settings, the keyboard shortcuts, the versions of an
-	// article. Escape, the close button and a click beside it close it.
+	// article. Escape, the close button and a click beside it close it. While it
+	// `holds` something that would be lost, such as a second factor being set up,
+	// only the close button does.
 	import { onMount, type Snippet } from 'svelte';
 	import { m } from '#lib/i18n/index.ts';
 	import Icon from './Icon.svelte';
@@ -8,9 +10,16 @@
 	let {
 		title,
 		wide = false,
+		holds = false,
 		onclose,
 		children
-	}: { title: string; wide?: boolean; onclose: () => void; children: Snippet } = $props();
+	}: {
+		title: string;
+		wide?: boolean;
+		holds?: boolean;
+		onclose: () => void;
+		children: Snippet;
+	} = $props();
 
 	let panel: HTMLElement | undefined = $state();
 
@@ -26,7 +35,7 @@
 	function keydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			event.stopPropagation();
-			onclose();
+			if (!holds) onclose();
 		}
 	}
 </script>
@@ -34,7 +43,7 @@
 <div
 	class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-8"
 	role="presentation"
-	onclick={(event) => event.target === event.currentTarget && onclose()}
+	onclick={(event) => event.target === event.currentTarget && !holds && onclose()}
 	onkeydown={keydown}
 >
 	<div

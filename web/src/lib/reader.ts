@@ -306,8 +306,11 @@ export interface Reader {
 	setUpSecondFactor(password: string): Promise<SecondFactorSetup | SecondFactorRefusal>;
 	/** Confirms it with a code of the app: the recovery codes, shown this once. */
 	confirmSecondFactor(code: string): Promise<string[] | SecondFactorRefusal>;
-	/** Switches it off, with the account's password; null when it worked. */
-	switchOffSecondFactor(password: string): Promise<SecondFactorRefusal | null>;
+	/**
+	 * Switches it off, with the account's password and a code of the app or a
+	 * recovery code; null when it worked.
+	 */
+	switchOffSecondFactor(password: string, code: string): Promise<SecondFactorRefusal | null>;
 	/** The filter rules. */
 	readonly filters: RuleBook;
 	/** Only the reader with made-up data has these. */

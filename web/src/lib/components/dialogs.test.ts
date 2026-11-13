@@ -666,10 +666,19 @@ describe('the second factor in the settings', () => {
 
 	afterEach(() => vi.unstubAllGlobals());
 
+	const onclose = vi.fn();
+
 	function open(account = { name: 'fiona', admin: false }) {
+		onclose.mockClear();
 		const reader = new ServerReader(account, session);
-		render(SettingsDialog, { reader, tab: 'security', onclose: () => {} });
+		render(SettingsDialog, { reader, tab: 'security', onclose });
 		return reader;
+	}
+
+	/** A click beside the window, and Escape. */
+	async function dismiss() {
+		await userEvent.click(screen.getByRole('dialog', { name: 'Settings' }).parentElement!);
+		await userEvent.keyboard('{Escape}');
 	}
 
 	it('is set up with the password and a code, and shows the recovery codes once', async () => {
@@ -687,6 +696,23 @@ describe('the second factor in the settings', () => {
 		expect(qr.getAttribute('src')).toMatch(/^data:image\/svg\+xml,/);
 		expect(screen.getByText('JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
 
+		// The QR code grows and shrinks with a click, and the key is copied as the app takes it.
+		const larger = screen.getByRole('button', { name: 'Show the QR code larger' });
+		expect(qr).toHaveClass('w-48');
+		await userEvent.click(larger);
+		expect(larger).toHaveAttribute('aria-pressed', 'true');
+		expect(qr).toHaveClass('w-96');
+		await userEvent.click(screen.getByRole('button', { name: 'Show the QR code smaller' }));
+		expect(qr).toHaveClass('w-48');
+		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+		await userEvent.click(screen.getByRole('button', { name: 'Copy the key' }));
+		expect(writeText).toHaveBeenLastCalledWith('JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP');
+		expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+		// Neither a click beside the window nor Escape loses the setup.
+		await dismiss();
+		expect(onclose).not.toHaveBeenCalled();
+
 		const code = screen.getByLabelText('The code the app shows now');
 		await userEvent.type(code, '111111');
 		await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
@@ -695,18 +721,42 @@ describe('the second factor in the settings', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 		expect(await screen.findByText('AAAAA-BBBBB')).toBeInTheDocument();
 		expect(screen.getByText('CCCCC-DDDDD')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Copy the codes' }));
+		expect(writeText).toHaveBeenLastCalledWith('AAAAA-BBBBB\nCCCCC-DDDDD');
+		expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+		await dismiss();
+		expect(onclose).not.toHaveBeenCalled();
 
 		await userEvent.click(screen.getByRole('button', { name: 'I have kept them' }));
 		expect(await screen.findByText('On.')).toBeInTheDocument();
 		expect(screen.getByText('2 recovery codes left.')).toBeInTheDocument();
 		expect(screen.queryByText('AAAAA-BBBBB')).toBeNull();
+		// Once the codes are kept, the window closes as any other.
+		await dismiss();
+		expect(onclose).toHaveBeenCalled();
 	});
 
-	it('is switched off with the password', async () => {
+	it('is switched off with the password and a code', async () => {
 		server.secondFactor = { code: server.appCode, recovery: ['AAAAA-BBBBB'] };
 		open();
 		expect(await screen.findByText('On.')).toBeInTheDocument();
-		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		const password = screen.getByLabelText('Your password');
+		const code = screen.getByLabelText('Code of the app, or a recovery code');
+		// The password alone is not enough, nor with a wrong code.
+		await userEvent.type(password, 'correct horse');
+		await userEvent.type(code, '111111');
+		await userEvent.click(screen.getByRole('button', { name: 'Switch off' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('That code is not right.');
+		expect([password, code].map((field) => (field as HTMLInputElement).value)).toEqual(['', '']);
+		expect(server.secondFactor).not.toBeNull();
+
+		await userEvent.type(password, 'wrong');
+		await userEvent.type(code, 'AAAAA-BBBBB');
+		await userEvent.click(screen.getByRole('button', { name: 'Switch off' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('The password is not right.');
+
+		await userEvent.type(password, 'correct horse');
+		await userEvent.type(code, 'AAAAA-BBBBB');
 		await userEvent.click(screen.getByRole('button', { name: 'Switch off' }));
 		expect(await screen.findByText('Off.')).toBeInTheDocument();
 		expect(server.secondFactor).toBeNull();

@@ -66,6 +66,19 @@ async fn app_code(db: &PgPool, account: i32, pending: bool, ahead: u64) -> Strin
     format!("{:06}", second_factor::code_at(&secret, now_step() + ahead))
 }
 
+/// The code of the step the server took last: one it must not take again.
+/// Read from the account, not the clock, which may have gone on a step since.
+async fn taken_code(db: &PgPool, account: i32) -> String {
+    let (secret, step): (Vec<u8>, i64) =
+        sqlx::query_as("SELECT totp_secret, totp_last_step FROM accounts WHERE id = $1")
+            .bind(account)
+            .fetch_one(db)
+            .await
+            .unwrap();
+    let step = u64::try_from(step).unwrap();
+    format!("{:06}", second_factor::code_at(&secret, step))
+}
+
 /// Sets the second factor up for a logged-in account and returns its
 /// recovery codes.
 async fn set_up(state: &AppState, account: i32, cookie: &str) -> Vec<String> {
@@ -253,7 +266,7 @@ async fn logging_in_takes_a_code_once_or_a_recovery_code(db: PgPool) {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // The code the confirmation used counts no more; the next one does, once.
-    let used = app_code(&db, ada, false, 0).await;
+    let used = taken_code(&db, ada).await;
     assert_eq!(
         log_in(&state, "ada", Some(&used)).await.0,
         StatusCode::UNAUTHORIZED
@@ -336,36 +349,49 @@ async fn wrong_codes_count_like_wrong_passwords(db: PgPool) {
 }
 
 #[sqlx::test]
-async fn it_is_switched_off_with_the_password_or_on_the_command_line(db: PgPool) {
+async fn it_is_switched_off_with_the_password_and_a_code_or_on_the_command_line(db: PgPool) {
     let ada = accounts::create(&db, "ada", Some(PASSWORD), false)
         .await
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
     let first = cookie(&log_in(&state, "ada", None).await.1);
-    set_up(&state, ada, &first).await;
+    let codes = set_up(&state, ada, &first).await;
+    let off = |body: Value| {
+        let (state, first) = (state.clone(), first.clone());
+        async move {
+            call(
+                &state,
+                Method::DELETE,
+                "/api/second-factor",
+                Some(&first),
+                Some(body),
+            )
+            .await
+            .0
+        }
+    };
+    let next = app_code(&db, ada, false, 1).await;
 
-    let wrong = json!({ "password": "wrong" });
-    let (status, _) = call(
-        &state,
-        Method::DELETE,
-        "/api/second-factor",
-        Some(&first),
-        Some(wrong),
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    let right = json!({ "password": PASSWORD });
-    let (status, _) = call(
-        &state,
-        Method::DELETE,
-        "/api/second-factor",
-        Some(&first),
-        Some(right),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let (_, off) = call(
+    // A wrong password, the password alone, a wrong code: all refused.
+    assert_eq!(
+        off(json!({ "password": "wrong", "code": next })).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        off(json!({ "password": PASSWORD })).await,
+        StatusCode::FORBIDDEN
+    );
+    let wrong = if next == "000000" { "111111" } else { "000000" };
+    assert_eq!(
+        off(json!({ "password": PASSWORD, "code": wrong })).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        off(json!({ "password": PASSWORD, "code": codes[0] })).await,
+        StatusCode::NO_CONTENT
+    );
+    let (_, now) = call(
         &state,
         Method::GET,
         "/api/second-factor",
@@ -373,8 +399,8 @@ async fn it_is_switched_off_with_the_password_or_on_the_command_line(db: PgPool)
         None,
     )
     .await;
-    assert_eq!(off["on"], false);
-    assert_eq!(off["recovery_codes_left"], 0);
+    assert_eq!(now["on"], false);
+    assert_eq!(now["recovery_codes_left"], 0);
     assert_eq!(log_in(&state, "ada", None).await.0, StatusCode::OK);
     // The sessions do not count as ones with it any more.
     let any: bool = sqlx::query_scalar("SELECT bool_or(second_factor) FROM sessions")
@@ -382,6 +408,14 @@ async fn it_is_switched_off_with_the_password_or_on_the_command_line(db: PgPool)
         .await
         .unwrap();
     assert!(!any);
+
+    // A code of the app does it too.
+    set_up(&state, ada, &first).await;
+    let next = app_code(&db, ada, false, 1).await;
+    assert_eq!(
+        off(json!({ "password": PASSWORD, "code": next })).await,
+        StatusCode::NO_CONTENT
+    );
 
     // On the command line, for somebody who lost both app and codes.
     set_up(&state, ada, &first).await;

@@ -733,6 +733,10 @@ export class FakeServer {
 		}
 		if (method === 'DELETE' && path === '/second-factor') {
 			if (!passwordRight()) return refused(403, 'the password is wrong');
+			const code = String(data.code ?? '');
+			const known = this.secondFactor;
+			if (known && code !== known.code && !known.recovery.includes(code))
+				return refused(403, 'the code is wrong');
 			this.secondFactor = null;
 			return empty();
 		}
