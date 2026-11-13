@@ -11,7 +11,9 @@
 //! - **Blocking** is for the operator on the command line (`rueder feed block
 //!   <address>`, [`block`]): the feed is not fetched any more, nobody sees its
 //!   articles, nobody subscribes to it anew, and its images go from the cache
-//!   ([`images_of`]). `rueder feed unblock` lifts it ([`unblock`]).
+//!   ([`images_of`]). They are listed in `blocked_images`, so that the proxy
+//!   does not fetch them back for a browser that still knows their addresses.
+//!   `rueder feed unblock` lifts it ([`unblock`]).
 
 use axum::{
     Json, Router,
@@ -24,7 +26,7 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
 
-use crate::{AppError, AppState, cleaning, sessions::Session};
+use crate::{AppError, AppState, cleaning, images, sessions::Session};
 
 /// The longest note of a report, in characters.
 pub const MAX_NOTE: usize = 500;
@@ -251,28 +253,55 @@ pub async fn reported(db: &PgPool) -> anyhow::Result<Vec<Reported>> {
 }
 
 /// Blocks the feeds at this address and says which; none if there is no feed
-/// there. A feed blocked already stays as it was blocked.
+/// there. A feed blocked already stays as it was blocked. Its images are
+/// listed as blocked, so that the image proxy does not fetch them; taking them
+/// out of the cache is the caller's, after this.
 pub async fn block(db: &PgPool, url: &str) -> anyhow::Result<Vec<i32>> {
-    Ok(sqlx::query_scalar!(
+    let blocked = sqlx::query_scalar!(
         "UPDATE feeds SET blocked_at = coalesce(blocked_at, now())
          WHERE feed_url = $1 RETURNING id",
         url.trim()
     )
     .fetch_all(db)
-    .await?)
+    .await?;
+    for &feed_id in &blocked {
+        let hashes: Vec<Vec<u8>> = images_of(db, feed_id)
+            .await?
+            .iter()
+            .map(|url| images::source_hash(url))
+            .collect();
+        sqlx::query!(
+            "INSERT INTO blocked_images (url_hash, feed_id)
+             SELECT h, $2 FROM unnest($1::bytea[]) AS h
+             ON CONFLICT DO NOTHING",
+            &hashes,
+            feed_id,
+        )
+        .execute(db)
+        .await?;
+    }
+    Ok(blocked)
 }
 
 /// Lifts the block of the feeds at this address, which are fetched again at
-/// once; how many there were.
+/// once and whose images the proxy fetches again; how many there were.
 pub async fn unblock(db: &PgPool, url: &str) -> anyhow::Result<u64> {
-    Ok(sqlx::query!(
+    let mut tx = db.begin().await?;
+    let lifted = sqlx::query_scalar!(
         "UPDATE feeds SET blocked_at = NULL, next_fetch_at = now()
-         WHERE feed_url = $1 AND blocked_at IS NOT NULL",
+         WHERE feed_url = $1 AND blocked_at IS NOT NULL RETURNING id",
         url.trim()
     )
-    .execute(db)
-    .await?
-    .rows_affected())
+    .fetch_all(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "DELETE FROM blocked_images WHERE feed_id = ANY($1)",
+        &lifted
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(lifted.len() as u64)
 }
 
 /// How many articles [`images_of`] reads at a time.

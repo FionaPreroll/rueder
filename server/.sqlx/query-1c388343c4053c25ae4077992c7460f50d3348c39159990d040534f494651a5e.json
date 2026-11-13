@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO blocked_images (url_hash, feed_id)\n             SELECT h, $2 FROM unnest($1::bytea[]) AS h\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "ByteaArray",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c388343c4053c25ae4077992c7460f50d3348c39159990d040534f494651a5e"
+}

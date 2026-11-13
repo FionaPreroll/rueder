@@ -34,6 +34,7 @@ use image::{
     DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder,
 };
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
 
@@ -555,6 +556,12 @@ impl Config {
     }
 }
 
+/// How an image of a blocked feed is known: the SHA-256 of its address, as
+/// the table `blocked_images` keeps it (see `moderation::block`).
+pub fn source_hash(url: &str) -> Vec<u8> {
+    Sha256::digest(url.as_bytes()).to_vec()
+}
+
 /// The image proxy.
 pub struct ImageProxy {
     signer: Signer,
@@ -568,6 +575,8 @@ pub struct ImageProxy {
     failed: Mutex<HashMap<String, Instant>>,
     /// What it served in the last hour, for the status page.
     served: Mutex<Window<monitor::Images>>,
+    /// Where the images of blocked feeds are listed, which it does not fetch.
+    blocked: Option<PgPool>,
 }
 
 impl ImageProxy {
@@ -587,6 +596,7 @@ impl ImageProxy {
             decodes: Arc::new(Semaphore::new(DECODES_AT_ONCE)),
             failed: Mutex::default(),
             served: Mutex::default(),
+            blocked: None,
         })
     }
 
@@ -605,6 +615,22 @@ impl ImageProxy {
             .lock()
             .map(|window| window.last_hour(now))
             .unwrap_or_default()
+    }
+
+    /// The parts of the hour that were counted in since the last time, to be
+    /// saved ([`crate::history`]).
+    pub fn take_changed(&self) -> Vec<(u64, monitor::Images)> {
+        self.served
+            .lock()
+            .map(|mut window| window.take_changed())
+            .unwrap_or_default()
+    }
+
+    /// Puts back what was saved of a part of the hour.
+    pub fn restore(&self, number: u64, saved: &monitor::Images, now: Instant) {
+        if let Ok(mut window) = self.served.lock() {
+            window.restore(number, saved, now);
+        }
     }
 
     /// How many sources are left alone for now because they failed.
@@ -675,6 +701,11 @@ impl ImageProxy {
         if let Ok(Some(picture)) = cached {
             return Ok((picture, true));
         }
+        // Blocking a feed took its images out of the cache; a browser that
+        // still knows their addresses does not bring them back.
+        if self.is_blocked(&url).await {
+            return Err(Refused::NotFound);
+        }
         if self.has_failed(&url) {
             return Err(Refused::Source("it failed a moment ago".into()));
         }
@@ -725,6 +756,32 @@ impl ImageProxy {
             Ok(result) => result,
             Err(_) => Err(Refused::NotAnImage),
         }
+    }
+
+    /// Fetches nothing the database lists as an image of a blocked feed.
+    pub fn with_blocked_from(self, db: PgPool) -> Self {
+        Self {
+            blocked: Some(db),
+            ..self
+        }
+    }
+
+    /// Whether the image at `url` belongs to a blocked feed. Without an answer
+    /// of the database it counts as blocked.
+    async fn is_blocked(&self, url: &str) -> bool {
+        let Some(db) = &self.blocked else {
+            return false;
+        };
+        let blocked = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM blocked_images WHERE url_hash = $1) AS "blocked!""#,
+            &source_hash(url)[..],
+        )
+        .fetch_one(db)
+        .await;
+        blocked.unwrap_or_else(|err| {
+            tracing::warn!("asking whether an image is blocked: {err:#}");
+            true
+        })
     }
 
     fn has_failed(&self, url: &str) -> bool {

@@ -10,7 +10,8 @@ use rueder::{
     AppState, accounts,
     events::Events,
     fetch,
-    images::{Cache, Format, Picture, Size},
+    http_client::{self, HttpClient},
+    images::{Cache, Config, Format, ImageProxy, Picture, Refused, Size},
     moderation,
     monitor::Monitor,
     rate::{Rate, Rates},
@@ -436,4 +437,70 @@ async fn a_blocked_feed_comes_in_with_no_file(db: PgPool) {
     .await
     .unwrap();
     assert_eq!(subscribed, 0);
+}
+
+#[sqlx::test]
+async fn the_proxy_does_not_fetch_the_images_of_a_blocked_feed_again(db: PgPool) {
+    let (_, feed) = common::reader(&db, "ada", 1).await;
+    // On this machine, which the hardened client never reaches: a fetch
+    // fails at once, and is told apart from a refusal without one.
+    sqlx::query(
+        "UPDATE articles SET thumbnail_url = 'https://127.0.0.1/thumb.png' WHERE feed_id = $1",
+    )
+    .bind(feed)
+    .execute(&db)
+    .await
+    .unwrap();
+    let dir = std::env::temp_dir().join(format!("rueder-blocked-{feed}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let config = Config {
+        key: Some(vec![7; 32]),
+        ..Config::new(&dir)
+    };
+    let client = HttpClient::new(http_client::Config::default()).unwrap();
+    let proxy = ImageProxy::open(config, client)
+        .unwrap()
+        .with_blocked_from(db.clone());
+    let ask = |url: &str| {
+        let address = proxy.signer().address(Size::Thumbnail, url).unwrap();
+        let parts: Vec<String> = address.split('/').map(str::to_owned).collect();
+        let proxy = &proxy;
+        async move { proxy.get(&parts[2], &parts[3], &parts[4]).await }
+    };
+    let elsewhere = "https://127.0.0.2/other.png";
+    assert!(matches!(
+        ask("https://127.0.0.1/thumb.png").await,
+        Err(Refused::Source(_))
+    ));
+
+    moderation::block(&db, "https://ada.example/feed.xml")
+        .await
+        .unwrap();
+    let listed: i64 = sqlx::query_scalar("SELECT count(*) FROM blocked_images WHERE feed_id = $1")
+        .bind(feed)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(listed, 1);
+    // Its image is refused without a fetch; another one is still fetched.
+    assert!(matches!(
+        ask("https://127.0.0.1/thumb.png").await,
+        Err(Refused::NotFound)
+    ));
+    assert!(matches!(ask(elsewhere).await, Err(Refused::Source(_))));
+
+    // Lifted, the proxy fetches it again.
+    moderation::unblock(&db, "https://ada.example/feed.xml")
+        .await
+        .unwrap();
+    let listed: i64 = sqlx::query_scalar("SELECT count(*) FROM blocked_images")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(listed, 0);
+    assert!(matches!(
+        ask("https://127.0.0.1/thumb.png").await,
+        Err(Refused::Source(_))
+    ));
+    let _ = std::fs::remove_dir_all(dir);
 }

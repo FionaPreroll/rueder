@@ -390,8 +390,9 @@ export const api = {
 	/** What each of the stored rules finds. */
 	ruleHits: async () => (await call<RulesHits>('GET', '/rules/hits')).hits,
 
-	/** For admins only. */
-	status: () => call<ServerStatus>('GET', '/status'),
+	/** For admins only: counted over the last `hours`, as far as the server keeps its counts. */
+	status: (hours = 1) =>
+		call<ServerStatus>('GET', hours > 1 ? `/status?hours=${hours}` : '/status'),
 
 	reportContent: (feedId: number, seq: number | undefined, report: ContentReport) =>
 		call<void>(

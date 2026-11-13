@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM status_problems",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e6c2b7b718856a442faab2ac19c91e9a9de70a05b606099df2a1de6d4a98a255"
+}

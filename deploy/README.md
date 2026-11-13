@@ -218,6 +218,7 @@ The server's commands run inside its container:
 docker compose exec rueder rueder account list
 docker compose exec rueder rueder registration show        # who may register or invite, see below
 docker compose exec rueder rueder admin add fiona          # sees the server status; admin remove, admin list
+docker compose exec rueder rueder retention set --status-days 30   # how long the status page keeps its counts, 7 days if not set; retention show
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
 docker compose exec rueder rueder account second-factor-off fiona   # lost the app and the recovery codes
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
