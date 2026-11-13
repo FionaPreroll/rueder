@@ -66,6 +66,19 @@ async fn app_code(db: &PgPool, account: i32, pending: bool, ahead: u64) -> Strin
     format!("{:06}", second_factor::code_at(&secret, now_step() + ahead))
 }
 
+/// The code of the step the server took last: one it must not take again.
+/// Read from the account, not the clock, which may have gone on a step since.
+async fn taken_code(db: &PgPool, account: i32) -> String {
+    let (secret, step): (Vec<u8>, i64) =
+        sqlx::query_as("SELECT totp_secret, totp_last_step FROM accounts WHERE id = $1")
+            .bind(account)
+            .fetch_one(db)
+            .await
+            .unwrap();
+    let step = u64::try_from(step).unwrap();
+    format!("{:06}", second_factor::code_at(&secret, step))
+}
+
 /// Sets the second factor up for a logged-in account and returns its
 /// recovery codes.
 async fn set_up(state: &AppState, account: i32, cookie: &str) -> Vec<String> {
@@ -253,7 +266,7 @@ async fn logging_in_takes_a_code_once_or_a_recovery_code(db: PgPool) {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // The code the confirmation used counts no more; the next one does, once.
-    let used = app_code(&db, ada, false, 0).await;
+    let used = taken_code(&db, ada).await;
     assert_eq!(
         log_in(&state, "ada", Some(&used)).await.0,
         StatusCode::UNAUTHORIZED
