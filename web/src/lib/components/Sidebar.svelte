@@ -100,6 +100,7 @@
 	<div class="min-h-0 flex-1 overflow-y-auto pb-6" bind:this={scroller} onscroll={scrolled}>
 		{@render entry({ kind: 'home' }, 'home', m.nav.home, 0)}
 		{@render entry({ kind: 'all' }, 'list', m.nav.all, reader.totalUnread)}
+		{@render entry({ kind: 'unread' }, 'unread', m.nav.unreadItems, reader.totalUnread)}
 		{@render entry({ kind: 'starred' }, 'star', m.nav.starred, 0)}
 		{@render entry({ kind: 'hidden' }, 'hidden', m.nav.hidden, 0, reader.hiddenCount)}
 

@@ -134,7 +134,7 @@ export class DemoReader implements Reader {
 	query = $state('');
 	/** The article the cursor is on, and the one that is open in the list view. */
 	cursor = $state<string | null>(null);
-	open = $state<string | null>(null);
+	private opened = $state<string | null>(null);
 	/** How many articles of the list are on the page; more come with scrolling. */
 	limit = $state(PAGE);
 	/** Whether made-up articles keep arriving. */
@@ -243,6 +243,8 @@ export class DemoReader implements Reader {
 	private shownUpto = $state.raw<Record<string, number>>({});
 	/** Read while this list was up; an unread-only list keeps them until it is refreshed. */
 	private kept = $state.raw<ReadonlySet<string>>(new Set());
+	/** Where the article the cursor was on was, after it went from the unread items. */
+	private hole: number | null = null;
 	/** Set back to unread by hand; scrolling past does not mark these as read again. */
 	private pinned = new Set<string>();
 
@@ -347,7 +349,9 @@ export class DemoReader implements Reader {
 	list = $derived.by(() => {
 		const stream = this.stream;
 		const query = this.query.trim().toLowerCase();
-		const onlyUnread = this.unreadOnly && stream.kind !== 'starred' && stream.kind !== 'hidden';
+		const onlyUnread =
+			stream.kind === 'unread' ||
+			(this.unreadOnly && stream.kind !== 'starred' && stream.kind !== 'hidden');
 		const found: DemoArticle[] = [];
 		for (const feedId of this.feedsOf(stream)) {
 			const state = this.states[feedId];
@@ -414,7 +418,35 @@ export class DemoReader implements Reader {
 		return count;
 	});
 
+	/** The article that is open in the list view. Closing it, or opening another, leaves it. */
+	get open() {
+		return this.opened;
+	}
+
+	set open(id: string | null) {
+		const was = this.opened;
+		this.opened = id;
+		if (was !== null && was !== id) this.leave(was, id === null);
+	}
+
+	/**
+	 * In the unread items, the reader left an article: read, it goes from the
+	 * list. Where it was closed, the cursor keeps its place in the list.
+	 */
+	private leave(id: string | null, closed: boolean) {
+		if (id === null || this.stream.kind !== 'unread' || !this.kept.has(id)) return;
+		const at = this.list.findIndex((article) => article.id === id);
+		const kept = new Set(this.kept);
+		kept.delete(id);
+		this.kept = kept;
+		// The cursor stays where the article was: the next step opens the one
+		// that took its place, a step back the one before.
+		if (closed && this.cursor === id && at !== -1) this.hole = at;
+	}
+
 	show(stream: Stream) {
+		this.kept = new Set();
+		this.hole = null;
 		this.stream = stream;
 		this.cursor = null;
 		this.open = null;
@@ -429,6 +461,8 @@ export class DemoReader implements Reader {
 		if (!there) return;
 		this.unreadOnly = view.unreadOnly;
 		this.newestFirst = view.newestFirst;
+		// Read, the open article stays among the unread items while it is open, as before.
+		if (view.stream.kind === 'unread' && view.open) this.kept = new Set([view.open]);
 		const list = this.list;
 		const at = (id: string | null) => (id ? list.findIndex((article) => article.id === id) : -1);
 		const furthest = Math.max(at(view.cursor), at(view.open), ...view.wanted.map(at));
@@ -446,6 +480,7 @@ export class DemoReader implements Reader {
 
 	refresh() {
 		this.kept = new Set();
+		this.hole = null;
 		this.pinned.clear();
 		this.limit = PAGE;
 		this.showNew();
@@ -490,11 +525,14 @@ export class DemoReader implements Reader {
 
 	/** Puts the cursor on an article; opening it marks it as read. */
 	select(article: Article, open = true) {
+		const left = this.cursor;
+		this.hole = null;
 		this.cursor = article.id;
 		if (open) {
 			this.open = article.id;
 			this.setRead(article, true);
 		}
+		if (left !== article.id) this.leave(left, false);
 	}
 
 	toggleOpen(article: Article) {
@@ -515,8 +553,10 @@ export class DemoReader implements Reader {
 		const list = this.list;
 		if (list.length === 0) return null;
 		const at = list.findIndex((article) => article.id === this.cursor);
-		// Without a cursor, either step goes to the first article.
-		const next = at === -1 ? 0 : at + by;
+		// Without a cursor, either step goes to the first article; where the
+		// cursor's article went from the unread items, from where it was.
+		const next =
+			at !== -1 ? at + by : this.hole === null ? 0 : by === 1 ? this.hole : this.hole - 1;
 		const article = list[next];
 		if (!article) return null;
 		if (next >= this.limit) this.limit = next + PAGE;

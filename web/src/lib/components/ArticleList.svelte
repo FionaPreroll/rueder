@@ -290,6 +290,8 @@
 					<p role="status">{m.list.waitingFeed}</p>
 				{:else if feedIsEmpty}
 					<p>{m.list.emptyFeed}</p>
+				{:else if reader.stream.kind === 'unread'}
+					<p>{m.list.emptyUnread}</p>
 				{:else if reader.unreadOnly && reader.stream.kind !== 'starred' && reader.stream.kind !== 'hidden'}
 					<p>{m.list.emptyUnread}</p>
 					<button type="button" class="tool mt-3" onclick={() => (reader.unreadOnly = false)}>

@@ -45,5 +45,6 @@ export const ACCOUNTS = [
 	'apps',
 	'secrets',
 	'keyholder',
-	'unverified'
+	'unverified',
+	'unreader'
 ];
