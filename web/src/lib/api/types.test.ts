@@ -69,6 +69,7 @@ describe('the types of the API', () => {
 					icon_url: null,
 					fetch_agent: 'rueder',
 					fetched: true,
+					blocked: false,
 					error: null,
 					last_seq: 12,
 					read_upto: 10,

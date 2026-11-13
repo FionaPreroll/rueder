@@ -34,7 +34,17 @@ export interface Account {
 	adminNeedsSecondFactor?: boolean;
 	/** The version of the terms of use the account has yet to agree to, if any. */
 	termsToAccept?: string | null;
+	/** The server takes reports of feeds and articles from the account. */
+	contentReports?: boolean;
 }
+
+/** Why a feed or an article is reported, as the server knows them. */
+export const reportReasons = ['illegal', 'copyright', 'malicious', 'spam', 'other'] as const;
+export type ReportReason = (typeof reportReasons)[number];
+/** How a report went. */
+export type ReportOutcome = 'sent' | 'tooMany' | 'unreachable';
+/** The longest note of a report, in characters, as the server takes it. */
+export const MAX_REPORT_NOTE = 500;
 
 /** Where the operator's legal texts are; what is null, the operator did not name. */
 export interface LegalLinks {
@@ -104,6 +114,8 @@ export interface Abilities {
 	secondFactor: boolean;
 	/** The account can delete itself, with everything that is its own. */
 	remove: boolean;
+	/** Feeds and articles can be reported to the admins. */
+	reportContent: boolean;
 }
 
 /** A feed found at an address. */
@@ -279,6 +291,12 @@ export interface Reader {
 	signOut(): void;
 	/** The operator's legal texts, where the reader has a server that names them. */
 	readonly legal: LegalLinks | null;
+	/** Reports a feed, or one of its articles, to the admins. */
+	reportContent(
+		target: { feedId: string; seq?: number },
+		reason: ReportReason,
+		note: string
+	): Promise<ReportOutcome>;
 	/** Agrees to the version of the terms the account was asked about; false if that did not work. */
 	acceptTerms(): Promise<boolean>;
 

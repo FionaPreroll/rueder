@@ -34,6 +34,7 @@ const de: Messages = {
 		feedNameHint: 'Leer für den eigenen Namen des Feeds',
 		renameFeed: 'Umbenennen',
 		unsubscribe: 'Abbestellen',
+		reportFeed: 'Feed melden …',
 		feedActions: (title) => `Aktionen für den Feed ${title}`,
 		unsubscribeTitle: 'Abbestellen?',
 		unsubscribeText: (title) =>
@@ -56,6 +57,7 @@ const de: Messages = {
 		unread: (count) => `${n(count)} ungelesen`,
 		fetchFailed: (reason) => `Der letzte Abruf ist fehlgeschlagen: ${reason}`,
 		waiting: 'Noch nicht abgerufen',
+		blocked: 'Vom Betreiber dieses rueder gesperrt',
 		moveHint: 'Zum Sortieren ziehen, oder Alt mit den Pfeiltasten drücken',
 		tooDeep: (levels) => `Ordner lassen sich höchstens ${levels} Ebenen tief verschachteln.`
 	},
@@ -106,7 +108,33 @@ const de: Messages = {
 		loadingList: 'Wird geladen …',
 		toTop: 'Zurück nach oben',
 		pick: 'Einen Artikel wählen, um ihn hier zu lesen.',
-		closeArticle: 'Artikel schließen'
+		closeArticle: 'Artikel schließen',
+		blockedFeed:
+			'Der Betreiber dieses rueder hat diesen Feed gesperrt. Er wird nicht abgerufen, und seine Artikel werden nicht gezeigt.',
+		articleActions: 'Weitere Aktionen für den Artikel',
+		reportArticle: 'Artikel melden …'
+	},
+
+	report: {
+		feedTitle: 'Feed melden',
+		articleTitle: 'Artikel melden',
+		text: (title) =>
+			`Der Betreiber dieses rueder sieht, dass „${title}“ gemeldet wurde, warum und was du schreibst, aber nicht, wer gemeldet hat. Er entscheidet, ob er es für alle sperrt.`,
+		reason: 'Warum',
+		reasons: {
+			illegal: 'Gegen das Gesetz',
+			copyright: 'Fremdes Werk',
+			malicious: 'Schadsoftware, Phishing oder Betrug',
+			spam: 'Spam',
+			other: 'Etwas anderes'
+		},
+		note: 'Was du hinzufügen möchtest (freiwillig)',
+		left: (count) => `Noch ${n(count)} Zeichen`,
+		send: 'Meldung senden',
+		sending: 'Wird gesendet …',
+		sent: 'Danke. Die Meldung ist beim Betreiber dieses rueder angekommen.',
+		tooMany: 'Du hast zuletzt viele Meldungen gesendet. Versuch es später wieder.',
+		unreachable: 'Die Meldung hat den Server nicht erreicht. Versuch es später wieder.'
 	},
 
 	media: {
@@ -527,7 +555,9 @@ const de: Messages = {
 			limited: (count) =>
 				`${n(count)} ${plural(count, { one: 'Anfrage wurde', other: 'Anfragen wurden' })} als zu viele abgewiesen.`,
 			browserErrors: (count) =>
-				`Browser haben am letzten Tag ${n(count)} ${plural(count, { one: 'Fehler', other: 'verschiedene Fehler' })} gemeldet.`
+				`Browser haben am letzten Tag ${n(count)} ${plural(count, { one: 'Fehler', other: 'verschiedene Fehler' })} gemeldet.`,
+			reportedFeeds: (count) =>
+				`Leser haben ${n(count)} ${plural(count, { one: 'Feed', other: 'Feeds' })} gemeldet, ${plural(count, { one: 'der', other: 'die' })} nicht gesperrt ${plural(count, { one: 'ist', other: 'sind' })}.`
 		},
 		server: {
 			title: 'Server',
@@ -653,6 +683,14 @@ const de: Messages = {
 			hits: (count, accounts, last) =>
 				`${n(count)}-mal in ${n(accounts)} ${plural(accounts, { one: 'Konto', other: 'Konten' })}, zuletzt ${last}`,
 			where: (versions, browsers) => `Version ${versions} · ${browsers}`
+		},
+		reported: {
+			title: 'Gemeldete Feeds',
+			text: 'Wer gemeldet hat, steht hier nicht. „rueder feed block <adresse>“ sperrt einen Feed für alle, „rueder feed unblock <adresse>“ hebt die Sperre auf.',
+			none: 'Niemand hat einen Feed gemeldet.',
+			reports: (count, last) =>
+				`${n(count)} ${plural(count, { one: 'Meldung', other: 'Meldungen' })}, zuletzt ${last}`,
+			blocked: 'Gesperrt'
 		}
 	},
 

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
@@ -213,6 +214,42 @@ describe('Sidebar', () => {
 		expect(screen.queryByRole('dialog')).toBeNull();
 		expect(reader.feeds['feed-tagesbote']).toBeUndefined();
 		expect(row('feed-tagesbote')).toBeNull();
+	});
+
+	it('reports a feed where the server takes reports, and marks a blocked one', async () => {
+		const reader = new DemoReader(() => now);
+		const feedMenu = () =>
+			userEvent.click(screen.getByRole('button', { name: 'Actions for the feed Tagesbote' }));
+		const { unmount } = render(Sidebar, { reader, onsubscribe: vi.fn(), onpick: vi.fn() });
+		await feedMenu();
+		expect(screen.queryByRole('menuitem', { name: 'Report the feed …' })).toBeNull();
+		unmount();
+
+		Object.assign(reader.can, { reportContent: true });
+		const reportContent = vi.spyOn(reader, 'reportContent').mockResolvedValue('sent');
+		render(Sidebar, { reader, onsubscribe: vi.fn(), onpick: vi.fn() });
+		await feedMenu();
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Report the feed …' }));
+		const dialog = screen.getByRole('dialog', { name: 'Report the feed' });
+		expect(dialog).toHaveTextContent('“Tagesbote” was reported');
+		await userEvent.click(within(dialog).getByRole('radio', { name: 'Against the law' }));
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Send the report' }));
+		expect(reportContent).toHaveBeenCalledWith({ feedId: 'feed-tagesbote' }, 'illegal', '');
+		await userEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[1]!);
+		expect(screen.queryByRole('dialog')).toBeNull();
+
+		reader.feeds = {
+			...reader.feeds,
+			'feed-tagesbote': { ...reader.feeds['feed-tagesbote']!, blocked: true }
+		};
+		flushSync();
+		expect(
+			within(screen.getByRole('button', { name: /^Tagesbote/ })).getByText(
+				'Blocked by the operator of this rueder'
+			)
+		).toBeInTheDocument();
+		await feedMenu();
+		expect(screen.queryByRole('menuitem', { name: 'Report the feed …' })).toBeNull();
 	});
 
 	it('lists the labels, makes, renames, recolors and deletes them', async () => {

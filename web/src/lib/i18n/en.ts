@@ -37,6 +37,7 @@ const en = {
 		feedNameHint: 'Empty for the feed’s own name',
 		renameFeed: 'Rename',
 		unsubscribe: 'Unsubscribe',
+		reportFeed: 'Report the feed …',
 		feedActions: (title: string) => `Actions for the feed ${title}`,
 		unsubscribeTitle: 'Unsubscribe?',
 		unsubscribeText: (title: string) =>
@@ -59,6 +60,7 @@ const en = {
 		unread: (count: number) => `${n(count)} unread`,
 		fetchFailed: (reason: string) => `The last fetch failed: ${reason}`,
 		waiting: 'Not fetched yet',
+		blocked: 'Blocked by the operator of this rueder',
 		moveHint: 'Drag to sort, or press Alt with the arrow keys',
 		tooDeep: (levels: number) => `Folders nest ${levels} levels deep at most.`
 	},
@@ -109,7 +111,33 @@ const en = {
 		loadingList: 'Loading …',
 		toTop: 'Back to the top',
 		pick: 'Pick an article to read it here.',
-		closeArticle: 'Close the article'
+		closeArticle: 'Close the article',
+		blockedFeed:
+			'The operator of this rueder blocked this feed. It is not fetched, and its articles are not shown.',
+		articleActions: 'More actions for the article',
+		reportArticle: 'Report the article …'
+	},
+
+	report: {
+		feedTitle: 'Report the feed',
+		articleTitle: 'Report the article',
+		text: (title: string) =>
+			`The operator of this rueder sees that “${title}” was reported, why and what you write, but not who reported it. They decide whether to block it for everyone.`,
+		reason: 'Why',
+		reasons: {
+			illegal: 'Against the law',
+			copyright: 'Somebody else’s work',
+			malicious: 'Malware, phishing or fraud',
+			spam: 'Spam',
+			other: 'Something else'
+		},
+		note: 'What you would like to add (optional)',
+		left: (count: number) => `${n(count)} characters left`,
+		send: 'Send the report',
+		sending: 'Sending …',
+		sent: 'Thank you. The report reached the operator of this rueder.',
+		tooMany: 'You sent many reports lately. Try again later.',
+		unreachable: 'The report did not reach the server. Try again later.'
 	},
 
 	media: {
@@ -528,7 +556,9 @@ const en = {
 			limited: (count: number) =>
 				`${n(count)} ${plural(count, { one: 'request was', other: 'requests were' })} turned away as too many.`,
 			browserErrors: (count: number) =>
-				`Browsers reported ${n(count)} ${plural(count, { one: 'error', other: 'different errors' })} in the last day.`
+				`Browsers reported ${n(count)} ${plural(count, { one: 'error', other: 'different errors' })} in the last day.`,
+			reportedFeeds: (count: number) =>
+				`Readers reported ${n(count)} ${plural(count, { one: 'feed', other: 'feeds' })} that ${plural(count, { one: 'is', other: 'are' })} not blocked.`
 		},
 		server: {
 			title: 'Server',
@@ -658,6 +688,14 @@ const en = {
 			hits: (count: number, accounts: number, last: string) =>
 				`${n(count)} ${plural(count, { one: 'time', other: 'times' })} in ${n(accounts)} ${plural(accounts, { one: 'account', other: 'accounts' })}, last ${last}`,
 			where: (versions: string, browsers: string) => `Version ${versions} · ${browsers}`
+		},
+		reported: {
+			title: 'Reported feeds',
+			text: 'Who reported is not shown here. “rueder feed block <address>” blocks a feed for everyone, “rueder feed unblock <address>” lifts it.',
+			none: 'Nobody reported a feed.',
+			reports: (count: number, last: string) =>
+				`${n(count)} ${plural(count, { one: 'report', other: 'reports' })}, last ${last}`,
+			blocked: 'Blocked'
 		}
 	},
 

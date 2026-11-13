@@ -29,6 +29,7 @@
 	import FeedIcon from './FeedIcon.svelte';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
+	import ReportDialog from './ReportDialog.svelte';
 	import TreeItem from './TreeItem.svelte';
 
 	let {
@@ -57,6 +58,7 @@
 	let renaming = $state(false);
 	let newTitle = $state('');
 	let unsubscribing = $state(false);
+	let reporting = $state(false);
 
 	function pick() {
 		reader.show({ kind: node.kind, id: node.id });
@@ -218,7 +220,12 @@
 						<span class="sr-only">{m.nav.waiting}</span>
 					</span>
 				{/if}
-				{#if feed?.error}
+				{#if feed?.blocked}
+					<span class="text-warn" title={m.nav.blocked}>
+						<Icon name="block" class="size-3.5" />
+						<span class="sr-only">{m.nav.blocked}</span>
+					</span>
+				{:else if feed?.error}
 					<span class="text-warn" title={m.nav.fetchFailed(feed.error)}>
 						<Icon name="warning" class="size-3.5" />
 						<span class="sr-only">{m.nav.fetchFailed(feed.error)}</span>
@@ -280,6 +287,16 @@
 					>
 						{m.nav.unsubscribe}
 					</button>
+					{#if reader.can.reportContent && !feed.blocked}
+						<button
+							type="button"
+							role="menuitem"
+							class="menu-item"
+							onclick={() => (reporting = true)}
+						>
+							{m.nav.reportFeed}
+						</button>
+					{/if}
 				</Menu>
 			</div>
 		{/if}
@@ -304,6 +321,15 @@
 				</button>
 			</div>
 		</Dialog>
+	{/if}
+
+	{#if reporting && feed}
+		<ReportDialog
+			{reader}
+			feedId={node.id}
+			title={feed.title}
+			onclose={() => (reporting = false)}
+		/>
 	{/if}
 
 	{#if node.kind === 'folder' && !closed && node.children.length > 0}

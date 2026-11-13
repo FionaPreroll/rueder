@@ -6,9 +6,10 @@ import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { demoStatus } from '#lib/demo/status.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
-import { MAX_OPML } from '#lib/reader.ts';
+import { MAX_OPML, type Reader } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
+import ReportDialog from './ReportDialog.svelte';
 import TopBar from './TopBar.svelte';
 import SettingsDialog from './SettingsDialog.svelte';
 import StatusDialog from './StatusDialog.svelte';
@@ -722,5 +723,66 @@ describe('the second factor in the settings', () => {
 	it('has no tab where the reader cannot have one', () => {
 		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
 		expect(screen.queryByRole('tab', { name: 'Security' })).toBeNull();
+	});
+});
+
+describe('Reported feeds on the status page', () => {
+	it('names the feed, its address and the reasons, never who reported', async () => {
+		render(StatusDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(await screen.findByRole('heading', { name: 'Reported feeds' })).toBeInTheDocument();
+		expect(screen.getByText('Readers reported 1 feed that is not blocked.')).toBeInTheDocument();
+		expect(screen.getByText('Daily Deals')).toBeInTheDocument();
+		expect(screen.getByText('https://deals.example/feed.xml')).toBeInTheDocument();
+		expect(screen.getByText(/^3 reports, last/)).toBeInTheDocument();
+		expect(screen.getByText('Spam 2 · Malware, phishing or fraud 1')).toBeInTheDocument();
+	});
+});
+
+describe('ReportDialog', () => {
+	function open(outcomes: ('sent' | 'tooMany' | 'unreachable')[], seq?: number) {
+		const reportContent = vi.fn(async () => outcomes.shift() ?? 'sent');
+		const reader = { reportContent } as unknown as Reader;
+		const onclose = vi.fn();
+		render(ReportDialog, { reader, feedId: 'feed-3', seq, title: 'Daily Deals', onclose });
+		return { reportContent, onclose };
+	}
+
+	it('sends a reason and a note, and thanks', async () => {
+		const { reportContent, onclose } = open(['sent'], 4);
+		expect(screen.getByRole('dialog', { name: 'Report the article' })).toBeInTheDocument();
+		expect(screen.getByText(/not who reported it/)).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('radio', { name: 'Somebody else’s work' }));
+		await userEvent.type(screen.getByRole('textbox'), 'Copied from my blog');
+		expect(screen.getByText('481 characters left')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Send the report' }));
+		expect(reportContent).toHaveBeenCalledWith(
+			{ feedId: 'feed-3', seq: 4 },
+			'copyright',
+			'Copied from my blog'
+		);
+		expect(await screen.findByRole('status')).toHaveTextContent('Thank you.');
+		// The window's own close button, and the one under the thanks.
+		const closes = screen.getAllByRole('button', { name: 'Close' });
+		expect(closes).toHaveLength(2);
+		await userEvent.click(closes[1]!);
+		expect(onclose).toHaveBeenCalled();
+	});
+
+	it('says when there were too many, and lets the reader try again', async () => {
+		const { reportContent } = open(['tooMany', 'unreachable', 'sent']);
+		expect(screen.getByRole('dialog', { name: 'Report the feed' })).toBeInTheDocument();
+		expect(screen.getByRole('textbox')).toHaveAttribute('maxlength', '500');
+		const send = screen.getByRole('button', { name: 'Send the report' });
+		await userEvent.click(send);
+		expect(await screen.findByRole('alert')).toHaveTextContent('many reports lately');
+		await userEvent.click(send);
+		expect(await screen.findByRole('alert')).toHaveTextContent('did not reach the server');
+		await userEvent.click(send);
+		expect(await screen.findByRole('status')).toHaveTextContent('Thank you.');
+		expect(reportContent).toHaveBeenLastCalledWith(
+			{ feedId: 'feed-3', seq: undefined },
+			'spam',
+			''
+		);
 	});
 });

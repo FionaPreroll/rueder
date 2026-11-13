@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds SET blocked_at = NULL, next_fetch_at = now()\n         WHERE feed_url = $1 AND blocked_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b74fb9228c366abdf1e6136b32113a5dcbc0f36b046a743eae4db0674fa36e1e"
+}

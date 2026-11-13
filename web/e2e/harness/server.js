@@ -43,7 +43,9 @@ const env = {
 	IMAGE_CACHE_DIR: mkdtempSync(join(tmpdir(), 'rueder-e2e-images-')),
 	// Never the settings of a rueder that is being worked on.
 	OIDC_ISSUER: '',
-	CLIENT_IP_HEADER: ''
+	CLIENT_IP_HEADER: '',
+	// Readers may report feeds and articles (reporting.spec.ts).
+	CONTENT_REPORTS: 'on'
 };
 
 // The first command also applies the migrations.

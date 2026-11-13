@@ -282,6 +282,8 @@
 			<div class="p-10 text-center text-soft">
 				{#if reader.loading}
 					<p role="status">{m.list.loadingList}</p>
+				{:else if shownFeed?.blocked}
+					<p role="status">{m.list.blockedFeed}</p>
 				{:else if reader.query.trim()}
 					<p>{m.list.emptySearch}</p>
 				{:else if feedIsEmpty && shownFeed?.waiting}

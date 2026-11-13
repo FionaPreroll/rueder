@@ -16,7 +16,7 @@ use rueder::{
     fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import,
+    import, moderation,
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
@@ -68,6 +68,11 @@ enum Command {
     /// make accounts in the browser.
     #[command(subcommand)]
     Admin(AdminCommand),
+    /// Block a feed readers reported, or lift the block: a blocked feed is not
+    /// fetched, nobody sees its articles or subscribes to it anew, and its
+    /// images go from the cache.
+    #[command(subcommand)]
+    Feed(FeedCommand),
     /// Say whether readers can make accounts for themselves or invite others,
     /// and how many. Nothing is open until it is said here.
     #[command(subcommand)]
@@ -215,6 +220,14 @@ enum AdminCommand {
 }
 
 #[derive(Subcommand)]
+enum FeedCommand {
+    /// Block the feed at this address (as the status page shows it).
+    Block { address: String },
+    /// Lift the block of the feed at this address; it is fetched again at once.
+    Unblock { address: String },
+}
+
+#[derive(Subcommand)]
 enum BenchCommand {
     /// Make up accounts, feeds, articles and what the accounts have read.
     Generate {
@@ -303,6 +316,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Account(command) => account(&db, command).await,
         Command::Admin(command) => admin(&db, command).await,
+        Command::Feed(command) => feed(&db, command).await,
         Command::Registration(command) => registering(&db, command).await,
         Command::Reclean { feed } => {
             let report = reclean::run(&db, &Rules::from_env()?, feed).await?;
@@ -516,6 +530,60 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
     Ok(())
 }
 
+async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
+    match command {
+        FeedCommand::Block { address } => {
+            let blocked = moderation::block(db, &address).await?;
+            if blocked.is_empty() {
+                anyhow::bail!("there is no feed at {}", address.trim());
+            }
+            // The images go from the cache this machine keeps, as the server
+            // would find it: in the container, the same volume.
+            let config = image_config()?;
+            let cache = images::Cache::open(&config.cache_dir, config.cache_bytes)?;
+            let mut files = 0;
+            for feed_id in &blocked {
+                for url in moderation::images_of(db, *feed_id).await? {
+                    files += cache.forget(&url);
+                }
+            }
+            println!(
+                "Blocked {}: it is not fetched, nobody sees its articles or subscribes to it, \
+                 and {files} cached images of it are gone.",
+                address.trim()
+            );
+        }
+        FeedCommand::Unblock { address } => {
+            if moderation::unblock(db, &address).await? == 0 {
+                anyhow::bail!("there is no blocked feed at {}", address.trim());
+            }
+            println!(
+                "{} is not blocked any more and is fetched again.",
+                address.trim()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Where the image proxy keeps its images and its key, from the environment:
+/// IMAGE_CACHE_DIR, IMAGE_CACHE_MB and IMAGE_PROXY_KEY.
+fn image_config() -> anyhow::Result<images::Config> {
+    let mut images =
+        images::Config::new(env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| "image-cache".into()));
+    if let Ok(megabytes) = env::var("IMAGE_CACHE_MB") {
+        let megabytes: u64 = megabytes
+            .parse()
+            .context("IMAGE_CACHE_MB is not a number")?;
+        images.cache_bytes = megabytes.saturating_mul(1024 * 1024);
+    }
+    images.key = env::var("IMAGE_PROXY_KEY")
+        .ok()
+        .filter(|key| !key.is_empty())
+        .map(String::into_bytes);
+    Ok(images)
+}
+
 async fn admin(db: &PgPool, command: AdminCommand) -> anyhow::Result<()> {
     match command {
         AdminCommand::Add { name } => {
@@ -629,19 +697,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     // Images reach readers through the proxy. IMAGE_CACHE_DIR is where it keeps
     // them, IMAGE_CACHE_MB how much of them; IMAGE_PROXY_KEY is the secret for
     // its addresses, which it makes itself if there is none.
-    let mut images =
-        images::Config::new(env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| "image-cache".into()));
-    if let Ok(megabytes) = env::var("IMAGE_CACHE_MB") {
-        let megabytes: u64 = megabytes
-            .parse()
-            .context("IMAGE_CACHE_MB is not a number")?;
-        images.cache_bytes = megabytes.saturating_mul(1024 * 1024);
-    }
-    images.key = env::var("IMAGE_PROXY_KEY")
-        .ok()
-        .filter(|key| !key.is_empty())
-        .map(String::into_bytes);
-    let images = Arc::new(ImageProxy::open(images, client.clone())?);
+    let images = Arc::new(ImageProxy::open(image_config()?, client.clone())?);
     // Once an hour, what the cache holds too much of goes.
     let cache = images.clone();
     tokio::spawn(async move {
@@ -691,6 +747,11 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             .parse()
             .context("CLIENT_IP_HEADER is not the name of a header")?;
         state = state.with_client_ip_header(name);
+    }
+    // CONTENT_REPORTS=on lets readers report feeds and articles to the admins.
+    if env::var("CONTENT_REPORTS").is_ok_and(|value| value == "on") {
+        tracing::info!("readers may report feeds and articles (CONTENT_REPORTS=on)");
+        state = state.with_content_reports();
     }
     // CLIENT_REPORTS=off takes no reports of errors from browsers, whoever
     // agreed to send them.

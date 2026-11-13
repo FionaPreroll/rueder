@@ -17,6 +17,7 @@ import type {
 	RemoveRefusal,
 	Resumed,
 	RulePreview,
+	ReportOutcome,
 	SecondFactorRefusal,
 	ServerStatus,
 	Subscribed
@@ -151,7 +152,8 @@ export class DemoReader implements Reader {
 		invites: false,
 		reports: false,
 		secondFactor: false,
-		remove: false
+		remove: false,
+		reportContent: false
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -164,6 +166,10 @@ export class DemoReader implements Reader {
 	readonly legal = null;
 	async acceptTerms() {
 		return true;
+	}
+	/** The draft has nobody to report to. */
+	async reportContent(): Promise<ReportOutcome> {
+		return 'unreachable';
 	}
 	/** The draft has no accounts, so nothing to secure. */
 	async secondFactor() {

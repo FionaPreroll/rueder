@@ -15,6 +15,7 @@ pub mod import;
 pub mod labels;
 pub mod legal;
 pub mod login;
+pub mod moderation;
 pub mod monitor;
 pub mod oidc;
 pub mod profile;
@@ -99,6 +100,8 @@ pub struct AppState {
     pub admin_second_factor: bool,
     /// Where the operator's legal texts are, and which terms count.
     pub legal: Arc<Legal>,
+    /// Whether readers may report feeds and articles (`CONTENT_REPORTS=on`).
+    pub content_reports: bool,
 }
 
 impl AppState {
@@ -117,6 +120,7 @@ impl AppState {
             reports: true,
             admin_second_factor: false,
             legal: Arc::default(),
+            content_reports: false,
         }
     }
 
@@ -133,6 +137,14 @@ impl AppState {
     pub fn with_admin_second_factor(self) -> Self {
         Self {
             admin_second_factor: true,
+            ..self
+        }
+    }
+
+    /// Lets readers report feeds and articles, as with `CONTENT_REPORTS=on`.
+    pub fn with_content_reports(self) -> Self {
+        Self {
+            content_reports: true,
             ..self
         }
     }
@@ -241,6 +253,7 @@ fn api(state: &AppState) -> Router<AppState> {
         .merge(profile::routes())
         .merge(second_factor::routes())
         .merge(legal::routes())
+        .merge(moderation::routes())
         .merge(registration::routes())
         .merge(status::routes())
         .merge(reports::routes())

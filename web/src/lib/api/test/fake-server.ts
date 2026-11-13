@@ -31,6 +31,8 @@ interface FakeFeed {
 	icon_url: string | null;
 	/** Whether the server fetched it yet; a feed from an OPML file waits. */
 	fetched: boolean;
+	/** The operator blocked it. */
+	blocked?: boolean;
 }
 
 /** A feed the made-up web has, at the address of a site or of the feed itself. */
@@ -133,6 +135,9 @@ export class FakeServer {
 	reportsAvailable = true;
 	sendsReports = false;
 	reports: unknown[] = [];
+	/** Whether readers can report feeds and articles, and what they reported. */
+	contentReports = false;
+	contentReported: { feed_id: number; seq: number | null; reason: unknown; note: unknown }[] = [];
 	oidc = false;
 	/** Whether anybody can register, and why nobody can right now: no room, or enough for today. */
 	registrationOpen = false;
@@ -464,6 +469,21 @@ export class FakeServer {
 			this.reports.push(...((data.reports as unknown[]) ?? []));
 			return empty();
 		}
+		const reported = /^\/feeds\/(\d+)(?:\/articles\/(\d+))?\/report$/.exec(path);
+		if (method === 'POST' && reported) {
+			const feedId = Number(reported[1]);
+			const seq = reported[2] === undefined ? null : Number(reported[2]);
+			const known =
+				this.contentReports &&
+				this.feeds.some((feed) => feed.id === feedId) &&
+				(seq === null || this.article(feedId, seq) !== undefined);
+			if (!known) return refused(404, 'not found');
+			this.contentReported = this.contentReported.filter(
+				(r) => r.feed_id !== feedId || r.seq !== seq
+			);
+			this.contentReported.push({ feed_id: feedId, seq, reason: data.reason, note: data.note });
+			return empty();
+		}
 		if (method === 'GET' && path === '/status') {
 			return this.admin ? json(demoStatus(Date.now())) : refused(403, 'only an admin can do this');
 		}
@@ -676,6 +696,7 @@ export class FakeServer {
 			is_admin: this.admin,
 			has_password: this.accounts.has(this.signedIn ?? ''),
 			admin_needs_second_factor: this.adminNeedsSecondFactor,
+			content_reports: this.contentReports,
 			terms_to_accept:
 				this.legal.terms_version && this.agreedTerms !== this.legal.terms_version
 					? this.legal.terms_version
@@ -731,7 +752,8 @@ export class FakeServer {
 				fetch_agent: 'rueder',
 				last_seq: this.articles.filter((a) => a.feed_id === feed.id).length,
 				read_upto: 0,
-				unread: this.unread(feed.id)
+				unread: feed.blocked ? 0 : this.unread(feed.id),
+				blocked: feed.blocked ?? false
 			}))
 		};
 	}
@@ -922,10 +944,13 @@ export class FakeServer {
 		const after = query.has('after') ? Number(query.get('after')) : null;
 		const limit = Number(query.get('limit') ?? 50);
 		const unread = query.get('unread') === 'true';
+		// Nobody sees the articles of a feed the operator blocked.
+		const blocked = new Set(this.feeds.filter((feed) => feed.blocked).map((feed) => feed.id));
 		return this.articles
 			.filter(
 				(a) =>
 					feeds.has(a.feed_id) &&
+					!blocked.has(a.feed_id) &&
 					a.id < before &&
 					a.id > (after ?? 0) &&
 					a.hidden === (kind === 'hidden') &&

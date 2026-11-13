@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.seq, a.thumbnail_url, c.image_url, c.html\n             FROM articles a JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n             WHERE a.feed_id = $1 AND a.seq > $2\n             ORDER BY a.seq LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "thumbnail_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "thumbnail_url"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "image_url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "html",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "html"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "0326bc6d8087afa11df307e791fc33e7eda58757eba573051fcbde2c0eb05151"
+}

@@ -34,6 +34,8 @@ export interface Feed {
 	error: string | null;
 	/** The feed waits for its first fetch, as one does that came with an OPML file. */
 	waiting?: boolean;
+	/** The operator blocked the feed: nobody sees its articles, and it is not fetched. */
+	blocked?: boolean;
 }
 
 export interface ArticleVersion {

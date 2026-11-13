@@ -19,7 +19,7 @@ use time::OffsetDateTime;
 use ts_rs::TS;
 
 use crate::{
-    AppError, AppState,
+    AppError, AppState, moderation,
     monitor::{self, Severity, Timing},
     profile, reports,
     sessions::Session,
@@ -68,6 +68,9 @@ struct Status {
     problems: Problems,
     /// Errors in the browsers of readers who agreed to send them.
     browsers: reports::Summary,
+    /// Feeds readers reported, with their address: the one place the status
+    /// names feeds, as the admins have to look at them. Never who reported.
+    reported: Vec<moderation::Reported>,
 }
 
 /// How long things took in the last hour, in milliseconds. The times are null
@@ -125,6 +128,8 @@ enum Hint {
     Limited { count: u64 },
     /// Browsers reported errors in the last day.
     BrowserErrors { errors: usize },
+    /// Readers reported feeds that are not blocked.
+    ReportedFeeds { feeds: usize },
 }
 
 /// How much there is.
@@ -519,6 +524,11 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
     if errors > 0 {
         hints.push(Hint::BrowserErrors { errors });
     }
+    let reported = moderation::reported(&state.db).await?;
+    let open = reported.iter().filter(|feed| !feed.blocked).count();
+    if open > 0 {
+        hints.push(Hint::ReportedFeeds { feeds: open });
+    }
     let requests = Requests {
         all: Durations::from(&all.timing),
         answers: all.answers,
@@ -566,6 +576,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
             recent: recent.collect(),
         },
         browsers,
+        reported,
     }))
 }
 

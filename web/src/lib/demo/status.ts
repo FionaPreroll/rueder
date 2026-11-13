@@ -25,7 +25,8 @@ export function demoStatus(now: number): ServerStatus {
 			{ kind: 'slow_route', route: 'POST /api/feeds/find', p95_ms: 2380 },
 			{ kind: 'feeds_failing', failing: 7, subscribed: 31 },
 			{ kind: 'errors', count: 1 },
-			{ kind: 'browser_errors', errors: 1 }
+			{ kind: 'browser_errors', errors: 1 },
+			{ kind: 'reported_feeds', feeds: 1 }
 		],
 		counts: {
 			accounts: 3,
@@ -168,6 +169,20 @@ export function demoStatus(now: number): ServerStatus {
 					last: ago(3 * 86_400)
 				}
 			]
-		}
+		},
+		reported: [
+			{
+				feed_id: 31,
+				url: 'https://deals.example/feed.xml',
+				title: 'Daily Deals',
+				reports: 3,
+				reasons: [
+					{ reason: 'spam', reports: 2 },
+					{ reason: 'malicious', reports: 1 }
+				],
+				last_at: ago(5 * 3600),
+				blocked: false
+			}
+		]
 	};
 }

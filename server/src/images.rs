@@ -376,6 +376,14 @@ impl Cache {
         }
     }
 
+    /// Takes an image out of the cache in every size; how many files went.
+    pub fn forget(&self, url: &str) -> usize {
+        Size::ALL
+            .into_iter()
+            .filter(|size| fs::remove_file(self.path(*size, url)).is_ok())
+            .count()
+    }
+
     /// How many bytes the cache holds, as far as it has counted.
     pub fn used(&self) -> u64 {
         self.used.load(Ordering::Relaxed)

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) AS \"hidden!\" FROM article_states\n           WHERE account_id = $1 AND hidden",
+  "query": "SELECT count(*) AS \"hidden!\" FROM article_states st\n           JOIN feeds f ON f.id = st.feed_id\n           WHERE st.account_id = $1 AND st.hidden AND f.blocked_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       null
     ]
   },
-  "hash": "a186b632bc1e0d6788c7bad00257f9bc6d96a4ab975266a5476dc2d61905f691"
+  "hash": "428de63bc160b08212de213e8761b6fca8abc6ceae8219944024ede6778512c9"
 }

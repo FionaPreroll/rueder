@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'\n         WHERE id IN (\n             SELECT f.id FROM feeds f\n             WHERE f.next_fetch_at <= now()\n               AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)\n             ORDER BY f.next_fetch_at\n             LIMIT $1\n             FOR UPDATE SKIP LOCKED\n         )\n         RETURNING id, feed_url, error_message IS NOT NULL AS \"failing!\"",
+  "query": "UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'\n         WHERE id IN (\n             SELECT f.id FROM feeds f\n             WHERE f.next_fetch_at <= now() AND f.blocked_at IS NULL\n               AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)\n             ORDER BY f.next_fetch_at\n             LIMIT $1\n             FOR UPDATE SKIP LOCKED\n         )\n         RETURNING id, feed_url, error_message IS NOT NULL AS \"failing!\"",
   "describe": {
     "columns": [
       {
@@ -44,5 +44,5 @@
       null
     ]
   },
-  "hash": "9fdaea5514413e71b9116a3951f7dd245cd5e383b37ec2788d5e15a275e6465e"
+  "hash": "ea5d2fc7f5c64a62035595170613681a7726670e590c2b38490417407a873bdb"
 }

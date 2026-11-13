@@ -119,6 +119,9 @@ struct Feed {
     /// Whether the feed was fetched at all yet. One that came with an OPML
     /// file waits for the next round.
     fetched: bool,
+    /// The operator blocked the feed: nobody sees its articles, and it is not
+    /// fetched.
+    blocked: bool,
     last_seq: i32,
     read_upto: i32,
     unread: i64,
@@ -166,7 +169,7 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
     let subscriptions = sqlx::query!(
         r#"SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title, f.title AS feed_title,
                   f.feed_url, f.site_url, f.icon_url, f.fetch_agent, f.error_message,
-                  f.fetched_at IS NOT NULL AS "fetched!"
+                  f.fetched_at IS NOT NULL AS "fetched!", f.blocked_at IS NOT NULL AS "blocked!"
            FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
            WHERE s.account_id = $1 ORDER BY s.position, s.feed_id"#,
         session.account_id
@@ -189,15 +192,22 @@ async fn tree(State(state): State<AppState>, session: Session) -> Result<Json<Tr
                 fetch_agent: row.fetch_agent,
                 error: row.error_message,
                 fetched: row.fetched,
+                blocked: row.blocked,
                 last_seq: count.map_or(0, |count| count.last_seq),
                 read_upto: count.map_or(0, |count| count.read_upto),
-                unread: count.map_or(0, |count| count.unread),
+                // What nobody sees does not count as unread.
+                unread: if row.blocked {
+                    0
+                } else {
+                    count.map_or(0, |count| count.unread)
+                },
             }
         })
         .collect();
     let hidden = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "hidden!" FROM article_states
-           WHERE account_id = $1 AND hidden"#,
+        r#"SELECT count(*) AS "hidden!" FROM article_states st
+           JOIN feeds f ON f.id = st.feed_id
+           WHERE st.account_id = $1 AND st.hidden AND f.blocked_at IS NULL"#,
         session.account_id
     )
     .fetch_one(&state.db)
@@ -381,8 +391,10 @@ async fn feeds_of(
     folder_id: Option<i32>,
 ) -> Result<Option<Vec<i32>>, AppError> {
     let Some(folder_id) = folder_id else {
+        // A blocked feed is in no list.
         let all = sqlx::query_scalar!(
-            "SELECT feed_id FROM subscriptions WHERE account_id = $1",
+            "SELECT s.feed_id FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+             WHERE s.account_id = $1 AND f.blocked_at IS NULL",
             session.account_id
         )
         .fetch_all(&state.db)
@@ -406,8 +418,9 @@ async fn feeds_of(
              SELECT f.id FROM folders f JOIN inside ON f.parent_id = inside.id
              WHERE f.account_id = $1
          )
-         SELECT s.feed_id FROM subscriptions s
-         WHERE s.account_id = $1 AND s.folder_id IN (SELECT id FROM inside)",
+         SELECT s.feed_id FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+         WHERE s.account_id = $1 AND s.folder_id IN (SELECT id FROM inside)
+           AND f.blocked_at IS NULL",
         session.account_id,
         folder_id
     )
@@ -416,15 +429,27 @@ async fn feeds_of(
     Ok(Some(inside))
 }
 
-async fn subscribed(state: &AppState, session: &Session, feed_id: i32) -> Result<(), AppError> {
-    let subscribed = sqlx::query_scalar!(
-        "SELECT feed_id FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
+/// The feed as the account reads it: 404 if it does not read it, and nothing
+/// if the operator blocked it, so that its reader sees an empty list.
+async fn subscribed(
+    state: &AppState,
+    session: &Session,
+    feed_id: i32,
+) -> Result<Vec<i32>, AppError> {
+    let blocked = sqlx::query_scalar!(
+        r#"SELECT f.blocked_at IS NOT NULL AS "blocked!"
+           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+           WHERE s.account_id = $1 AND s.feed_id = $2"#,
         session.account_id,
         feed_id
     )
     .fetch_optional(&state.db)
     .await?;
-    subscribed.map(|_| ()).ok_or(AppError::NotFound)
+    match blocked {
+        None => Err(AppError::NotFound),
+        Some(true) => Ok(Vec::new()),
+        Some(false) => Ok(vec![feed_id]),
+    }
 }
 
 async fn all_articles(
@@ -454,8 +479,8 @@ async fn feed_articles(
     Path(feed_id): Path<i32>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<List>, AppError> {
-    subscribed(&state, &session, feed_id).await?;
-    list(&state, &session, &[feed_id], query).await
+    let feeds = subscribed(&state, &session, feed_id).await?;
+    list(&state, &session, &feeds, query).await
 }
 
 /// A search through the articles of the account's feeds: `GET /api/search`.
@@ -498,10 +523,7 @@ async fn search_articles(
 ) -> Result<Json<SearchHits>, AppError> {
     let feeds = match (query.feed, query.folder) {
         (Some(_), Some(_)) => return Err(AppError::BadRequest("give feed or folder".into())),
-        (Some(feed_id), None) => {
-            subscribed(&state, &session, feed_id).await?;
-            vec![feed_id]
-        }
+        (Some(feed_id), None) => subscribed(&state, &session, feed_id).await?,
         (None, folder_id) => feeds_of(&state, &session, folder_id)
             .await?
             .ok_or(AppError::NotFound)?,
@@ -799,7 +821,10 @@ async fn read_feed(
     Path(feed_id): Path<i32>,
     Json(upto): Json<Upto>,
 ) -> Result<StatusCode, AppError> {
-    subscribed(&state, &session, feed_id).await?;
+    if subscribed(&state, &session, feed_id).await?.is_empty() {
+        // Nothing of a blocked feed is shown, so nothing is marked.
+        return Ok(StatusCode::NO_CONTENT);
+    }
     let cutoff = upto.cutoff()?;
     match (upto.upto, upto.upto_id) {
         (Some(seq), None) if seq >= 0 => read_upto(&state, &session, feed_id, seq, cutoff).await?,
