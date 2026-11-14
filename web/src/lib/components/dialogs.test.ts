@@ -412,7 +412,7 @@ describe('StatusDialog', () => {
 		expect(problems).toHaveAttribute('open');
 		expect(problems?.querySelector('summary')).toHaveTextContent(/1 error and 2 warnings/);
 		expect(
-			screen.getByText('rueder retention set --status-days <days>', { selector: 'code' })
+			screen.getByText('rueder feed block <address>', { selector: 'code' })
 		).toBeInTheDocument();
 	});
 
@@ -459,37 +459,6 @@ describe('StatusDialog', () => {
 		expect(asked).toHaveBeenCalledTimes(2);
 		// What it knew stays on the page.
 		expect(screen.getByText('7 of 31 feeds fail.')).toBeInTheDocument();
-		vi.restoreAllMocks();
-	});
-
-	it('counts over longer times, as far as the server keeps its counts', async () => {
-		const reader = new DemoReader(() => now);
-		const asked = vi.spyOn(reader, 'status');
-		render(StatusDialog, { reader, onclose: () => {} });
-		expect(
-			await screen.findByText(/^Over the last hour, 1 error and 2 warnings/)
-		).toBeInTheDocument();
-		expect(
-			screen.getByText(/keeps its counts for 7 days, also across a restart/)
-		).toBeInTheDocument();
-		const select = screen.getByRole('combobox', { name: 'Counted over' });
-		const offered = [...select.querySelectorAll('option')].map((option) => option.textContent);
-		// Thirty days are more than the server keeps.
-		expect(offered).toEqual(['the last hour', 'the last 24 hours', 'the last 7 days']);
-		await userEvent.selectOptions(select, 'the last 7 days');
-		expect(asked).toHaveBeenLastCalledWith(168);
-		expect(await screen.findByText(/^Over the last 7 days, 171 errors/)).toBeInTheDocument();
-		vi.restoreAllMocks();
-	});
-
-	it('offers all the server keeps when that is not one of the usual times', async () => {
-		const reader = new DemoReader(() => now);
-		vi.spyOn(reader, 'status').mockResolvedValue({ ...demoStatus(now), kept_days: 2 });
-		render(StatusDialog, { reader, onclose: () => {} });
-		const select = await screen.findByRole('combobox', { name: 'Counted over' });
-		await screen.findByText(/keeps its counts for 2 days/);
-		const offered = [...select.querySelectorAll('option')].map((option) => option.textContent);
-		expect(offered).toEqual(['the last hour', 'the last 24 hours', 'the last 48 hours']);
 		vi.restoreAllMocks();
 	});
 

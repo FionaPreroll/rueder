@@ -2575,9 +2575,9 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	async status(hours?: number) {
+	async status() {
 		try {
-			return await this.api.status(hours);
+			return await this.api.status();
 		} catch (error) {
 			this.refusal(error);
 			return null;

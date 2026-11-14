@@ -3662,21 +3662,8 @@
         "tags": [
           "Admin"
         ],
-        "summary": "The status of the server, for admins: requests and how long they took, the server's own warnings and errors, the fetching of feeds, the feed search, the image proxy, the database and the reported feeds, over the hours asked for. Nothing in it names an account.",
+        "summary": "The status of the server, for admins: requests and how long they took, the server's own warnings and errors, the fetching of feeds, the feed search, the image proxy, the database and the reported feeds, over the last hour. Nothing in it names an account.",
         "operationId": "server_status",
-        "parameters": [
-          {
-            "name": "hours",
-            "in": "query",
-            "description": "Over how many hours to count, up to the days the counts are kept;\n1 if not said.",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -6020,7 +6007,7 @@
       },
       "Durations": {
         "type": "object",
-        "description": "How long things took in the hours counted, in milliseconds. The times are null\nwhen nothing was timed.",
+        "description": "How long things took in the last hour, in milliseconds. The times are null\nwhen nothing was timed.",
         "required": [
           "count"
         ],
@@ -8357,8 +8344,6 @@
           "build",
           "started_at",
           "uptime_s",
-          "hours",
-          "kept_days",
           "hints",
           "counts",
           "requests",
@@ -8394,18 +8379,6 @@
             ],
             "format": "int64",
             "description": "The memory the server holds, if the system says.",
-            "minimum": 0
-          },
-          "hours": {
-            "type": "integer",
-            "format": "int32",
-            "description": "Over how many hours requests, fetches, the feed search, the images and\nthe problems of the log were counted.",
-            "minimum": 0
-          },
-          "kept_days": {
-            "type": "integer",
-            "format": "int32",
-            "description": "How many days the counts are kept for, so the most hours to ask for\nare 24 times as many.",
             "minimum": 0
           },
           "hints": {
@@ -8771,7 +8744,7 @@
           },
           "took": {
             "$ref": "#/components/schemas/Durations",
-            "description": "The fetches of the hours counted."
+            "description": "The fetches of the last hour."
           },
           "fetched": {
             "type": "integer",
@@ -8827,7 +8800,7 @@
       },
       "StatusFinder": {
         "type": "object",
-        "description": "The feed search, in the hours counted.",
+        "description": "The feed search, in the last hour.",
         "required": [
           "on",
           "took",
@@ -9206,7 +9179,7 @@
           },
           "took": {
             "$ref": "#/components/schemas/Durations",
-            "description": "Images not in the cache, in the hours counted."
+            "description": "Images not in the cache, in the last hour."
           },
           "cached": {
             "type": "integer",
@@ -9286,7 +9259,7 @@
           "errors": {
             "type": "integer",
             "format": "int64",
-            "description": "In the hours counted.",
+            "description": "In the last hour.",
             "minimum": 0
           },
           "warnings": {
@@ -9305,7 +9278,7 @@
       },
       "StatusRequests": {
         "type": "object",
-        "description": "The requests of the hours counted.",
+        "description": "The requests of the last hour.",
         "required": [
           "all",
           "answers",

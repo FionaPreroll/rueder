@@ -14,7 +14,7 @@ use rueder::{
     cleaning::Rules,
     email,
     events::Events,
-    fetch, health, history,
+    fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
     import, mail, moderation,
@@ -81,9 +81,8 @@ enum Command {
     /// and how many. Nothing is open until it is said here.
     #[command(subcommand)]
     Registration(RegistrationCommand),
-    /// Say how long the server keeps what it keeps: the counts of its status
-    /// page and the problems of its log, and old articles, versions and feeds
-    /// without subscribers, which stay until it is said here.
+    /// Say how long the server keeps old articles, versions and feeds without
+    /// subscribers, which stay until it is said here.
     #[command(subcommand)]
     Retention(RetentionCommand),
     /// Bring over the feeds, articles, accounts, folders and subscriptions of the
@@ -233,10 +232,6 @@ enum RetentionCommand {
     /// Change what is set. What is not named stays as it is, and a change
     /// counts at once, without a restart: what is older goes within the hour.
     Set {
-        /// How many days the counts of the status page and the problems of the
-        /// log are kept. The status page counts over as many days at most.
-        #[arg(long, value_name = "DAYS", value_parser = clap::value_parser!(i32).range(1..=3650))]
-        status_days: Option<i32>,
         /// After how many months since rueder first fetched them articles go;
         /// `never` keeps them. Those a reader starred or labelled stay.
         #[arg(long, value_name = "MONTHS|never")]
@@ -614,21 +609,15 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
 }
 
 async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()> {
-    let mut status = retention::settings(db).await?;
     let mut settings = retention::articles(db).await?;
     match command {
         RetentionCommand::Show => {}
         RetentionCommand::Set {
-            status_days,
             articles,
             remove,
             versions,
             orphans,
         } => {
-            if let Some(days) = status_days {
-                status.status_days = days;
-                retention::set(db, &status).await?;
-            }
             if let Some(Keep(months)) = articles {
                 settings.articles_months = months;
                 if months.is_none() {
@@ -668,10 +657,6 @@ async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()>
             println!();
         }
     }
-    println!(
-        "The status page and the problems of the log: kept for {} days",
-        status.status_days
-    );
     let after = |value: Option<i32>, unit: &str| {
         value.map_or("never".to_owned(), |value| format!("after {value} {unit}"))
     };
@@ -887,27 +872,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         }
     });
 
-    // What the status counted before the restart comes back, and what it
-    // counts goes to the database every minute.
-    if let Err(err) = history::load(&db, &monitor, Some(&images)).await {
-        tracing::warn!("reading back the status: {err:#}");
-    }
-    let (saving, counted, served) = (db.clone(), monitor.clone(), images.clone());
-    tokio::spawn(async move {
-        let mut every = tokio::time::interval(history::EVERY);
-        every.tick().await;
-        loop {
-            every.tick().await;
-            if let Err(err) = history::save(&saving, &counted, Some(&served)).await {
-                tracing::warn!("saving the status: {err:#}");
-            }
-        }
-    });
-
-    // Once an hour, the sessions that have run out go, the reports of errors
-    // in browsers that are older than 30 days, and the counts of the status
-    // that are older than the operator keeps them.
-    let (sessions, problems) = (db.clone(), monitor.problems.clone());
+    // Once an hour, the sessions that have run out go, and the reports of
+    // errors in browsers that are older than 30 days.
+    let sessions = db.clone();
     tokio::spawn(async move {
         let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
         loop {
@@ -924,12 +891,8 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             if let Err(err) = reports::sweep(&sessions).await {
                 tracing::error!("removing old reports of errors: {err:#}");
             }
-            if let Err(err) = history::sweep(&sessions, &problems).await {
-                tracing::error!("removing old counts of the status: {err:#}");
-            }
         }
     });
-    let (saving, counted, served) = (db.clone(), monitor.clone(), images.clone());
 
     // Once an hour, what the retention says is old goes, for five minutes at
     // most, in portions that each hold up fetching only for a moment.
@@ -1063,10 +1026,6 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     )
     .with_graceful_shutdown(shutdown())
     .await?;
-    // What was counted since the last minute is not lost either.
-    if let Err(err) = history::save(&saving, &counted, Some(&served)).await {
-        tracing::warn!("saving the status: {err:#}");
-    }
     Ok(())
 }
 

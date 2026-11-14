@@ -684,12 +684,8 @@ export interface Reader {
 		passkey?: PasskeyProof
 	): Promise<EmailRefusal | null>;
 
-	/**
-	 * How the server fares, for an admin (`can.status`), counted over the last
-	 * `hours` (1 if not said, at most as long as the server keeps its counts);
-	 * null if there was no answer.
-	 */
-	status(hours?: number): Promise<ServerStatus | null>;
+	/** How the server fares, for an admin (`can.status`); null if there was no answer. */
+	status(): Promise<ServerStatus | null>;
 
 	/**
 	 * Whether the server takes reports of errors from browsers and whether this

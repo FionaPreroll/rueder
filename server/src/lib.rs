@@ -26,7 +26,7 @@
 //! - **Apps of other makers:** [`greader`] and [`app_passwords`].
 //! - **Safety:** [`hardening`] for every answer and every changing request,
 //!   [`rate`] for how much one sender and one account may ask.
-//! - **Running it:** [`status`], [`monitor`], [`history`], [`mod@health`],
+//! - **Running it:** [`status`], [`monitor`], [`mod@health`],
 //!   [`reports`], [`retention`], [`moderation`], [`legal`] and [`version`].
 //! - **Tools:** [`import`] (the old rueder's data), [`reclean`],
 //!   [`mod@bench`] and [`typescript`] (the API's types for the page).
@@ -46,7 +46,6 @@ pub mod filters;
 pub mod greader;
 pub mod hardening;
 pub mod health;
-pub mod history;
 pub mod http_client;
 pub mod images;
 pub mod import;

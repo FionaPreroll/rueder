@@ -819,15 +819,7 @@ const de: Messages = {
 		loading: 'Frage den Server …',
 		failed: 'Der Server antwortet nicht. Versuch es gleich noch einmal.',
 		refresh: 'Aktualisieren',
-		asOf: (time) => `Stand ${time}.`,
-		period: {
-			label: 'Gezählt über',
-			hour: 'die letzte Stunde',
-			hours: (hours) => `die letzten ${n(hours)} Stunden`,
-			days: (days) => `die letzten ${n(days)} Tage`,
-			kept: (days) =>
-				`Der Server bewahrt seine Zahlen ${n(days)} ${plural(days, { one: 'Tag', other: 'Tage' })} auf, auch über einen Neustart; „rueder retention set --status-days <tage>“ ändert das. Die Hinweise gelten der letzten Stunde.`
-		},
+		asOf: (time) => `Stand ${time}. Gezählt wird die letzte Stunde.`,
 		demo: 'Erfunden, denn hier gibt es keinen Server.',
 		empty: '–',
 		on: 'An',
@@ -983,13 +975,13 @@ const de: Messages = {
 			p95: '95 %',
 			max: 'Längste',
 			errors: 'Fehler',
-			none: 'Keine Anfragen in der gezählten Zeit.'
+			none: 'Keine Anfragen in der letzten Stunde.'
 		},
 		problems: {
 			title: 'Warnungen und Fehler',
-			counts: (errors, warnings, over) =>
-				`Über ${over} ${n(errors)} Fehler und ${n(warnings)} ${plural(warnings, { one: 'Warnung', other: 'Warnungen' })}.`,
-			none: 'In den aufbewahrten Tagen wurde nichts geloggt.',
+			counts: (errors, warnings) =>
+				`In der letzten Stunde ${n(errors)} Fehler und ${n(warnings)} ${plural(warnings, { one: 'Warnung', other: 'Warnungen' })}.`,
+			none: 'Seit dem Start wurde nichts geloggt.',
 			error: 'Fehler',
 			warning: 'Warnung',
 			times: (count, last) => (count > 1 ? `${n(count)}-mal, zuletzt ${last}` : last)

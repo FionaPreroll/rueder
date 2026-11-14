@@ -90,13 +90,10 @@ fn the_types_stand_in_a_fixed_order() {
 /// old database holds, what an OpenID provider says and what the Google Reader
 /// API answers apps. Everything else that is written or read as JSON has to
 /// be in the file.
-const NOT_THE_API: [(&str, &str); 7] = [
+const NOT_THE_API: [(&str, &str); 6] = [
     ("articles.rs", "Original"),
     ("articles.rs", "Version"),
     ("import.rs", "*"),
-    // What the server counts about itself goes to its own database as JSON
-    // (`history.rs`); the page gets it as the types of `status.rs`.
-    ("monitor.rs", "*"),
     ("oidc.rs", "*"),
     // The Google Reader API (`greader/`) answers apps of other makers, never
     // the page.
