@@ -119,7 +119,7 @@ export async function mailsTo(address: string) {
  * confirms the address, or one that sets a new password.
  */
 export async function linkIn(address: string, kind: 'confirm' | 'reset' = 'confirm') {
-	const pattern = new RegExp(`https?://\\S+\\?${kind}=[\\w-]+`);
+	const pattern = new RegExp(`https?://\\S+#${kind}=[\\w-]+`);
 	let link: string | undefined;
 	await expect
 		.poll(async () => {

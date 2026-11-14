@@ -419,7 +419,8 @@ export class FakeServer {
 			if (--refusal.times === 0) this.refusals = this.refusals.filter((r) => r !== refusal);
 			return refused(refusal.status, refusal.reason, refusal.headers);
 		}
-		return this.answer(method, url.pathname.replace(/^\/api/, ''), url.searchParams, body, type);
+		const route = url.pathname.replace(/^\/api/, '');
+		return this.answer(method, route, url.searchParams, body, type, headers);
 	};
 
 	private answer(
@@ -427,7 +428,8 @@ export class FakeServer {
 		path: string,
 		query: URLSearchParams,
 		body: unknown,
-		type: string | null
+		type: string | null,
+		headers: Headers = new Headers()
 	): Response {
 		const data = (body ?? {}) as Record<string, unknown>;
 		if (method === 'GET' && path === '/login/ways') {
@@ -483,7 +485,8 @@ export class FakeServer {
 			return json(this.me());
 		}
 		if (method === 'GET' && path === '/register') {
-			const token = query.get('invite');
+			// As the server: the token comes in a header, never in the address.
+			const token = headers.get('X-Rueder-Invite');
 			const open = this.registrationOpen && !this.noRoom;
 			const email = this.emailMode;
 			return json(token === null ? { open, email } : { open, email, invite: !!this.usable(token) });

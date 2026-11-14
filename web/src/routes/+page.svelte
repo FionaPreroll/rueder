@@ -18,15 +18,19 @@
 
 	onMount(() => {
 		void session.check();
-		// The page may have been opened with a link from a mail.
+		// The page may have been opened with a link from a mail, or get one
+		// while it is open, which changes only what follows the `#`.
 		session.takeResetLink();
 		void session.confirmFromAddress();
+		const arrived = () => session.linkArrived();
+		addEventListener('hashchange', arrived);
 		// The dev server has no worker, and one would keep its files from changing.
-		if (dev) return;
+		if (dev) return () => removeEventListener('hashchange', arrived);
 		const stopping = registerServiceWorker();
 		// Only a page with a worker can be installed as an app.
 		const unwatch = watchInstall();
 		return () => {
+			removeEventListener('hashchange', arrived);
 			unwatch();
 			void stopping.then((stop) => stop());
 		};

@@ -41,12 +41,13 @@ test('a new account logs in once the link from its mail is opened', async ({ pag
 
 	// The newest link is the one that counts.
 	const link = await linkIn('newcomer@mail.test');
-	expect(link).toMatch(/^http:\/\/localhost:3210\/\?confirm=[\w-]{43}$/);
+	expect(link).toMatch(/^http:\/\/localhost:3210\/#confirm=[\w-]{43}$/);
 	await page.goto(link);
 	await expect(page.getByText('The address newcomer@mail.test is confirmed.')).toBeVisible();
 	await expect(page.getByText('The account is ready: log in.')).toBeVisible();
 	// Said once: the address of the page no longer carries the link.
-	expect(new URL(page.url()).search).toBe('');
+	// The token is gone from the address, so a reload does not take it again.
+	expect(new URL(page.url()).hash).toBe('');
 	await page.getByRole('button', { name: 'Close' }).click();
 
 	await page.getByLabel('Name').fill('newcomer');

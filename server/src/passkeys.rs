@@ -77,10 +77,14 @@ pub const MAX_PER_ACCOUNT: i64 = 10;
 /// How long a ceremony waits for the device: as long as browsers give the
 /// reader by default, to find a key, type a PIN or use a phone.
 pub const CEREMONY_TIME: Duration = Duration::from_secs(300);
-/// How many ceremonies are kept at most, of all senders.
+/// How many ceremonies are kept at most, of all senders. When they are all
+/// open, the oldest login makes room (see [`Passkeys::open`]).
 const MAX_CEREMONIES: usize = 10_000;
-/// How many ceremonies one sender can have open at once.
+/// How many logins one sender (its network) can have under way at once.
 const MAX_PER_SENDER: usize = 20;
+/// How many ceremonies of its sessions one account can have under way at once:
+/// adding a passkey, or showing that its owner is there.
+const CEREMONIES_PER_ACCOUNT: usize = 5;
 /// The longest ceremony name that is looked at; those the server makes are 22
 /// characters long.
 const MAX_CEREMONY_ID: usize = 64;
@@ -97,6 +101,8 @@ pub struct Passkeys {
     /// The Android apps that may use them too, see [`crate::asset_links`].
     android_apps: Vec<AndroidApp>,
     ceremonies: Mutex<HashMap<String, Ceremony>>,
+    /// How many ceremonies are kept at most ([`MAX_CEREMONIES`]).
+    capacity: usize,
 }
 
 /// One ceremony under way, waiting for the device's answer.
@@ -123,6 +129,17 @@ enum Kind {
         session: Vec<u8>,
         state: PasskeyAuthentication,
     },
+}
+
+impl Kind {
+    /// The account whose session asked for it; none for a login, which
+    /// anybody can start.
+    fn account(&self) -> Option<i32> {
+        match self {
+            Self::Register { account_id, .. } | Self::Proof { account_id, .. } => Some(*account_id),
+            Self::Login { .. } => None,
+        }
+    }
 }
 
 impl Passkeys {
@@ -175,6 +192,7 @@ impl Passkeys {
             webauthn,
             android_apps,
             ceremonies: Mutex::default(),
+            capacity: MAX_CEREMONIES,
         })
     }
 
@@ -184,7 +202,13 @@ impl Passkeys {
     }
 
     /// Keeps a ceremony and returns its name, or refuses when too many are
-    /// open, in all or of this sender.
+    /// open: logins of this sender, or ceremonies of this account.
+    ///
+    /// A login needs no session, so whoever has many networks could start
+    /// them by the thousand. When all places are taken, the oldest login
+    /// makes room: such a flood can end logins that wait for their device,
+    /// but never keeps out what a session does with passkeys, and never
+    /// blocks the table for the five minutes a ceremony lasts.
     fn open(&self, kind: Kind, sender: IpAddr, now: Instant) -> Result<String, AppError> {
         let sender = login::network(sender);
         let mut ceremonies = self
@@ -192,13 +216,41 @@ impl Passkeys {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         ceremonies.retain(|_, ceremony| ceremony.until > now);
-        let of_sender = ceremonies
-            .values()
-            .filter(|ceremony| ceremony.sender == sender)
-            .count();
-        if ceremonies.len() >= MAX_CEREMONIES || of_sender >= MAX_PER_SENDER {
-            let message = "too many passkey ceremonies, try again later";
+        let message = "too many passkey ceremonies, try again later";
+        let account = kind.account();
+        let (same, most) = match account {
+            None => (
+                ceremonies
+                    .values()
+                    .filter(|ceremony| {
+                        ceremony.kind.account().is_none() && ceremony.sender == sender
+                    })
+                    .count(),
+                MAX_PER_SENDER,
+            ),
+            Some(_) => (
+                ceremonies
+                    .values()
+                    .filter(|ceremony| ceremony.kind.account() == account)
+                    .count(),
+                CEREMONIES_PER_ACCOUNT,
+            ),
+        };
+        if same >= most {
             return Err(AppError::TooMany(CEREMONY_TIME, message));
+        }
+        if ceremonies.len() >= self.capacity {
+            let oldest = ceremonies
+                .iter()
+                .filter(|(_, ceremony)| ceremony.kind.account().is_none())
+                .min_by_key(|(_, ceremony)| ceremony.until)
+                .map(|(id, _)| id.clone());
+            match oldest {
+                Some(id) => {
+                    ceremonies.remove(&id);
+                }
+                None => return Err(AppError::TooMany(CEREMONY_TIME, message)),
+            }
         }
         let id = URL_SAFE_NO_PAD.encode(random::<16>()?);
         ceremonies.insert(
@@ -999,6 +1051,81 @@ mod tests {
                 .is_ok()
         );
         assert!(passkeys.open(login(), ip, now + CEREMONY_TIME).is_ok());
+    }
+
+    #[test]
+    fn logins_cannot_keep_out_what_a_session_does_nor_block_the_table() {
+        let mut passkeys = Passkeys::new("https://reader.example").unwrap();
+        passkeys.capacity = 50;
+        let now = Instant::now();
+        let login = || {
+            let (_, state) = passkeys
+                .webauthn
+                .start_discoverable_authentication()
+                .unwrap();
+            Kind::Login { state }
+        };
+        let register = |account_id| {
+            let (_, state) = passkeys
+                .webauthn
+                .start_passkey_registration(Uuid::new_v4(), "ada", "ada", None)
+                .unwrap();
+            Kind::Register {
+                account_id,
+                session: vec![1],
+                name: "Phone".into(),
+                state,
+            }
+        };
+        // Whoever has many networks takes every place with logins, one
+        // second apart; the first one is the oldest.
+        let network = |n: usize| IpAddr::from([198, 51, u8::try_from(n / 10).unwrap(), 1]);
+        let mut first = None;
+        for n in 0..50 {
+            let at = now + Duration::from_secs(u64::try_from(n).unwrap());
+            let id = passkeys.open(login(), network(n), at).ok().unwrap();
+            first.get_or_insert(id);
+        }
+        assert_eq!(passkeys.open_ceremonies(), 50);
+        let later = now + Duration::from_secs(60);
+        // A login still starts: the oldest makes room.
+        let id = passkeys
+            .open(login(), "192.0.2.7".parse().unwrap(), later)
+            .ok()
+            .unwrap();
+        assert!(passkeys.take(first.as_ref().unwrap(), later).is_none());
+        assert!(passkeys.take(&id, later).is_some());
+        // So does a ceremony of a session, and it is not the one that goes.
+        let mine = passkeys
+            .open(register(7), "192.0.2.7".parse().unwrap(), later)
+            .ok()
+            .unwrap();
+        // More logins push out older logins, never it.
+        for n in 0..60 {
+            passkeys
+                .open(login(), network(n + 100), later)
+                .ok()
+                .unwrap();
+        }
+        assert_eq!(passkeys.open_ceremonies(), 50);
+        assert!(passkeys.take(&mine, later).is_some());
+        // An account has only so many under way, from wherever.
+        for _ in 0..CEREMONIES_PER_ACCOUNT {
+            passkeys
+                .open(register(8), "203.0.113.1".parse().unwrap(), later)
+                .ok()
+                .unwrap();
+        }
+        assert!(
+            passkeys
+                .open(register(8), "203.0.113.200".parse().unwrap(), later)
+                .is_err()
+        );
+        assert!(
+            passkeys
+                .open(register(9), "203.0.113.1".parse().unwrap(), later)
+                .is_ok()
+        );
     }
 
     #[test]

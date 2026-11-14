@@ -211,11 +211,17 @@ impl Mailer {
         })
     }
 
-    /// The link of the page that takes a token, as `https://site/?confirm=…`.
+    /// The link of the page that takes a token, as `https://site/#confirm=…`.
+    /// The token goes after the `#`, which a browser keeps to itself: it never
+    /// reaches the server or a proxy in front of it, whose logs would have it.
     pub fn link(&self, what: &str, token: &str) -> String {
         let mut url = self.site.clone();
         url.set_path("/");
-        url.query_pairs_mut().clear().append_pair(what, token);
+        url.set_query(None);
+        let pair: String = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair(what, token)
+            .finish();
+        url.set_fragment(Some(&pair));
         url.into()
     }
 
@@ -377,7 +383,7 @@ mod tests {
         let (mailer, _) = Mailer::in_memory("https://reader.example/some/path").unwrap();
         assert_eq!(
             mailer.link("confirm", "abc-_1"),
-            "https://reader.example/?confirm=abc-_1"
+            "https://reader.example/#confirm=abc-_1"
         );
         assert_eq!(mailer.site(), "reader.example");
     }

@@ -217,7 +217,9 @@ async function send(
 	/** The request may outlive the page, as one sent while it is left. */
 	keepalive = false,
 	/** What a `Blob` is said to be. */
-	kind = OPML
+	kind = OPML,
+	/** Headers of this request alone, such as a token that is not to be in the address. */
+	extra: Record<string, string> = {}
 ): Promise<Response> {
 	const file = body instanceof Blob;
 	let response: Response;
@@ -228,6 +230,7 @@ async function send(
 			keepalive,
 			headers: {
 				'X-Rueder-Tab': TAB,
+				...extra,
 				...(body === undefined ? {} : { 'Content-Type': file ? kind : 'application/json' })
 			},
 			body: body === undefined ? undefined : file ? body : JSON.stringify(body)
@@ -246,8 +249,14 @@ async function send(
 /** A request as a report names it: without what follows the `?`. */
 const asked = (method: string, path: string) => `${method} ${path.split('?')[0]}`;
 
-async function call<T>(method: string, path: string, body?: unknown, kind?: string): Promise<T> {
-	const response = await send(method, path, body, false, kind);
+async function call<T>(
+	method: string,
+	path: string,
+	body?: unknown,
+	kind?: string,
+	extra?: Record<string, string>
+): Promise<T> {
+	const response = await send(method, path, body, false, kind, extra);
 	if (response.status === 204) return undefined as T;
 	try {
 		return (await response.json()) as T;
@@ -303,9 +312,13 @@ export const api = {
 
 	/** Whether anybody can register, and whether an invitation can be used; for anybody. */
 	registering: (invite?: string) =>
+		// The token goes in a header, not the address, which proxies write down.
 		call<Registering>(
 			'GET',
-			invite ? `/register?invite=${encodeURIComponent(invite)}` : '/register'
+			'/register',
+			undefined,
+			undefined,
+			invite ? { 'X-Rueder-Invite': invite } : undefined
 		),
 	/**
 	 * Makes an account and logs it in; where every account needs a confirmed

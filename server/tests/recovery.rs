@@ -135,7 +135,7 @@ async fn mails(outbox: &Outbox, count: usize) -> Vec<Sent> {
 
 /// The token of the link in a mail.
 fn token(mail: &Sent) -> String {
-    let start = mail.body.find("?reset=").expect("a link") + "?reset=".len();
+    let start = mail.body.find("#reset=").expect("a link") + "#reset=".len();
     mail.body[start..]
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
@@ -215,7 +215,7 @@ async fn whoever_is_asked_for_gets_the_same_answer(db: PgPool) {
     );
     assert_eq!(sent[0], first[0]);
     assert_eq!(sent[0].subject, subject(Template::Reset, Language::En));
-    assert!(sent[0].body.contains("https://reader.example/?reset="));
+    assert!(sent[0].body.contains("https://reader.example/#reset="));
     assert!(sent[0].body.contains("30 minutes"));
     // Only the newest counts.
     assert_eq!(
@@ -455,4 +455,33 @@ async fn of_links_asked_for_at_once_one_is_left(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(left, 1);
+}
+
+#[sqlx::test]
+async fn links_to_a_new_password_have_a_share_of_the_day_of_their_own(db: PgPool) {
+    let hour = Duration::from_secs(3600);
+    let (state, outbox) = server(&db, Mode::Optional).await;
+    let room = Rate::new(100, hour);
+    let state = state.with_rates(
+        Rates::default()
+            .with_mails(room, room, room)
+            .with_reset_mails(Rate::new(2, hour)),
+    );
+    for name in ["ada", "bob", "carol"] {
+        account(&db, name, Some(&format!("{name}@example.org"))).await;
+        forgot(&state, name).await;
+    }
+    // Whoever asks for many uses up the share of such links ...
+    let sent = mails(&outbox, 2).await;
+    assert!(sent.iter().all(|mail| mail.body.contains("#reset=")));
+    // ... and not the mail of everybody else: an address is still confirmed.
+    let dora = account(&db, "dora", None).await;
+    let cookie = common::session(&db, dora).await;
+    let body = serde_json::json!({ "email": "dora@example.org", "password": PASSWORD });
+    let (status, _) =
+        common::call(&state, Method::PUT, "/api/email", Some(&cookie), Some(body)).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let sent = mails(&outbox, 3).await;
+    assert_eq!(sent[2].to, "dora@example.org");
+    assert!(sent[2].body.contains("#confirm="));
 }

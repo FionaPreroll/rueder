@@ -82,10 +82,21 @@ export type ResetFailure =
 	| { kind: 'invalid'; reason: string }
 	| { kind: 'unreachable' };
 
-/** The token of a link to set a new password in the page's address: `/?reset=<token>`. */
-function resetToken(): string | null {
+/**
+ * A token the page's address brings, as `/#reset=<token>`: after the `#`,
+ * which the browser keeps to itself, so that no server or proxy in front of it
+ * writes the token into its logs. Links sent before that have it in the query
+ * (`/?reset=<token>`), which is read too.
+ */
+function fromAddress(name: 'reset' | 'confirm' | 'invite'): string | null {
 	if (typeof location === 'undefined') return null;
-	return new URLSearchParams(location.search).get('reset') || null;
+	const after = new URLSearchParams(location.hash.replace(/^#/, '')).get(name);
+	return after || new URLSearchParams(location.search).get(name) || null;
+}
+
+/** The token of a link to set a new password in the page's address. */
+function resetToken(): string | null {
+	return fromAddress('reset');
 }
 
 /** An account that was made and waits for its address, which the login page says. */
@@ -94,10 +105,9 @@ export interface Awaiting {
 	address: string;
 }
 
-/** The token of a link from a mail in the page's address: `/?confirm=<token>`. */
+/** The token of a link from a mail that confirms an address, in the page's address. */
 function confirmToken(): string | null {
-	if (typeof location === 'undefined') return null;
-	return new URLSearchParams(location.search).get('confirm') || null;
+	return fromAddress('confirm');
 }
 
 const minutes = (error: ApiError) => Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60));
@@ -123,10 +133,9 @@ export interface Invitation {
 	valid: boolean;
 }
 
-/** The token of the invitation in the page's address: `/?invite=<token>`. */
+/** The token of the invitation in the page's address. */
 function invitedBy(): string | null {
-	if (typeof location === 'undefined') return null;
-	return new URLSearchParams(location.search).get('invite') || null;
+	return fromAddress('invite');
 }
 
 export class Session {
@@ -257,6 +266,17 @@ export class Session {
 				this.confirmation = { kind: 'taken' };
 			else this.confirmation = { kind: 'unreachable' };
 		}
+	}
+
+	/**
+	 * Takes what a link brings in the address when only what follows the `#`
+	 * changes, as when a link is opened in a tab that shows rueder already:
+	 * that loads nothing, so the start of the page does not see it.
+	 */
+	linkArrived() {
+		this.takeResetLink();
+		void this.confirmFromAddress();
+		if (invitedBy()) void this.askWays();
 	}
 
 	/**
