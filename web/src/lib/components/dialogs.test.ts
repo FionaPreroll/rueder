@@ -782,7 +782,7 @@ describe('The password in the account settings', () => {
 		const reader = opened(false);
 		expect(screen.getByRole('tab', { name: 'Password' })).toBeInTheDocument();
 		expect(screen.queryByLabelText('Current password')).toBeNull();
-		expect(screen.getByText(/logs in through single sign-on/)).toBeInTheDocument();
+		expect(screen.getByText(/not only through single sign-on/)).toBeInTheDocument();
 		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
 		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secret');
 		await userEvent.click(screen.getByRole('button', { name: 'Set the password' }));
