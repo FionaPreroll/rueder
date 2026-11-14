@@ -1,10 +1,12 @@
 name: Pages
 
 # rueder's site on GitHub Pages (pages/README.md): an overview, the demo, the
-# self-hosting and app pages, and the documentation of the server's Rust and
-# the page's TypeScript, at https://<owner>.github.io/<repository>/. Every
-# pull request builds it, so a doc comment rustdoc cannot read or a link that
-# leads nowhere turns the check red; a push to main also publishes it.
+# self-hosting and app pages, the documentation of the server's Rust and the
+# page's TypeScript, and the pictures the README shows, at
+# https://<owner>.github.io/<repository>/. Every pull request builds it, so a
+# doc comment rustdoc cannot read, a picture that cannot be taken or a link
+# that leads nowhere turns the check red; a push to main also publishes it.
+# The pictures are taken anew each time and never committed.
 on:
   push:
     branches: [main]
@@ -56,8 +58,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The demo (the page as one file with made-up data) and the documentation of
-  # the page's TypeScript.
+  # The demo (the page as one file with made-up data), the pictures of it the
+  # README shows, and the documentation of the page's TypeScript.
   web:
     runs-on: ubuntu-latest
     defaults:
@@ -76,6 +78,9 @@ jobs:
           package_json_file: web/package.json
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:single
+      # The README's pictures, of the demo just built (web/showcase/).
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run showcase
       - run: RUEDER_DOCS_FOOTER="$(node ../pages/footer.js)" pnpm run build:docs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -89,6 +94,22 @@ jobs:
           path: web/build-docs
           if-no-files-found: error
           retention-days: 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pages-screenshots
+          path: web/showcase/out
+          if-no-files-found: error
+          retention-days: 1
+          # PNG files are packed already.
+          compression-level: 0
+      # What the browser saw when a picture could not be taken.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: showcase-report
+          path: |
+            web/playwright-report
+            web/test-results
 
   # The Android app's Java code. Its build.gradle stays as it is: the task
   # comes from pages/javadoc.gradle, so that the tools of the documentation
@@ -171,6 +192,10 @@ jobs:
         with:
           name: pages-app
           path: app/android/app/build/docs/javadoc
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pages-screenshots
+          path: web/showcase/out
       - run: node build.js --out ../_site
       # Also on pull requests: the run's artifact github-pages is the site as
       # it would be published, to look at before merging.

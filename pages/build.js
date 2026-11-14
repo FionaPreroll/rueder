@@ -39,7 +39,8 @@ export const parts = [
 		from: 'app/android/app/build/docs/javadoc',
 		to: 'docs/android-app/code',
 		how: './gradlew javadoc in app/android/'
-	}
+	},
+	{ from: 'web/showcase/out', to: 'screenshots', how: 'pnpm build:single && pnpm showcase in web/' }
 ];
 
 /** The READMEs that are pages of the site, with what goes above their text. */
@@ -68,6 +69,16 @@ export const foreignLinks = [
 
 const foreign = ({ page, link }) =>
 	foreignLinks.some((known) => page.startsWith(known.under) && known.link.test(link));
+
+/**
+ * The pictures the README at the top of the repository shows from the site,
+ * as their names under screenshots/. The README is not a page of the site, so
+ * it names them by their whole address.
+ */
+export const readmePictures = (markdown) =>
+	[...markdown.matchAll(/https:\/\/[\w-]+\.github\.io\/[\w.-]+\/screenshots\/([\w.-]+)/g)].map(
+		(match) => match[1]
+	);
 
 /** A page that sends the browser on to `to`, for addresses that only lead somewhere. */
 export const redirect = (to) =>
@@ -156,6 +167,12 @@ export function build({ repo, out, from }) {
 	}
 
 	const broken = brokenLinks(out, sitePath(from)).filter((found) => !foreign(found));
+	// The README's pictures come from the site, so the site has them.
+	for (const picture of readmePictures(readFileSync(join(repo, 'README.md'), 'utf8'))) {
+		if (!existsSync(join(out, 'screenshots', picture))) {
+			broken.push({ page: 'README.md', link: `screenshots/${picture}` });
+		}
+	}
 	if (broken.length) {
 		throw new Error(
 			`${broken.length} links lead nowhere:\n` +

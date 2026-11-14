@@ -1,8 +1,8 @@
 # rueder's site on GitHub Pages
 
 What is published at https://fionapreroll.github.io/rueder/: an overview, the
-demo and the documentation, put together from what the other parts of the
-repository build. Everything on it is in English.
+demo, the documentation and the pictures the README shows, put together from
+what the other parts of the repository build. Everything on it is in English.
 
 | Address                      | What                                     | Made from                         |
 | ---------------------------- | ---------------------------------------- | --------------------------------- |
@@ -13,6 +13,7 @@ repository build. Everything on it is in English.
 | `/rueder/docs/rest-api/`     | every route of the server (OpenAPI)      | `server/openapi.json`, Swagger UI |
 | `/rueder/docs/rust/`         | the server's code                        | rustdoc, private items included   |
 | `/rueder/docs/frontend/`     | the page's TypeScript                    | TypeDoc over `web/src/lib`        |
+| `/rueder/screenshots/`       | the pictures in the README               | `pnpm showcase` in `web/`         |
 
 `/rueder/docs/` leads to the overview, and an address with nothing there gets
 `src/404.html`. Every page says at its foot which commit and day it was built
@@ -27,7 +28,7 @@ README of `web/`, `server/` and `app/`), from the top of the repository:
 ```sh
 export RUEDER_DOCS_FOOTER="$(node pages/footer.js)"
 node pages/footer.js --rustdoc > /tmp/footer.html
-(cd web && pnpm build:single && pnpm build:docs)
+(cd web && pnpm build:single && pnpm showcase && pnpm build:docs)
 (cd server && RUSTDOCFLAGS="-D warnings --html-after-content /tmp/footer.html" \
   cargo doc --no-deps --lib --document-private-items)
 (cd app && pnpm run sync)
@@ -56,6 +57,12 @@ and open http://localhost:8000/rueder/.
   the app anew whenever something in `app/` changes.
 - The demo is the single-file build, which finds its pages by the part of the
   address after the `#`, so it runs from any folder.
+- The README at the top of the repository shows pictures of the demo from
+  `/rueder/screenshots/`, light or dark as GitHub is for the reader
+  (`<picture>`). `pnpm showcase` in `web/` takes them anew for every run of
+  the workflow (`web/showcase/`), so they always show `main` and none is ever
+  committed. The README names them by their whole address, and `build.js`
+  fails if it names one the site does not have (`readmePictures`).
 
 ## Publishing
 

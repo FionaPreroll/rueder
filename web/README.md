@@ -118,6 +118,20 @@ it up in `screenshots/out/measure.md`, against the measure of the design review
 most 80 characters to the line. The colors are checked by
 `src/routes/colors.test.ts` with the other tests.
 
+## The pictures in the README
+
+`pnpm showcase`, after `pnpm build:single`, takes the pictures the README at
+the top of the repository shows: what rueder does best, in the demo with its
+English made-up feeds, on a desktop and on a phone, light and dark. Each
+picture is a test of its own in `showcase/showcase.spec.ts`; the test serves the
+single-file build to the browser itself, so nothing else has to run, and stops
+the page's clock so that no made-up article arrives in the middle of a picture.
+The pictures land in `showcase/out/` as `<picture>-light.png` and
+`<picture>-dark.png`. The workflow Pages takes them for every pull request and
+publishes them with the site under `/rueder/screenshots/`, which is where the
+README finds them; they are never committed. A new picture gets its name in the
+README too.
+
 ## Conventions
 
 - Texts live in `src/lib/i18n/` (English and German); components read them as
