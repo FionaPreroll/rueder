@@ -328,6 +328,12 @@ docker compose exec rueder rueder registration set --email optional
 docker compose exec rueder rueder registration set --email required
 ```
 
+With an address, readers who forgot their password get a link from "Forgot
+your password?" on the login page, good for 30 minutes and once. It sets a new
+password and logs out every browser and device of the account; logging in
+still asks for a second factor where the account has one. Without addresses
+you set a forgotten password yourself with `rueder account password`.
+
 `--email off`, the default, asks nobody. A link is good for 24 hours and once;
 an account made with `required` that never opens its link goes after 7 days.
 rueder sends at most 5 mails an hour for an account, 3 to an address and one

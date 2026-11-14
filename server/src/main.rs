@@ -918,6 +918,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             if let Err(err) = rueder::email::sweep(&sessions).await {
                 tracing::error!("removing old links and unconfirmed accounts: {err:#}");
             }
+            if let Err(err) = rueder::recovery::sweep(&sessions).await {
+                tracing::error!("removing old links to set a password: {err:#}");
+            }
             if let Err(err) = reports::sweep(&sessions).await {
                 tracing::error!("removing old reports of errors: {err:#}");
             }

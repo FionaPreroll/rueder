@@ -216,6 +216,7 @@ const en = {
 		resend: 'Send the link again',
 		resent: 'The link is on its way again. Look in your mail, and in its spam folder too.',
 		resendWrong: 'Enter the name and the password of the account to have the link sent again.',
+		forgot: 'Forgot your password?',
 		removed: 'Your account is deleted, with everything that was yours.',
 		note: 'There is no sign-up. Accounts are made by whoever runs this rueder.'
 	},
@@ -261,6 +262,33 @@ const en = {
 		awaitingTitle: 'Check your mail',
 		awaiting: (address: string, hours: number) =>
 			`The account is made. A link went to ${address}: open it within ${n(hours)} hours, then log in.`
+	},
+
+	forgot: {
+		title: 'Forgot your password?',
+		intro:
+			'Give the name of your account or its email address. Where the account has a confirmed address, a link goes to it that sets a new password.',
+		field: 'Name or email address',
+		submit: 'Send the link',
+		asked: (minutes: number) =>
+			`If there is such an account with a confirmed address, a link is on its way to it, good for ${n(minutes)} minutes. Look in the spam folder too.`,
+		tooMany: (minutes: number) =>
+			`Asked too often. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
+		back: 'Back to the login'
+	},
+
+	reset: {
+		title: 'Set a new password',
+		intro:
+			'Every browser and device of the account is logged out. Where the account has a second factor, logging in still asks for it.',
+		fresh: 'New password',
+		again: 'New password again',
+		submit: 'Set the password',
+		mismatch: 'The two do not match.',
+		gone: 'This link cannot be used any more: it was used, a newer one was sent, or it is more than half an hour old. Ask for a new one.',
+		invalid: (reason: string) => `The server did not take that password. It says: ${reason}`,
+		done: 'The password is set. Log in with it.',
+		cancel: 'Cancel'
 	},
 
 	email: {

@@ -182,6 +182,8 @@ export class FakeServer {
 	links = new Map<string, { name: string; email: string }>();
 	/** The mails sent, oldest first. */
 	mails: { to: string; token: string; language: unknown }[] = [];
+	/** The links that set a new password, by their token: for which account. */
+	resets = new Map<string, string>();
 	/** The invitations of the account that is logged in, the newest first. */
 	invites: FakeInvite[] = [];
 	/** For how many accounts a reader who is no admin may invite in all, and how long a link is good. */
@@ -433,8 +435,39 @@ export class FakeServer {
 				oidc: this.oidc,
 				registration: this.registrationOpen && !this.noRoom,
 				passkeys: this.passkeysOn,
+				password_reset: this.emailMode !== 'off',
 				legal: this.legal
 			});
+		}
+		if (method === 'POST' && path === '/password/forgot') {
+			if (this.emailMode === 'off') return refused(404);
+			const who = String(data.name ?? '')
+				.trim()
+				.toLowerCase();
+			if (!who) return refused(400, 'give the name or the address');
+			const name = this.accounts.has(who)
+				? who
+				: [...this.emails].find(([, email]) => email.toLowerCase() === who)?.[0];
+			const to = name ? this.emails.get(name) : undefined;
+			if (name && to) {
+				for (const [token, owner] of this.resets) if (owner === name) this.resets.delete(token);
+				const token = `reset-${this.mails.length + 1}`;
+				this.resets.set(token, name);
+				this.mails.push({ to, token, language: undefined });
+			}
+			return empty(202);
+		}
+		if (method === 'POST' && path === '/password/reset') {
+			if (this.emailMode === 'off') return refused(404);
+			const name = this.resets.get(String(data.token));
+			if (String(data.new ?? '').length < 8) {
+				return refused(400, 'the password is shorter than 8 characters');
+			}
+			if (!name) return refused(404);
+			this.resets.delete(String(data.token));
+			this.accounts.set(name, String(data.new));
+			if (this.signedIn === name) this.signedIn = null;
+			return empty();
 		}
 		if (method === 'POST' && path === '/login/passkey') {
 			if (!this.passkeysOn) return refused(404);

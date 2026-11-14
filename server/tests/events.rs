@@ -253,6 +253,10 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/email", area(Area::Session)),
         ("/api/email/confirm", None),
         ("/api/email/resend", None),
+        // Asking for a new password changes nothing; setting it publishes for
+        // itself, as nobody is logged in to it.
+        ("/api/password/forgot", None),
+        ("/api/password/reset", None),
     ] {
         assert_eq!(changed(path), what, "{path}");
     }

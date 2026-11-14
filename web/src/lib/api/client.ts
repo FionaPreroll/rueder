@@ -29,6 +29,8 @@ import type {
 	Credentials,
 	Farewell,
 	NewPassword,
+	ForgotPassword,
+	ResetPassword,
 	Feed,
 	FindFeeds,
 	Folder,
@@ -288,6 +290,17 @@ export const api = {
 	 */
 	changePassword: (current: string, fresh: string) =>
 		call<void>('PUT', '/password', { current, new: fresh } satisfies NewPassword),
+
+	/**
+	 * Asks for a link that sets a new password, by the account's name or its
+	 * address. The server answers the same, with nothing to read, whoever it is.
+	 */
+	forgotPassword: async (name: string) => {
+		await send('POST', '/password/forgot', { name } satisfies ForgotPassword);
+	},
+	/** Sets a new password with the token from that link; it does not log in. */
+	resetPassword: (token: string, fresh: string) =>
+		call<void>('POST', '/password/reset', { token, new: fresh } satisfies ResetPassword),
 
 	/** Whether anybody can register, and whether an invitation can be used; for anybody. */
 	registering: (invite?: string) =>

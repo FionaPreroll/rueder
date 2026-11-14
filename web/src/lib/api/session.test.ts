@@ -443,3 +443,59 @@ describe('Session with addresses', () => {
 		});
 	});
 });
+
+describe('Forgot password', () => {
+	it('asks for a link, and gets the same answer for whoever it is', async () => {
+		server.signedIn = null;
+		server.emailMode = 'optional';
+		server.emails.set('fiona', 'fiona@example.org');
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.ways.password_reset).toBe(true));
+		expect(await session.forgot(' fiona ')).toEqual({ kind: 'asked' });
+		expect(await session.forgot('nobody')).toEqual({ kind: 'asked' });
+		expect(server.mails.map((mail) => mail.to)).toEqual(['fiona@example.org']);
+		expect(server.requests.at(-1)?.body).toEqual({ name: 'nobody' });
+		server.refuse('POST', /^\/password\/forgot$/, 429, 1, 'asked too often', {
+			'Retry-After': '300'
+		});
+		expect(await session.forgot('fiona')).toEqual({ kind: 'tooMany', minutes: 5 });
+		server.down = true;
+		expect(await session.forgot('fiona')).toEqual({ kind: 'unreachable' });
+	});
+
+	it('takes the link from the address and sets the new password with it, without logging in', async () => {
+		server.emailMode = 'optional';
+		server.emails.set('fiona', 'fiona@example.org');
+		server.resets.set('a-token', 'fiona');
+		history.replaceState(null, '', '/?reset=a-token');
+		const session = new Session();
+		session.takeResetLink();
+		expect(session.resetting).toBe('a-token');
+		expect(location.search).toBe('');
+		await session.check();
+		expect(session.state).toBe('in');
+
+		expect(await session.resetPassword('short')).toEqual({
+			kind: 'invalid',
+			reason: 'the password is shorter than 8 characters'
+		});
+		expect(session.resetting).toBe('a-token');
+		expect(await session.resetPassword('a brand new one')).toBeNull();
+		expect(server.accounts.get('fiona')).toBe('a brand new one');
+		expect(session.resetting).toBeNull();
+		expect(session.passwordSet).toBe(true);
+		// The account's sessions ended, this browser's too.
+		expect(session.state).toBe('out');
+	});
+
+	it('says when the link is no good any more', async () => {
+		server.emailMode = 'optional';
+		history.replaceState(null, '', '/?reset=gone');
+		const session = new Session();
+		session.takeResetLink();
+		expect(await session.resetPassword('a brand new one')).toEqual({ kind: 'gone' });
+		expect(session.resetting).toBeNull();
+		expect(await session.resetPassword('a brand new one')).toEqual({ kind: 'gone' });
+	});
+});
