@@ -735,6 +735,9 @@ pub fn changed(path: &str) -> Option<Changed> {
         // A link that is opened or sent again has no session to announce it
         // by; opening it tells the account's tabs itself (see `email`).
         ["email", "confirm" | "resend"] => return None,
+        // Asking changes nothing yet; setting the password publishes for itself,
+        // as nobody is logged in to it.
+        ["password", "forgot" | "reset"] => return None,
         // A new address waits for its link, or one goes: `me` says it.
         ["email"] => Changed::Area(Area::Session),
         // Questions that are sent like changes: what a rule would do, and

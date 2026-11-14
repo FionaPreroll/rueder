@@ -114,17 +114,28 @@ export async function mailsTo(address: string) {
 	return (await answer.json()) as { to: string; subject: string; body: string }[];
 }
 
-/** The link in the newest mail to this address, once it has come. */
-export async function linkIn(address: string) {
+/**
+ * The link in the newest mail to this address once it has come: one that
+ * confirms the address, or one that sets a new password.
+ */
+export async function linkIn(address: string, kind: 'confirm' | 'reset' = 'confirm') {
+	const pattern = new RegExp(`https?://\\S+\\?${kind}=[\\w-]+`);
 	let link: string | undefined;
 	await expect
 		.poll(async () => {
 			const mails = await mailsTo(address);
-			link = /https?:\/\/\S+\?confirm=[\w-]+/.exec(mails.at(-1)?.body ?? '')?.[0];
+			link = pattern.exec(mails.at(-1)?.body ?? '')?.[0];
 			return link;
 		})
 		.toBeTruthy();
 	return link as string;
+}
+
+/** Says something to the run's database, as the operator could: for what no request does. */
+export function sql(statement: string) {
+	execFileSync('psql', [database(), '--quiet', '-c', statement], {
+		stdio: ['ignore', 'ignore', 'inherit']
+	});
 }
 
 /** How long a test waits for what a fetch brings: a round of the server and some. */

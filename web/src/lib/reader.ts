@@ -58,6 +58,9 @@ export type EmailMode = 'off' | 'optional' | 'required';
 /** How many hours the link that confirms an address is good for (`email::LINK_HOURS`). */
 export const EMAIL_LINK_HOURS = 24;
 
+/** How many minutes a link that sets a new password is good for (`recovery::LINK_MINUTES`). */
+export const RESET_LINK_MINUTES = 30;
+
 /** A passkey, as the list shows it. */
 export interface PasskeyItem {
 	id: number;

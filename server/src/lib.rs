@@ -64,6 +64,7 @@ pub mod profile;
 pub mod rate;
 pub mod reading;
 pub mod reclean;
+pub mod recovery;
 pub mod registration;
 pub mod reports;
 pub mod retention;
@@ -113,6 +114,9 @@ pub struct AppState {
     pub images: Option<Arc<ImageProxy>>,
     /// The count of wrong passwords.
     pub logins: Arc<Limiter>,
+    /// The count of asking for a link to set a new password, as for wrong
+    /// passwords but apart from them (see `recovery`).
+    pub resets: Arc<Limiter>,
     /// The header a reverse proxy in front of the server names the sender's
     /// address in. Without one, the address of the connection counts.
     pub client_ip_header: Option<HeaderName>,
@@ -159,6 +163,7 @@ impl AppState {
             db,
             images: None,
             logins: Arc::default(),
+            resets: Arc::default(),
             client_ip_header: None,
             oidc: None,
             rules: None,
@@ -426,6 +431,7 @@ fn api_routes() -> OpenApiRouter<AppState> {
         .merge(passkeys::routes())
         .merge(registration::routes())
         .merge(email::routes())
+        .merge(recovery::routes())
         .merge(status::routes())
         .merge(reports::routes())
         .merge(transfer::routes())

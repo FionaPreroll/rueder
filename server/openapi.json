@@ -3608,6 +3608,69 @@
         }
       }
     },
+    "/api/password/forgot": {
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Mails a link that sets a new password to the confirmed address of the account with this name or this address, if there is one. The answer is the same whether there is or not, and comes before the mail goes.",
+        "operationId": "forgot_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Asked. If there is such an account with a confirmed address, a link is on its way to it; the answer says neither."
+          },
+          "400": {
+            "description": "No name or address given, or a longer one than there can be."
+          },
+          "404": {
+            "description": "This server keeps no addresses or sends no mail."
+          },
+          "429": {
+            "description": "Asked too often for this name or from this sender; see `Retry-After`."
+          }
+        }
+      }
+    },
+    "/api/password/reset": {
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Sets a new password with the link from a mail. Every session and app password of the account ends, and so does the link; it does not log in. An unknown, used, replaced or old link gets the same answer.",
+        "operationId": "reset_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The account has the new password; it logs in with it as always, with its second factor where it has one."
+          },
+          "400": {
+            "description": "A password that cannot be one; the answer says why."
+          },
+          "404": {
+            "description": "No such link, or not any more: used, replaced by a newer one, older than half an hour, or the account has another address now. Also where this server keeps no addresses."
+          }
+        }
+      }
+    },
     "/api/status": {
       "get": {
         "tags": [
@@ -6591,6 +6654,18 @@
           }
         }
       },
+      "ForgotPassword": {
+        "type": "object",
+        "description": "What `POST /api/password/forgot` reads: the account's name or its address.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "FoundFeeds": {
         "type": "object",
         "description": "What `POST /api/feeds/find` answers.",
@@ -7086,6 +7161,7 @@
           "oidc",
           "registration",
           "passkeys",
+          "password_reset",
           "legal"
         ],
         "properties": {
@@ -7100,6 +7176,10 @@
           "passkeys": {
             "type": "boolean",
             "description": "With a passkey, at `/api/login/passkey`."
+          },
+          "password_reset": {
+            "type": "boolean",
+            "description": "A forgotten password can be set anew with a link mailed to the\naccount's address, at `/api/password/forgot`."
           },
           "legal": {
             "$ref": "#/components/schemas/LegalLinks",
@@ -7896,6 +7976,22 @@
             "type": "string"
           },
           "password": {
+            "type": "string"
+          }
+        }
+      },
+      "ResetPassword": {
+        "type": "object",
+        "description": "What `POST /api/password/reset` reads: the token from the link and the new\npassword.",
+        "required": [
+          "token",
+          "new"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "new": {
             "type": "string"
           }
         }

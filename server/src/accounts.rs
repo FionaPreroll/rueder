@@ -17,7 +17,7 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use tokio::sync::Semaphore;
 
@@ -194,17 +194,36 @@ pub async fn set_password(
     let password_hash = hash(password).await?;
     let mut tx = db.begin().await?;
     let account_id = sqlx::query_scalar!(
-        "UPDATE accounts SET password_hash = $2 WHERE lower(username) = lower($1) RETURNING id",
+        "SELECT id FROM accounts WHERE lower(username) = lower($1) FOR UPDATE",
         name.trim(),
-        password_hash,
     )
     .fetch_optional(&mut *tx)
     .await?;
     let Some(account_id) = account_id else {
         return Ok(Ok(false));
     };
+    replace_password(&mut tx, account_id, &password_hash).await?;
+    tx.commit().await?;
+    Ok(Ok(true))
+}
+
+/// Gives the account a new password, already hashed, and ends what the old
+/// one opened: every session, every app password, and any link to set a new
+/// password that was mailed before.
+pub(crate) async fn replace_password(
+    conn: &mut PgConnection,
+    account_id: i32,
+    password_hash: &str,
+) -> anyhow::Result<()> {
+    sqlx::query!(
+        "UPDATE accounts SET password_hash = $2 WHERE id = $1",
+        account_id,
+        password_hash,
+    )
+    .execute(&mut *conn)
+    .await?;
     sqlx::query!("DELETE FROM sessions WHERE account_id = $1", account_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     // And so do the app passwords: whoever had the account's password may
     // have made some.
@@ -212,10 +231,15 @@ pub async fn set_password(
         "DELETE FROM app_passwords WHERE account_id = $1",
         account_id
     )
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
-    tx.commit().await?;
-    Ok(Ok(true))
+    sqlx::query!(
+        "DELETE FROM password_resets WHERE account_id = $1",
+        account_id
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 /// Makes an account an admin, or an admin a reader again. False if there is

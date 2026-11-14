@@ -18,7 +18,8 @@
 
 	onMount(() => {
 		void session.check();
-		// The page may have been opened with the link from a mail.
+		// The page may have been opened with a link from a mail.
+		session.takeResetLink();
 		void session.confirmFromAddress();
 		// The dev server has no worker, and one would keep its files from changing.
 		if (dev) return;
@@ -32,7 +33,8 @@
 	});
 </script>
 
-{#if session.reader}
+<!-- A link to set a new password shows its form, whoever is logged in here. -->
+{#if session.reader && !session.resetting}
 	<!-- Another account gets a page of its own, with nothing left of the one before. -->
 	{#key session.reader}
 		<!-- A part of the page that fails to draw is reported, if the account agreed, and the page offers to start again. -->

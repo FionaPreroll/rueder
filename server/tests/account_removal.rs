@@ -231,6 +231,17 @@ async fn fill(db: &PgPool, account_id: i32, name: &str, shared: i32) -> i32 {
     .execute(db)
     .await
     .unwrap();
+    // And a link to set a new password.
+    sqlx::query(
+        "INSERT INTO password_resets (token_hash, account_id, email, expires_at)
+         VALUES (sha256($2::bytea), $1, $3, now() + interval '30 minutes')",
+    )
+    .bind(account_id)
+    .bind(format!("reset-{name}").into_bytes())
+    .bind(format!("{name}@example.org"))
+    .execute(db)
+    .await
+    .unwrap();
     assert!(
         oidc::link(db, name, "https://id.example", &format!("{name}-subject"))
             .await

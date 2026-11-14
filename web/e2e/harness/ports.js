@@ -64,5 +64,6 @@ export const ACCOUNTS = [
 	'unreader',
 	'cutoff',
 	'waiter',
-	'addressee'
+	'addressee',
+	'forgetful'
 ];

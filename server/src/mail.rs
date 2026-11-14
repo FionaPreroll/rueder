@@ -1,5 +1,6 @@
-//! Mail to readers (work package 5.4, E6): the link that confirms an address,
-//! and the notice to an address an account no longer has.
+//! Mail to readers (work packages 5.4 and 5.5, E6): the link that confirms an
+//! address, the notice to an address an account no longer has, the link that
+//! sets a new password and the notice that one was set.
 //!
 //! Mail goes by SMTP to the one relay the operator names in `SMTP_URL`, from
 //! the address in `MAIL_FROM`; the links in it lead to `PUBLIC_URL`. This is
@@ -62,10 +63,20 @@ pub enum Template {
     /// To the address an account had before: `{name}`, `{site}`, `{address}`
     /// (the new one, partly hidden).
     Changed,
+    /// The link that sets a new password: `{name}`, `{site}`, `{link}`,
+    /// `{minutes}`.
+    Reset,
+    /// After a new password was set with that link: `{name}`, `{site}`.
+    PasswordChanged,
 }
 
 impl Template {
-    pub const ALL: [Template; 2] = [Template::Confirm, Template::Changed];
+    pub const ALL: [Template; 4] = [
+        Template::Confirm,
+        Template::Changed,
+        Template::Reset,
+        Template::PasswordChanged,
+    ];
 
     /// The file of the mail in this language, as it is built into the program.
     pub fn text(self, language: Language) -> &'static str {
@@ -74,6 +85,14 @@ impl Template {
             (Self::Confirm, Language::De) => include_str!("../templates/mail/de/confirm.txt"),
             (Self::Changed, Language::En) => include_str!("../templates/mail/en/changed.txt"),
             (Self::Changed, Language::De) => include_str!("../templates/mail/de/changed.txt"),
+            (Self::Reset, Language::En) => include_str!("../templates/mail/en/reset.txt"),
+            (Self::Reset, Language::De) => include_str!("../templates/mail/de/reset.txt"),
+            (Self::PasswordChanged, Language::En) => {
+                include_str!("../templates/mail/en/password_changed.txt")
+            }
+            (Self::PasswordChanged, Language::De) => {
+                include_str!("../templates/mail/de/password_changed.txt")
+            }
         }
     }
 
@@ -82,6 +101,8 @@ impl Template {
         match self {
             Self::Confirm => &["name", "site", "link", "hours"],
             Self::Changed => &["name", "site", "address"],
+            Self::Reset => &["name", "site", "link", "minutes"],
+            Self::PasswordChanged => &["name", "site"],
         }
     }
 }

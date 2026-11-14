@@ -108,6 +108,11 @@ export type LoginWays = {
 	 */
 	passkeys: boolean,
 	/**
+	 * A forgotten password can be set anew with a link mailed to the
+	 * account's address, at `/api/password/forgot`.
+	 */
+	password_reset: boolean,
+	/**
 	 * The operator's legal texts, for the login page to link to.
 	 */
 	legal: LegalLinks,
@@ -711,6 +716,22 @@ export type Confirmed = {
 export type Resend = {
 	username: string,
 	password: string,
+};
+
+/**
+ * What `POST /api/password/forgot` reads: the account's name or its address.
+ */
+export type ForgotPassword = {
+	name: string,
+};
+
+/**
+ * What `POST /api/password/reset` reads: the token from the link and the new
+ * password.
+ */
+export type ResetPassword = {
+	token: string,
+	new: string,
 };
 
 /**

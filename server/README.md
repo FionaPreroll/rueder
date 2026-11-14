@@ -92,6 +92,10 @@ What is here:
   `/api/email/confirm`); with `required` a new account logs in only after
   that. Mail goes by SMTP to the relay in `SMTP_URL`, from `MAIL_FROM`, with
   links to `PUBLIC_URL`; its texts are in `templates/mail/`.
+- Forgot password (`src/recovery.rs`): where accounts have addresses,
+  `POST /api/password/forgot` mails a link to the account's confirmed address,
+  with the same answer whoever is asked for, and `POST /api/password/reset`
+  sets the new password with it, ending every session; it does not log in.
 - The operator's legal texts (`src/legal.rs`): with `LEGAL_IMPRINT_URL`,
   `LEGAL_PRIVACY_URL` and `LEGAL_TERMS_URL` the page links to them, and with
   `TERMS_VERSION` every account agrees to that version of the terms

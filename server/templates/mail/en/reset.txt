@@ -1,0 +1,13 @@
+Set a new password for rueder
+Hello {name},
+
+somebody, most likely you, asked to set a new password for the account
+"{name}" on {site}. To do so, open this link within {minutes} minutes:
+
+{link}
+
+The link works once. Setting the new password logs out every browser and
+device of the account. Where the account has a second factor, logging in
+still asks for it.
+
+If that was not you, ignore this mail: without the link nothing changes.

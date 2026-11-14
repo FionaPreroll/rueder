@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE accounts SET password_hash = $2 WHERE lower(username) = lower($1) RETURNING id",
+  "query": "SELECT id FROM accounts WHERE lower(username) = lower($1) FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -17,7 +17,6 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text"
       ]
     },
@@ -25,5 +24,5 @@
       false
     ]
   },
-  "hash": "257fd430db44ccd65e2a046fd267aa9f6b77b2fb7660a2fc657858e741ac1e4a"
+  "hash": "a6f06a36d52aa5a0c7e23fe00f35318ecebf8a6627b2aa36c0a425fe2e2f00c9"
 }
