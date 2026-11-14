@@ -280,12 +280,11 @@ async fn only_an_admin_lists_and_makes_accounts(db: PgPool) {
             "{refused}"
         );
     }
-    assert!(
-        accounts::login(&db, "grace", "battery staple")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    let made: i64 = sqlx::query_scalar("SELECT count(*) FROM accounts WHERE username = 'grace'")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(made, 0);
 
     let (status, made) = add(Some(&admin), &new).await;
     assert_eq!(status, StatusCode::CREATED);

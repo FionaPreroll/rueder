@@ -531,7 +531,9 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
 #[sqlx::test]
 async fn linking_takes_the_owner_and_a_ticket_of_the_session_once(db: PgPool) {
     let (state, provider, issuer) = setup(&db).await;
-    let ada = rueder::accounts::create(&db, "ada", Some("correct horse"), false)
+    // Made up for this test, so that nothing here looks like a real password.
+    let password = uuid::Uuid::new_v4().to_string();
+    let ada = rueder::accounts::create(&db, "ada", Some(&password), false)
         .await
         .unwrap()
         .unwrap();
@@ -548,8 +550,7 @@ async fn linking_takes_the_owner_and_a_ticket_of_the_session_once(db: PgPool) {
             "{proof}"
         );
     }
-    let (status, ticket) =
-        link_ticket(&state, &laptop, json!({ "password": "correct horse" })).await;
+    let (status, ticket) = link_ticket(&state, &laptop, json!({ "password": password })).await;
     assert_eq!(status, StatusCode::OK);
     let path = format!("/api/oidc/start?link={ticket}");
     // Given to the laptop, it does not count on the phone, and is gone then.
@@ -559,7 +560,7 @@ async fn linking_takes_the_owner_and_a_ticket_of_the_session_once(db: PgPool) {
         assert_eq!(location(&headers), "/?oidc=failed");
     }
     // A new one starts once on the laptop, and ties the identity there.
-    let (_, ticket) = link_ticket(&state, &laptop, json!({ "password": "correct horse" })).await;
+    let (_, ticket) = link_ticket(&state, &laptop, json!({ "password": password })).await;
     let path = format!("/api/oidc/start?link={ticket}");
     let (headers, _) = log_in(
         &state,
@@ -578,7 +579,7 @@ async fn linking_takes_the_owner_and_a_ticket_of_the_session_once(db: PgPool) {
     );
     assert_eq!(count(&db, "account_identities").await, 1);
     // A newer ticket replaces the account's last.
-    let proof = json!({ "password": "correct horse" });
+    let proof = json!({ "password": password });
     let (_, first) = link_ticket(&state, &laptop, proof.clone()).await;
     let (_, second) = link_ticket(&state, &laptop, proof).await;
     let path = format!("/api/oidc/start?link={first}");

@@ -23,7 +23,18 @@ async fn log_in(
     name: &str,
     code: Option<&str>,
 ) -> (StatusCode, HeaderMap, String) {
-    let mut body = json!({ "username": name, "password": PASSWORD });
+    log_in_with(state, name, PASSWORD, code).await
+}
+
+/// Logs in through the server, with this password: how a test sees that a
+/// password counts, the way a browser would.
+async fn log_in_with(
+    state: &AppState,
+    name: &str,
+    password: &str,
+    code: Option<&str>,
+) -> (StatusCode, HeaderMap, String) {
+    let mut body = json!({ "username": name, "password": password });
     if let Some(code) = code {
         body["code"] = json!(code);
     }
@@ -568,11 +579,11 @@ async fn a_new_password_takes_the_code_too(db: PgPool) {
     right["code"] = json!(codes[0]);
     let (status, text) = said(&state, Method::PUT, "/api/password", &cookie, right).await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{text}");
-    assert!(
-        accounts::login(&db, "ada", "a new password")
-            .await
-            .unwrap()
-            .is_some()
+    // The new one is right: the login asks for the code next.
+    let (status, _, text) = log_in_with(&state, "ada", "a new password", None).await;
+    assert_eq!(
+        (status, text.as_str()),
+        (StatusCode::UNAUTHORIZED, "second factor needed")
     );
 }
 
@@ -617,12 +628,8 @@ async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPoo
         .await
         .unwrap();
     assert_eq!(made, 0);
-    assert!(
-        accounts::login(&db, "oidc", "a first password")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    let (status, _, _) = log_in_with(&state, "oidc", "a first password", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
     // Too old is no wrong try: logging in again and doing it still works.
     let young = common::session(&db, id).await;
     let (status, text) = said(
@@ -643,10 +650,6 @@ async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPoo
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{text}");
-    assert!(
-        accounts::login(&db, "oidc", "a first password")
-            .await
-            .unwrap()
-            .is_some()
-    );
+    let (status, _, _) = log_in_with(&state, "oidc", "a first password", None).await;
+    assert_eq!(status, StatusCode::OK);
 }
