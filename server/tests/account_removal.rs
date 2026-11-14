@@ -529,9 +529,7 @@ async fn a_disabled_account_cannot_log_in_and_is_told_so(db: PgPool) {
     assert_eq!(status, StatusCode::CREATED);
     let token = made["token"].as_str().unwrap().to_owned();
     let invite_works = |state: AppState, token: String| async move {
-        let path = format!("/api/register?invite={token}");
-        let (_, asked) = call(&state, Method::GET, &path, None, None).await;
-        asked["invite"] == true
+        common::registering(&state, &token).await["invite"] == true
     };
     assert!(invite_works(state.clone(), token.clone()).await);
     let grace = make(&db, "grace", false).await;

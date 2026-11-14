@@ -3262,12 +3262,15 @@
         "operationId": "registering",
         "parameters": [
           {
-            "name": "invite",
-            "in": "query",
-            "description": "The token of an invitation to ask about.",
+            "name": "X-Rueder-Invite",
+            "in": "header",
+            "description": "The token of an invitation to ask about, from the `#invite=` of its link.",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -7216,7 +7219,7 @@
       },
       "MadeInvite": {
         "type": "object",
-        "description": "A new invitation, with its token, which is never shown again. The link is\nthe page's address with `?invite=<token>`.",
+        "description": "A new invitation, with its token, which is never shown again. The link is\nthe page's address with `#invite=<token>`.",
         "required": [
           "id",
           "token",
@@ -7883,7 +7886,7 @@
       },
       "Registering": {
         "type": "object",
-        "description": "What the page for registering needs to know before anybody typed a name.\n\n`GET /api/register` answers with it, to anybody; with `?invite=<token>` it\nalso says whether that invitation can be used.",
+        "description": "What the page for registering needs to know before anybody typed a name.\n\n`GET /api/register` answers with it, to anybody; with the token of an\ninvitation in the header `X-Rueder-Invite` it also says whether that\ninvitation can be used.",
         "required": [
           "open",
           "email"

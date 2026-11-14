@@ -194,3 +194,20 @@ pub async fn raw(
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, headers, bytes.to_vec())
 }
+
+/// What `GET /api/register` says, asked about this invitation as the page
+/// asks: its token in the header, never in the address.
+pub async fn registering(state: &rueder::AppState, invite: &str) -> serde_json::Value {
+    use axum::body::Body;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let request = axum::http::Request::get("/api/register")
+        .header(rueder::registration::INVITE_HEADER, invite)
+        .body(Body::empty())
+        .unwrap();
+    let app = rueder::router(state.clone(), "missing".as_ref());
+    let response = app.oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null)
+}

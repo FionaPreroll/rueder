@@ -23,7 +23,7 @@ async function makeLink(page: Page) {
 	const dialog = await accountSettings(page, 'Invitations');
 	await dialog.getByRole('button', { name: 'Make a link' }).click();
 	const link = await dialog.getByLabel('The link, to pass on now').inputValue();
-	expect(link).toMatch(/^http:\/\/localhost:3210\/\?invite=[\w-]{43}$/);
+	expect(link).toMatch(/^http:\/\/localhost:3210\/#invite=[\w-]{43}$/);
 	return link;
 }
 
@@ -62,7 +62,7 @@ test('an admin invites with a link that makes one account', async ({ page, brows
 	// The new account is logged in, with an empty rueder of its own.
 	await expect(sidebar(guest)).toBeVisible();
 	await expect(guest.getByRole('button', { name: 'Logged in as invited-by-admin' })).toBeVisible();
-	expect(new URL(guest.url()).search).toBe('');
+	expect(new URL(guest.url()).hash).toBe('');
 
 	// The link is used up.
 	const late = await stranger(browser);

@@ -104,7 +104,7 @@ fn token_for(outbox: &Outbox, address: &str) -> String {
         .rev()
         .find(|mail| mail.to == address)
         .unwrap_or_else(|| panic!("no mail to {address}: {mails:?}"));
-    let start = mail.body.find("?confirm=").expect("a link") + "?confirm=".len();
+    let start = mail.body.find("#confirm=").expect("a link") + "#confirm=".len();
     mail.body[start..]
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
@@ -201,7 +201,7 @@ async fn where_it_is_optional_the_account_logs_in_at_once(db: PgPool) {
     assert_eq!(mails.len(), 1);
     assert_eq!(mails[0].to, "Ada@Example.org");
     assert!(mails[0].body.contains("ada"), "{}", mails[0].body);
-    assert!(mails[0].body.contains("https://reader.example/?confirm="));
+    assert!(mails[0].body.contains("https://reader.example/#confirm="));
     assert!(mails[0].body.contains("24"));
 
     let cookie = cookie(&headers);
@@ -806,12 +806,12 @@ async fn the_mail_goes_to_the_relay(db: PgPool) {
     let unfolded = quoted_printable(mail);
     assert!(unfolded.contains("Hallo nina"), "{unfolded}");
     assert!(
-        unfolded.contains("https://reader.example/?confirm="),
+        unfolded.contains("https://reader.example/#confirm="),
         "{unfolded}"
     );
 
     // The link from the relay's mail confirms the address.
-    let start = unfolded.find("?confirm=").unwrap() + "?confirm=".len();
+    let start = unfolded.find("#confirm=").unwrap() + "#confirm=".len();
     let token: String = unfolded[start..]
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')

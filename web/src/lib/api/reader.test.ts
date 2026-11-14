@@ -1027,7 +1027,7 @@ describe('invitations', () => {
 
 		// The link leads to this rueder and is shown this once.
 		const made = await reader.invite(2);
-		expect(made).toEqual({ link: `${location.origin}/?invite=${server.invites[0].token}` });
+		expect(made).toEqual({ link: `${location.origin}/#invite=${server.invites[0].token}` });
 		expect(server.requests.at(-1)).toMatchObject({
 			method: 'POST',
 			path: '/invites',
@@ -1046,7 +1046,7 @@ describe('invitations', () => {
 
 	it('have no quota for an admin', async () => {
 		const reader = await started();
-		expect(await reader.invite(50)).toMatchObject({ link: expect.stringContaining('?invite=') });
+		expect(await reader.invite(50)).toMatchObject({ link: expect.stringContaining('#invite=') });
 		const list = await reader.invites();
 		expect(list?.left).toBeUndefined();
 	});

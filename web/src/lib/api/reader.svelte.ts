@@ -2571,7 +2571,7 @@ export class ServerReader implements Reader {
 		try {
 			const made = await this.api.invite(uses);
 			// The link leads to this rueder's page, which reads the token from it.
-			return { link: `${location.origin}/?invite=${made.token}` };
+			return { link: `${location.origin}/#invite=${made.token}` };
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 403) return 'none-left' as const;
 			this.refusal(error);

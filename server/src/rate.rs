@@ -21,7 +21,9 @@
 //! - mail the server sends ([`MAILS_PER_ACCOUNT`], [`MAILS_PER_ADDRESS`],
 //!   [`MAILS_PER_DAY`]): per account, per address it goes to and for the whole
 //!   server, so that nobody uses rueder to fill somebody's inbox, nor the
-//!   relay's allowance.
+//!   relay's allowance. Links to set a new password, which anybody can ask
+//!   for, have a share of the day of their own ([`RESET_MAILS_PER_DAY`]), so
+//!   that asking for many does not use up the mail of everybody else.
 //!
 //! Wrong passwords have their own, much smaller limit in [`crate::login`].
 //! Who is over a limit gets 429 with `Retry-After`.
@@ -84,6 +86,10 @@ pub const MAILS_PER_ACCOUNT: Rate = Rate::new(5, Duration::from_secs(60 * 60));
 pub const MAILS_PER_ADDRESS: Rate = Rate::new(3, Duration::from_secs(2 * 60 * 60));
 /// How many mails the whole server sends: 1000 at once, and 1000 more a day.
 pub const MAILS_PER_DAY: Rate = Rate::new(1000, Duration::from_millis(86_400));
+/// How many of them may be links to set a new password: 300 at once, and 300
+/// more a day. Anybody can ask for one for any name, so these have a share of
+/// their own, and the rest of the day's mail stays for confirmations.
+pub const RESET_MAILS_PER_DAY: Rate = Rate::new(300, Duration::from_millis(288_000));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
 /// How many costly requests run at once on the whole server: fewer than the
@@ -218,6 +224,7 @@ pub struct Limits {
     pub mails_per_account: Rate,
     pub mails_per_address: Rate,
     pub mails_per_day: Rate,
+    pub reset_mails_per_day: Rate,
 }
 
 impl Default for Limits {
@@ -233,6 +240,7 @@ impl Default for Limits {
             mails_per_account: MAILS_PER_ACCOUNT,
             mails_per_address: MAILS_PER_ADDRESS,
             mails_per_day: MAILS_PER_DAY,
+            reset_mails_per_day: RESET_MAILS_PER_DAY,
         }
     }
 }
@@ -249,6 +257,7 @@ pub struct Rates {
     mails_per_account: Limiter<i32>,
     mails_per_address: Limiter<String>,
     mails_per_day: Limiter<()>,
+    reset_mails_per_day: Limiter<()>,
     heavy: Heavy,
 }
 
@@ -265,6 +274,7 @@ impl Rates {
             mails_per_account: Limiter::new(limits.mails_per_account),
             mails_per_address: Limiter::new(limits.mails_per_address),
             mails_per_day: Limiter::new(limits.mails_per_day),
+            reset_mails_per_day: Limiter::new(limits.reset_mails_per_day),
             heavy: Heavy {
                 running: Semaphore::new(HEAVY_AT_ONCE),
                 accounts: Mutex::default(),
@@ -333,11 +343,31 @@ impl Rates {
     /// against the account, the address and the day. Whichever is over first
     /// says how long to wait.
     pub fn mail(&self, account_id: i32, address: &str, now: Instant) -> Result<(), AppError> {
+        self.mails(account_id, address, None, now)
+    }
+
+    /// Counts a link to set a new password like any mail, and against the
+    /// share of the day such links have, before the day of all mail: whoever
+    /// asks for many uses up that share, not everybody's confirmations.
+    pub fn reset_mail(&self, account_id: i32, address: &str, now: Instant) -> Result<(), AppError> {
+        self.mails(account_id, address, Some(&self.reset_mails_per_day), now)
+    }
+
+    /// Counts a mail against the account, the address, a share of the day if
+    /// it has one, and the day. Whichever is over first says how long to wait.
+    fn mails(
+        &self,
+        account_id: i32,
+        address: &str,
+        share: Option<&Limiter<()>>,
+        now: Instant,
+    ) -> Result<(), AppError> {
         let address = address.to_lowercase();
         let message = "too many mails, try again later";
         self.mails_per_account
             .take(&account_id, now)
             .and_then(|()| self.mails_per_address.take(&address, now))
+            .and_then(|()| share.map_or(Ok(()), |share| share.take(&(), now)))
             .and_then(|()| self.mails_per_day.take(&(), now))
             .map_err(|wait| AppError::TooMany(wait, message))
     }
