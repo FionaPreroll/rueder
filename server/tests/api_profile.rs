@@ -273,13 +273,11 @@ async fn only_an_admin_lists_and_makes_accounts(db: PgPool) {
     let without = json!({ "username": "grace", "password": "battery staple", "is_admin": true });
     let wrong = json!({ "username": "grace", "password": "battery staple", "is_admin": true,
                         "proof": { "password": "battery staple" } });
-    for refused in [&without, &wrong] {
-        assert_eq!(
-            add(Some(&admin), refused).await.0,
-            StatusCode::FORBIDDEN,
-            "{refused}"
-        );
-    }
+    assert_eq!(
+        add(Some(&admin), &without).await.0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(add(Some(&admin), &wrong).await.0, StatusCode::FORBIDDEN);
     let made: i64 = sqlx::query_scalar("SELECT count(*) FROM accounts WHERE username = 'grace'")
         .fetch_one(&db)
         .await

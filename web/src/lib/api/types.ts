@@ -231,7 +231,7 @@ export type NewAccount = {
 	/**
 	 * That the admin is there: their own password and code, or a passkey.
 	 */
-	proof?: OwnerProof,
+	proof: OwnerProof,
 };
 
 /**

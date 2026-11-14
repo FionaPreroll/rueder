@@ -2597,6 +2597,9 @@
           "403": {
             "description": "The account is no admin, or an admin without the second factor where the operator asks for it; or the admin's password, code or passkey are wrong, or `second factor needed`."
           },
+          "422": {
+            "description": "No `proof`."
+          },
           "429": {
             "description": "Too many wrong tries; see `Retry-After`."
           }
@@ -7329,7 +7332,8 @@
         "description": "What `POST /api/accounts` reads, for admins only. It answers with `Created`.",
         "required": [
           "username",
-          "password"
+          "password",
+          "proof"
         ],
         "properties": {
           "username": {
@@ -7346,15 +7350,8 @@
             ]
           },
           "proof": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/OwnerProof",
-                "description": "That the admin is there: their own password and code, or a passkey."
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/OwnerProof",
+            "description": "That the admin is there: their own password and code, or a passkey."
           }
         }
       },

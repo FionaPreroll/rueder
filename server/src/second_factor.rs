@@ -301,7 +301,7 @@ pub async fn is_on(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
 /// that they are there: the password, which an account without one does
 /// without, and where the second factor is on, a code from the app or a
 /// recovery code; or a passkey instead of both (see [`prove`]).
-#[derive(Default, Deserialize, TS, ToSchema)]
+#[derive(Deserialize, TS, ToSchema)]
 pub struct OwnerProof {
     #[serde(default)]
     #[ts(as = "Option<String>", optional)]

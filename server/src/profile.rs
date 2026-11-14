@@ -363,9 +363,7 @@ struct NewAccount {
     #[schema(value_type = Option<bool>)]
     is_admin: bool,
     /// That the admin is there: their own password and code, or a passkey.
-    #[serde(default)]
-    #[ts(optional)]
-    proof: Option<second_factor::OwnerProof>,
+    proof: second_factor::OwnerProof,
 }
 
 /// The answer to making something: the number it got.
@@ -384,7 +382,7 @@ struct Created {
     tag = "Admin",
     request_body = NewAccount,
     security(("session" = [])),
-    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A name that is taken or not allowed, or a password that is too short or too long."), (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it; or the admin's password, code or passkey are wrong, or `second factor needed`."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A name that is taken or not allowed, or a password that is too short or too long."), (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it; or the admin's password, code or passkey are wrong, or `second factor needed`."), (status = UNPROCESSABLE_ENTITY, description = "No `proof`."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
 )]
 async fn add_account(
     State(state): State<AppState>,
@@ -393,8 +391,7 @@ async fn add_account(
     Json(new): Json<NewAccount>,
 ) -> Result<(StatusCode, Json<Created>), AppError> {
     admin(&session)?;
-    let proof = new.proof.unwrap_or_default();
-    second_factor::prove(&state, &session, &headers, proof.proof()).await?;
+    second_factor::prove(&state, &session, &headers, new.proof.proof()).await?;
     let made = accounts::create(&state.db, &new.username, Some(&new.password), new.is_admin);
     match made.await? {
         Ok(id) => Ok((StatusCode::CREATED, Json(Created { id }))),
