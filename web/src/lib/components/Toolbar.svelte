@@ -1,6 +1,8 @@
 <script lang="ts">
 	// The row of buttons over the list, in Google Reader's order: refresh, what to
-	// show, mark all as read, the views, previous and next.
+	// show, mark all as read, the views, previous and next. On a phone, what to
+	// show, the views and marking as read are one menu with words, between the
+	// icons for refresh and for previous and next.
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { settings, views } from '#lib/settings.svelte.ts';
@@ -22,6 +24,42 @@
 		magazine: 'magazine'
 	} as const;
 </script>
+
+{#snippet heading(text: string)}
+	<p class="px-3 pt-2 pb-1 text-xs font-semibold text-soft" aria-hidden="true">{text}</p>
+{/snippet}
+
+{#snippet showOptions()}
+	<!-- The unread items are unread whatever this says. -->
+	{#if reader.stream.kind !== 'unread'}
+		{@render option(m.toolbar.showAll, !reader.unreadOnly, () => (reader.unreadOnly = false))}
+		{@render option(m.toolbar.showUnread, reader.unreadOnly, () => (reader.unreadOnly = true))}
+	{/if}
+	{#if reader.can.oldestFirst}
+		{#if reader.stream.kind !== 'unread'}
+			<hr class="my-1 border-line" />
+		{/if}
+		{@render option(m.toolbar.newestFirst, reader.newestFirst, () => (reader.newestFirst = true))}
+		{@render option(m.toolbar.oldestFirst, !reader.newestFirst, () => (reader.newestFirst = false))}
+	{/if}
+{/snippet}
+
+{#snippet markOptions()}
+	<button type="button" role="menuitem" class="menu-item" onclick={() => reader.markAllRead()}>
+		{m.toolbar.markEverything}
+	</button>
+	<button type="button" role="menuitem" class="menu-item" onclick={() => reader.markAllRead(DAY)}>
+		{m.toolbar.markOlderDay}
+	</button>
+	<button
+		type="button"
+		role="menuitem"
+		class="menu-item"
+		onclick={() => reader.markAllRead(7 * DAY)}
+	>
+		{m.toolbar.markOlderWeek}
+	</button>
+{/snippet}
 
 {#snippet option(label: string, on: boolean, pick: () => void)}
 	<button type="button" role="menuitemradio" aria-checked={on} class="menu-item" onclick={pick}>
@@ -48,34 +86,17 @@
 		<Icon name="refresh" />
 	</button>
 
-	<!-- On a phone only its icon, so the row does not break differently for each choice. -->
-	<Menu title={m.toolbar.show} label={onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll}>
-		{#snippet button()}
-			<span class="max-sm:hidden">
+	<div class="max-sm:hidden">
+		<Menu title={m.toolbar.show} label={onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll}>
+			{#snippet button()}
 				{onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll}
-			</span>
-			<Icon name={onlyUnread ? 'unread' : 'filter'} class="size-4 sm:hidden" />
-			<Icon name="down" class="size-3.5" />
-		{/snippet}
-		<!-- The unread items are unread whatever this says. -->
-		{#if reader.stream.kind !== 'unread'}
-			{@render option(m.toolbar.showAll, !reader.unreadOnly, () => (reader.unreadOnly = false))}
-			{@render option(m.toolbar.showUnread, reader.unreadOnly, () => (reader.unreadOnly = true))}
-		{/if}
-		{#if reader.can.oldestFirst}
-			{#if reader.stream.kind !== 'unread'}
-				<hr class="my-1 border-line" />
-			{/if}
-			{@render option(m.toolbar.newestFirst, reader.newestFirst, () => (reader.newestFirst = true))}
-			{@render option(
-				m.toolbar.oldestFirst,
-				!reader.newestFirst,
-				() => (reader.newestFirst = false)
-			)}
-		{/if}
-	</Menu>
+				<Icon name="down" class="size-3.5" />
+			{/snippet}
+			{@render showOptions()}
+		</Menu>
+	</div>
 
-	<div class="flex">
+	<div class="flex max-sm:hidden">
 		<button
 			type="button"
 			class={['tool', reader.can.markOlder && 'rounded-r-none']}
@@ -94,6 +115,38 @@
 				{#snippet button()}
 					<Icon name="down" class="size-3.5" />
 				{/snippet}
+				{@render markOptions()}
+			</Menu>
+		{/if}
+	</div>
+
+	<!-- On a phone one menu with words, so the row of buttons fits and says what it does. -->
+	<div class="sm:hidden">
+		<Menu
+			label={m.toolbar.phoneMenu(onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll)}
+			title={m.toolbar.show}
+		>
+			{#snippet button()}
+				<Icon name={viewIcons[settings.view]} class="size-4" />
+				{onlyUnread ? m.toolbar.showUnread : m.toolbar.showAll}
+				<Icon name="down" class="size-3.5" />
+			{/snippet}
+			{@render heading(m.toolbar.show)}
+			{@render showOptions()}
+			<hr class="my-1 border-line" />
+			{@render heading(m.settings.view)}
+			{#each views as view (view)}
+				{@render option(
+					m.settings.views[view],
+					settings.view === view,
+					() => (settings.view = view)
+				)}
+			{/each}
+			<hr class="my-1 border-line" />
+			{@render heading(m.toolbar.markAllRead)}
+			{#if reader.can.markOlder}
+				{@render markOptions()}
+			{:else}
 				<button
 					type="button"
 					role="menuitem"
@@ -102,40 +155,7 @@
 				>
 					{m.toolbar.markEverything}
 				</button>
-				<button
-					type="button"
-					role="menuitem"
-					class="menu-item"
-					onclick={() => reader.markAllRead(DAY)}
-				>
-					{m.toolbar.markOlderDay}
-				</button>
-				<button
-					type="button"
-					role="menuitem"
-					class="menu-item"
-					onclick={() => reader.markAllRead(7 * DAY)}
-				>
-					{m.toolbar.markOlderWeek}
-				</button>
-			</Menu>
-		{/if}
-	</div>
-
-	<!-- On a phone the four views are one menu, so the row of buttons fits. -->
-	<div class="sm:hidden">
-		<Menu label={m.settings.view} title={m.settings.view}>
-			{#snippet button()}
-				<Icon name={viewIcons[settings.view]} />
-				<Icon name="down" class="size-3.5" />
-			{/snippet}
-			{#each views as view (view)}
-				{@render option(
-					m.settings.views[view],
-					settings.view === view,
-					() => (settings.view = view)
-				)}
-			{/each}
+			{/if}
 		</Menu>
 	</div>
 	<div class="flex max-sm:hidden" role="group" aria-label={m.settings.view}>

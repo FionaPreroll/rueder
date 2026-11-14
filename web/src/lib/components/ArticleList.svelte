@@ -332,7 +332,7 @@
 						<li data-article={article.id} use:measure={article.id}>
 							<ArticleRow {reader} {article} {now} {showFeed} stacked={pane} />
 							{#if !pane && reader.open === article.id}
-								<div class="border-l-accent-line-line border-t border-l-3 border-line bg-paper">
+								<div class="border-t border-l-3 border-line border-l-accent-line bg-paper">
 									<ArticleBody {reader} {article} {now} {onversions} />
 								</div>
 							{/if}

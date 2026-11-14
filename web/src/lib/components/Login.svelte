@@ -169,17 +169,22 @@
 	<title>rueder</title>
 </svelte:head>
 
-<main class="flex min-h-dvh items-center justify-center bg-panel p-4 text-ink">
+<main class="flex min-h-dvh flex-col items-center justify-center bg-panel p-4 pb-14 text-ink">
+	<!-- Who it is before what to do: the logo, the name and what rueder does. -->
+	<header class="mb-6 flex max-w-sm flex-col items-center text-center">
+		<svg class="size-14" viewBox="0 0 24 24" aria-hidden="true">
+			<rect width="24" height="24" rx="5" fill="var(--color-accent)" />
+			<g fill="none" stroke="var(--color-on-accent)" stroke-width="2.4" stroke-linecap="round">
+				<path d="M7 11a6 6 0 0 1 6 6" />
+				<path d="M7 6a11 11 0 0 1 11 11" />
+			</g>
+			<circle cx="7.6" cy="16.6" r="1.6" fill="var(--color-on-accent)" />
+		</svg>
+		<p class="mt-2 text-3xl font-semibold tracking-tight">rueder</p>
+		<p class="mt-1 text-soft">{m.login.about}</p>
+	</header>
 	<div class="w-full max-w-sm rounded-lg border border-line bg-paper p-6 shadow-sm">
-		<h1 class="flex items-center gap-2 text-lg font-semibold">
-			<svg class="size-6" viewBox="0 0 24 24" aria-hidden="true">
-				<rect width="24" height="24" rx="5" fill="var(--color-accent)" />
-				<g fill="none" stroke="var(--color-on-accent)" stroke-width="2.4" stroke-linecap="round">
-					<path d="M7 11a6 6 0 0 1 6 6" />
-					<path d="M7 6a11 11 0 0 1 11 11" />
-				</g>
-				<circle cx="7.6" cy="16.6" r="1.6" fill="var(--color-on-accent)" />
-			</svg>
+		<h1 class="text-lg font-semibold">
 			{registering ? m.register.title : m.login.title}
 		</h1>
 

@@ -60,6 +60,7 @@ const de: Messages = {
 		installSafari:
 			'So wird rueder zur App: Ablage › Zum Dock hinzufügen auf dem Mac, Teilen › Zum Home-Bildschirm auf iPhone und iPad.',
 		unread: (count) => `${n(count)} ungelesen`,
+		hiddenCount: (count) => `${n(count)} von Filtern ausgeblendet`,
 		fetchFailed: (reason) => `Der letzte Abruf ist fehlgeschlagen: ${reason}`,
 		waiting: 'Noch nicht abgerufen',
 		blocked: 'Vom Betreiber dieses rueder gesperrt',
@@ -77,6 +78,7 @@ const de: Messages = {
 		oldestFirst: 'Älteste zuerst',
 		markAllRead: 'Alle als gelesen markieren',
 		markOptions: 'Weitere Arten, als gelesen zu markieren',
+		phoneMenu: (shown) => `Ansicht und als gelesen markieren, gezeigt: ${shown}`,
 		markEverything: 'Alle Artikel',
 		markOlderDay: 'Artikel, die älter als ein Tag sind',
 		markOlderWeek: 'Artikel, die älter als eine Woche sind',
@@ -172,6 +174,8 @@ const de: Messages = {
 
 	login: {
 		title: 'Bei rueder anmelden',
+		about:
+			'Ein Feedreader: Er holt, was die Seiten veröffentlichen, denen du folgst, und zeigt, was du noch nicht gelesen hast.',
 		name: 'Name',
 		password: 'Passwort',
 		submit: 'Anmelden',
@@ -733,6 +737,13 @@ const de: Messages = {
 		on: 'An',
 		off: 'Aus',
 		took: (median, p95) => `Median ${median}, 95 % in ${p95}`,
+		summary: {
+			label: 'Auf einen Blick',
+			hints: 'Hinweise',
+			failing: 'Feeds mit Fehlern',
+			errors: 'Fehler im Log',
+			reported: 'Gemeldete Feeds'
+		},
 		hintsTitle: 'Einen Blick wert',
 		allWell: 'Nichts fällt auf.',
 		hints: {

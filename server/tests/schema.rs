@@ -459,3 +459,45 @@ async fn versions_lie_in_the_month_they_were_fetched_in(db: PgPool) {
     .await;
     assert!(homeless.is_err());
 }
+
+/// The migration of 2026-11-14 takes the brackets off the names of authors that
+/// were stored before the fetch did so itself, in the article and in the copy
+/// the search reads, and leaves every other name as it is.
+#[sqlx::test]
+async fn stored_authors_lose_their_brackets(db: PgPool) {
+    let (_, feed_id) = reader(&db, "ada", 6).await;
+    let names = [
+        ("(Jonas Erbe)", "Jonas Erbe"),
+        ("<Jonas Erbe>", "Jonas Erbe"),
+        ("( Jonas Erbe )", "Jonas Erbe"),
+        ("(Klammern) im Namen", "(Klammern) im Namen"),
+        ("Jonas Erbe", "Jonas Erbe"),
+        ("", ""),
+    ];
+    for (seq, (stored, _)) in (1..).zip(names) {
+        sqlx::query("UPDATE articles SET author = $1 WHERE feed_id = $2 AND seq = $3")
+            .bind(stored)
+            .bind(feed_id)
+            .bind(seq)
+            .execute(&db)
+            .await
+            .unwrap();
+    }
+    sqlx::raw_sql(include_str!("../migrations/0018_author_names.sql"))
+        .execute(&db)
+        .await
+        .unwrap();
+    for (seq, (stored, name)) in (1..).zip(names) {
+        let (author, copied): (String, String) = sqlx::query_as(
+            "SELECT a.author, c.author FROM articles a JOIN article_content c USING (feed_id, seq)
+             WHERE feed_id = $1 AND seq = $2",
+        )
+        .bind(feed_id)
+        .bind(seq)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(author, name, "{stored}");
+        assert_eq!(copied, name, "{stored}");
+    }
+}

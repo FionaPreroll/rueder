@@ -28,7 +28,7 @@ async function reportedOnStatus(page: Page) {
 	await page.getByRole('button', { name: 'Logged in as login' }).click();
 	await page.getByRole('menuitem', { name: 'Server status' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Server status' });
-	const section = dialog.locator('section', {
+	const section = dialog.locator('details', {
 		has: page.getByRole('heading', { name: 'Reported feeds' })
 	});
 	return section.getByRole('listitem').filter({ hasText: ADDRESS });
