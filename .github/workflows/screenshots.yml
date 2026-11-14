@@ -85,6 +85,11 @@ jobs:
         env:
           # Empty for a pull request, which takes both.
           SCREENSHOT_LANGUAGES: ${{ inputs.languages }}
+      # What the walk measured next to the pictures (targets, lines of text),
+      # added up in measure.md; also when some views failed.
+      - run: pnpm run screenshots:report
+        if: ${{ !cancelled() }}
+        working-directory: web
       # Also when some views failed: the others are there, and the report
       # says which failed and why.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -104,11 +104,7 @@
 	{#if refusal}
 		<p class="text-warn" role="alert">{say(refusal)}</p>
 	{/if}
-	<button
-		type="submit"
-		class="tool font-semibold text-warn disabled:cursor-default disabled:opacity-50"
-		disabled={busy || !proof || (asksCode && !code.trim())}
-	>
+	<button type="submit" class="danger" disabled={busy || !proof || (asksCode && !code.trim())}>
 		{m.removeAccount.submit}
 	</button>
 	<PasskeyProof {reader} disabled={busy} onproof={withPasskey} />

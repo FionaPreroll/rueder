@@ -60,7 +60,7 @@
 		<h2 class="text-xl leading-snug font-semibold">
 			{#if article.link}
 				<a
-					class="text-link hover:underline"
+					class="reach text-link hover:underline"
 					href={article.link}
 					target="_blank"
 					rel="noopener noreferrer"
@@ -76,7 +76,7 @@
 				{m.list.from}
 				<button
 					type="button"
-					class="cursor-pointer text-link hover:underline"
+					class="reach cursor-pointer text-link hover:underline"
 					onclick={() => reader.show({ kind: 'feed', id: article.feedId })}
 				>
 					{feed?.title}
@@ -91,7 +91,7 @@
 				{@const headline = article.changed === 'title'}
 				<button
 					type="button"
-					class="inline-flex cursor-pointer items-center gap-1 rounded border border-line px-1.5 text-xs hover:bg-hover hover:text-ink"
+					class="reach inline-flex cursor-pointer items-center gap-1 rounded border border-line px-1.5 text-xs hover:bg-hover hover:text-ink"
 					title={headline
 						? m.list.updatedHeadlineTitle(article.changes)
 						: m.list.updatedTitle(article.changes)}

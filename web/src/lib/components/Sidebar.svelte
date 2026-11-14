@@ -87,7 +87,7 @@
 		<div class="p-3">
 			<button
 				type="button"
-				class="cursor-pointer rounded bg-accent px-4 py-1.5 text-xs font-bold tracking-wider text-on-accent uppercase shadow-sm hover:brightness-110"
+				class="cursor-pointer rounded bg-accent px-4 py-1.5 text-sm font-semibold text-on-accent shadow-sm hover:brightness-110 pointer-coarse:min-h-11"
 				onclick={onsubscribe}
 			>
 				{m.nav.subscribe}
