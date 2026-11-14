@@ -13,6 +13,7 @@ The README says what rueder is and where to find what. `docs/` holds the rewrite
 - The pictures in the README are taken by `web/showcase/` from the demo and published with the site on GitHub Pages, by the workflow `pages.yml`; no picture of them is ever committed. The README names them by their address on the site, and the site's build fails if one is missing.
 - Whoever finishes a work package ticks it off in `docs/implementation.md` and brings the state there up to date, in the same pull request.
 - Whoever departs from the plan or the architecture changes `docs/plan.md` or `docs/architecture.md` in the same pull request and gives the reason. What Fiona decided stays decided until she decides otherwise, the detail questions at the end of `docs/plan.md` included.
+- The documents say how it is and why, not how it came to be: the history is in the pull requests, and the numbers (limits, timeouts, sizes) are only in the code, which the documents name instead. A finished work package is one line there.
 - Measurements go into "Messung" in `docs/implementation.md`, with date, amount of data and machine.
 - Code, comments in code, READMEs and commit messages are in English. Comments in SQL migrations and the three documents above are in German.
 
@@ -40,3 +41,13 @@ The README says what rueder is and where to find what. `docs/` holds the rewrite
 - Components get their data from a `Reader` (`web/src/lib/reader.ts`) and nowhere else. Whatever the page can do works in both readers, the one for the server (`web/src/lib/api/`) and the one with made-up data (`web/src/lib/demo/`), or is switched off through `Reader.can` where one of them cannot do it yet. What the account sets about itself (password, address, second factor, passkeys, invitations, deleting it) is not part of the `Reader`: it is `AccountSettings` (`web/src/lib/account.ts`), which only exists with a server; the demo fakes nothing of it but app passwords (`AppPasswordKeeper`).
 - Tests and measurements use made-up data. No dump of the production database, no real account and no secret is ever committed; settings come from the environment, and `.env` stays out of the repository.
 - Dependencies come from crates.io and the npm registry, with their lockfiles committed. Prefer crates in pure Rust, e.g. `rustls` over OpenSSL.
+
+## What we don't need
+
+People read this code, so rather 20 lines less than one more case. What follows is enough as it is and needs no code to make it better:
+
+- A limit per account may be passed by one when requests come at the same time; only limits the operator sets for the whole server hold exactly. No lock just for that.
+- Counts and events may be stale for a moment; the page reloads when in doubt.
+- The project's own files (the build, the templates, the rules in `server/rules/`) are not outside input.
+- No fallback for errors that do not happen (`getrandom`, a poisoned mutex); not panicking on outside input is enough.
+- A message in the console that breaks nothing is no reason for code.
