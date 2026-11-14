@@ -82,6 +82,22 @@ describe('SettingsDialog', () => {
 		expect(screen.getByText('Next article, opened')).toBeInTheDocument();
 	});
 
+	it('leaves the keys out on a touch screen, unless asked for them', () => {
+		vi.stubGlobal('matchMedia', (query: string) => ({
+			matches: query.includes('pointer: coarse')
+		}));
+		render(SettingsDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual([
+			'Appearance',
+			'Reading',
+			'Filter rules'
+		]);
+		document.body.innerHTML = '';
+		render(SettingsDialog, { reader: new DemoReader(() => now), tab: 'keys', onclose: () => {} });
+		expect(screen.getByRole('tab', { name: 'Keyboard' })).toHaveAttribute('aria-selected', 'true');
+		vi.unstubAllGlobals();
+	});
+
 	it('opens on the tab it is given, and closes', async () => {
 		const onclose = vi.fn();
 		render(SettingsDialog, { reader: new DemoReader(() => now), tab: 'keys', onclose });

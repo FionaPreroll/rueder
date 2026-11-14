@@ -97,12 +97,21 @@ export async function shoot(page: Page, file: string, scrolling?: Locator) {
 	}
 }
 
+/** A target that can be pressed: its name, the left and top of its box and its size, in CSS pixels. */
+export interface Target {
+	name: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 /** What `measure` notes of a picture: its targets too small for a finger or a pointer, and the lines of article text. */
 export interface Measured {
 	/** The picture, as its name in its folder. */
 	picture: string;
-	/** Targets that can be pressed and are seen on top, as the name they are known by and their size in CSS pixels. */
-	targets: { name: string; width: number; height: number }[];
+	/** Targets that can be pressed and are seen on top, as the name they are known by and their place and size in CSS pixels. */
+	targets: Target[];
 	/** For each paragraph of article text of three lines or more, its characters to the line. */
 	lines: number[];
 }
@@ -118,7 +127,7 @@ export async function measure(page: Page, picture: string) {
 	const seen = await page.evaluate(() => {
 		const pressable =
 			'button, a[href], input:not([type=hidden]), select, textarea, summary, [role=button], [role=tab], [role=menuitem], [role=menuitemradio]';
-		const targets: { name: string; width: number; height: number }[] = [];
+		const targets: { name: string; x: number; y: number; width: number; height: number }[] = [];
 		for (const element of document.querySelectorAll<HTMLElement>(pressable)) {
 			// A checkbox or a radio button is pressed through its label, around it or named
 			// by `for`; a text field is pressed itself.
@@ -147,10 +156,14 @@ export async function measure(page: Page, picture: string) {
 				.slice(0, 60);
 			// A target in a line of text is pressed around it, by 44 pixels (layout.css).
 			const around = target.matches('.reach') && matchMedia('(pointer: coarse)').matches ? 44 : 0;
+			const width = Math.max(box.width, around);
+			const height = Math.max(box.height, around);
 			targets.push({
 				name,
-				width: Math.max(Math.round(box.width), around),
-				height: Math.max(Math.round(box.height), around)
+				x: Math.round(box.left + (box.width - width) / 2),
+				y: Math.round(box.top + (box.height - height) / 2),
+				width: Math.round(width),
+				height: Math.round(height)
 			});
 		}
 		const lines: number[] = [];

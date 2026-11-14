@@ -18,11 +18,7 @@
 			class="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-paper px-4 py-2.5 text-sm shadow-lg"
 		>
 			<span>{m.update.ready}</span>
-			<button
-				type="button"
-				class="cursor-pointer rounded bg-accent px-3 py-1 font-semibold text-on-accent hover:brightness-110"
-				onclick={apply}
-			>
+			<button type="button" class="primary" onclick={apply}>
 				{m.update.reload}
 			</button>
 			<button type="button" class="tool" onclick={() => (later = true)}>{m.update.later}</button>

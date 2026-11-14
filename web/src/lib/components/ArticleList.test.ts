@@ -83,10 +83,11 @@ describe('the list view', () => {
 		const article = reader.list.find(
 			(entry) => entry.versions.length > 0 && entry.changed !== 'title'
 		)!;
-		expect(within(row(article.id)).getByText('updated')).toHaveAttribute(
-			'title',
-			expect.stringMatching(/^Changed since it was first fetched; \d earlier version/)
-		);
+		expect(
+			within(row(article.id)).getByRole('img', {
+				name: /^Changed since it was first fetched; \d earlier version/
+			})
+		).toHaveAttribute('title', expect.stringMatching(/^Changed since/));
 		reader.select(article);
 		const compare = await vi.waitFor(() =>
 			within(row(article.id)).getByRole('button', { name: 'Compare versions' })
@@ -99,10 +100,11 @@ describe('the list view', () => {
 		const { reader, row } = setup({ kind: 'all' });
 		const article = reader.list.find((entry) => entry.changed === 'title')!;
 		expect(article).toBeDefined();
-		expect(within(row(article.id)).getByText('new headline')).toHaveAttribute(
-			'title',
-			expect.stringMatching(/^Its headline was rewritten, its text is as it was/)
-		);
+		expect(
+			within(row(article.id)).getByRole('img', {
+				name: /^Its headline was rewritten, its text is as it was/
+			})
+		).toHaveAttribute('title', expect.stringMatching(/^Its headline/));
 	});
 
 	it('holds new articles back behind a button', async () => {
@@ -172,6 +174,42 @@ describe('an empty list', () => {
 		await vi.waitFor(() =>
 			expect(screen.getByRole('status')).toHaveTextContent('The operator of this rueder blocked')
 		);
+	});
+});
+
+describe('the notes above the list', () => {
+	it('says what a search found, marks the words, and searches all feeds from a feed', async () => {
+		const { reader, container } = setup();
+		const word = reader.list[0].title.split(' ')[0];
+		reader.query = word;
+		const found = await vi.waitFor(() => screen.getByText(new RegExp(`with “${word}”`)));
+		expect(found).toHaveTextContent(/^\d+\+? articles? with/);
+		expect(container.querySelector('mark')).toHaveTextContent(new RegExp(`^${word}$`, 'i'));
+		await userEvent.click(screen.getByRole('button', { name: 'Search all feeds' }));
+		expect(reader.stream).toEqual({ kind: 'all' });
+		expect(reader.query).toBe(word);
+		// Searching all feeds already, there is nowhere wider to go.
+		await vi.waitFor(() => expect(screen.getByText(new RegExp(`with “${word}”`))).toBeVisible());
+		expect(screen.queryByRole('button', { name: 'Search all feeds' })).toBeNull();
+	});
+
+	it('says why a feed fails and what to do about it', () => {
+		setup({ kind: 'feed', id: 'feed-wort' });
+		expect(screen.getByText('The last fetch failed: 404 Not Found')).toBeInTheDocument();
+		expect(screen.getByText(/subscribe to the new address/)).toBeInTheDocument();
+	});
+
+	it('says that the filters hid the articles, which rule hid each, and leads to the rules', async () => {
+		const reader = new DemoReader(() => now);
+		reader.show({ kind: 'hidden' });
+		const onrules = vi.fn();
+		render(ArticleList, { reader, now, onversions: vi.fn(), onrules });
+		expect(reader.visible.length).toBeGreaterThan(0);
+		expect(screen.getAllByRole('img', { name: /^Hidden by the rule: / }).length).toBe(
+			Math.min(40, reader.visible.length)
+		);
+		await userEvent.click(screen.getByRole('button', { name: 'Filter rules' }));
+		expect(onrules).toHaveBeenCalled();
 	});
 });
 

@@ -42,11 +42,15 @@ test('an article that changed says so, and its versions can be compared', async 
 	await logIn(page, 'live');
 	await node(page, 'Live Wire').click();
 	await expect(articles(page)).toHaveCount(3);
-	await expect(article(page, 'Wire news 3').getByText('updated')).toHaveCount(0);
+	await expect(
+		article(page, 'Wire news 3').getByRole('img', { name: /^Changed since it was first fetched/ })
+	).toHaveCount(0);
 
 	await site('revise', 'live', 'Correction: it was the fourth.');
 	fetchSoon();
-	await expect(article(page, 'Wire news 3').getByText('updated')).toBeVisible({
+	await expect(
+		article(page, 'Wire news 3').getByRole('img', { name: /^Changed since it was first fetched/ })
+	).toBeVisible({
 		timeout: AFTER_FETCH
 	});
 
@@ -65,8 +69,10 @@ test('a headline that was rewritten says so, and the text is left alone', async 
 	await site('rename', 'live', 'Wire news 3, corrected');
 	fetchSoon();
 	const row = article(page, 'Wire news 3, corrected');
-	await expect(row.getByText('new headline')).toBeVisible({ timeout: AFTER_FETCH });
-	await expect(row.getByText('updated')).toHaveCount(0);
+	await expect(row.getByRole('img', { name: /^Its headline was rewritten/ })).toBeVisible({
+		timeout: AFTER_FETCH
+	});
+	await expect(row.getByRole('img', { name: /^Changed since/ })).toHaveCount(0);
 
 	await row.getByRole('button', { name: /Wire news 3, corrected/ }).click();
 	await page.getByRole('button', { name: 'Compare versions' }).click();

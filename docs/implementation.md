@@ -572,6 +572,8 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 
   Fertig am 2026-11-14, beschrieben unter [Seite auf GitHub Pages](architecture.md#seite-auf-github-pages): `web/showcase/` mit `web/playwright.showcase.config.ts` und `pnpm showcase`, im Workflow `pages.yml` im Job `web`, auf der Seite unter `/rueder/screenshots/`, in `pages/build.js` die Prüfung (`readmePictures`, Tests in `pages/test/build.test.js`). Acht Bilder in je zwei Themen: drei Spalten (oben in der README, ein Klick führt zur Demo), Magazin, Versionen eines Artikels, eine neue Filterregel mit dem, was sie fangen würde, die Einrichtung von NetNewsWire, und auf dem Handy Startseite, Seitenleiste und ein Artikel. Die Dialoge sind auf sich und einen Rand zugeschnitten, damit man sie in der halben Breite lesen kann. Ein Lauf dauert rund zehn Sekunden ohne Server, dazu die Installation von Chromium. Eigene Entscheidungen, nicht mit Fiona abgesprochen: die Bilder liegen auf GitHub Pages statt in einem eigenen Branch oder an einem Release, weil die Seite ohnehin von `main` veröffentlicht wird und so nichts committet; sie zeigen die Demo statt eines echten Servers, weil das schnell geht und die README zur Demo führt; kein erfundener Artikel kommt mitten in ein Bild, weil Intervalle ab fünf Sekunden dort nicht starten (eine stehende Uhr hielt auch die Frames an, in denen die Liste ihre Zeilen misst, und ließ den ersten Lauf auf GitHub scheitern); die Auswahl der Motive. Offen: Vor dem ersten Lauf auf `main` nach dem Merge zeigt die README auf Bilder, die es noch nicht gibt.
 
+  Runde 3 am 2026-11-14, nach Fionas „alle“ für die übrigen Funde: F5 (Datum in fester Spalte, Hinweise als Symbol), F16 (Klasse `primary` für die eine Hauptaktion), F17 (Komponente `Badge`), F19 (Fehler des Feeds über seiner Liste), F20 (Anzahl der Treffer über der Liste, Wörter markiert, und auf ihren Wunsch „Search all feeds“, wenn in einem Feed, Ordner oder einer anderen Liste gesucht wird), F21 (Hinweis mit Knopf zu den Filterregeln, die Regel an der Zeile, sobald der Artikel geöffnet war), F23 und F26 (Komponente `Tabs`, eine Zeile, die sich seitwärts schieben lässt, der Verweis einmal darunter, Mindesthöhe), F27 (Fehler und Hinweis der Anmeldung getrennt), F28 (Link im Satz) und F31 (kein Reiter „Keyboard“ auf einem Gerät nur mit Touch). Für F33 prüft `report.ts` jetzt den Abstand nach WCAG 2.5.8; alle 73 kleineren Ziele am Desktop haben ihn.
+
 ### Für später
 
 Von Fiona am 2026-11-12 für später notiert, noch keinem Schritt zugeordnet:
@@ -822,7 +824,7 @@ Touch-Ziele und Zeilenlänge, gemessen vom Rundgang der Screenshots (`pnpm scree
 | Messung | Vorher | Nachher |
 |---|---|---|
 | Ziele unter 44×44, en-phone-light (67 Bilder) | 176 | 0 |
-| Ziele unter 24×24, en-desktop-light (58 Bilder) | nicht gemessen | 75, Abstände nicht geprüft (F33) |
+| Ziele unter 24×24 ohne den Abstand nach 2.5.8, en-desktop-light (56 Bilder) | nicht gemessen | 0 (73 kleinere mit Abstand) |
 | Längste Zeile Artikeltext, Desktop, Schrift „Mittel“ | 84 Zeichen (`44rem`), mit `66ch` 86 | 80 Zeichen (`60ch`) |
 | Längste Zeile Artikeltext, Handy | – | 46 Zeichen |
 | Kontrast aller Themen und Akzente | F8, F10–F12 unter dem Maß | alle 37 Fälle von `colors.test.ts` erfüllt |

@@ -134,7 +134,12 @@
 			<p class="mt-2 text-xs text-soft">{m.subscribe.note}</p>
 		{/if}
 		<div class="mt-3 flex gap-2">
-			<button type="submit" class={['tool', waits]} disabled={!address.trim()} aria-disabled={busy}>
+			<button
+				type="submit"
+				class={[found?.length ? 'tool' : 'primary', waits]}
+				disabled={!address.trim()}
+				aria-disabled={busy}
+			>
 				{finding ? m.subscribe.finding : m.subscribe.find}
 			</button>
 			<button type="button" class="tool" onclick={onclose}>{m.common.cancel}</button>
@@ -187,10 +192,7 @@
 							{:else}
 								<button
 									type="button"
-									class={[
-										'cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110',
-										waits
-									]}
+									class={['primary', waits]}
 									aria-label={`${m.subscribe.add}: ${feed.title || feed.url}`}
 									aria-disabled={busy}
 									onclick={() => subscribe(feed.url)}

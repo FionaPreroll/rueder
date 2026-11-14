@@ -12,8 +12,10 @@
 	import { formatFull, formatWhen } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
+	import { ruleText } from '#lib/rule-text.ts';
 	import { settings } from '#lib/settings.svelte.ts';
 	import Icon from './Icon.svelte';
+	import Marked from './Marked.svelte';
 
 	let {
 		reader,
@@ -37,6 +39,10 @@
 	const feed = $derived(reader.feeds[article.feedId]);
 	const opened = $derived(reader.open === article.id);
 	const byline = $derived((showFeed ? feed?.title : article.author)?.trim());
+	/** In the list of what the filters hid, the rule that hid this one. */
+	const rule = $derived(
+		reader.stream.kind === 'hidden' ? reader.filters.hidingRule(article) : null
+	);
 </script>
 
 {#snippet star()}
@@ -62,25 +68,39 @@
 			role="img"
 		></span>
 	{/each}
-	{#if article.changes > 0}
-		{@const headline = article.changed === 'title'}
+	{#if rule}
+		{@const said = m.list.hiddenBy(ruleText(rule))}
 		<span
-			class={[
-				'shrink-0 rounded border border-line px-1 text-xs text-soft',
-				order && 'max-sm:order-3'
-			]}
-			title={headline
+			class={['shrink-0 self-center text-soft', order && 'max-sm:order-3']}
+			title={said}
+			aria-label={said}
+			role="img"
+		>
+			<Icon name="hidden" class="size-3.5" />
+		</span>
+	{/if}
+	{#if article.changes > 0}
+		{@const said =
+			article.changed === 'title'
 				? m.list.updatedHeadlineTitle(article.changes)
 				: m.list.updatedTitle(article.changes)}
+		<span
+			class={['shrink-0 self-center text-soft', order && 'max-sm:order-3']}
+			title={said}
+			aria-label={said}
+			role="img"
 		>
-			{headline ? m.list.updatedHeadline : m.list.updated}
+			<Icon name="versions" class="size-3.5" />
 		</span>
 	{/if}
 {/snippet}
 
 {#snippet when(right = false)}
 	<time
-		class={['shrink-0 text-xs text-soft tabular-nums', right && 'max-sm:order-3 max-sm:ml-auto']}
+		class={[
+			'min-w-[6ch] shrink-0 text-right text-xs text-soft tabular-nums',
+			right && 'max-sm:order-3 max-sm:ml-auto'
+		]}
 		datetime={new Date(article.publishedAt).toISOString()}
 		title={formatFull(article.publishedAt)}
 	>
@@ -112,14 +132,14 @@
 					{@render when()}
 				</span>
 				<span class={['mt-0.5 line-clamp-2', read ? 'text-soft' : 'font-semibold text-ink']}>
-					{article.title}
+					<Marked text={article.title} query={reader.query} />
 				</span>
 			{:else}
 				<span class="flex items-baseline gap-2">
 					<span
 						class={['line-clamp-2 min-w-0 flex-1', read ? 'text-soft' : 'font-semibold text-ink']}
 					>
-						{article.title}
+						<Marked text={article.title} query={reader.query} />
 					</span>
 					{@render dots()}
 					{@render when()}
@@ -158,7 +178,9 @@
 			<span
 				class="min-w-0 flex-1 truncate max-sm:order-1 max-sm:line-clamp-2 max-sm:basis-full max-sm:whitespace-normal"
 			>
-				<span class={read ? 'text-soft' : 'font-semibold text-ink'}>{article.title}</span>
+				<span class={read ? 'text-soft' : 'font-semibold text-ink'}
+					><Marked text={article.title} query={reader.query} /></span
+				>
 				{#if settings.teasers}
 					<span class="text-soft"> – {article.teaser}</span>
 				{/if}

@@ -202,11 +202,7 @@
 			{/if}
 		</p>
 		<div class="mt-3 flex gap-2">
-			<button
-				type="submit"
-				class="cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
-				disabled={!valid}
-			>
+			<button type="submit" class="primary" disabled={!valid}>
 				{m.common.save}
 			</button>
 			<button type="button" class="tool" onclick={() => (draft = null)}>{m.common.cancel}</button>
