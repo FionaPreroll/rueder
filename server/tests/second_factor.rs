@@ -26,15 +26,15 @@ async fn log_in(
     log_in_with(state, name, PASSWORD, code).await
 }
 
-/// Logs in through the server, with this password: how a test sees that a
-/// password counts, the way a browser would.
+/// Logs in through the server with what was typed as the password: how a test
+/// sees that a password counts, the way a browser would.
 async fn log_in_with(
     state: &AppState,
     name: &str,
-    password: &str,
+    typed: &str,
     code: Option<&str>,
 ) -> (StatusCode, HeaderMap, String) {
-    let mut body = json!({ "username": name, "password": password });
+    let mut body = json!({ "username": name, "password": typed });
     if let Some(code) = code {
         body["code"] = json!(code);
     }
@@ -554,10 +554,12 @@ async fn a_new_password_takes_the_code_too(db: PgPool) {
     let (_, headers, _) = log_in(&state, "ada", None).await;
     let cookie = cookie(&headers);
     let codes = set_up(&state, ada, &cookie).await;
+    // Made up for this test, so that nothing here looks like a real password.
+    let fresh = uuid::Uuid::new_v4().to_string();
 
     // The password so far alone no longer does: a session and a password that
     // got out together must not lock the owner out.
-    let new = json!({ "current": PASSWORD, "new": "a new password" });
+    let new = json!({ "current": PASSWORD, "new": fresh });
     let answer = said(&state, Method::PUT, "/api/password", &cookie, new.clone()).await;
     assert_eq!(
         answer,
@@ -580,7 +582,7 @@ async fn a_new_password_takes_the_code_too(db: PgPool) {
     let (status, text) = said(&state, Method::PUT, "/api/password", &cookie, right).await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{text}");
     // The new one is right: the login asks for the code next.
-    let (status, _, text) = log_in_with(&state, "ada", "a new password", None).await;
+    let (status, _, text) = log_in_with(&state, "ada", &fresh, None).await;
     assert_eq!(
         (status, text.as_str()),
         (StatusCode::UNAUTHORIZED, "second factor needed")
@@ -595,6 +597,8 @@ async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPoo
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
+    // Made up for this test, so that nothing here looks like a real password.
+    let first = uuid::Uuid::new_v4().to_string();
     let old = common::session(&db, id).await;
     sqlx::query("UPDATE sessions SET created_at = now() - interval '11 minutes'")
         .execute(&db)
@@ -604,11 +608,7 @@ async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPoo
     // What would outlast the session: a first password, an app password, the
     // authenticator app, an address. A session that is not young makes none.
     for (method, path, body) in [
-        (
-            Method::PUT,
-            "/api/password",
-            json!({ "new": "a first password" }),
-        ),
+        (Method::PUT, "/api/password", json!({ "new": first })),
         (
             Method::POST,
             "/api/app-passwords",
@@ -628,7 +628,7 @@ async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPoo
         .await
         .unwrap();
     assert_eq!(made, 0);
-    let (status, _, _) = log_in_with(&state, "oidc", "a first password", None).await;
+    let (status, _, _) = log_in_with(&state, "oidc", &first, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     // Too old is no wrong try: logging in again and doing it still works.
     let young = common::session(&db, id).await;
@@ -646,10 +646,10 @@ async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPoo
         Method::PUT,
         "/api/password",
         &young,
-        json!({ "new": "a first password" }),
+        json!({ "new": first }),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{text}");
-    let (status, _, _) = log_in_with(&state, "oidc", "a first password", None).await;
+    let (status, _, _) = log_in_with(&state, "oidc", &first, None).await;
     assert_eq!(status, StatusCode::OK);
 }
