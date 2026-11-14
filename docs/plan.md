@@ -46,6 +46,7 @@ Die Nummern werden in den Arbeitspaketen in [implementation.md](implementation.m
 | A20 | Rechtliches und Meldeweg (2026-11-12) | Impressum, Datenschutz und Nutzungsbedingungen mit Zustimmung; Meldungen von Inhalten; Sperre von Feeds. |
 | A21 | Wachstum im Griff (2026-11-12) | Aufbewahrung von Artikeln einstellbar, Abruf einstellbar und gemessen. |
 | A22 | Zweiter Faktor (2026-11-12) | TOTP mit Wiederherstellungscodes, Pflicht für Admins der öffentlichen Instanz. Dazu Passkeys (2026-11-13): Login ohne Passwort, der zugleich als zweiter Faktor zählt. |
+| A23 | Betrieb der öffentlichen Instanz | Eigener Server, Backup an zwei Orten, Überwachung, Kennzahlen ohne Namen, geschlossene Beta. |
 | A24 | Apps anderer Anbieter (2026-11-13) | Feedreader-Apps wie Reeder, NetNewsWire oder Read You lesen und bedienen ein Konto über die Google-Reader-API, angemeldet mit App-Passwörtern. |
 
 Die Nummern ab A16 und die Kennungen E4, E6, E12, E13 und 5.x stammen aus Fionas eigener Planung für eine öffentliche Instanz; was hier fehlt, steht dort und gehört nicht zu diesem Repository. Die Lücken sind Absicht.
