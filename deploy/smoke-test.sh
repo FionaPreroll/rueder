@@ -82,11 +82,8 @@ hashes=$(printf '%s' "$script_src" | grep -o "'sha256-" | wc -l)
 [ "$scripts" -gt 0 ] && [ "$hashes" -eq "$scripts" ] ||
 	fail "the policy allows $hashes scripts inside the page, which has $scripts"
 case "$script_src" in *unsafe*) fail "the policy allows more than the page's own scripts" ;; esac
-# The one style attribute it allows is the one SvelteKit hides its announcer
-# for screen readers with, by its hash and nothing else.
-style_attrs=$(printf '%s' "$(directive style-src-attr)" | grep -o "'sha256-" | wc -l)
-[ "$style_attrs" -eq 1 ] ||
-	fail "the policy allows $style_attrs style attributes, not just the announcer's"
+# No style attribute is allowed, not even SvelteKit's on its announcer.
+[ -z "$(directive style-src-attr)" ] || fail "the policy allows style attributes"
 case "$policy" in *unsafe-inline* | *unsafe-eval*) fail "the policy allows inline code" ;; esac
 
 say "A change that another site asks for is refused"

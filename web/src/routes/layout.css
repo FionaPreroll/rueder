@@ -193,9 +193,8 @@
 	}
 
 	/* SvelteKit names the page for screen readers after a navigation, in an element it
-	   hides with a `style` attribute. The server allows that one attribute by its hash
-	   (server/src/hardening.rs); should it not find it in a build, the same rules
-	   stand here. */
+	   hides with a `style` attribute. The server's policy refuses that attribute
+	   (server/src/hardening.rs), so the same rules stand here. */
 	#svelte-announcer {
 		position: absolute;
 		top: 0;
