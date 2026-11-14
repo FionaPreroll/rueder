@@ -4,7 +4,6 @@
 	import { Hold } from '#lib/hold.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import { formatNumber } from '#lib/i18n/intl.ts';
 	import { sameStream, type Stream } from '#lib/model.ts';
 	import Counter from './Counter.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -75,9 +74,7 @@
 		<span class={['truncate', unread > 0 && 'font-semibold']}>{label}</span>
 		<span class="ml-auto pl-1">
 			<Counter count={unread} />
-			{#if quiet > 0}
-				<span class="text-xs text-soft">{formatNumber(quiet)}</span>
-			{/if}
+			<Counter count={quiet} quiet />
 		</span>
 	</button>
 {/snippet}

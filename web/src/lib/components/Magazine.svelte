@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The magazine view: the first article large, with its picture over the whole
 	// width, and the others as tiles in a grid, each with its picture, its title and
-	// the first words of its text. A click opens the article over the grid.
+	// the first words of its text. A tile without a picture gives its room to more
+	// of the text. A click opens the article over the grid.
 	import type { Reader } from '#lib/reader.ts';
 	import { formatFull, formatWhen } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -54,7 +55,7 @@
 	</span>
 {/snippet}
 
-{#snippet picture(url: string | null | undefined, article: Article, big: boolean)}
+{#snippet picture(url: string | null | undefined, big: boolean)}
 	{#if url}
 		<img
 			src={url}
@@ -62,17 +63,6 @@
 			loading={big ? 'eager' : 'lazy'}
 			class={['dimmed w-full object-cover', big ? 'aspect-[21/9] max-h-[26rem]' : 'aspect-video']}
 		/>
-	{:else}
-		<!-- Without a picture, the feed's first letter on a quiet ground keeps the grid even. -->
-		<span
-			class={[
-				'flex w-full items-center justify-center bg-panel text-4xl font-semibold text-soft',
-				big ? 'aspect-[21/9]' : 'aspect-video'
-			]}
-			aria-hidden="true"
-		>
-			{(reader.feeds[article.feedId]?.title ?? article.title).slice(0, 1).toUpperCase()}
-		</span>
 	{/if}
 {/snippet}
 
@@ -92,7 +82,7 @@
 				class="block w-full cursor-pointer text-left"
 				onclick={() => reader.select(lead)}
 			>
-				{#if leadPicture}{@render picture(leadPicture, lead, true)}{/if}
+				{#if leadPicture}{@render picture(leadPicture, true)}{/if}
 				<!-- Room for the star, which sits over the text where there is no picture. -->
 				<span class="block p-4 pr-12">
 					{@render byline(lead)}
@@ -129,8 +119,9 @@
 					class="flex h-full w-full cursor-pointer flex-col justify-start text-left"
 					onclick={() => reader.select(article)}
 				>
-					{@render picture(article.thumbnail, article, false)}
-					<span class="block p-3">
+					{@render picture(article.thumbnail, false)}
+					<!-- Without a picture the star sits over the text, so the text keeps clear of it. -->
+					<span class={['block p-3', !article.thumbnail && 'pr-12']}>
 						{@render byline(article)}
 						<span
 							class={[
@@ -141,7 +132,14 @@
 							{article.title}
 						</span>
 						{#if article.teaser}
-							<span class="mt-1 line-clamp-2 block text-sm text-soft">{article.teaser}</span>
+							<span
+								class={[
+									'mt-1 block text-sm text-soft',
+									article.thumbnail ? 'line-clamp-2' : 'line-clamp-6'
+								]}
+							>
+								{article.teaser}
+							</span>
 						{/if}
 					</span>
 				</button>

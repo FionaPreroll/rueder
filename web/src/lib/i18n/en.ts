@@ -63,6 +63,7 @@ const en = {
 		installSafari:
 			'To install rueder as an app: File › Add to Dock on a Mac, Share › Add to Home Screen on an iPhone or iPad.',
 		unread: (count: number) => `${n(count)} unread`,
+		hiddenCount: (count: number) => `${n(count)} hidden by filters`,
 		fetchFailed: (reason: string) => `The last fetch failed: ${reason}`,
 		waiting: 'Not fetched yet',
 		blocked: 'Blocked by the operator of this rueder',
@@ -80,6 +81,7 @@ const en = {
 		oldestFirst: 'Oldest first',
 		markAllRead: 'Mark all as read',
 		markOptions: 'More ways to mark as read',
+		phoneMenu: (shown: string) => `View and mark as read, showing: ${shown}`,
 		markEverything: 'All items',
 		markOlderDay: 'Items older than a day',
 		markOlderWeek: 'Items older than a week',
@@ -176,6 +178,8 @@ const en = {
 
 	login: {
 		title: 'Log in to rueder',
+		about:
+			'A feed reader: it fetches what the sites you follow publish and shows what you have not read yet.',
 		name: 'Name',
 		password: 'Password',
 		submit: 'Log in',
@@ -735,6 +739,13 @@ const en = {
 		on: 'On',
 		off: 'Off',
 		took: (median: string, p95: string) => `median ${median}, 95% within ${p95}`,
+		summary: {
+			label: 'At a glance',
+			hints: 'Hints',
+			failing: 'Feeds failing',
+			errors: 'Errors logged',
+			reported: 'Feeds reported'
+		},
 		hintsTitle: 'Worth a look',
 		allWell: 'Nothing stands out.',
 		hints: {

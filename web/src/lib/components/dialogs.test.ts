@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ServerReader } from '#lib/api/reader.svelte.ts';
@@ -379,6 +379,24 @@ describe('StatusDialog', () => {
 		expect(screen.getByText(/canceling statement due to statement timeout/)).toBeInTheDocument();
 		expect(screen.getByText('rueder::oidc')).toBeInTheDocument();
 		expect(screen.getByText(/^2 times, last/)).toBeInTheDocument();
+	});
+
+	it('puts a few numbers first, keeps the parts closed and shows commands as code', async () => {
+		render(StatusDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		const summary = await screen.findByLabelText('At a glance');
+		expect(within(summary).getByText('Feeds failing').nextElementSibling).toHaveTextContent('7');
+		expect(within(summary).getByText('Errors logged').nextElementSibling).toHaveTextContent('1');
+		// The parts open on demand; the log's counts stay in sight in the closed line.
+		const server = screen.getByRole('heading', { name: 'Server' }).closest('details');
+		expect(server).not.toHaveAttribute('open');
+		const problems = screen
+			.getByRole('heading', { name: 'Warnings and errors' })
+			.closest('details');
+		expect(problems).toHaveAttribute('open');
+		expect(problems?.querySelector('summary')).toHaveTextContent(/1 error and 2 warnings/);
+		expect(
+			screen.getByText('rueder retention set --status-days <days>', { selector: 'code' })
+		).toBeInTheDocument();
 	});
 
 	it('says what this build is and links the run that built it', async () => {

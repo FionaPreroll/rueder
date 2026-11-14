@@ -1,9 +1,9 @@
 <script lang="ts">
-	// The status of the server, for its admins: what wants looking at, then the
-	// server, its database, fetching, the feed search, the image proxy, the
-	// requests by route and what the log said, counted over the last hour or
-	// longer, as far as the server keeps its counts. It asks again every few
-	// seconds while it is open.
+	// The status of the server, for its admins: a few numbers at a glance and what
+	// wants looking at, then, each to be opened, the reported feeds, the server, its
+	// database, fetching, the feed search, the image proxy, the requests by route
+	// and what the log said, counted over the last hour or longer, as far as the
+	// server keeps its counts. It asks again every few seconds while it is open.
 	import { onMount } from 'svelte';
 	import type { Durations, StatusHint } from '#lib/api/types.ts';
 	import {
@@ -137,6 +137,10 @@
 		return rows;
 	}
 
+	/** A text cut where it names a command of `rueder`, so the command shows as code. */
+	const commands = (text: string) =>
+		text.split(/[“„](rueder [^”“]+)[”“]/).map((part, i) => ({ part, code: i % 2 === 1 }));
+
 	const failure = (failing: ServerStatus['fetcher']['failing'][number]) => {
 		const failures = m.status.fetcher.failures;
 		return failing.failure === 'status'
@@ -145,10 +149,30 @@
 	};
 </script>
 
+<!-- The line that opens a part; a note in it stays in sight while the part is closed. -->
+{#snippet opener(title: string, id?: string, note?: string)}
+	<summary
+		class="flex cursor-pointer flex-wrap items-center gap-x-2 rounded px-1 py-1 hover:bg-hover [&::-webkit-details-marker]:hidden"
+	>
+		<Icon
+			name="right"
+			class="size-4 shrink-0 text-soft transition-transform group-open:rotate-90"
+		/>
+		<h3 {id} class="text-sm font-semibold">{title}</h3>
+		{#if note}<span class="basis-full pl-6 text-sm text-soft">{note}</span>{/if}
+	</summary>
+{/snippet}
+
+{#snippet said(text: string)}
+	{#each commands(text) as { part, code }, i (i)}
+		{#if code}<code class="rounded bg-panel px-1 font-mono text-xs">{part}</code>{:else}{part}{/if}
+	{/each}
+{/snippet}
+
 {#snippet facts(title: string, rows: [string, string, string?][])}
-	<section class="rounded border border-line p-3">
-		<h3 class="text-sm font-semibold">{title}</h3>
-		<dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+	<details class="group rounded border border-line p-2">
+		{@render opener(title)}
+		<dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-1 text-sm">
 			{#each rows as [label, value, href] (label)}
 				<dt class="text-soft">{label}</dt>
 				<dd class="min-w-0 break-words">
@@ -160,7 +184,7 @@
 				</dd>
 			{/each}
 		</dl>
-	</section>
+	</details>
 {/snippet}
 
 <Dialog title={m.status.title} wide {onclose}>
@@ -187,7 +211,7 @@
 		</button>
 	</div>
 	{#if status}
-		<p class="mt-2 text-xs text-soft">{m.status.period.kept(status.kept_days)}</p>
+		<p class="mt-2 text-xs text-soft">{@render said(m.status.period.kept(status.kept_days))}</p>
 	{/if}
 	{#if reader.demo}
 		<p class="mt-2 text-xs text-soft">{m.status.demo}</p>
@@ -198,6 +222,18 @@
 
 	{#if status}
 		{@const s = status}
+		{@const failingFeeds = s.fetcher.failing.reduce((sum, failing) => sum + failing.feeds, 0)}
+		<dl class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={m.status.summary.label}>
+			{#each [[m.status.summary.hints, s.hints.length], [m.status.summary.failing, failingFeeds], [m.status.summary.errors, s.problems.errors], [m.status.summary.reported, s.reported.length]] as const as [label, count] (label)}
+				<div class="rounded border border-line px-3 py-2">
+					<dt class="text-xs text-soft">{label}</dt>
+					<dd class={['text-2xl font-semibold tabular-nums', count > 0 && 'text-warn']}>
+						{formatNumber(count)}
+					</dd>
+				</div>
+			{/each}
+		</dl>
+
 		<section class="mt-4" aria-labelledby="status-hints">
 			<h3 id="status-hints" class="text-sm font-semibold">{m.status.hintsTitle}</h3>
 			{#if s.hints.length === 0}
@@ -216,9 +252,13 @@
 			{/if}
 		</section>
 
-		<section class="mt-4" aria-labelledby="status-reported">
-			<h3 id="status-reported" class="text-sm font-semibold">{m.status.reported.title}</h3>
-			<p class="mt-1 text-sm text-soft">{m.status.reported.text}</p>
+		<details
+			class="group mt-2 rounded border border-line p-2"
+			open={s.reported.length > 0}
+			aria-labelledby="status-reported"
+		>
+			{@render opener(m.status.reported.title, 'status-reported')}
+			<p class="mt-1 text-sm text-soft">{@render said(m.status.reported.text)}</p>
 			{#if s.reported.length === 0}
 				<p class="mt-2 text-sm text-soft">{m.status.reported.none}</p>
 			{:else}
@@ -247,9 +287,9 @@
 					{/each}
 				</ul>
 			{/if}
-		</section>
+		</details>
 
-		<div class="mt-4 grid gap-3 sm:grid-cols-2">
+		<div class="mt-4 space-y-2">
 			{@render facts(m.status.server.title, [
 				[m.status.server.version, s.version],
 				[m.status.server.running, ago(s.started_at)],
@@ -332,12 +372,12 @@
 				],
 				[m.status.fetcher.waiting, formatNumber(s.fetcher.waiting)]
 			])}
-			<section class="rounded border border-line p-3">
-				<h3 class="text-sm font-semibold">{m.status.fetcher.failing}</h3>
+			<details class="group rounded border border-line p-2">
+				{@render opener(m.status.fetcher.failing)}
 				{#if s.fetcher.failing.length === 0}
-					<p class="mt-2 text-sm text-soft">{m.status.fetcher.noneFailing}</p>
+					<p class="mt-2 px-1 text-sm text-soft">{m.status.fetcher.noneFailing}</p>
 				{:else}
-					<ul class="mt-2 space-y-1 text-sm">
+					<ul class="mt-2 space-y-1 px-1 text-sm">
 						{#each s.fetcher.failing as failing (`${failing.failure}-${failing.status}`)}
 							<li class="flex gap-3">
 								<span class="min-w-0 flex-1">{failure(failing)}</span>
@@ -346,7 +386,7 @@
 						{/each}
 					</ul>
 				{/if}
-			</section>
+			</details>
 			{@render facts(m.status.finder.title, [
 				[m.status.finder.state, s.finder.on ? m.status.on : m.status.off],
 				[
@@ -380,8 +420,8 @@
 			])}
 		</div>
 
-		<section class="mt-4" aria-labelledby="status-requests">
-			<h3 id="status-requests" class="text-sm font-semibold">{m.status.requests.title}</h3>
+		<details class="group mt-2 rounded border border-line p-2" aria-labelledby="status-requests">
+			{@render opener(m.status.requests.title, 'status-requests')}
 			<dl class="mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
 				<dt class="text-soft">{m.status.requests.all}</dt>
 				<dd>{m.status.requests.allValue(s.requests.all.count, took(s.requests.all))}</dd>
@@ -426,10 +466,10 @@
 					</table>
 				</div>
 			{/if}
-		</section>
+		</details>
 
-		<section class="mt-4" aria-labelledby="status-tables">
-			<h3 id="status-tables" class="text-sm font-semibold">{m.status.database.tables}</h3>
+		<details class="group mt-2 rounded border border-line p-2" aria-labelledby="status-tables">
+			{@render opener(m.status.database.tables, 'status-tables')}
 			<div class="mt-2 overflow-x-auto">
 				<table class="w-full text-left text-sm">
 					<thead class="text-xs text-soft">
@@ -450,13 +490,18 @@
 					</tbody>
 				</table>
 			</div>
-		</section>
+		</details>
 
-		<section class="mt-4" aria-labelledby="status-problems">
-			<h3 id="status-problems" class="text-sm font-semibold">{m.status.problems.title}</h3>
-			<p class="mt-1 text-sm text-soft">
-				{m.status.problems.counts(s.problems.errors, s.problems.warnings, period(s.hours))}
-			</p>
+		<details
+			class="group mt-2 rounded border border-line p-2"
+			open={s.problems.errors > 0}
+			aria-labelledby="status-problems"
+		>
+			{@render opener(
+				m.status.problems.title,
+				'status-problems',
+				m.status.problems.counts(s.problems.errors, s.problems.warnings, period(s.hours))
+			)}
 			{#if s.problems.recent.length === 0}
 				<p class="mt-2 text-sm text-soft">{m.status.problems.none}</p>
 			{:else}
@@ -480,10 +525,10 @@
 					{/each}
 				</ul>
 			{/if}
-		</section>
+		</details>
 
-		<section class="mt-4" aria-labelledby="status-browsers">
-			<h3 id="status-browsers" class="text-sm font-semibold">{m.status.browsers.title}</h3>
+		<details class="group mt-2 rounded border border-line p-2" aria-labelledby="status-browsers">
+			{@render opener(m.status.browsers.title, 'status-browsers')}
 			{#if !s.browsers.available}
 				<p class="mt-1 text-sm text-soft">{m.status.browsers.off}</p>
 			{:else}
@@ -517,6 +562,6 @@
 					</ul>
 				{/if}
 			{/if}
-		</section>
+		</details>
 	{/if}
 </Dialog>

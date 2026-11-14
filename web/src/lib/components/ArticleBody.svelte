@@ -60,7 +60,7 @@
 		<h2 class="text-xl leading-snug font-semibold">
 			{#if article.link}
 				<a
-					class="reach text-link hover:underline"
+					class="reach text-ink hover:underline"
 					href={article.link}
 					target="_blank"
 					rel="noopener noreferrer"

@@ -4,7 +4,7 @@
 // for both themes and every accent color, so a new shade is checked before it
 // is seen.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { accents } from '#lib/settings.svelte.ts';
 
@@ -91,6 +91,7 @@ describe.each(['light', 'dark'] as const)('the %s theme', (theme) => {
 					expect(at(text, ground), `${text} on ${ground}`).toBeGreaterThanOrEqual(4.5);
 			expect(at('on-accent', 'accent'), 'on-accent on accent').toBeGreaterThanOrEqual(4.5);
 			expect(at('on-warn', 'warn'), 'on-warn on warn').toBeGreaterThanOrEqual(4.5);
+			expect(at('ink', 'line'), 'a quiet badge').toBeGreaterThanOrEqual(4.5);
 		});
 
 		it('keeps the text of the list and of articles at 7:1 (AAA)', () => {
@@ -113,4 +114,21 @@ describe.each(['light', 'dark'] as const)('the %s theme', (theme) => {
 it('reads every accent of the settings from the file', () => {
 	for (const accent of accents.filter((accent) => accent !== 'red'))
 		expect(block(`:root[data-accent='${accent}']`).accent, accent).toBeDefined();
+});
+
+it('uses only colors that layout.css names in the classes of the components', () => {
+	const names = new Set(Object.keys(light));
+	const folder = 'src/lib/components';
+	const wrong: string[] = [];
+	for (const file of readdirSync(folder).filter((file) => file.endsWith('.svelte'))) {
+		const source = readFileSync(`${folder}/${file}`, 'utf8');
+		for (const [, name] of source.matchAll(
+			/\b(?:bg|text|border(?:-[lrtbxy])?|ring|divide|fill|stroke)-([a-z][a-z-]*[a-z])(?:\/\d+)?\b/g
+		)) {
+			// A name that starts like a color but is none, as `accent-line-line`.
+			const like = [...names].some((color) => name.startsWith(`${color}-`));
+			if (like && !names.has(name)) wrong.push(`${file}: ${name}`);
+		}
+	}
+	expect(wrong).toEqual([]);
 });

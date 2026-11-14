@@ -36,7 +36,7 @@ describe('Sidebar', () => {
 		const all = entries.findIndex((text) => text.startsWith('All items'));
 		expect(entries[all + 1]).toMatch(/^Unread items/);
 		expect(within(nav).getByRole('button', { name: /^Hidden by filters/ })).toHaveTextContent(
-			String(reader.hiddenCount)
+			`(${reader.hiddenCount})`
 		);
 		expect(row('feed-tagesbote')).toHaveTextContent(
 			`Tagesbote (${reader.unread('feed-tagesbote')})`

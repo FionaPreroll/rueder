@@ -183,8 +183,20 @@ test('every view', async ({ page, isMobile }, info) => {
 			name: label
 		});
 		if (await direct.isVisible()) return direct.click();
-		await button(m.settings.view).click();
+		await button(phoneMenu).click();
 		await page.getByRole('menuitemradio', { name: m.settings.views[view] }).click();
+	}
+
+	/** On a phone, what to show, the views and marking as read are one menu. */
+	const phoneMenu = new RegExp(
+		`^${m.toolbar.phoneMenu('').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`
+	);
+
+	/** Opens the menu of what to show, which says what it shows now. */
+	async function openShow(shown: string) {
+		const combined = button(phoneMenu);
+		if (await combined.isVisible()) return combined.click();
+		await button(shown).click();
 	}
 
 	async function logIn() {
@@ -355,11 +367,11 @@ test('every view', async ({ page, isMobile }, info) => {
 	await view('nothing unread', async () => {
 		await reset();
 		await show('Blog von nebenan', true);
-		await button(m.toolbar.showAll).click();
+		await openShow(m.toolbar.showAll);
 		await page.getByRole('menuitemradio', { name: m.toolbar.showUnread }).click();
 		await expect(page.getByText(m.list.emptyUnread)).toBeVisible();
 		await picture('nothing-unread');
-		await button(m.toolbar.showUnread).click();
+		await openShow(m.toolbar.showUnread);
 		await page.getByRole('menuitemradio', { name: m.toolbar.showAll }).click();
 	});
 
@@ -368,15 +380,13 @@ test('every view', async ({ page, isMobile }, info) => {
 	await view('menus of the toolbar', async () => {
 		await reset();
 		await show(m.nav.all);
-		await button(m.toolbar.showAll).click();
+		await openShow(m.toolbar.showAll);
 		await picture('menu-show');
 		await page.keyboard.press('Escape');
-		await page.getByRole('button', { name: m.toolbar.markOptions }).click();
-		await picture('menu-mark-as-read');
-		await page.keyboard.press('Escape');
-		if (phone) {
-			await button(m.settings.view).click();
-			await picture('menu-view');
+		// On a phone that one menu holds marking as read too.
+		if (!phone) {
+			await page.getByRole('button', { name: m.toolbar.markOptions }).click();
+			await picture('menu-mark-as-read');
 			await page.keyboard.press('Escape');
 		}
 	});

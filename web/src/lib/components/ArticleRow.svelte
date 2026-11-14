@@ -6,6 +6,8 @@
 	// it, and a click opens the article in its pane instead of under the row. An
 	// article of a single feed without an author has nothing to put over the
 	// title, so its time goes beside the title instead of on a line of its own.
+	// On a phone a line of the list view takes two: the title on up to two lines,
+	// and under it the feed, the hints and the time.
 	import type { Reader } from '#lib/reader.ts';
 	import { formatFull, formatWhen } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -50,10 +52,10 @@
 	</button>
 {/snippet}
 
-{#snippet dots()}
+{#snippet dots(order = false)}
 	{#each labels as label (label.id)}
 		<span
-			class="size-2 shrink-0 self-center rounded-full"
+			class={['size-2 shrink-0 self-center rounded-full', order && 'max-sm:order-3']}
 			style:background-color={label.color}
 			title={label.title}
 			aria-label={m.labels.set(label.title)}
@@ -63,7 +65,10 @@
 	{#if article.changes > 0}
 		{@const headline = article.changed === 'title'}
 		<span
-			class="shrink-0 rounded border border-line px-1 text-xs text-soft"
+			class={[
+				'shrink-0 rounded border border-line px-1 text-xs text-soft',
+				order && 'max-sm:order-3'
+			]}
 			title={headline
 				? m.list.updatedHeadlineTitle(article.changes)
 				: m.list.updatedTitle(article.changes)}
@@ -73,9 +78,9 @@
 	{/if}
 {/snippet}
 
-{#snippet when()}
+{#snippet when(right = false)}
 	<time
-		class="shrink-0 text-xs text-soft tabular-nums"
+		class={['shrink-0 text-xs text-soft tabular-nums', right && 'max-sm:order-3 max-sm:ml-auto']}
 		datetime={new Date(article.publishedAt).toISOString()}
 		title={formatFull(article.publishedAt)}
 	>
@@ -87,7 +92,7 @@
 	<div
 		class={[
 			'flex items-start border-l-3 pr-3',
-			reader.cursor === article.id ? 'border-l-accent-line-line' : 'border-l-transparent',
+			reader.cursor === article.id ? 'border-l-accent-line' : 'border-l-transparent',
 			opened ? 'bg-chosen' : read ? 'bg-panel' : 'bg-paper'
 		]}
 	>
@@ -129,30 +134,37 @@
 	<div
 		class={[
 			'flex items-center border-l-3 pr-3',
-			reader.cursor === article.id ? 'border-l-accent-line-line' : 'border-l-transparent',
+			reader.cursor === article.id ? 'border-l-accent-line' : 'border-l-transparent',
 			read ? 'bg-panel' : 'bg-paper'
 		]}
 	>
 		{@render star()}
 		<button
 			type="button"
-			class="flex min-w-0 flex-1 cursor-pointer items-baseline gap-3 py-(--row-pad) text-left text-sm"
+			class="flex min-w-0 flex-1 cursor-pointer items-baseline gap-3 py-(--row-pad) text-left text-sm max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-0.5"
 			aria-expanded={reader.open === article.id}
 			onclick={() => reader.toggleOpen(article)}
 		>
 			{#if showFeed}
-				<span class={['hidden w-40 shrink-0 truncate md:block', read ? 'text-soft' : 'text-ink']}>
+				<span
+					class={[
+						'w-40 shrink-0 truncate max-sm:order-2 max-sm:w-auto max-sm:min-w-0 max-sm:shrink max-sm:text-xs sm:max-md:hidden',
+						read ? 'text-soft' : 'text-ink'
+					]}
+				>
 					{feed?.title}
 				</span>
 			{/if}
-			<span class="min-w-0 flex-1 truncate">
+			<span
+				class="min-w-0 flex-1 truncate max-sm:order-1 max-sm:line-clamp-2 max-sm:basis-full max-sm:whitespace-normal"
+			>
 				<span class={read ? 'text-soft' : 'font-semibold text-ink'}>{article.title}</span>
 				{#if settings.teasers}
 					<span class="text-soft"> – {article.teaser}</span>
 				{/if}
 			</span>
-			{@render dots()}
-			{@render when()}
+			{@render dots(true)}
+			{@render when(true)}
 		</button>
 	</div>
 {/if}

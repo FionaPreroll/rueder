@@ -32,7 +32,7 @@
 						<FeedIcon {feed} />
 						<button
 							type="button"
-							class="reach cursor-pointer text-link hover:underline"
+							class="reach cursor-pointer text-ink hover:underline"
 							title={m.home.showFeed(feed.title)}
 							onclick={() => reader.show({ kind: 'feed', id: feed.id })}
 						>
@@ -70,7 +70,7 @@
 						<li>
 							<button
 								type="button"
-								class="reach cursor-pointer text-left wrap-anywhere text-link hover:underline"
+								class="reach cursor-pointer text-left wrap-anywhere text-ink hover:underline"
 								onclick={() => open(article)}
 							>
 								{article.title}

@@ -111,6 +111,21 @@ describe('the toolbar', () => {
 		expect(within(sidebar).getByRole('button', { name: /^All items$/ })).toBeInTheDocument();
 	});
 
+	it('puts what to show, the views and marking as read in one menu with words on a phone', async () => {
+		render(Page);
+		await press('ga');
+		const toolbar = screen.getByRole('main');
+		await userEvent.click(
+			within(toolbar).getByRole('button', { name: 'View and mark as read, showing: All items' })
+		);
+		await userEvent.click(screen.getByRole('menuitemradio', { name: 'Magazine' }));
+		expect(settings.view).toBe('magazine');
+		await userEvent.click(within(toolbar).getByRole('button', { name: /^View and mark as read/ }));
+		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeInTheDocument();
+		expect(screen.getByRole('menuitem', { name: 'Items older than a day' })).toBeInTheDocument();
+		settings.view = defaults.view;
+	});
+
 	it('shows unread only, the oldest first, in either view', async () => {
 		render(Page);
 		await press('ga');
