@@ -193,7 +193,7 @@
 						bind:value={code}
 					/>
 				</label>
-				<button type="submit" class="tool" disabled={busy || code.trim().length !== 6}>
+				<button type="submit" class="primary" disabled={busy || code.trim().length !== 6}>
 					{texts.confirm}
 				</button>
 				<button type="button" class="tool" onclick={() => (setup = null)}>{texts.cancel}</button>
@@ -235,7 +235,7 @@
 					/>
 				</label>
 			{/if}
-			<button type="submit" class="tool" disabled={busy}>
+			<button type="submit" class={current.app ? 'tool' : 'primary'} disabled={busy}>
 				{current.app ? texts.switchOff : texts.start}
 			</button>
 		</form>

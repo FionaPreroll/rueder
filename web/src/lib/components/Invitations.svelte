@@ -89,11 +89,7 @@
 						bind:value={uses}
 					/>
 				</label>
-				<button
-					type="submit"
-					class="cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
-					disabled={busy}
-				>
+				<button type="submit" class="primary" disabled={busy}>
 					{m.invites.make}
 				</button>
 			</form>

@@ -99,6 +99,13 @@ const en = {
 		empty: 'No articles here.',
 		emptyUnread: 'Nothing unread here.',
 		emptySearch: 'No article matches the search.',
+		found: (count: number, more: boolean, words: string) =>
+			`${n(count)}${more ? '+' : ''} ${plural(count, { one: 'article', other: 'articles' })} with “${words}”`,
+		searchAll: 'Search all feeds',
+		feedFailing:
+			'rueder tries again with the next round of fetching. If it keeps failing, the site may have moved its feed: subscribe to the new address and unsubscribe from this one.',
+		hiddenNote: 'Your filter rules hid these articles. Open one to see which rule it was.',
+		toRules: 'Filter rules',
 		emptyFeed: 'This feed has no articles yet.',
 		waitingFeed:
 			'This feed has not been fetched yet. Its articles come with the next round of fetching, within a few minutes.',
@@ -212,7 +219,7 @@ const en = {
 		imprint: 'Imprint',
 		privacy: 'Privacy policy',
 		terms: 'Terms of use',
-		agree: 'I agree to the terms of use',
+		agree: { before: 'I agree to the ', link: 'terms of use', after: '.' },
 		changed: 'The terms of use have changed',
 		changedIntro: 'Please read the new terms of use. To go on using rueder, agree to them.',
 		read: 'Read the terms of use',

@@ -245,7 +245,7 @@
 				</label>
 			{/if}
 			<div class="flex flex-wrap gap-2">
-				<button type="submit" class="tool" disabled={sending || name.trim() === ''}>
+				<button type="submit" class="primary" disabled={sending || name.trim() === ''}>
 					{sending ? texts.creating : texts.create}
 				</button>
 				<button type="button" class="tool" onclick={() => (step = 'choose')}>{texts.back}</button>

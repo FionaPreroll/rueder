@@ -21,15 +21,23 @@
 	import Dialog from './Dialog.svelte';
 	import RulesEditor from './RulesEditor.svelte';
 	import Shortcuts from './Shortcuts.svelte';
+	import Tabs from './Tabs.svelte';
 
 	const tabs = ['look', 'reading', 'rules', 'keys'] as const;
 	type Tab = (typeof tabs)[number];
+
+	/** Only a touch screen, where a keyboard is unlikely: its keys are left out, unless asked for. */
+	const touchOnly =
+		typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
 
 	let {
 		reader,
 		tab = $bindable('look'),
 		onclose
 	}: { reader: Reader; tab?: Tab; onclose: () => void } = $props();
+
+	const asked = tab;
+	const shown = $derived(tabs.filter((name) => name !== 'keys' || !touchOnly || asked === 'keys'));
 
 	const swatch: Record<(typeof accents)[number], string> = {
 		red: '#c8402e',
@@ -42,26 +50,13 @@
 </script>
 
 <Dialog title={m.settings.title} wide {onclose}>
-	<div class="-mt-1 flex flex-wrap gap-1 border-b border-line" role="tablist">
-		{#each tabs as name (name)}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={tab === name}
-				class={[
-					'-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm',
-					tab === name
-						? 'border-accent-line font-semibold'
-						: 'border-transparent text-soft hover:text-ink'
-				]}
-				onclick={() => (tab = name)}
-			>
-				{m.settings.tabs[name]}
-			</button>
-		{/each}
-	</div>
+	<Tabs tabs={shown} open={tab} names={m.settings.tabs} onpick={(name) => (tab = name)} />
+	{#if reader.account}
+		<!-- Where to find what used to be here, for whoever looks for it. -->
+		<p class="mt-2 text-xs text-soft">{m.settings.accountNote}</p>
+	{/if}
 
-	<div class="pt-4" role="tabpanel">
+	<div class="pt-4 sm:min-h-[28rem]" role="tabpanel">
 		{#if tab === 'look'}
 			<div class="space-y-4">
 				<Choice
@@ -156,18 +151,14 @@
 					</span>
 				</label>
 			</div>
-		{:else if tab === 'rules'}
-			<RulesEditor {reader} book={reader.filters} />
-		{:else}
-			<Shortcuts />
 		{/if}
-
 		{#if tab === 'look' || tab === 'reading'}
 			<p class="mt-5 text-xs text-soft">{reader.demo ? m.settings.noteDemo : m.settings.note}</p>
 		{/if}
-		{#if reader.account}
-			<!-- Where to find what used to be here, for whoever looks for it. -->
-			<p class="mt-2 text-xs text-soft">{m.settings.accountNote}</p>
+		{#if tab === 'rules'}
+			<RulesEditor {reader} book={reader.filters} />
+		{:else if tab === 'keys'}
+			<Shortcuts />
 		{/if}
 	</div>
 </Dialog>

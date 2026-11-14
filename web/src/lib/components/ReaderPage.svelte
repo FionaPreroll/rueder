@@ -386,7 +386,13 @@
 							style:--list-width="{list.width}px"
 							data-pane="list"
 						>
-							<ArticleList {reader} {now} onversions={compare} pane />
+							<ArticleList
+								{reader}
+								{now}
+								onversions={compare}
+								onrules={() => openSettings('rules')}
+								pane
+							/>
 						</div>
 						<Resizer
 							width={list.width}
@@ -399,7 +405,7 @@
 						<ArticlePane {reader} {now} onversions={compare} />
 					</div>
 				{:else}
-					<ArticleList {reader} {now} onversions={compare} />
+					<ArticleList {reader} {now} onversions={compare} onrules={() => openSettings('rules')} />
 				{/if}
 			{/if}
 		</main>

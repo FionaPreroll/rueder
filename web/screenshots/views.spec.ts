@@ -327,7 +327,10 @@ test('every view', async ({ page, isMobile }, info) => {
 		await reset();
 		await show(m.nav.all);
 		await pickView('list');
-		const changed = articles.filter({ has: page.getByText(m.list.updated, { exact: true }) });
+		const updated = m.list.updatedTitle(1).split(';')[0];
+		const changed = articles.filter({
+			has: page.getByRole('img', { name: new RegExp(`^${updated}`) })
+		});
 		await changed.first().click();
 		await button(m.list.compare).first().click();
 		const open = dialog(m.versions.title);
@@ -358,9 +361,11 @@ test('every view', async ({ page, isMobile }, info) => {
 
 	await view('search', async () => {
 		await reset();
-		await show(m.nav.all);
+		// In one feed, which offers to search all of them.
+		await show('Ferris Wochenblatt', true);
 		await page.getByRole('searchbox').fill('Borrow');
 		await expect(articles.first()).toBeVisible();
+		await expect(button(m.list.searchAll)).toBeVisible();
 		await picture('search');
 	});
 
@@ -455,7 +460,11 @@ test('every view', async ({ page, isMobile }, info) => {
 		await reset();
 		await button(m.nav.settings).click();
 		const open = dialog(m.settings.title);
-		for (const tab of ['look', 'reading', 'rules', 'keys'] as const) {
+		// A phone has no keyboard, so no tab for its keys.
+		const tabs = (['look', 'reading', 'rules', 'keys'] as const).filter(
+			(tab) => !phone || tab !== 'keys'
+		);
+		for (const tab of tabs) {
 			await open.getByRole('tab', { name: m.settings.tabs[tab] }).click();
 			await picture(`settings-${tab}`, backdrop(open));
 		}

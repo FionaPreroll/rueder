@@ -36,7 +36,7 @@ async function logInWith(page: Page, code: string) {
 	await page.getByLabel('Name').fill('guarded');
 	await page.getByLabel('Password').fill(PASSWORD);
 	await page.getByRole('button', { name: 'Log in', exact: true }).click();
-	await expect(page.getByRole('alert')).toContainText('This account has a second factor.');
+	await expect(page.getByRole('status')).toContainText('This account has a second factor.');
 	await page.getByLabel('Code').fill(code);
 	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 }

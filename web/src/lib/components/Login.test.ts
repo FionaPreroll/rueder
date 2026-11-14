@@ -1,6 +1,6 @@
 // The login page, against a made-up server.
 
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Session } from '#lib/api/session.svelte.ts';
@@ -59,7 +59,11 @@ describe('Login', () => {
 		const session = await loginPage();
 		expect(screen.queryByLabelText('Code')).toBeNull();
 		await fill('fiona', 'correct horse{Enter}');
-		expect(await screen.findByRole('alert')).toHaveTextContent('This account has a second factor.');
+		// A hint of what comes next, not an error.
+		expect(await screen.findByRole('status')).toHaveTextContent(
+			'This account has a second factor.'
+		);
+		expect(screen.queryByRole('alert')).toBeNull();
 		// The password stays, the code is asked for.
 		expect(screen.getByLabelText('Password')).toHaveValue('correct horse');
 		const code = screen.getByLabelText('Code');
@@ -111,7 +115,7 @@ describe('Login', () => {
 		const button = await screen.findByRole('button', { name: 'Log in with a passkey' });
 		device.refuse('NotAllowedError');
 		await userEvent.click(button);
-		expect(await screen.findByRole('alert')).toHaveTextContent('No passkey was used.');
+		expect(await screen.findByRole('status')).toHaveTextContent('No passkey was used.');
 		await userEvent.click(button);
 		expect(await screen.findByRole('alert')).toHaveTextContent(
 			'This passkey belongs to no account here.'
@@ -280,7 +284,12 @@ describe('registering', () => {
 		await userEvent.click(screen.getByRole('button', { name: 'Make an account' }));
 		await fillNew('grace', 'a long password', 'a long password');
 		expect(make()).toBeDisabled();
-		const agree = screen.getByRole('checkbox', { name: 'I agree to the terms of use' });
+		const agree = screen.getByRole('checkbox', { name: /^I agree to the terms of use/ });
+		// The terms are a link in the sentence itself.
+		expect(within(agree.closest('p')!).getByRole('link', { name: 'terms of use' })).toHaveAttribute(
+			'href',
+			'https://operator.example/terms'
+		);
 		await userEvent.click(agree);
 		await userEvent.click(make());
 		await vi.waitFor(() => expect(session.state).toBe('in'));
