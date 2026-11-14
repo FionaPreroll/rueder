@@ -43,7 +43,11 @@
 	{#key session.reader}
 		<!-- A part of the page that fails to draw is reported, if the account agreed, and the page offers to start again. -->
 		<svelte:boundary onerror={(error) => session.reader?.noteError('component', error)}>
-			<ReaderPage reader={session.reader} />
+			<ReaderPage
+				reader={session.reader}
+				accountSettings={session.accountSettings}
+				apps={session.apps}
+			/>
 			{#snippet failed()}
 				<div class="p-10 text-center" role="alert">
 					<p class="font-semibold">{m.crash.title}</p>

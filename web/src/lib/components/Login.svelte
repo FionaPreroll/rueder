@@ -11,7 +11,7 @@
 		Session
 	} from '#lib/api/session.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import { EMAIL_LINK_HOURS, RESET_LINK_MINUTES } from '#lib/reader.ts';
+	import { EMAIL_LINK_HOURS, RESET_LINK_MINUTES } from '#lib/account.ts';
 	import Icon from './Icon.svelte';
 
 	let { session }: { session: Session } = $props();

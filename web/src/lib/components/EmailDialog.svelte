@@ -5,10 +5,11 @@
 	// tab or another, the account has its address and this goes away.
 	import { onMount } from 'svelte';
 	import { m } from '#lib/i18n/index.ts';
+	import type { AccountSettings } from '#lib/account.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import EmailAddress from './EmailAddress.svelte';
 
-	let { reader }: { reader: Reader } = $props();
+	let { reader, accountSettings }: { reader: Reader; accountSettings: AccountSettings } = $props();
 
 	let panel: HTMLElement | undefined = $state();
 
@@ -30,7 +31,7 @@
 		<h2 id="email-ask-title" class="text-lg font-semibold">{m.email.askTitle}</h2>
 		<p id="email-ask-intro" class="mt-2 text-sm">{m.email.askIntro}</p>
 		<div class="mt-4">
-			<EmailAddress {reader} asking />
+			<EmailAddress {reader} {accountSettings} asking />
 		</div>
 		{#if reader.account?.emailPending}
 			<p class="mt-3 text-xs text-soft">{m.email.askWaiting}</p>

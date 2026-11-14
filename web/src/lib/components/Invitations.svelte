@@ -5,10 +5,10 @@
 	import { onMount } from 'svelte';
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import type { Invites, Reader } from '#lib/reader.ts';
+	import type { AccountSettings, Invites } from '#lib/account.ts';
 	import Icon from './Icon.svelte';
 
-	let { reader }: { reader: Reader } = $props();
+	let { accountSettings }: { accountSettings: AccountSettings } = $props();
 
 	let list = $state.raw<Invites | null>(null);
 	/** Asked and no answer came. */
@@ -28,7 +28,7 @@
 	const most = $derived(admin ? MAX_USES : Math.min(MAX_USES, left ?? 0));
 
 	async function load() {
-		const answer = await reader.invites();
+		const answer = await accountSettings.invites();
 		failed = answer === null;
 		if (answer) list = answer;
 	}
@@ -41,7 +41,7 @@
 		busy = true;
 		problem = null;
 		copied = false;
-		const made = await reader.invite(uses);
+		const made = await accountSettings.invite(uses);
 		busy = false;
 		if (made === null) problem = 'failed';
 		else if (made === 'none-left') problem = 'none-left';
@@ -50,7 +50,7 @@
 	}
 
 	async function revoke(id: number) {
-		if (await reader.revokeInvite(id)) await load();
+		if (await accountSettings.revokeInvite(id)) await load();
 		else problem = 'failed';
 	}
 

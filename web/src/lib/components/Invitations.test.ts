@@ -3,6 +3,7 @@
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServerAccount } from '#lib/api/account.svelte.ts';
 import { ServerReader } from '#lib/api/reader.svelte.ts';
 import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
@@ -23,15 +24,16 @@ afterEach(() => {
 	useLanguage(null);
 });
 
-const reader = () =>
-	new ServerReader({ name: 'fiona', admin: server.admin }, { signOut() {}, expired() {} });
+const session = { signOut() {}, expired() {} };
+const reader = () => new ServerReader({ name: 'fiona', admin: server.admin }, session);
+const accountSettings = () => new ServerAccount(reader(), session);
 const makeLink = () => screen.getByRole('button', { name: 'Make a link' });
 
 describe('Invitations', () => {
 	it('says how many a reader can give, and makes a link that is shown once', async () => {
 		server.inviteQuota = 3;
 		server.inviteDays = 14;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		expect(await screen.findByText(/You can invite 3 more people\./)).toBeInTheDocument();
 		expect(screen.getByText('A link is good for 14 days.')).toBeInTheDocument();
 		expect(screen.getByText('You have made no links yet.')).toBeInTheDocument();
@@ -54,7 +56,7 @@ describe('Invitations', () => {
 		server.inviteQuota = 1;
 		// The clipboard of the tests' browser.
 		const user = userEvent.setup();
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		await user.click(await screen.findByRole('button', { name: 'Make a link' }));
 		await user.click(await screen.findByRole('button', { name: 'Copy' }));
 		expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
@@ -65,7 +67,7 @@ describe('Invitations', () => {
 
 	it('takes a link back, which gives its place back', async () => {
 		server.inviteQuota = 1;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		await userEvent.click(await screen.findByRole('button', { name: 'Make a link' }));
 		expect(await screen.findByText('You have no invitations to give.')).toBeInTheDocument();
 		// Nothing left: nothing to make.
@@ -86,7 +88,7 @@ describe('Invitations', () => {
 			{ ...link, id: 1, max_uses: 2, uses: 2, expires_at: at(4) },
 			{ ...link, id: 2, max_uses: 3, uses: 1, expires_at: at(-1) }
 		];
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		const rows = await screen.findAllByRole('listitem');
 		expect(rows[0]).toHaveTextContent('2 of 2 used');
 		expect(rows[0]).toHaveTextContent('used up');
@@ -98,7 +100,7 @@ describe('Invitations', () => {
 
 	it('lets an admin always invite', async () => {
 		server.admin = true;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		expect(await screen.findByText(/As an admin you can always invite\./)).toBeInTheDocument();
 		expect(screen.getByLabelText('For how many accounts')).toHaveAttribute('max', '1000');
 		await userEvent.click(makeLink());
@@ -107,7 +109,7 @@ describe('Invitations', () => {
 
 	it('says when the invitations ran out in the meantime', async () => {
 		server.inviteQuota = 2;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		await screen.findByText(/You can invite 2 more people\./);
 		// Another tab used them up.
 		server.inviteQuota = 0;
@@ -119,7 +121,7 @@ describe('Invitations', () => {
 
 	it('says when making a link did not work', async () => {
 		server.inviteQuota = 2;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		await screen.findByText(/You can invite 2 more people\./);
 		server.refuse('POST', /^\/invites$/, 500);
 		await userEvent.click(makeLink());
@@ -129,14 +131,14 @@ describe('Invitations', () => {
 
 	it('says when the list did not come', async () => {
 		server.down = true;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		expect(await screen.findByRole('alert')).toHaveTextContent('That did not work.');
 	});
 
 	it('speaks German', async () => {
 		useLanguage('de');
 		server.inviteQuota = 1;
-		render(Invitations, { reader: reader() });
+		render(Invitations, { accountSettings: accountSettings() });
 		expect(await screen.findByText(/Du kannst noch 1 Person einladen\./)).toBeInTheDocument();
 		await userEvent.click(screen.getByRole('button', { name: 'Link erzeugen' }));
 		expect(await screen.findByText('0 von 1 benutzt')).toBeInTheDocument();
@@ -146,7 +148,12 @@ describe('Invitations', () => {
 describe('the account settings', () => {
 	it('have a tab for invitations where there is a server', async () => {
 		server.inviteQuota = 1;
-		render(AccountDialog, { reader: reader(), onclose: () => {} });
+		const r = reader();
+		render(AccountDialog, {
+			reader: r,
+			accountSettings: new ServerAccount(r, session),
+			onclose: () => {}
+		});
 		await userEvent.click(screen.getByRole('tab', { name: 'Invitations' }));
 		const panel = screen.getByRole('tabpanel');
 		expect(await within(panel).findByText(/You can invite 1 more person\./)).toBeInTheDocument();

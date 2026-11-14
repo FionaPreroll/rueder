@@ -5,6 +5,7 @@
 	// settings, or the browser's. Another language takes effect at the next start.
 	import ReaderPage from '#lib/components/ReaderPage.svelte';
 	import { demoData } from '#lib/demo/data.ts';
+	import { DemoApps } from '#lib/demo/apps.svelte.ts';
 	import { DemoReader } from '#lib/demo/reader.svelte.ts';
 	import { startLanguage } from '#lib/i18n/locale.svelte.ts';
 	import { settings } from '#lib/settings.svelte.ts';
@@ -12,4 +13,4 @@
 	const reader = new DemoReader(Date.now, demoData(Date.now(), startLanguage(settings.language)));
 </script>
 
-<ReaderPage {reader} />
+<ReaderPage {reader} apps={new DemoApps()} />

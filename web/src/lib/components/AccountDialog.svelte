@@ -5,7 +5,12 @@
 	// other makers, invitations, moving the account to another rueder, whether
 	// this browser reports its errors, and deleting the account. It opens from the
 	// menu of the account, where logging out is.
-	import { tabsOf, type AccountTab } from '#lib/account.ts';
+	import {
+		tabsOf,
+		type AccountSettings,
+		type AccountTab,
+		type AppPasswordKeeper
+	} from '#lib/account.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { Reader } from '#lib/reader.ts';
 	import Apps from './Apps.svelte';
@@ -21,9 +26,19 @@
 
 	let {
 		reader,
+		accountSettings = null,
+		apps = null,
 		tab = $bindable<AccountTab>('password'),
 		onclose
-	}: { reader: Reader; tab?: AccountTab; onclose: () => void } = $props();
+	}: {
+		reader: Reader;
+		/** Null without a server, as in the demo. */
+		accountSettings?: AccountSettings | null;
+		/** Null where the server has no API for apps. */
+		apps?: AppPasswordKeeper | null;
+		tab?: AccountTab;
+		onclose: () => void;
+	} = $props();
 
 	/** A second factor or an app password is being set up: a click beside would lose it. */
 	let busy = $state(false);
@@ -32,7 +47,7 @@
 	/** Counts changes to the second factor, so that both parts of the tab show them. */
 	let security = $state(0);
 
-	const tabs = $derived(tabsOf(reader));
+	const tabs = $derived(tabsOf(reader, accountSettings, apps));
 	/** The tab that is open, or the first one this reader has. */
 	const open = $derived(tabs.includes(tab) ? tab : (tabs[0] ?? 'password'));
 </script>
@@ -42,21 +57,33 @@
 	<p class="mt-2 text-xs text-soft">{m.account.settingsNote}</p>
 
 	<div class="pt-4 sm:min-h-[28rem]" role="tabpanel">
-		{#if open === 'password'}
-			<ChangePassword {reader} />
-		{:else if open === 'email'}
-			<EmailAddress {reader} />
-		{:else if open === 'security'}
-			<SecondFactor {reader} bind:busy version={security} onchange={() => security++} />
-			{#if reader.can.passkeys}
+		{#if open === 'password' && accountSettings}
+			<ChangePassword {reader} {accountSettings} />
+		{:else if open === 'email' && accountSettings}
+			<EmailAddress {reader} {accountSettings} />
+		{:else if open === 'security' && accountSettings}
+			<SecondFactor
+				{reader}
+				{accountSettings}
+				bind:busy
+				version={security}
+				onchange={() => security++}
+			/>
+			{#if accountSettings.can.passkeys}
 				<div class="mt-6 border-t border-line pt-4">
-					<Passkeys {reader} bind:busy={addingKey} version={security} onchange={() => security++} />
+					<Passkeys
+						{reader}
+						{accountSettings}
+						bind:busy={addingKey}
+						version={security}
+						onchange={() => security++}
+					/>
 				</div>
 			{/if}
-		{:else if open === 'apps'}
-			<Apps {reader} bind:busy />
-		{:else if open === 'invites'}
-			<Invitations {reader} />
+		{:else if open === 'apps' && apps}
+			<Apps {reader} {accountSettings} {apps} bind:busy />
+		{:else if open === 'invites' && accountSettings}
+			<Invitations {accountSettings} />
 		{:else if open === 'move'}
 			<MoveAccount {reader} />
 		{:else if open === 'privacy'}
@@ -82,8 +109,8 @@
 				<p class="text-soft">{m.settings.reports.never}</p>
 				<p class="text-xs text-soft">{m.settings.reports.off}</p>
 			</div>
-		{:else if open === 'remove'}
-			<RemoveAccount {reader} />
+		{:else if open === 'remove' && accountSettings}
+			<RemoveAccount {reader} {accountSettings} />
 		{/if}
 	</div>
 </Dialog>
