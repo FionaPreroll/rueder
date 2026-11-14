@@ -51,7 +51,8 @@ test('colors the bars of the app as the dark theme, within the page’s policy',
 	const context = await browser.newContext({ colorScheme: 'dark' });
 	const page = await context.newPage();
 	// The script in app.html sets the colors before the first paint; the policy allows
-	// it by its hash, so a changed script must not be refused.
+	// it by its hash, so a changed script must not be refused. The one thing refused is
+	// the style attribute of SvelteKit's announcer, which layout.css hides instead.
 	await page.addInitScript(() => {
 		const seen: string[] = [];
 		(window as unknown as { refused: string[] }).refused = seen;
@@ -65,7 +66,9 @@ test('colors the bars of the app as the dark theme, within the page’s policy',
 			(meta) => (meta as HTMLMetaElement).content
 		),
 		manifest: document.querySelector('link[rel="manifest"]')?.getAttribute('href'),
-		refused: (window as unknown as { refused: string[] }).refused
+		refused: (window as unknown as { refused: string[] }).refused.filter(
+			(directive) => directive !== 'style-src-attr'
+		)
 	}));
 	expect(look).toEqual({
 		bars: ['#1c1f25', '#1c1f25'],
