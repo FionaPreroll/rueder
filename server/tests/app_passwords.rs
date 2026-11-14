@@ -279,7 +279,10 @@ async fn without_the_app_api_there_are_none(db: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    let state = AppState::new(db.clone()).without_app_api();
+    let state = AppState {
+        app_api: false,
+        ..AppState::new(db.clone())
+    };
     let cookie = common::session(&db, ada).await;
     let body = json!({ "name": "Reeder", "password": PASSWORD });
     assert_eq!(make(&state, &cookie, body).await.0, StatusCode::NOT_FOUND);

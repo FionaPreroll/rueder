@@ -879,7 +879,7 @@ const en = {
 			dirty: (commit: string) => `${commit}, with changes of its own`,
 			branch: 'Branch',
 			tag: 'Tag',
-			built: 'Built',
+			committed: 'Committed',
 			where: 'Runs',
 			container: 'in a container',
 			host: 'on the machine itself',

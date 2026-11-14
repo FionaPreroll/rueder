@@ -452,7 +452,10 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
         .unwrap()
         .unwrap();
     let lax = AppState::new(db.clone());
-    let strict = AppState::new(db.clone()).with_admin_second_factor();
+    let strict = AppState {
+        admin_second_factor: true,
+        ..AppState::new(db.clone())
+    };
     let without = cookie(&log_in(&strict, "root", None).await.1);
 
     // As rueder comes, an admin is one with the password alone.

@@ -16,7 +16,7 @@ use rueder::{
     AppState,
     email::{self, Mode},
     mail::{Mailer, Outbox, Sent},
-    rate::{Rate, Rates},
+    rate::{Limits, Rate, Rates},
     registration,
 };
 use serde_json::{Value, json};
@@ -41,7 +41,13 @@ async fn set_mode(db: &PgPool, mode: Mode) {
 async fn server(db: &PgPool, mode: Mode) -> (AppState, Outbox) {
     set_mode(db, mode).await;
     let (mailer, outbox) = Mailer::in_memory(SITE).unwrap();
-    (AppState::new(db.clone()).with_mail(mailer), outbox)
+    (
+        AppState {
+            mail: Some(mailer.into()),
+            ..AppState::new(db.clone())
+        },
+        outbox,
+    )
 }
 
 /// An account with a password, logged in.
@@ -543,10 +549,17 @@ async fn an_address_belongs_to_one_account(db: PgPool) {
 #[sqlx::test]
 async fn mail_has_limits_per_account_address_and_day(db: PgPool) {
     let hour = Duration::from_secs(3600);
-    let rates =
-        Rates::default().with_mails(Rate::new(2, hour), Rate::new(3, hour), Rate::new(5, hour));
+    let rates = Rates::new(Limits {
+        mails_per_account: Rate::new(2, hour),
+        mails_per_address: Rate::new(3, hour),
+        mails_per_day: Rate::new(5, hour),
+        ..Limits::default()
+    });
     let (state, outbox) = server(&db, Mode::Optional).await;
-    let state = state.with_rates(rates);
+    let state = AppState {
+        rates: rates.into(),
+        ..state
+    };
     let (_, ada) = reader(&db, "ada").await;
     let (_, grace) = reader(&db, "grace").await;
     let (_, linus) = reader(&db, "linus").await;
@@ -763,7 +776,10 @@ async fn the_mail_goes_to_the_relay(db: PgPool) {
     )
     .unwrap();
     set_mode(&db, Mode::Optional).await;
-    let state = AppState::new(db.clone()).with_mail(mailer);
+    let state = AppState {
+        mail: Some(mailer.into()),
+        ..AppState::new(db.clone())
+    };
     let body = json!({
         "username": "nina", "password": PASSWORD, "email": "nina@example.org", "language": "de",
     });
@@ -814,7 +830,10 @@ async fn a_relay_that_refuses_leaves_no_link(db: PgPool) {
     )
     .unwrap();
     set_mode(&db, Mode::Optional).await;
-    let state = AppState::new(db.clone()).with_mail(mailer);
+    let state = AppState {
+        mail: Some(mailer.into()),
+        ..AppState::new(db.clone())
+    };
     let (_, cookie) = reader(&db, "ada").await;
     let (status, _) = change(&state, &cookie, "nobody@example.org").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
@@ -829,7 +848,16 @@ async fn of_links_asked_for_at_once_one_is_left(db: PgPool) {
     let hour = Duration::from_secs(3600);
     let room = Rate::new(100, hour);
     let (state, outbox) = server(&db, Mode::Optional).await;
-    let state = state.with_rates(Rates::default().with_mails(room, room, room));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            mails_per_account: room,
+            mails_per_address: room,
+            mails_per_day: room,
+            ..Limits::default()
+        })
+        .into(),
+        ..state
+    };
     let (_, cookie) = reader(&db, "ada").await;
     let asked: Vec<_> = (0..8)
         .map(|n| {

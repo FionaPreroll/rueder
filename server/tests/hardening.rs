@@ -15,7 +15,7 @@ use rueder::{
     AppState, MAX_BODY,
     http_client::{self, HttpClient},
     images::{self, Config, ImageProxy, Size},
-    rate::{LOOKUPS, Rate, Rates},
+    rate::{Limits, Rate, Rates},
     subscribe,
 };
 use serde_json::json;
@@ -180,7 +180,10 @@ async fn an_image_keeps_the_headers_of_the_proxy(db: PgPool) {
     let picture = images::fit(PNG.to_vec(), size).unwrap();
     images.cache().put(size, source, &picture);
     let address = images.signer().address(size, source).unwrap();
-    let state = AppState::new(db.clone()).with_images(images);
+    let state = AppState {
+        images: Some(images),
+        ..AppState::new(db.clone())
+    };
 
     let (status, headers, _) = send(
         &state,
@@ -358,9 +361,15 @@ async fn reading_is_not_a_change_and_logging_out_is(db: PgPool) {
 async fn a_sender_can_ask_only_so_much(db: PgPool) {
     let dir = frontend("rate");
     let hour = Duration::from_secs(3600);
-    let state = AppState::new(db.clone())
-        .with_rates(Rates::new(Rate::new(3, hour), LOOKUPS))
-        .with_client_ip_header("x-forwarded-for".parse().unwrap());
+    let state = AppState {
+        rates: Rates::new(Limits {
+            requests: Rate::new(3, hour),
+            ..Limits::default()
+        })
+        .into(),
+        client_ip_header: Some("x-forwarded-for".parse().unwrap()),
+        ..AppState::new(db.clone())
+    };
     let ask = async |path: &str, from: &str| {
         let from = [("x-forwarded-for", from)];
         send(&state, &dir, Method::GET, path, &from, None).await

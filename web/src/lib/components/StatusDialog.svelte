@@ -96,7 +96,7 @@
 		if (build.branch) rows.push([b.branch, build.branch]);
 		if (build.tag) rows.push([b.tag, build.tag]);
 		rows.push(
-			[b.built, build.built_at ? formatFull(Date.parse(build.built_at)) : empty],
+			[b.committed, build.committed_at ? formatFull(Date.parse(build.committed_at)) : empty],
 			[b.where, build.container ? b.container : b.host],
 			[b.target, build.target || empty],
 			[b.profile, b.profileValue(build.profile, build.opt_level)],

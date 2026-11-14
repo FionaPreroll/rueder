@@ -26,12 +26,14 @@ WORKDIR /src/server
 # does (see .github/workflows/ci.yml); a build by hand may leave it out, and
 # the status then says it does not know.
 ARG RUEDER_COMMIT=""
+ARG RUEDER_COMMITTED_AT=""
 ARG RUEDER_BRANCH=""
 ARG RUEDER_TAG=""
 ARG RUEDER_DIRTY=""
 ARG RUEDER_CI_RUN=""
 ENV SQLX_OFFLINE=true \
     RUEDER_COMMIT=$RUEDER_COMMIT \
+    RUEDER_COMMITTED_AT=$RUEDER_COMMITTED_AT \
     RUEDER_BRANCH=$RUEDER_BRANCH \
     RUEDER_TAG=$RUEDER_TAG \
     RUEDER_DIRTY=$RUEDER_DIRTY \

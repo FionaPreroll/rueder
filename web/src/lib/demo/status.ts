@@ -24,7 +24,7 @@ export function demoStatus(now: number): ServerStatus {
 			branch: 'main',
 			tag: 'v0.1.0',
 			dirty: false,
-			built_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, 'Z'),
+			committed_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, 'Z'),
 			target: 'x86_64-unknown-linux-gnu',
 			profile: 'release',
 			opt_level: '3',

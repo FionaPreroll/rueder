@@ -210,7 +210,42 @@ impl Drop for Turn<'_> {
     }
 }
 
-/// The limits of a server.
+/// What a server allows. The default is what rueder comes with; a test sets
+/// another for what it looks at, as in `Limits { imports: …, ..Limits::default() }`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    pub requests: Rate,
+    pub lookups: Rate,
+    pub new_feeds: Rate,
+    pub reports: Rate,
+    pub content_reports: Rate,
+    pub imports: Rate,
+    pub app_changes: Rate,
+    pub mails_per_account: Rate,
+    pub mails_per_address: Rate,
+    pub mails_per_day: Rate,
+    pub reset_mails_per_day: Rate,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            requests: REQUESTS,
+            lookups: LOOKUPS,
+            new_feeds: NEW_FEEDS,
+            reports: REPORTS,
+            content_reports: CONTENT_REPORTS,
+            imports: IMPORTS,
+            app_changes: APP_CHANGES,
+            mails_per_account: MAILS_PER_ACCOUNT,
+            mails_per_address: MAILS_PER_ADDRESS,
+            mails_per_day: MAILS_PER_DAY,
+            reset_mails_per_day: RESET_MAILS_PER_DAY,
+        }
+    }
+}
+
+/// What each sender and each account has used of the [`Limits`] of a server.
 pub struct Rates {
     requests: Limiter<IpAddr>,
     lookups: Limiter<i32>,
@@ -227,19 +262,19 @@ pub struct Rates {
 }
 
 impl Rates {
-    pub fn new(requests: Rate, lookups: Rate) -> Self {
+    pub fn new(limits: Limits) -> Self {
         Self {
-            requests: Limiter::new(requests),
-            lookups: Limiter::new(lookups),
-            new_feeds: Limiter::new(NEW_FEEDS),
-            reports: Limiter::new(REPORTS),
-            content_reports: Limiter::new(CONTENT_REPORTS),
-            imports: Limiter::new(IMPORTS),
-            app_changes: Limiter::new(APP_CHANGES),
-            mails_per_account: Limiter::new(MAILS_PER_ACCOUNT),
-            mails_per_address: Limiter::new(MAILS_PER_ADDRESS),
-            mails_per_day: Limiter::new(MAILS_PER_DAY),
-            reset_mails_per_day: Limiter::new(RESET_MAILS_PER_DAY),
+            requests: Limiter::new(limits.requests),
+            lookups: Limiter::new(limits.lookups),
+            new_feeds: Limiter::new(limits.new_feeds),
+            reports: Limiter::new(limits.reports),
+            content_reports: Limiter::new(limits.content_reports),
+            imports: Limiter::new(limits.imports),
+            app_changes: Limiter::new(limits.app_changes),
+            mails_per_account: Limiter::new(limits.mails_per_account),
+            mails_per_address: Limiter::new(limits.mails_per_address),
+            mails_per_day: Limiter::new(limits.mails_per_day),
+            reset_mails_per_day: Limiter::new(limits.reset_mails_per_day),
             heavy: Heavy {
                 running: Semaphore::new(HEAVY_AT_ONCE),
                 accounts: Mutex::default(),
@@ -274,27 +309,11 @@ impl Rates {
         Ok(turn)
     }
 
-    /// Other limits for the moves from another rueder than [`IMPORTS`].
-    pub fn with_imports(self, imports: Rate) -> Self {
-        Self {
-            imports: Limiter::new(imports),
-            ..self
-        }
-    }
-
     /// Counts a move from another rueder into the account.
     pub fn import(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
         self.imports
             .take(&account_id, now)
             .map_err(|wait| AppError::TooMany(wait, "too many imports, try again later"))
-    }
-
-    /// Other limits for the feeds nobody read before than [`NEW_FEEDS`].
-    pub fn with_new_feeds(self, new_feeds: Rate) -> Self {
-        Self {
-            new_feeds: Limiter::new(new_feeds),
-            ..self
-        }
     }
 
     /// Counts `n` feeds nobody read before that the account brings in, all of
@@ -306,22 +325,6 @@ impl Rates {
             .map_err(|wait| AppError::TooMany(wait, "too many new feeds at once, try again later"))
     }
 
-    /// Other limits for the reports of errors than [`REPORTS`].
-    pub fn with_reports(self, reports: Rate) -> Self {
-        Self {
-            reports: Limiter::new(reports),
-            ..self
-        }
-    }
-
-    /// Other limits for reports of feeds and articles than [`CONTENT_REPORTS`].
-    pub fn with_content_reports(self, reports: Rate) -> Self {
-        Self {
-            content_reports: Limiter::new(reports),
-            ..self
-        }
-    }
-
     /// Counts a report of a feed or an article the account sends.
     pub fn content_report(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
         self.content_reports
@@ -329,39 +332,11 @@ impl Rates {
             .map_err(|wait| AppError::TooMany(wait, "too many reports, try again later"))
     }
 
-    /// Other limits for the changes of apps than [`APP_CHANGES`].
-    pub fn with_app_changes(self, changes: Rate) -> Self {
-        Self {
-            app_changes: Limiter::new(changes),
-            ..self
-        }
-    }
-
     /// Counts a change an app of another maker sends for the account.
     pub fn app_change(&self, account_id: i32, now: Instant) -> Result<(), AppError> {
         self.app_changes
             .take(&account_id, now)
             .map_err(|wait| AppError::TooMany(wait, "too many changes, try again later"))
-    }
-
-    /// Other limits for mail than [`MAILS_PER_ACCOUNT`], [`MAILS_PER_ADDRESS`]
-    /// and [`MAILS_PER_DAY`].
-    pub fn with_mails(self, account: Rate, address: Rate, day: Rate) -> Self {
-        Self {
-            mails_per_account: Limiter::new(account),
-            mails_per_address: Limiter::new(address),
-            mails_per_day: Limiter::new(day),
-            ..self
-        }
-    }
-
-    /// Another share of the day for links to set a new password than
-    /// [`RESET_MAILS_PER_DAY`].
-    pub fn with_reset_mails(self, day: Rate) -> Self {
-        Self {
-            reset_mails_per_day: Limiter::new(day),
-            ..self
-        }
     }
 
     /// Counts a mail the server is to send for the account to the address:
@@ -420,7 +395,7 @@ impl Rates {
 
 impl Default for Rates {
     fn default() -> Self {
-        Self::new(REQUESTS, LOOKUPS)
+        Self::new(Limits::default())
     }
 }
 
@@ -537,7 +512,10 @@ mod tests {
 
     #[test]
     fn an_ipv6_sender_is_its_network() {
-        let rates = Rates::new(Rate::new(1, SECOND), LOOKUPS);
+        let rates = Rates::new(Limits {
+            requests: Rate::new(1, SECOND),
+            ..Limits::default()
+        });
         let now = Instant::now();
         let ip = |text: &str| text.parse::<IpAddr>().unwrap();
         assert_eq!(rates.request(ip("2001:db8::1"), now), Ok(()));

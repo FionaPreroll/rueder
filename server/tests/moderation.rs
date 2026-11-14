@@ -14,13 +14,16 @@ use rueder::{
     images::{Cache, Config, Format, ImageProxy, Picture, Refused, Size},
     moderation,
     monitor::Monitor,
-    rate::{Rate, Rates},
+    rate::{Limits, Rate, Rates},
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
 fn reporting(db: &PgPool) -> AppState {
-    AppState::new(db.clone()).with_content_reports()
+    AppState {
+        content_reports: true,
+        ..AppState::new(db.clone())
+    }
 }
 
 async fn report(state: &AppState, cookie: &str, path: &str, body: Value) -> StatusCode {
@@ -113,8 +116,14 @@ async fn readers_report_feeds_and_articles_once_each(db: PgPool) {
 async fn an_account_reports_within_its_limit(db: PgPool) {
     let (ada, feed) = common::reader(&db, "ada", 5).await;
     let cookie = common::session(&db, ada).await;
-    let state = reporting(&db)
-        .with_rates(Rates::default().with_content_reports(Rate::new(2, Duration::from_secs(3600))));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            content_reports: Rate::new(2, Duration::from_secs(3600)),
+            ..Limits::default()
+        })
+        .into(),
+        ..reporting(&db)
+    };
     let mut answers = Vec::new();
     for seq in 1..=3 {
         let path = format!("/api/feeds/{feed}/articles/{seq}/report");

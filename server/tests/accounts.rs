@@ -581,8 +581,10 @@ async fn wrong_passwords_are_counted_for_the_address(db: PgPool) {
     let now = std::time::Instant::now();
 
     // Behind a proxy that names the sender, the address it names counts.
-    let state =
-        AppState::new(db.clone()).with_client_ip_header(HeaderName::from_static("x-forwarded-for"));
+    let state = AppState {
+        client_ip_header: Some(HeaderName::from_static("x-forwarded-for")),
+        ..AppState::new(db.clone())
+    };
     for _ in 0..PER_ADDRESS {
         state.logins.failed(Key::address(noisy), now);
     }

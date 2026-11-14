@@ -157,6 +157,8 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// A server with what the settings give when none is set. A part is set
+    /// by its field, as in `AppState { mail: …, ..AppState::new(db) }`.
     pub fn new(db: PgPool) -> Self {
         Self {
             db,
@@ -178,124 +180,6 @@ impl AppState {
             passkeys: None,
             mail: None,
             metrics: None,
-        }
-    }
-
-    /// Has passkeys, for the site at this address (see `PUBLIC_URL`).
-    /// Sends mail through this mailer (see `mail`).
-    pub fn with_mail(self, mailer: mail::Mailer) -> Self {
-        Self {
-            mail: Some(Arc::new(mailer)),
-            ..self
-        }
-    }
-
-    pub fn with_passkeys(self, passkeys: passkeys::Passkeys) -> Self {
-        Self {
-            passkeys: Some(Arc::new(passkeys)),
-            ..self
-        }
-    }
-
-    /// Lets no app of another maker in, as with `APP_API=off`.
-    pub fn without_app_api(self) -> Self {
-        Self {
-            app_api: false,
-            ..self
-        }
-    }
-
-    /// Takes no reports of errors from browsers, as with `CLIENT_REPORTS=off`.
-    pub fn without_reports(self) -> Self {
-        Self {
-            reports: false,
-            ..self
-        }
-    }
-
-    /// Lets admins be admins only in a session with a second factor, as with
-    /// `ADMIN_SECOND_FACTOR=required`.
-    pub fn with_admin_second_factor(self) -> Self {
-        Self {
-            admin_second_factor: true,
-            ..self
-        }
-    }
-
-    /// Lets readers report feeds and articles, as with `CONTENT_REPORTS=on`.
-    pub fn with_content_reports(self) -> Self {
-        Self {
-            content_reports: true,
-            ..self
-        }
-    }
-
-    /// Links to the operator's legal texts, and the terms an account agrees to.
-    pub fn with_legal(self, legal: Legal) -> Self {
-        Self {
-            legal: Arc::new(legal),
-            ..self
-        }
-    }
-
-    /// Gives the metrics for Prometheus under `/metrics`.
-    pub fn with_metrics(self, metrics: metrics::Metrics) -> Self {
-        Self {
-            metrics: Some(Arc::new(metrics)),
-            ..self
-        }
-    }
-
-    /// Shares the monitor with whatever else it watches, such as fetching.
-    pub fn with_monitor(self, monitor: Arc<Monitor>) -> Self {
-        Self { monitor, ..self }
-    }
-
-    /// Other limits than [`rate::REQUESTS`] and [`rate::LOOKUPS`].
-    pub fn with_rates(self, rates: Rates) -> Self {
-        Self {
-            rates: Arc::new(rates),
-            ..self
-        }
-    }
-
-    pub fn with_client(self, client: HttpClient) -> Self {
-        Self {
-            client: Some(client),
-            ..self
-        }
-    }
-
-    /// Shares the events with whatever else publishes them, such as fetching.
-    pub fn with_events(self, events: Events) -> Self {
-        Self { events, ..self }
-    }
-
-    pub fn with_rules(self, rules: Arc<Rules>) -> Self {
-        Self {
-            rules: Some(rules),
-            ..self
-        }
-    }
-
-    pub fn with_oidc(self, oidc: Arc<Oidc>) -> Self {
-        Self {
-            oidc: Some(oidc),
-            ..self
-        }
-    }
-
-    pub fn with_client_ip_header(self, name: HeaderName) -> Self {
-        Self {
-            client_ip_header: Some(name),
-            ..self
-        }
-    }
-
-    pub fn with_images(self, images: Arc<ImageProxy>) -> Self {
-        Self {
-            images: Some(images),
-            ..self
         }
     }
 }

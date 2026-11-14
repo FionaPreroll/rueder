@@ -9,7 +9,7 @@ use axum::http::{Method, StatusCode, header};
 use common::{START, article, call, raw, session};
 use rueder::{
     AppState, articles,
-    rate::{Rate, Rates},
+    rate::{Limits, Rate, Rates},
     reading, transfer,
 };
 use serde_json::{Value, json};
@@ -634,7 +634,10 @@ async fn an_article_that_cannot_be_found_loses_what_was_read_of_it(db: PgPool) {
 
 #[sqlx::test]
 async fn a_file_that_breaks_the_rules_is_refused(db: PgPool) {
-    let rates = Rates::default().with_imports(Rate::new(100, std::time::Duration::from_secs(1)));
+    let rates = Rates::new(Limits {
+        imports: Rate::new(100, std::time::Duration::from_secs(1)),
+        ..Limits::default()
+    });
     let state = AppState {
         rates: rates.into(),
         ..AppState::new(db.clone())
@@ -760,7 +763,10 @@ async fn a_file_that_breaks_the_rules_is_refused(db: PgPool) {
 
 #[sqlx::test]
 async fn an_account_cannot_import_without_end(db: PgPool) {
-    let rates = Rates::default().with_imports(Rate::new(2, std::time::Duration::from_secs(3600)));
+    let rates = Rates::new(Limits {
+        imports: Rate::new(2, std::time::Duration::from_secs(3600)),
+        ..Limits::default()
+    });
     let state = AppState {
         rates: rates.into(),
         ..AppState::new(db.clone())
@@ -795,7 +801,11 @@ async fn a_move_counts_its_new_feeds_against_the_limit(db: PgPool) {
     forget(&db).await;
     let hour = std::time::Duration::from_secs(3600);
     let state = AppState {
-        rates: Rates::default().with_new_feeds(Rate::new(4, hour)).into(),
+        rates: Rates::new(Limits {
+            new_feeds: Rate::new(4, hour),
+            ..Limits::default()
+        })
+        .into(),
         ..AppState::new(db.clone())
     };
     let grace = common::account(&db, "grace").await;
