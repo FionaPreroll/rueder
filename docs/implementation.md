@@ -565,6 +565,8 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 
   Runde 2 am 2026-11-14 nach Fionas Antworten: F2 (Magazin ohne Bildfläche), F3 (ein Menü mit Text in der Werkzeugleiste auf dem Handy), F6 (Anmeldung mit Logo, Name und einem Satz), F7 (Status mit Zahlen auf einen Blick, Teilen zum Aufklappen und Befehlen als Code), F18 (Titel in `ink`), F22 (zwei Zeilen je Artikel auf dem Handy), F25 (ein leiser Zähler für „Hidden by filters“) und die Migration `0018_author_names.sql` für die gespeicherten Autoren von F1. Dabei repariert: Die Markierung der aktuellen Zeile in der Liste fehlte seit Runde 1 (`border-l-accent-line-line`); `colors.test.ts` prüft jetzt, dass die Klassen der Komponenten nur Farben nennen, die es gibt.
 
+  Runde 3 am 2026-11-14, nach Fionas „alle“ für die übrigen Funde: F5 (Datum in fester Spalte, Hinweise als Symbol), F16 (Klasse `primary` für die eine Hauptaktion), F17 (Komponente `Badge`), F19 (Fehler des Feeds über seiner Liste), F20 (Anzahl der Treffer über der Liste, Wörter markiert, und auf ihren Wunsch „Search all feeds“, wenn in einem Feed, Ordner oder einer anderen Liste gesucht wird), F21 (Hinweis mit Knopf zu den Filterregeln, die Regel an der Zeile, sobald der Artikel geöffnet war), F23 und F26 (Komponente `Tabs`, eine Zeile, die sich seitwärts schieben lässt, der Verweis einmal darunter, Mindesthöhe), F27 (Fehler und Hinweis der Anmeldung getrennt), F28 (Link im Satz) und F31 (kein Reiter „Keyboard“ auf einem Gerät nur mit Touch). Für F33 prüft `report.ts` jetzt den Abstand nach WCAG 2.5.8; alle 73 kleineren Ziele am Desktop haben ihn.
+
 ### Für später
 
 Von Fiona am 2026-11-12 für später notiert, noch keinem Schritt zugeordnet:
@@ -815,7 +817,7 @@ Touch-Ziele und Zeilenlänge, gemessen vom Rundgang der Screenshots (`pnpm scree
 | Messung | Vorher | Nachher |
 |---|---|---|
 | Ziele unter 44×44, en-phone-light (67 Bilder) | 176 | 0 |
-| Ziele unter 24×24, en-desktop-light (58 Bilder) | nicht gemessen | 75, Abstände nicht geprüft (F33) |
+| Ziele unter 24×24 ohne den Abstand nach 2.5.8, en-desktop-light (56 Bilder) | nicht gemessen | 0 (73 kleinere mit Abstand) |
 | Längste Zeile Artikeltext, Desktop, Schrift „Mittel“ | 84 Zeichen (`44rem`), mit `66ch` 86 | 80 Zeichen (`60ch`) |
 | Längste Zeile Artikeltext, Handy | – | 46 Zeichen |
 | Kontrast aller Themen und Akzente | F8, F10–F12 unter dem Maß | alle 37 Fälle von `colors.test.ts` erfüllt |

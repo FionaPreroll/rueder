@@ -112,11 +112,7 @@
 	{#if done}
 		<p class="text-soft" role="status">{done === 'first' ? texts.doneFirst : texts.done}</p>
 	{/if}
-	<button
-		type="submit"
-		class="tool font-semibold disabled:cursor-default disabled:opacity-50"
-		disabled={!ready}
-	>
+	<button type="submit" class="primary" disabled={!ready}>
 		{first ? texts.submitFirst : texts.submit}
 	</button>
 </form>

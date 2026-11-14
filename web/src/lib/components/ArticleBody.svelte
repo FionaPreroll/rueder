@@ -6,8 +6,10 @@
 	import { m } from '#lib/i18n/index.ts';
 	import { nextLabelColor, type Article } from '#lib/model.ts';
 	import { ruleText } from '#lib/rule-text.ts';
+	import Badge from './Badge.svelte';
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
+	import Marked from './Marked.svelte';
 	import Menu from './Menu.svelte';
 	import ReportDialog from './ReportDialog.svelte';
 
@@ -27,7 +29,12 @@
 	const starred = $derived(reader.isStarred(article));
 	const labelled = $derived(new Set(reader.labelsOf(article)));
 	const feed = $derived(reader.feeds[article.feedId]);
-	const rule = $derived(reader.isHidden(article) ? reader.filters.hidingRule(article) : null);
+	// Everything in the list of what the filters hid is hidden, whether its mark has come yet or not.
+	const rule = $derived(
+		reader.isHidden(article) || reader.stream.kind === 'hidden'
+			? reader.filters.hidingRule(article)
+			: null
+	);
 
 	// The picture a feed gives beside the text is shown where the text has none of its own.
 	const lead = $derived(
@@ -65,10 +72,10 @@
 					target="_blank"
 					rel="noopener noreferrer"
 				>
-					{article.title}
+					<Marked text={article.title} query={reader.query} />
 				</a>
 			{:else}
-				{article.title}
+				<Marked text={article.title} query={reader.query} />
 			{/if}
 		</h2>
 		<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-soft">
@@ -89,9 +96,8 @@
 			</time>
 			{#if article.changes > 0}
 				{@const headline = article.changed === 'title'}
-				<button
-					type="button"
-					class="reach inline-flex cursor-pointer items-center gap-1 rounded border border-line px-1.5 text-xs hover:bg-hover hover:text-ink"
+				<Badge
+					kind="hint"
 					title={headline
 						? m.list.updatedHeadlineTitle(article.changes)
 						: m.list.updatedTitle(article.changes)}
@@ -99,13 +105,15 @@
 				>
 					<Icon name="versions" class="size-3.5" />
 					{headline ? m.list.updatedHeadline : m.list.updated}
-				</button>
+				</Badge>
 			{/if}
 		</p>
 		{#if rule}
-			<p class="mt-2 inline-flex items-center gap-1.5 rounded bg-panel px-2 py-1 text-sm">
-				<Icon name="hidden" />
-				{m.list.hiddenBy(ruleText(rule))}
+			<p class="mt-2">
+				<Badge kind="hint">
+					<Icon name="hidden" class="size-3.5" />
+					{m.list.hiddenBy(ruleText(rule))}
+				</Badge>
 			</p>
 		{/if}
 	</header>
@@ -216,13 +224,9 @@
 			</form>
 		{/if}
 		{#each reader.labels.filter((label) => labelled.has(label.id)) as label (label.id)}
-			<span
-				class="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink"
-				aria-label={m.labels.set(label.title)}
-			>
-				<span class="size-2 rounded-full" style:background-color={label.color}></span>
+			<Badge kind="label" color={label.color} label={m.labels.set(label.title)}>
 				{label.title}
-			</span>
+			</Badge>
 		{/each}
 		{#if article.changes > 0}
 			<button
@@ -236,7 +240,7 @@
 		{/if}
 		{#if article.link}
 			<a
-				class="inline-flex items-center gap-1 hover:text-ink"
+				class="inline-flex items-center gap-1 hover:text-ink pointer-coarse:min-h-11"
 				href={article.link}
 				target="_blank"
 				rel="noopener noreferrer"
@@ -247,7 +251,7 @@
 		{/if}
 		<span class="ml-auto flex gap-1">
 			{#each article.tags as tag (tag)}
-				<span class="rounded bg-panel px-1.5 py-0.5 text-xs">{tag}</span>
+				<Badge kind="tag">{tag}</Badge>
 			{/each}
 		</span>
 		{#if reader.can.reportContent}

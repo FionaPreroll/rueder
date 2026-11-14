@@ -33,11 +33,14 @@
 		reader,
 		now,
 		onversions,
+		onrules,
 		pane = false
 	}: {
 		reader: Reader;
 		now: number;
 		onversions: (article: Article) => void;
+		/** Opens the filter rules, from the list of what they hid. */
+		onrules?: () => void;
 		pane?: boolean;
 	} = $props();
 
@@ -83,6 +86,14 @@
 		reader.stream.kind === 'feed' ? reader.feeds[reader.stream.id] : undefined
 	);
 	const feedIsEmpty = $derived(shownFeed?.lastSeq === 0);
+	const words = $derived(reader.query.trim());
+
+	/** Searches all feeds for the words of the search in a feed, a folder or another list. */
+	function searchAll() {
+		const query = reader.query;
+		reader.show({ kind: 'all' });
+		reader.query = query;
+	}
 
 	const rowOf = (id: string) => scroller?.querySelector<HTMLElement>(`[data-article="${id}"]`);
 
@@ -275,6 +286,42 @@
 				>
 					{m.toolbar.newArticles(reader.pending)}
 				</button>
+			</div>
+		{/if}
+
+		<!-- What the list is: what a search found, why a feed fails, why articles are hidden. -->
+		{#if words && !reader.loading}
+			<div
+				class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-2 text-sm"
+				aria-live="polite"
+			>
+				<span class="font-semibold">
+					{m.list.found(reader.visible.length, reader.hasMore, words)}
+				</span>
+				{#if reader.stream.kind !== 'all'}
+					<button type="button" class="tool" onclick={searchAll}>
+						<Icon name="search" />
+						{m.list.searchAll}
+					</button>
+				{/if}
+			</div>
+		{/if}
+		{#if shownFeed?.error && !shownFeed.blocked}
+			<div class="flex gap-2 border-b border-line bg-panel px-3 py-2 text-sm">
+				<Icon name="warning" class="mt-0.5 size-4 shrink-0 text-warn" />
+				<p>
+					<span class="font-semibold">{m.nav.fetchFailed(shownFeed.error)}</span>
+					<span class="block text-soft">{m.list.feedFailing}</span>
+				</p>
+			</div>
+		{/if}
+		{#if reader.stream.kind === 'hidden' && onrules}
+			<div
+				class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3 py-2 text-sm"
+			>
+				<Icon name="hidden" class="size-4 shrink-0 text-soft" />
+				<span class="min-w-0 flex-1">{m.list.hiddenNote}</span>
+				<button type="button" class="tool" onclick={onrules}>{m.list.toRules}</button>
 			</div>
 		{/if}
 

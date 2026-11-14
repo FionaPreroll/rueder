@@ -96,6 +96,13 @@ const de: Messages = {
 		empty: 'Hier sind keine Artikel.',
 		emptyUnread: 'Hier ist nichts ungelesen.',
 		emptySearch: 'Kein Artikel passt zur Suche.',
+		found: (count, more, words) => `${n(count)}${more ? '+' : ''} Artikel mit „${words}“`,
+		searchAll: 'In allen Feeds suchen',
+		feedFailing:
+			'rueder versucht es mit der nächsten Runde wieder. Scheitert es weiter, ist der Feed vielleicht umgezogen: Abonniere die neue Adresse und beende das Abo von diesem.',
+		hiddenNote:
+			'Deine Filterregeln haben diese Artikel ausgeblendet. Öffne einen, um zu sehen, welche Regel es war.',
+		toRules: 'Filterregeln',
 		emptyFeed: 'Dieser Feed hat noch keine Artikel.',
 		waitingFeed:
 			'Dieser Feed wurde noch nicht abgerufen. Seine Artikel kommen mit der nächsten Runde des Abrufs, in wenigen Minuten.',
@@ -211,7 +218,7 @@ const de: Messages = {
 		imprint: 'Impressum',
 		privacy: 'Datenschutzerklärung',
 		terms: 'Nutzungsbedingungen',
-		agree: 'Ich stimme den Nutzungsbedingungen zu',
+		agree: { before: 'Ich stimme den ', link: 'Nutzungsbedingungen', after: ' zu.' },
 		changed: 'Die Nutzungsbedingungen haben sich geändert',
 		changedIntro:
 			'Bitte lies die neuen Nutzungsbedingungen. Um rueder weiter zu nutzen, stimm ihnen zu.',

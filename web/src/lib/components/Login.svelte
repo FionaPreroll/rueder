@@ -79,7 +79,8 @@
 	// Said once: a reload of the page does not say it again.
 	if (came) history.replaceState(history.state, '', location.pathname);
 
-	const problem = $derived.by(() => {
+	/** What went wrong, or a hint of what to do next, which is not an error. */
+	const said = $derived.by(() => {
 		if (session.state === 'unreachable') return m.login.unreachable;
 		if (registering) return refusal ? refused(refusal) : null;
 		// An invitation that cannot be used is said once, where the login is.
@@ -88,7 +89,7 @@
 			case 'wrong':
 				return m.login.wrong;
 			case 'codeNeeded':
-				return m.login.codeNeeded;
+				return { hint: m.login.codeNeeded };
 			case 'wrongCode':
 				return m.login.wrongCode;
 			case 'tooMany':
@@ -96,7 +97,7 @@
 			case 'disabled':
 				return m.login.disabled;
 			case 'passkeyCancelled':
-				return m.login.passkeyCancelled;
+				return { hint: m.login.passkeyCancelled };
 			case 'passkeyFailed':
 				return m.login.passkeyFailed;
 			case 'passkeyWrong':
@@ -107,6 +108,8 @@
 				return outcome?.() ?? null;
 		}
 	});
+	const problem = $derived(typeof said === 'string' ? said : null);
+	const hint = $derived(said !== null && typeof said === 'object' ? said.hint : null);
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -188,14 +191,19 @@
 			{registering ? m.register.title : m.login.title}
 		</h1>
 
-		{#if session.farewell && !problem}
+		{#if session.farewell && !said}
 			<p class="mt-4 rounded bg-panel px-3 py-2 text-sm" role="status">{m.login.removed}</p>
 		{/if}
 
 		{#if problem}
-			<p class="mt-4 flex gap-2 rounded bg-panel px-3 py-2 text-sm" role="alert">
+			<p class="mt-4 flex gap-2 rounded border border-warn bg-panel px-3 py-2 text-sm" role="alert">
 				<span class="mt-0.5 text-warn"><Icon name="warning" /></span>
 				<span>{problem}</span>
+			</p>
+		{:else if hint}
+			<p class="mt-4 flex gap-2 rounded bg-panel px-3 py-2 text-sm" role="status">
+				<span class="mt-0.5 text-soft"><Icon name="info" /></span>
+				<span>{hint}</span>
 			</p>
 		{/if}
 
@@ -266,23 +274,18 @@
 						<label
 							for="agree"
 							class="pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
-							>{m.legal.agree}</label
+							><span
+								>{m.legal.agree.before}<a
+									class="reach text-link underline"
+									href={legal.terms}
+									target="_blank"
+									rel="noopener noreferrer">{m.legal.agree.link}</a
+								>{m.legal.agree.after}</span
+							></label
 						>
-						<a
-							class="ml-auto shrink-0 text-link hover:underline"
-							href={legal.terms}
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							{m.legal.terms}
-						</a>
 					</p>
 				{/if}
-				<button
-					type="submit"
-					class="w-full cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
-					disabled={busy || !ready}
-				>
+				<button type="submit" class="primary h-9 w-full" disabled={busy || !ready}>
 					{m.register.submit}
 				</button>
 			</form>
@@ -341,7 +344,7 @@
 				{/if}
 				<button
 					type="submit"
-					class="w-full cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50"
+					class="primary h-9 w-full"
 					disabled={busy || !name.trim() || !password || (needsCode && !code.trim())}
 				>
 					{m.login.submit}

@@ -114,8 +114,9 @@ Next to each picture the walk notes what can be measured of the page: the
 size of every target that can be pressed and the characters to a line of
 article text (`measure.jsonl` in each folder). `pnpm screenshots:report` adds
 it up in `screenshots/out/measure.md`, against the measure of the design review
-(`../docs/design_review.md`): 44 by 44 pixels on a phone, 24 by 24 elsewhere, at
-most 80 characters to the line. The colors are checked by
+(`../docs/design_review.md`): 44 by 44 pixels on a phone, 24 by 24 elsewhere
+unless there is room around a target as WCAG 2.5.8 asks, at most 80 characters
+to the line. The colors are checked by
 `src/routes/colors.test.ts` with the other tests.
 
 ## Conventions

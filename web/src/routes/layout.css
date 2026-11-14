@@ -32,6 +32,8 @@
 	--color-live: #1a7f43;
 	--color-added: #d6f3dc;
 	--color-removed: #fbdcdc;
+	/* The words of a search, marked in a title. */
+	--color-mark: #fde68a;
 }
 
 :root {
@@ -62,6 +64,7 @@
 	--color-live: #4cc37d;
 	--color-added: #17402a;
 	--color-removed: #55232a;
+	--color-mark: #5c4813;
 }
 
 /* Accent colors: the Subscribe button, the cursor in the list, what is switched on.
@@ -212,6 +215,11 @@
 	}
 	.tool[aria-pressed='true'] {
 		@apply bg-chosen;
+	}
+
+	/* The one main action of a dialog or a form: filled in the accent, the others are `tool`. */
+	.primary {
+		@apply inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded bg-accent px-3 text-sm font-semibold whitespace-nowrap text-on-accent hover:brightness-110 disabled:cursor-default disabled:opacity-50;
 	}
 
 	/* The button of what cannot be undone: unsubscribing, deleting the account. */

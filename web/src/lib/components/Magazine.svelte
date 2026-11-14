@@ -8,6 +8,7 @@
 	import { m } from '#lib/i18n/index.ts';
 	import type { Article } from '#lib/model.ts';
 	import Icon from './Icon.svelte';
+	import Marked from './Marked.svelte';
 
 	let { reader, now, articles }: { reader: Reader; now: number; articles: Article[] } = $props();
 
@@ -92,7 +93,7 @@
 							read ? 'text-soft' : 'font-semibold text-ink'
 						]}
 					>
-						{lead.title}
+						<Marked text={lead.title} query={reader.query} />
 					</span>
 					{#if lead.teaser}
 						<span class="mt-2 line-clamp-3 block text-soft">{lead.teaser}</span>
@@ -129,7 +130,7 @@
 								read ? 'text-soft' : 'font-semibold text-ink'
 							]}
 						>
-							{article.title}
+							<Marked text={article.title} query={reader.query} />
 						</span>
 						{#if article.teaser}
 							<span

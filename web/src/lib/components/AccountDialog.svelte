@@ -15,6 +15,7 @@
 	import Passkeys from './Passkeys.svelte';
 	import RemoveAccount from './RemoveAccount.svelte';
 	import SecondFactor from './SecondFactor.svelte';
+	import Tabs from './Tabs.svelte';
 
 	let {
 		reader,
@@ -35,26 +36,10 @@
 </script>
 
 <Dialog title={m.account.title} wide holds={busy || addingKey} {onclose}>
-	<div class="-mt-1 flex flex-wrap gap-1 border-b border-line" role="tablist">
-		{#each tabs as name (name)}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={open === name}
-				class={[
-					'-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm',
-					open === name
-						? 'border-accent-line font-semibold'
-						: 'border-transparent text-soft hover:text-ink'
-				]}
-				onclick={() => (tab = name)}
-			>
-				{m.account.tabs[name]}
-			</button>
-		{/each}
-	</div>
+	<Tabs {tabs} {open} names={m.account.tabs} onpick={(name) => (tab = name)} />
+	<p class="mt-2 text-xs text-soft">{m.account.settingsNote}</p>
 
-	<div class="pt-4" role="tabpanel">
+	<div class="pt-4 sm:min-h-[28rem]" role="tabpanel">
 		{#if open === 'password'}
 			<ChangePassword {reader} />
 		{:else if open === 'security'}
@@ -97,6 +82,4 @@
 			<RemoveAccount {reader} />
 		{/if}
 	</div>
-
-	<p class="mt-5 text-xs text-soft">{m.account.settingsNote}</p>
 </Dialog>

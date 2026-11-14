@@ -70,11 +70,7 @@
 				<p class="text-sm text-warn" role="alert">{m.report[outcome]}</p>
 			{/if}
 			<div class="flex gap-2">
-				<button
-					type="submit"
-					class="cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-60"
-					disabled={sending}
-				>
+				<button type="submit" class="primary" disabled={sending}>
 					{sending ? m.report.sending : m.report.send}
 				</button>
 				<button type="button" class="tool" onclick={onclose}>{m.common.cancel}</button>

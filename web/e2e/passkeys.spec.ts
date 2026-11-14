@@ -65,7 +65,7 @@ test('a passkey is added, logs in without name or password, and is removed', asy
 	await page.getByLabel('Name').fill('keyholder');
 	await page.getByLabel('Password').fill(PASSWORD);
 	await page.getByRole('button', { name: 'Log in', exact: true }).click();
-	await expect(page.getByRole('alert')).toContainText('This account has a second factor.');
+	await expect(page.getByRole('status')).toContainText('This account has a second factor.');
 	await page.getByRole('button', { name: 'Log in with a passkey' }).click();
 	await expect(sidebar(page)).toBeVisible();
 
@@ -104,7 +104,8 @@ test('a device that does not verify its user logs nobody in', async ({ page }) =
 	await page.context().clearCookies();
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Log in with a passkey' }).click();
-	await expect(page.getByRole('alert')).toBeVisible();
+	// The browser says no more than that no passkey was used, which the page takes as a hint.
+	await expect(page.getByRole('status')).toContainText('No passkey was used.');
 	await expect(sidebar(page)).toBeHidden();
 	await page.reload();
 	await expect(page.getByRole('button', { name: 'Log in with a passkey' })).toBeVisible();

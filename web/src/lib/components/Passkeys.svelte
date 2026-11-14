@@ -159,7 +159,7 @@
 		</label>
 	{/if}
 	<div class="flex flex-wrap gap-2">
-		<button type="submit" class="tool" disabled={working}>
+		<button type="submit" class="primary" disabled={working}>
 			{working ? texts.working : submit}
 		</button>
 		<button type="button" class="tool" onclick={close}>{texts.cancel}</button>

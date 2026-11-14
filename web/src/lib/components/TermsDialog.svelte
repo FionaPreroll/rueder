@@ -55,12 +55,7 @@
 			<button type="button" class="tool" onclick={() => reader.signOut()}>
 				{m.legal.decline}
 			</button>
-			<button
-				type="button"
-				class="cursor-pointer rounded bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
-				disabled={busy}
-				onclick={agree}
-			>
+			<button type="button" class="primary" disabled={busy} onclick={agree}>
 				{m.legal.accept}
 			</button>
 		</div>

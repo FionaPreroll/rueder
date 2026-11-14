@@ -92,6 +92,7 @@ describe.each(['light', 'dark'] as const)('the %s theme', (theme) => {
 			expect(at('on-accent', 'accent'), 'on-accent on accent').toBeGreaterThanOrEqual(4.5);
 			expect(at('on-warn', 'warn'), 'on-warn on warn').toBeGreaterThanOrEqual(4.5);
 			expect(at('ink', 'line'), 'a quiet badge').toBeGreaterThanOrEqual(4.5);
+			expect(at('ink', 'mark'), 'a marked word').toBeGreaterThanOrEqual(7);
 		});
 
 		it('keeps the text of the list and of articles at 7:1 (AAA)', () => {
