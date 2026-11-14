@@ -1,8 +1,12 @@
 // Made-up feeds and articles for the draft of the interface. Nothing here is a real
 // publication. The same seed and time give the same data, so tests and screenshots
-// come out the same every time.
+// come out the same every time. There are two corpora: a German one with a few
+// English feeds in it, as a reader in Germany might have, and an English one with
+// the same feeds under English names, for the demo in English (GitHub Pages).
 
-import type { Article, ArticleVersion, Changed, Feed, TreeNode } from '#lib/model.ts';
+import type { FilterRule } from '#lib/filters.ts';
+import type { Language } from '#lib/i18n/locale.svelte.ts';
+import type { Article, ArticleVersion, Changed, Feed, Label, TreeNode } from '#lib/model.ts';
 
 const HOUR = 3_600_000;
 
@@ -335,6 +339,163 @@ const seeds: FeedSeed[] = [
 	}
 ];
 
+/**
+ * The German feeds in English: the same feed under another name, with English
+ * headlines, authors and tags. What is not named stays as in the German corpus,
+ * so both behave alike: the same numbers of articles, the same advertisements,
+ * recordings and errors. The feeds that are English already are not here.
+ */
+const inEnglish: Record<string, Partial<FeedSeed>> = {
+	'feed-ferris': {
+		title: 'Ferris Weekly',
+		site: 'https://ferris-weekly.example',
+		tags: ['rust', 'language', 'tools'],
+		heads: [
+			'Async traits',
+			'The borrow checker',
+			'Cargo workspaces',
+			'Error handling',
+			'Lifetimes',
+			'Unsafe code'
+		],
+		tails: [
+			'without the headache',
+			'in practice',
+			'after a year in production',
+			'for newcomers',
+			'with less boilerplate',
+			'and what went wrong'
+		]
+	},
+	'feed-kernel': {
+		title: 'Kernel Notes',
+		site: 'https://kernel-notes.example',
+		heads: ['The scheduler', 'io_uring', 'Memory management', 'The file system', 'eBPF'],
+		tails: [
+			'in the new release',
+			'measured under load',
+			'briefly explained',
+			'and a stubborn bug',
+			'as a driver sees it'
+		]
+	},
+	'feed-platine': {
+		title: 'Circuit Mail',
+		site: 'https://circuit-mail.example',
+		tags: ['hardware', 'making'],
+		heads: [
+			'A single-board computer',
+			'The e-paper display',
+			'The reflow oven',
+			'A five-dollar sensor',
+			'The keyboard'
+		],
+		tails: [
+			'in a long-term test',
+			'to build yourself',
+			'with an open schematic',
+			'for the windowsill',
+			'from the 3D printer'
+		]
+	},
+	'feed-loetkolben': {
+		title: 'The Soldering Iron',
+		site: 'https://the-soldering-iron.example',
+		tags: ['repair', 'workshop'],
+		heads: ['The old radio', 'A power supply', 'The record player', 'The coffee grinder'],
+		tails: ['brought back to life', 'taken apart for good', 'fixed for three dollars']
+	},
+	'feed-netz': {
+		title: 'Net Policy Notes',
+		site: 'https://net-policy-notes.example',
+		authors: ['Carla Brandt', 'Milan Hoffmann', 'Newsroom'],
+		tags: ['net policy', 'privacy', 'surveillance'],
+		heads: [
+			'Chat control',
+			'The transparency act',
+			'Open data',
+			"The privacy commissioner's report",
+			'Digital government',
+			'Free public Wi-Fi'
+		],
+		tails: [
+			'is back on the agenda',
+			'fails in committee',
+			'in three charts',
+			'and the criticism of it',
+			'is delayed by a year',
+			'fact-checked'
+		]
+	},
+	'feed-tagesbote': {
+		title: 'The Daily Courier',
+		site: 'https://daily-courier.example',
+		authors: ['Newsroom', 'Anne Sievers', 'Paul Okafor'],
+		tags: ['politics', 'business', 'local'],
+		heads: [
+			'The town council',
+			'The railway',
+			'The harbor festival',
+			'The budget',
+			'The new bridge',
+			'The swimming pool'
+		],
+		tails: [
+			'approves the expansion',
+			'reports delays',
+			'takes first stock',
+			'remains disputed',
+			'reopens after two years',
+			'costs more than planned'
+		]
+	},
+	'feed-teleskop': {
+		title: 'Telescope News',
+		site: 'https://telescope-news.example',
+		tags: ['astronomy', 'spaceflight'],
+		heads: ['A distant gas giant', 'The comet', 'The radio telescope', 'A double star'],
+		tails: [
+			'shows up in infrared for the first time',
+			'surprises researchers',
+			'delivers sharper pictures',
+			'poses an old riddle'
+		]
+	},
+	'feed-strich': {
+		title: 'Stick Figures Daily',
+		site: 'https://stick-figures.example',
+		authors: ['scribble'],
+		heads: ['Monday', 'Coffee', 'The meeting', 'The cat', 'The printer', 'Quitting time'],
+		tails: ['(again)', 'with a footnote', 'in four panels', 'without words']
+	},
+	'feed-fundstuecke': {
+		title: 'Finds of the Week',
+		site: 'https://finds-of-the-week.example',
+		tags: ['links', 'oddities'],
+		heads: ['Ten links', 'A map', 'An archive', 'Three tools'],
+		tails: ['for rainy days', "I won't give up", 'from the depths of the web', 'to marvel at']
+	},
+	'feed-nebenan': {
+		title: 'The Blog Next Door',
+		site: 'https://blog-next-door.example',
+		tags: ['everyday', 'garden'],
+		heads: ['The balcony', 'The bicycle', 'The neighbors', 'My sourdough'],
+		tails: ['in November', 'has a name now', 'and me', 'after the move']
+	},
+	'feed-wort': {
+		title: 'Word of the Day',
+		site: 'https://word-of-the-day.example',
+		authors: ['Dictionary'],
+		tags: ['language'],
+		heads: ['Flibbertigibbet', 'Gobbledygook', 'Kerfuffle', 'Hullabaloo', 'Brouhaha', 'Codswallop'],
+		tails: ['– origin and use', '– the word of the day']
+	}
+};
+
+/** The feeds of a corpus. */
+const seedsOf = (corpus: Language): FeedSeed[] =>
+	corpus === 'de' ? seeds : seeds.map((seed) => ({ ...seed, ...inEnglish[seed.id], lang: 'en' }));
+
 const sentences = {
 	de: [
 		'Auf den ersten Blick wirkt das unscheinbar, im Alltag macht es aber einen spürbaren Unterschied.',
@@ -514,15 +675,24 @@ export interface DemoData {
 	nextArticle: (feedId: string, seq: number, now: number) => DemoArticle;
 	/** How many articles a feed gets per day, for the made-up live updates. */
 	pace: Record<string, number>;
+	/** The reader's labels and filter rules to start with. */
+	labels: Label[];
+	rules: FilterRule[];
 }
 
 const feed = (id: string) => ({ kind: 'feed', id }) as const;
 
-const tree = (): TreeNode[] => [
+/** What the folders are called in each corpus. */
+const folderTitles = {
+	de: { tech: 'Technik', news: 'Nachrichten', science: 'Wissenschaft', fun: 'Comics & Kurioses' },
+	en: { tech: 'Technology', news: 'News', science: 'Science', fun: 'Comics & Oddities' }
+};
+
+const tree = (corpus: Language): TreeNode[] => [
 	{
 		kind: 'folder',
 		id: 'folder-tech',
-		title: 'Technik',
+		title: folderTitles[corpus].tech,
 		children: [
 			{
 				kind: 'folder',
@@ -550,30 +720,73 @@ const tree = (): TreeNode[] => [
 	{
 		kind: 'folder',
 		id: 'folder-news',
-		title: 'Nachrichten',
+		title: folderTitles[corpus].news,
 		children: [feed('feed-tagesbote'), feed('feed-harbor')]
 	},
 	{
 		kind: 'folder',
 		id: 'folder-science',
-		title: 'Wissenschaft',
+		title: folderTitles[corpus].science,
 		children: [feed('feed-teleskop'), feed('feed-labnotes')]
 	},
 	{
 		kind: 'folder',
 		id: 'folder-fun',
-		title: 'Comics & Kurioses',
+		title: folderTitles[corpus].fun,
 		children: [feed('feed-strich'), feed('feed-fundstuecke')]
 	},
 	feed('feed-nebenan'),
 	feed('feed-wort')
 ];
 
-/** The made-up feeds with their articles, the newest ones shortly before `now`. */
-export function demoData(now: number): DemoData {
+/** The reader's labels to start with, in each corpus; two articles of the daily news have them. */
+const startLabels = (corpus: Language): Label[] => [
+	{ id: 'label-later', title: corpus === 'de' ? 'Später lesen' : 'Read later', color: '#1a73e8' },
+	{ id: 'label-work', title: corpus === 'de' ? 'Arbeit' : 'Work', color: '#1e8e3e' }
+];
+
+/** The reader's filter rules to start with, in each corpus. */
+const startRules = (corpus: Language): FilterRule[] => [
+	{
+		id: 'rule-1',
+		enabled: true,
+		scope: { kind: 'all' },
+		field: 'title',
+		match: 'word',
+		// What an advertisement's headline begins with (`ad`).
+		pattern: corpus === 'de' ? 'Anzeige' : 'Sponsored',
+		action: 'hide'
+	},
+	{
+		id: 'rule-2',
+		enabled: true,
+		scope: { kind: 'all' },
+		field: 'author',
+		match: 'contains',
+		pattern: ad.en.author,
+		action: 'hide'
+	},
+	{
+		id: 'rule-3',
+		enabled: false,
+		scope: { kind: 'folder', id: 'folder-news' },
+		field: 'title',
+		match: 'regex',
+		pattern: corpus === 'de' ? 'Hafenfest|Stadtbad' : 'harbor festival|swimming pool',
+		action: 'read'
+	}
+];
+
+/**
+ * The made-up feeds with their articles, the newest ones shortly before `now`,
+ * and the reader's labels and rules to start with: in German unless asked for
+ * English, which the demo does when it starts in English.
+ */
+export function demoData(now: number, corpus: Language = 'de'): DemoData {
 	const feeds: Record<string, Feed> = {};
 	const articles: Record<string, DemoArticle[]> = {};
 	const pace: Record<string, number> = {};
+	const seeds = seedsOf(corpus);
 	const byId = new Map(seeds.map((seed) => [seed.id, seed]));
 
 	for (const seed of seeds) {
@@ -599,10 +812,12 @@ export function demoData(now: number): DemoData {
 	}
 
 	return {
-		tree: tree(),
+		tree: tree(corpus),
 		feeds,
 		articles,
 		pace,
+		labels: startLabels(corpus),
+		rules: startRules(corpus),
 		nextArticle: (feedId, seq, at) => makeArticle(byId.get(feedId)!, seq, at)
 	};
 }

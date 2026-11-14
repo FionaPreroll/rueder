@@ -7,6 +7,7 @@ import { catalogs, language, languageNames, languages, m } from './index.ts';
 import { formatNumber, plural } from './intl.ts';
 import {
 	browserLanguage,
+	startLanguage,
 	formatLocale,
 	formatLocaleFor,
 	pickLanguage,
@@ -110,6 +111,15 @@ describe('picking the language', () => {
 	it('falls back to English', () => {
 		vi.stubGlobal('navigator', { language: 'fr-FR' });
 		expect(browserLanguage()).toBe('en');
+	});
+
+	it('starts in the language picked, else in the browser’s', () => {
+		vi.stubGlobal('navigator', { languages: ['de-AT'] });
+		expect(startLanguage('auto')).toBe('de');
+		expect(startLanguage('en')).toBe('en');
+		vi.stubGlobal('navigator', { languages: ['fr'] });
+		expect(startLanguage('auto')).toBe('en');
+		expect(startLanguage('de')).toBe('de');
 	});
 });
 

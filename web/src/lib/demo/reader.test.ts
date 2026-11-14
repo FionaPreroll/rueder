@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FilterRule } from '#lib/filters.ts';
 import { MAX_FOLDER_DEPTH } from '#lib/model.ts';
 import { ancestorIds, feedIds, findNode } from '#lib/tree.ts';
+import { demoData } from './data.ts';
 import { DemoReader } from './reader.svelte.ts';
 
 const start = Date.parse('2026-11-10T14:30:00Z');
@@ -31,6 +32,23 @@ const rule = (over: Partial<FilterRule>): FilterRule => ({
 });
 
 afterEach(() => vi.useRealTimers());
+
+describe('the corpus', () => {
+	it('starts in German, or in English when asked', () => {
+		const german = new DemoReader(() => start);
+		expect(german.labels.map((label) => label.title)).toEqual(['Später lesen', 'Arbeit']);
+		const english = new DemoReader(() => start, demoData(start, 'en'));
+		expect(english.labels.map((label) => label.title)).toEqual(['Read later', 'Work']);
+		expect(english.feeds['feed-tagesbote'].title).toBe('The Daily Courier');
+		// Its rules hide its advertisements, as the German ones do theirs.
+		expect(english.hiddenCount).toBeGreaterThan(0);
+		const sponsored = Object.values(english.articles)
+			.flat()
+			.filter((article) => article.title.startsWith('Sponsored: '));
+		expect(sponsored.length).toBeGreaterThan(0);
+		expect(sponsored.every((article) => english.isHidden(article))).toBe(true);
+	});
+});
 
 describe('unread counts', () => {
 	it('agree with the articles, feed by feed and in sum', () => {

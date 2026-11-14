@@ -77,3 +77,79 @@ describe('demoData', () => {
 		expect(data.articles[feed.id].some((article) => article.id === next.id)).toBe(false);
 	});
 });
+
+describe('the English corpus', () => {
+	const de = demoData(now);
+	const en = demoData(now, 'en');
+	/** Every text a reader sees of a corpus: names, headlines, teasers, authors, tags, labels. */
+	const texts = (data: typeof de) => {
+		const folders: string[] = [];
+		const walk = (nodes: TreeNode[]) =>
+			nodes.forEach((node) => {
+				if (node.kind === 'folder') {
+					folders.push(node.title);
+					walk(node.children);
+				}
+			});
+		walk(data.tree);
+		return [
+			...folders,
+			...Object.values(data.feeds).map((feed) => feed.title),
+			...Object.values(data.articles)
+				.flat()
+				.flatMap((article) => [
+					article.title,
+					article.teaser ?? '',
+					article.author ?? '',
+					...article.tags
+				]),
+			...data.labels.map((label) => label.title)
+		];
+	};
+
+	it('has the same feeds, folders and articles as the German one', () => {
+		expect(Object.keys(en.feeds)).toEqual(Object.keys(de.feeds));
+		for (const id of Object.keys(de.feeds)) {
+			const { title: _de, siteUrl: _deSite, ...rest } = de.feeds[id];
+			const { title: _en, siteUrl: _enSite, ...same } = en.feeds[id];
+			expect(same, id).toEqual(rest);
+			expect(en.articles[id].map((article) => article.seq)).toEqual(
+				de.articles[id].map((article) => article.seq)
+			);
+		}
+		const ids = (nodes: TreeNode[]): unknown[] =>
+			nodes.map((node) => (node.kind === 'folder' ? [node.id, ids(node.children)] : node.id));
+		expect(ids(en.tree)).toEqual(ids(de.tree));
+		expect(en.pace).toEqual(de.pace);
+		expect(en.labels.map((label) => label.id)).toEqual(de.labels.map((label) => label.id));
+		expect(en.rules.map((rule) => rule.id)).toEqual(de.rules.map((rule) => rule.id));
+	});
+
+	it('is all in English', () => {
+		const german = /[äöüßÄÖÜ]|\b(der|die|das|und|nicht|mit|für|Anzeige|Redaktion|Nachrichten)\b/;
+		const found = texts(en).filter((text) => german.test(text));
+		expect(found).toEqual([]);
+		// The German corpus stays as it was.
+		expect(de.feeds['feed-tagesbote'].title).toBe('Tagesbote');
+		expect(texts(de).some((text) => german.test(text))).toBe(true);
+	});
+
+	it('has rules that still catch what they are for', () => {
+		const titles = Object.values(en.articles)
+			.flat()
+			.map((article) => article.title);
+		const [hide, sponsor, news] = en.rules;
+		expect(
+			titles.filter((title) => title.split(/\W+/).includes(hide.pattern)).length
+		).toBeGreaterThan(0);
+		expect(
+			Object.values(en.articles)
+				.flat()
+				.some((article) => article.author?.includes(sponsor.pattern))
+		).toBe(true);
+		const readOnSight = new RegExp(news.pattern);
+		expect(en.articles['feed-tagesbote'].some((article) => readOnSight.test(article.title))).toBe(
+			true
+		);
+	});
+});

@@ -36,6 +36,10 @@ export function formatLocaleFor(language: Language, locales: readonly string[]) 
 /** The language of the browser, or English. */
 export const browserLanguage = () => pickLanguage(browserLocales()) ?? 'en';
 
+/** The language a page starts in: the one picked in the settings, or the browser's for "auto". */
+export const startLanguage = (picked: 'auto' | Language): Language =>
+	picked === 'auto' ? browserLanguage() : picked;
+
 const current = $state(settle(null));
 
 function settle(picked: string | null | undefined) {
