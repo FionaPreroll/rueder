@@ -392,8 +392,9 @@ async fn the_metrics_name_nobody(db: PgPool) {
     );
 
     let text = metrics(&state).await;
-    for secret in ["secret", "Secret", "10.0.0.1", "example", "spam"] {
-        assert!(!text.contains(secret), "{secret} in the metrics");
+    // Made-up names, none of which may show.
+    for named in ["secret", "Secret", "10.0.0.1", "example", "spam"] {
+        assert!(!text.contains(named), "{named} in the metrics");
     }
     let samples = parse(&text);
     assert_eq!(
