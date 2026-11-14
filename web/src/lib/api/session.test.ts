@@ -493,6 +493,18 @@ describe('Forgot password', () => {
 		expect(session.state).toBe('out');
 	});
 
+	it('takes a link opened in the tab that shows rueder already', async () => {
+		server.emailMode = 'optional';
+		server.resets.set('a-token', 'fiona');
+		const session = new Session();
+		await session.check();
+		// Only what follows the # changes, which loads nothing.
+		history.replaceState(null, '', '/#reset=a-token');
+		session.linkArrived();
+		expect(session.resetting).toBe('a-token');
+		expect(location.hash).toBe('');
+	});
+
 	it('says when the link is no good any more, also one from before with the token in the query', async () => {
 		server.emailMode = 'optional';
 		history.replaceState(null, '', '/?reset=gone');

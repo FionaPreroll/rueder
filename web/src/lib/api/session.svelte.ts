@@ -269,6 +269,17 @@ export class Session {
 	}
 
 	/**
+	 * Takes what a link brings in the address when only what follows the `#`
+	 * changes, as when a link is opened in a tab that shows rueder already:
+	 * that loads nothing, so the start of the page does not see it.
+	 */
+	linkArrived() {
+		this.takeResetLink();
+		void this.confirmFromAddress();
+		if (invitedBy()) void this.askWays();
+	}
+
+	/**
 	 * Takes the token of a link to set a new password from the page's address,
 	 * so that it is not left in the history or shown, and keeps it for the form.
 	 */

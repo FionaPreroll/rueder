@@ -36,7 +36,7 @@ test('a forgotten password is set anew with the link from the mail', async ({ pa
 	await expect(asked).toBeVisible();
 
 	const link = await linkIn(ADDRESS, 'reset');
-	expect(link).toMatch(/^http:\/\/localhost:3210\/\?reset=[\w-]{43}$/);
+	expect(link).toMatch(/^http:\/\/localhost:3210\/#reset=[\w-]{43}$/);
 	const [mail] = await mailsTo(ADDRESS);
 	expect(mail.subject).toBe('Set a new password for rueder');
 	expect(mail.body).toContain('30 minutes');
@@ -44,7 +44,7 @@ test('a forgotten password is set anew with the link from the mail', async ({ pa
 	await page.goto(link);
 	await expect(page.getByRole('heading', { name: 'Set a new password' })).toBeVisible();
 	// The token is no longer in the address, nor in the history.
-	expect(new URL(page.url()).search).toBe('');
+	expect(new URL(page.url()).hash).toBe('');
 	await page.getByLabel('New password', { exact: true }).fill(FRESH);
 	await page.getByLabel('New password again').fill(FRESH);
 	await page.getByRole('button', { name: 'Set the password' }).click();
