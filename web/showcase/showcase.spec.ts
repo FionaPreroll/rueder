@@ -131,8 +131,10 @@ const pictures: Picture[] = [
 		phone: false,
 		async show(page) {
 			await showAll(page, 'list');
+			// An article whose text changed, by the sign beside it.
+			const sign = new RegExp(`^${m.list.updatedTitle(1).split(';')[0]}`);
 			const updated = articles(page)
-				.filter({ has: page.getByText(m.list.updated, { exact: true }) })
+				.filter({ has: page.getByRole('img', { name: sign }) })
 				.first();
 			// The list draws only the rows near what is in sight, and which
 			// articles are near the top depends on the time of day.
