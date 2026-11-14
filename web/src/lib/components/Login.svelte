@@ -3,16 +3,21 @@
 	// OpenID Connect provider. Where the server lets anybody register, or the page
 	// was opened with an invitation, it is also where an account is made.
 	import type {
+		ForgotOutcome,
 		LoginFailure,
 		RegisterFailure,
 		ResendOutcome,
+		ResetFailure,
 		Session
 	} from '#lib/api/session.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
-	import { EMAIL_LINK_HOURS } from '#lib/reader.ts';
+	import { EMAIL_LINK_HOURS, RESET_LINK_MINUTES } from '#lib/reader.ts';
 	import Icon from './Icon.svelte';
 
 	let { session }: { session: Session } = $props();
+
+	/** The shortest password the server takes. */
+	const MIN_PASSWORD = 8;
 
 	let name = $state('');
 	let password = $state('');
@@ -32,6 +37,16 @@
 	const needsEmail = $derived(session.emailMode === 'required');
 	/** How asking for the link again went. */
 	let resent: ResendOutcome | null = $state(null);
+
+	/** Asking for a link that sets a new password, instead of logging in. */
+	let forgetting = $state(false);
+	let forgotten: ForgotOutcome | null = $state(null);
+	/** The page came with such a link: the form for the new password. */
+	const resetting = $derived(session.resetting !== null);
+	let resetFailure: ResetFailure | null = $state(null);
+	const resetReady = $derived(
+		password.length >= MIN_PASSWORD && again === password && session.resetting !== null
+	);
 	/** The reader agreed to the terms of use, where the server names a version of them. */
 	let agreed = $state(false);
 	const legal = $derived(session.ways.legal);
@@ -48,8 +63,6 @@
 		}
 	});
 
-	/** The shortest password the server takes. */
-	const MIN_PASSWORD = 8;
 	const mismatch = $derived(again !== '' && again !== password);
 	const ready = $derived(
 		name.trim() !== '' &&
@@ -113,9 +126,35 @@
 	// Said once: a reload of the page does not say it again.
 	if (came) history.replaceState(history.state, '', location.pathname);
 
+	function resetSaid(failure: ResetFailure) {
+		switch (failure.kind) {
+			case 'gone':
+				return m.reset.gone;
+			case 'invalid':
+				return m.reset.invalid(failure.reason);
+			case 'unreachable':
+				return m.login.unreachable;
+		}
+	}
+
+	function forgotSaid(outcome: ForgotOutcome) {
+		switch (outcome.kind) {
+			case 'asked':
+				return { hint: m.forgot.asked(RESET_LINK_MINUTES) };
+			case 'tooMany':
+				return m.forgot.tooMany(outcome.minutes);
+			case 'unreachable':
+				return m.login.unreachable;
+		}
+	}
+
 	/** What went wrong, or a hint of what to do next, which is not an error. */
 	const said = $derived.by(() => {
 		if (session.state === 'unreachable') return m.login.unreachable;
+		// Said until the reader does something else, also once a link that is gone left.
+		if (resetFailure) return resetSaid(resetFailure);
+		if (resetting) return null;
+		if (forgetting) return forgotten ? forgotSaid(forgotten) : null;
 		if (registering) return refusal ? refused(refusal) : null;
 		if (resent) return resendSaid(resent);
 		// An invitation that cannot be used is said once, where the login is.
@@ -142,6 +181,7 @@
 			case 'unreachable':
 				return m.login.unreachable;
 			default:
+				if (session.passwordSet) return { hint: m.reset.done };
 				return outcome?.() ?? null;
 		}
 	});
@@ -154,6 +194,7 @@
 		busy = true;
 		failure = null;
 		resent = null;
+		resetFailure = null;
 		try {
 			failure = await session.login(name, password, needsCode ? code : undefined);
 			if (failure?.kind === 'codeNeeded' || failure?.kind === 'wrongCode') {
@@ -211,6 +252,56 @@
 		}
 	}
 
+	async function askForLink(event: SubmitEvent) {
+		event.preventDefault();
+		if (busy || !name.trim()) return;
+		busy = true;
+		forgotten = null;
+		try {
+			forgotten = await session.forgot(name);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function setPassword(event: SubmitEvent) {
+		event.preventDefault();
+		if (busy || !resetReady) return;
+		busy = true;
+		resetFailure = null;
+		try {
+			resetFailure = await session.resetPassword(password);
+			password = '';
+			again = '';
+			if (!resetFailure) {
+				forgetting = false;
+				registering = false;
+			}
+		} finally {
+			busy = false;
+		}
+	}
+
+	/** Leaves the form for the new password, and its link with it. */
+	function cancelReset() {
+		session.resetting = null;
+		resetFailure = null;
+		password = '';
+		again = '';
+	}
+
+	/** Between the login and asking for a link to set a new password. */
+	function forget(to: boolean) {
+		forgetting = to;
+		forgotten = null;
+		resetFailure = null;
+		failure = null;
+		resent = null;
+		password = '';
+		needsCode = false;
+		code = '';
+	}
+
 	/** The account waits for its link: said after registering, or after the right password. */
 	const waiting = $derived.by(
 		() => !registering && (session.awaiting !== null || failure?.kind === 'unconfirmed')
@@ -219,6 +310,7 @@
 	function turn(to: boolean) {
 		registering = to;
 		failure = null;
+		resetFailure = null;
 		refusal = null;
 		resent = null;
 		session.awaiting = null;
@@ -251,7 +343,13 @@
 	</header>
 	<div class="w-full max-w-sm rounded-lg border border-line bg-paper p-6 shadow-sm">
 		<h1 class="text-lg font-semibold">
-			{registering ? m.register.title : m.login.title}
+			{resetting
+				? m.reset.title
+				: forgetting
+					? m.forgot.title
+					: registering
+						? m.register.title
+						: m.login.title}
 		</h1>
 
 		{#if session.farewell && !said}
@@ -281,6 +379,84 @@
 			<button type="button" class="tool mt-4" onclick={() => session.check()}>
 				{m.login.retry}
 			</button>
+		{:else if resetting}
+			<p class="mt-3 text-sm text-soft">{m.reset.intro}</p>
+			<form class="mt-4 space-y-3" onsubmit={setPassword}>
+				<label class="block text-sm">
+					<span class="font-medium">{m.reset.fresh}</span>
+					<input
+						class="mt-1.5 block w-full rounded py-1.5 text-sm"
+						type="password"
+						name="new-password"
+						autocomplete="new-password"
+						minlength={MIN_PASSWORD}
+						required
+						aria-describedby="reset-rule"
+						bind:value={password}
+						use:focus
+					/>
+				</label>
+				<p id="reset-rule" class="-mt-2 text-xs text-soft">
+					{m.register.passwordRule(MIN_PASSWORD)}
+				</p>
+				<label class="block text-sm">
+					<span class="font-medium">{m.reset.again}</span>
+					<input
+						class="mt-1.5 block w-full rounded py-1.5 text-sm"
+						type="password"
+						name="new-password-again"
+						autocomplete="new-password"
+						required
+						aria-invalid={mismatch}
+						bind:value={again}
+					/>
+				</label>
+				{#if mismatch}
+					<p class="-mt-2 text-xs text-warn">{m.reset.mismatch}</p>
+				{/if}
+				<button type="submit" class="primary h-9 w-full" disabled={busy || !resetReady}>
+					{m.reset.submit}
+				</button>
+			</form>
+			<p class="mt-4 text-sm">
+				<button
+					type="button"
+					class="cursor-pointer text-link hover:underline"
+					onclick={cancelReset}
+				>
+					{m.reset.cancel}
+				</button>
+			</p>
+		{:else if forgetting}
+			<p class="mt-3 text-sm text-soft">{m.forgot.intro}</p>
+			<form class="mt-4 space-y-3" onsubmit={askForLink}>
+				<label class="block text-sm">
+					<span class="font-medium">{m.forgot.field}</span>
+					<input
+						class="mt-1.5 block w-full rounded py-1.5 text-sm"
+						name="username"
+						autocomplete="username"
+						autocapitalize="none"
+						spellcheck="false"
+						maxlength="254"
+						required
+						bind:value={name}
+						use:focus
+					/>
+				</label>
+				<button type="submit" class="primary h-9 w-full" disabled={busy || !name.trim()}>
+					{m.forgot.submit}
+				</button>
+			</form>
+			<p class="mt-4 text-sm">
+				<button
+					type="button"
+					class="cursor-pointer text-link hover:underline"
+					onclick={() => forget(false)}
+				>
+					{m.forgot.back}
+				</button>
+			</p>
 		{:else if registering}
 			{#if invitation?.valid}
 				<p class="mt-3 text-sm text-soft">{m.register.invited}</p>
@@ -471,6 +647,18 @@
 				<a class="tool w-full justify-center" href="/api/oidc/start" rel="external">
 					{m.login.oidc}
 				</a>
+			{/if}
+
+			{#if session.ways.password_reset}
+				<p class="mt-3 text-sm">
+					<button
+						type="button"
+						class="cursor-pointer text-link hover:underline"
+						onclick={() => forget(true)}
+					>
+						{m.login.forgot}
+					</button>
+				</p>
 			{/if}
 
 			{#if mayRegister}

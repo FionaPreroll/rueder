@@ -19,7 +19,7 @@ use ts_rs::{Config, TS, TypeVisitor};
 
 use crate::{
     api, app_passwords, email, events, filters, labels, legal, login, moderation, passkeys,
-    profile, registration, reports, second_factor, status, subscribe, transfer, tree,
+    profile, recovery, registration, reports, second_factor, status, subscribe, transfer, tree,
 };
 
 /// Where the committed file lies, seen from the crate.
@@ -134,6 +134,7 @@ pub fn generate() -> anyhow::Result<String> {
     passkeys::types(&mut types);
     registration::types(&mut types);
     email::types(&mut types);
+    recovery::types(&mut types);
     api::types(&mut types);
     tree::types(&mut types);
     subscribe::types(&mut types);

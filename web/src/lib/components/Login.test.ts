@@ -431,3 +431,77 @@ describe('registering', () => {
 		);
 	});
 });
+
+describe('forgot password', () => {
+	it('is offered only where the server keeps addresses', async () => {
+		await loginPage();
+		expect(screen.queryByRole('button', { name: 'Forgot your password?' })).toBeNull();
+	});
+
+	it('asks for a link by name or address and says the same for anybody', async () => {
+		server.emailMode = 'optional';
+		server.emails.set('fiona', 'fiona@example.org');
+		await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Forgot your password?' }));
+		expect(screen.getByRole('heading', { name: 'Forgot your password?' })).toBeInTheDocument();
+		const field = screen.getByLabelText('Name or email address');
+		expect(field).toHaveFocus();
+		await userEvent.type(field, 'fiona@example.org{Enter}');
+		const said = await screen.findByText(/If there is such an account/);
+		expect(said).toHaveTextContent('30 minutes');
+		expect(server.mails.map((mail) => mail.to)).toEqual(['fiona@example.org']);
+
+		await userEvent.clear(field);
+		await userEvent.type(field, 'nobody{Enter}');
+		expect(await screen.findByText(/If there is such an account/)).toBeInTheDocument();
+		expect(server.mails).toHaveLength(1);
+
+		await userEvent.click(screen.getByRole('button', { name: 'Back to the login' }));
+		expect(screen.getByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+	});
+
+	it('sets the new password from the link, and then asks to log in with it', async () => {
+		server.emailMode = 'optional';
+		server.resets.set('a-token', 'fiona');
+		history.replaceState(null, '', '/?reset=a-token');
+		const session = new Session();
+		session.takeResetLink();
+		await session.check();
+		render(Login, { session });
+		expect(screen.getByRole('heading', { name: 'Set a new password' })).toBeInTheDocument();
+		const fresh = screen.getByLabelText('New password');
+		expect(fresh).toHaveAttribute('autocomplete', 'new-password');
+		const submit = screen.getByRole('button', { name: 'Set the password' });
+		await userEvent.type(fresh, 'a brand new one');
+		await userEvent.type(screen.getByLabelText('New password again'), 'a brand new on');
+		expect(screen.getByText('The two do not match.')).toBeInTheDocument();
+		expect(submit).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('New password again'), 'e');
+		await userEvent.click(submit);
+		expect(await screen.findByText('The password is set. Log in with it.')).toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+		expect(server.accounts.get('fiona')).toBe('a brand new one');
+	});
+
+	it('says when the link is no good any more, and leaves', async () => {
+		server.emailMode = 'optional';
+		server.signedIn = null;
+		history.replaceState(null, '', '/?reset=old');
+		const session = new Session();
+		session.takeResetLink();
+		await session.check();
+		render(Login, { session });
+		await userEvent.type(screen.getByLabelText('New password'), 'a brand new one');
+		await userEvent.type(screen.getByLabelText('New password again'), 'a brand new one{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent(/cannot be used any more/);
+		expect(screen.getByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+	});
+
+	it('speaks German', async () => {
+		useLanguage('de');
+		server.emailMode = 'optional';
+		await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Passwort vergessen?' }));
+		expect(screen.getByLabelText('Name oder E-Mail-Adresse')).toBeInTheDocument();
+	});
+});

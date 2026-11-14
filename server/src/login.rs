@@ -25,7 +25,7 @@ use utoipa::ToSchema;
 use crate::{
     AppError, AppState, accounts, email,
     legal::Legal,
-    registration, second_factor,
+    recovery, registration, second_factor,
     sessions::{self, Session},
 };
 
@@ -365,6 +365,9 @@ pub struct Ways {
     registration: bool,
     /// With a passkey, at `/api/login/passkey`.
     passkeys: bool,
+    /// A forgotten password can be set anew with a link mailed to the
+    /// account's address, at `/api/password/forgot`.
+    password_reset: bool,
     /// The operator's legal texts, for the login page to link to.
     legal: Legal,
 }
@@ -382,6 +385,7 @@ pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError>
         oidc: state.oidc.is_some(),
         registration: registration::is_open(&state.db).await?,
         passkeys: state.passkeys.is_some(),
+        password_reset: recovery::offered(&state).await?,
         legal: (*state.legal).clone(),
     }))
 }

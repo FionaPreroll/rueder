@@ -823,3 +823,27 @@ async fn a_relay_that_refuses_leaves_no_link(db: PgPool) {
     let me = me(&state, &cookie).await;
     assert_eq!(me["email_pending"], Value::Null);
 }
+
+#[sqlx::test]
+async fn of_links_asked_for_at_once_one_is_left(db: PgPool) {
+    let hour = Duration::from_secs(3600);
+    let room = Rate::new(100, hour);
+    let (state, outbox) = server(&db, Mode::Optional).await;
+    let state = state.with_rates(Rates::default().with_mails(room, room, room));
+    let (_, cookie) = reader(&db, "ada").await;
+    let asked: Vec<_> = (0..8)
+        .map(|n| {
+            let (state, cookie) = (state.clone(), cookie.clone());
+            tokio::spawn(async move {
+                change(&state, &cookie, &format!("ada{n}@example.org"))
+                    .await
+                    .0
+            })
+        })
+        .collect();
+    for asking in asked {
+        assert_eq!(asking.await.unwrap(), StatusCode::ACCEPTED);
+    }
+    assert_eq!(sent(&outbox).len(), 8);
+    assert_eq!(links(&db).await, 1);
+}

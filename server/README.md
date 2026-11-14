@@ -87,6 +87,10 @@ What is here:
   `/api/email/confirm`); with `required` a new account logs in only after
   that. Mail goes by SMTP to the relay in `SMTP_URL`, from `MAIL_FROM`, with
   links to `PUBLIC_URL`; its texts are in `templates/mail/`.
+- Forgot password (`src/recovery.rs`): where accounts have addresses,
+  `POST /api/password/forgot` mails a link to the account's confirmed address,
+  with the same answer whoever is asked for, and `POST /api/password/reset`
+  sets the new password with it, ending every session; it does not log in.
 - Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
   readers report a feed or an article with a reason and a note, at most 20 a
   day; the status page lists the reported feeds with their address, never who

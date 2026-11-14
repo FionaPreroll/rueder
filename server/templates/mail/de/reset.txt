@@ -1,0 +1,14 @@
+Neues Passwort für rueder setzen
+Hallo {name},
+
+jemand, vermutlich du, möchte ein neues Passwort für das Konto „{name}“ auf
+{site} setzen. Öffne dazu innerhalb von {minutes} Minuten diesen Link:
+
+{link}
+
+Der Link gilt einmal. Das neue Passwort meldet alle Browser und Geräte des
+Kontos ab. Hat das Konto einen zweiten Faktor, fragt die Anmeldung weiter
+nach ihm.
+
+Warst du das nicht, kannst du diese Mail übergehen: Ohne den Link ändert
+sich nichts.

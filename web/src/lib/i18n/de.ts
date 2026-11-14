@@ -216,6 +216,7 @@ const de: Messages = {
 		resent: 'Der Link ist wieder unterwegs. Schau in deine Mails, auch in den Spam-Ordner.',
 		resendWrong:
 			'Gib Name und Passwort des Kontos ein, um den Link noch einmal schicken zu lassen.',
+		forgot: 'Passwort vergessen?',
 		removed: 'Dein Konto ist gelöscht, mit allem, was deins war.',
 		note: 'Registrieren kann man sich nicht. Konten legt an, wer diesen rueder betreibt.'
 	},
@@ -263,6 +264,33 @@ const de: Messages = {
 		awaitingTitle: 'Schau in deine Mails',
 		awaiting: (address, hours) =>
 			`Das Konto ist angelegt. Ein Link ging an ${address}: Öffne ihn innerhalb von ${n(hours)} Stunden, dann melde dich an.`
+	},
+
+	forgot: {
+		title: 'Passwort vergessen?',
+		intro:
+			'Gib den Namen deines Kontos oder seine E-Mail-Adresse an. Hat das Konto eine bestätigte Adresse, geht an sie ein Link, der ein neues Passwort setzt.',
+		field: 'Name oder E-Mail-Adresse',
+		submit: 'Link schicken',
+		asked: (minutes) =>
+			`Gibt es ein solches Konto mit bestätigter Adresse, ist ein Link an sie unterwegs, ${n(minutes)} Minuten lang gültig. Schau auch in den Spam-Ordner.`,
+		tooMany: (minutes) =>
+			`Zu oft gefragt. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
+		back: 'Zurück zur Anmeldung'
+	},
+
+	reset: {
+		title: 'Neues Passwort setzen',
+		intro:
+			'Alle Browser und Geräte des Kontos werden abgemeldet. Hat das Konto einen zweiten Faktor, fragt die Anmeldung weiter nach ihm.',
+		fresh: 'Neues Passwort',
+		again: 'Neues Passwort noch einmal',
+		submit: 'Passwort setzen',
+		mismatch: 'Die beiden stimmen nicht überein.',
+		gone: 'Dieser Link gilt nicht mehr: Er wurde schon benutzt, ein neuerer wurde geschickt, oder er ist älter als eine halbe Stunde. Fordere einen neuen an.',
+		invalid: (reason) => `Der Server hat dieses Passwort nicht angenommen. Er sagt: ${reason}`,
+		done: 'Das Passwort ist gesetzt. Melde dich damit an.',
+		cancel: 'Abbrechen'
 	},
 
 	email: {

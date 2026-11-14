@@ -182,6 +182,14 @@ pub(crate) async fn send_link(
     let token = URL_SAFE_NO_PAD.encode(random);
     let hash = sessions::token_hash(&token);
     let mut tx = state.db.begin().await?;
+    // One at a time per account, so that of two asked at once only the
+    // newer link is left.
+    sqlx::query!(
+        "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
+        account_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     sqlx::query!("DELETE FROM email_links WHERE account_id = $1", account_id)
         .execute(&mut *tx)
         .await?;
@@ -220,7 +228,7 @@ pub(crate) async fn send_link(
 
 /// What a log says of a mail that failed, without the address it was for:
 /// the relay's answer may repeat it.
-fn without(text: &str, address: &str) -> String {
+pub(crate) fn without(text: &str, address: &str) -> String {
     format!(
         "a mail could not be handed to the relay: {}",
         text.replace(address, &mail::masked(address))
@@ -331,6 +339,8 @@ async fn change(
 ) -> Result<(StatusCode, Json<Pending>), AppError> {
     let mut conn = state.db.acquire().await?;
     let now = self::state(&mut conn, session.account_id).await?;
+    // Not held while the password is checked, which takes a while.
+    drop(conn);
     if now.mode == Mode::Off {
         return Err(off());
     }
@@ -357,9 +367,8 @@ async fn change(
         session.account_id,
         language(new.language.as_deref()) as Language,
     )
-    .fetch_one(&mut *conn)
+    .fetch_one(&state.db)
     .await?;
-    drop(conn);
     send_link(
         &state,
         session.account_id,

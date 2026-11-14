@@ -69,6 +69,25 @@ export type Confirmation =
 	| { kind: 'taken' }
 	| { kind: 'unreachable' };
 
+/** How asking for a link to set a new password went. */
+export type ForgotOutcome =
+	/** Asked: if there is such an account with a confirmed address, the link is on its way. */
+	{ kind: 'asked' } | { kind: 'tooMany'; minutes: number } | { kind: 'unreachable' };
+
+/** Why the new password from the link was not set. */
+export type ResetFailure =
+	/** No such link, or not any more: used, replaced, more than half an hour old. */
+	| { kind: 'gone' }
+	/** The server does not take the password; it says why. */
+	| { kind: 'invalid'; reason: string }
+	| { kind: 'unreachable' };
+
+/** The token of a link to set a new password in the page's address: `/?reset=<token>`. */
+function resetToken(): string | null {
+	if (typeof location === 'undefined') return null;
+	return new URLSearchParams(location.search).get('reset') || null;
+}
+
 /** An account that was made and waits for its address, which the login page says. */
 export interface Awaiting {
 	name: string;
@@ -88,6 +107,7 @@ const NO_WAYS: ApiLoginWays = {
 	oidc: false,
 	registration: false,
 	passkeys: false,
+	password_reset: false,
 	legal: { imprint: null, privacy: null, terms: null, terms_version: null }
 };
 
@@ -129,6 +149,10 @@ export class Session {
 	awaiting = $state.raw<Awaiting | null>(null);
 	/** What the link the page was opened with did, until the reader closes the note. */
 	confirmation = $state.raw<Confirmation | null>(null);
+	/** The token of the link to set a new password the page was opened with, until it is used. */
+	resetting = $state<string | null>(null);
+	/** A new password was set here a moment ago, which the login page says. */
+	passwordSet = $state(false);
 
 	private api: Api;
 
@@ -233,6 +257,54 @@ export class Session {
 				this.confirmation = { kind: 'taken' };
 			else this.confirmation = { kind: 'unreachable' };
 		}
+	}
+
+	/**
+	 * Takes the token of a link to set a new password from the page's address,
+	 * so that it is not left in the history or shown, and keeps it for the form.
+	 */
+	takeResetLink() {
+		const token = resetToken();
+		if (!token) return;
+		history.replaceState(history.state, '', location.pathname);
+		this.resetting = token;
+		this.passwordSet = false;
+	}
+
+	/** Asks for a link that sets a new password, by name or by address. */
+	async forgot(name: string): Promise<ForgotOutcome> {
+		try {
+			await this.api.forgotPassword(name.trim());
+			return { kind: 'asked' };
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 429) {
+				return { kind: 'tooMany', minutes: minutes(error) };
+			}
+			return { kind: 'unreachable' };
+		}
+	}
+
+	/** Sets the new password with the link's token; null if it is set. It does not log in. */
+	async resetPassword(fresh: string): Promise<ResetFailure | null> {
+		const token = this.resetting;
+		if (!token) return { kind: 'gone' };
+		try {
+			await this.api.resetPassword(token, fresh);
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 404) {
+				this.resetting = null;
+				return { kind: 'gone' };
+			}
+			if (error instanceof ApiError && error.status === 400) {
+				return { kind: 'invalid', reason: error.message };
+			}
+			return { kind: 'unreachable' };
+		}
+		this.resetting = null;
+		this.passwordSet = true;
+		// Every session of the account ended, this browser's too if it had one.
+		await this.check();
+		return null;
 	}
 
 	/** Sends the link again to an account that waits for its address. */
