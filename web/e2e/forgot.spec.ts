@@ -72,5 +72,5 @@ test('a forgotten password is set anew with the link from the mail', async ({ pa
 	await kept.getByLabel('New password', { exact: true }).fill('yet another password');
 	await kept.getByLabel('New password again').fill('yet another password');
 	await kept.getByRole('button', { name: 'Set the password' }).click();
-	await expect(kept.getByText(/This link cannot be used any more/)).toBeVisible();
+	await expect(kept.getByText(/This link no longer works/)).toBeVisible();
 });

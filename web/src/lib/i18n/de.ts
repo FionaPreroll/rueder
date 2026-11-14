@@ -99,7 +99,7 @@ const de: Messages = {
 		found: (count, more, words) => `${n(count)}${more ? '+' : ''} Artikel mit „${words}“`,
 		searchAll: 'In allen Feeds suchen',
 		feedFailing:
-			'rueder versucht es mit der nächsten Runde wieder. Scheitert es weiter, ist der Feed vielleicht umgezogen: Abonniere die neue Adresse und beende das Abo von diesem.',
+			'rueder versucht es mit der nächsten Runde wieder. Scheitert es weiter, ist der Feed vielleicht umgezogen.',
 		hiddenNote:
 			'Deine Filterregeln haben diese Artikel ausgeblendet. Öffne einen, um zu sehen, welche Regel es war.',
 		toRules: 'Filterregeln',
@@ -253,9 +253,9 @@ const de: Messages = {
 		invalid: (reason) => `Das kann kein Konto werden. Der Server sagt: ${reason}`,
 		email: 'E-Mail-Adresse',
 		emailOptional: 'E-Mail-Adresse (freiwillig)',
-		emailNote: 'Du bekommst einen Link, um sie zu bestätigen. Niemand sonst sieht sie.',
+		emailNote: 'Du bekommst einen Link, um sie zu bestätigen.',
 		emailRequiredNote:
-			'Du bekommst einen Link, um sie zu bestätigen; das Konto kann sich anmelden, sobald du ihn geöffnet hast. Niemand sonst sieht die Adresse.',
+			'Du bekommst einen Link, um sie zu bestätigen; das Konto kann sich anmelden, sobald du ihn geöffnet hast.',
 		emailInvalid: 'Gib eine E-Mail-Adresse an, an die Mails gehen können.',
 		unsent:
 			'Der Link konnte nicht verschickt werden, darum wurde kein Konto angelegt. Versuch es später noch einmal.',
@@ -269,7 +269,7 @@ const de: Messages = {
 	forgot: {
 		title: 'Passwort vergessen?',
 		intro:
-			'Gib den Namen deines Kontos oder seine E-Mail-Adresse an. Hat das Konto eine bestätigte Adresse, geht an sie ein Link, der ein neues Passwort setzt.',
+			'Gib deinen Namen oder deine E-Mail-Adresse an. Ein Link für ein neues Passwort geht an die bestätigte Adresse.',
 		field: 'Name oder E-Mail-Adresse',
 		submit: 'Link schicken',
 		asked: (minutes) =>
@@ -281,13 +281,12 @@ const de: Messages = {
 
 	reset: {
 		title: 'Neues Passwort setzen',
-		intro:
-			'Alle Browser und Geräte des Kontos werden abgemeldet. Hat das Konto einen zweiten Faktor, fragt die Anmeldung weiter nach ihm.',
+		intro: 'Alle Browser und Geräte des Kontos werden abgemeldet.',
 		fresh: 'Neues Passwort',
 		again: 'Neues Passwort noch einmal',
 		submit: 'Passwort setzen',
 		mismatch: 'Die beiden stimmen nicht überein.',
-		gone: 'Dieser Link gilt nicht mehr: Er wurde schon benutzt, ein neuerer wurde geschickt, oder er ist älter als eine halbe Stunde. Fordere einen neuen an.',
+		gone: 'Dieser Link gilt nicht mehr. Fordere einen neuen an.',
 		invalid: (reason) => `Der Server hat dieses Passwort nicht angenommen. Er sagt: ${reason}`,
 		done: 'Das Passwort ist gesetzt. Melde dich damit an.',
 		cancel: 'Abbrechen'
@@ -295,8 +294,7 @@ const de: Messages = {
 
 	email: {
 		title: 'E-Mail-Adresse',
-		intro:
-			'rueder schreibt dir nur zu deinem Konto: Links, die eine Adresse bestätigen, und eine Nachricht, wenn sie sich ändert. Niemand sonst sieht sie.',
+		intro: 'rueder schreibt dir nur zu deinem Konto.',
 		current: 'Deine Adresse',
 		none: 'Das Konto hat keine Adresse.',
 		pending: (address, hours) =>
@@ -404,9 +402,9 @@ const de: Messages = {
 			title: 'Passwort ändern',
 			titleFirst: 'Passwort setzen',
 			intro:
-				'Ein neues Passwort meldet jeden anderen Browser und jedes andere Gerät ab und widerruft die App-Passwörter anderer Apps; dieser bleibt angemeldet.',
+				'Ein neues Passwort meldet jeden anderen Browser und jedes andere Gerät ab und widerruft alle App-Passwörter.',
 			introFirst:
-				'Dieses Konto meldet sich über Single Sign-on an und hat kein eigenes Passwort. Mit einem kann es sich auch mit seinem Namen anmelden.',
+				'Mit einem Passwort kann sich dieses Konto auch mit seinem Namen anmelden, nicht nur über Single Sign-on.',
 			current: 'Bisheriges Passwort',
 			fresh: 'Neues Passwort',
 			again: 'Neues Passwort wiederholen',
@@ -439,7 +437,7 @@ const de: Messages = {
 			keys: 'Tastatur'
 		},
 		accountNote:
-			'Passwort, zweiter Faktor, Apps, Einladungen und das Konto selbst stehen unter Kontoeinstellungen, im Menü des Kontos.',
+			'Passwort, zweiter Faktor, Apps und Einladungen stehen unter Kontoeinstellungen, im Menü des Kontos.',
 		theme: 'Farbschema',
 		themes: { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' },
 		accent: 'Akzentfarbe',
@@ -471,7 +469,7 @@ const de: Messages = {
 		noteDemo: 'Änderungen gelten sofort und bleiben in diesem Browser.',
 		apps: {
 			intro:
-				'Feedreader-Apps anderer Anbieter können über die Google-Reader-API lesen und ändern, was du hier liest. Jede App bekommt ein eigenes App-Passwort, das du jederzeit widerrufen kannst; dein eigenes Passwort bleibt bei dir.',
+				'Andere Feedreader-Apps können dein Konto über die Google-Reader-API nutzen. Jede bekommt ein eigenes App-Passwort, das du jederzeit widerrufen kannst.',
 			none: 'Noch ist keine App eingerichtet.',
 			made: (when) => `eingerichtet ${when}`,
 			used: (when) => `zuletzt benutzt ${when}`,
@@ -545,7 +543,7 @@ const de: Messages = {
 		secondFactor: {
 			title: 'Zweiter Faktor',
 			intro:
-				'Mit einem zweiten Faktor braucht der Login mehr als das Passwort: einen Code aus einer Authenticator-App auf deinem Handy oder einen Passkey. Ein Passwort, das bekannt geworden ist, reicht dann nicht.',
+				'Mit einem zweiten Faktor braucht der Login auch einen Code aus einer Authenticator-App oder einen Passkey.',
 			app: 'Authenticator-App',
 			on: 'An.',
 			left: (count) =>
@@ -569,7 +567,7 @@ const de: Messages = {
 			cancel: 'Abbrechen',
 			codesTitle: 'Deine Wiederherstellungscodes',
 			codesIntro:
-				'Jeder bringt dich einmal hinein, wenn du dein Handy nicht hast. Bewahre sie sicher auf: Sie werden nur jetzt gezeigt.',
+				'Jeder bringt dich einmal ohne Handy hinein. Bewahre sie sicher auf: Sie werden nur jetzt gezeigt.',
 			copyCodes: 'Codes kopieren',
 			codesDone: 'Ich habe sie aufbewahrt',
 			switchOff: 'Ausschalten',
@@ -591,8 +589,8 @@ const de: Messages = {
 		passkeys: {
 			title: 'Passkeys',
 			intro:
-				'Mit einem Passkey meldest du dich ohne Name und Passwort an: Dein Gerät fragt nach seiner PIN, deinem Fingerabdruck oder Gesicht. Er zählt als zweiter Faktor, gilt nur für diesen rueder und lässt sich von keiner gefälschten Seite abgreifen.',
-			once: 'Sobald du einen Passkey hast, öffnet dein Passwort allein dein Konto nicht mehr: Dazu braucht es einen Passkey, einen Code deiner Authenticator-App oder einen Wiederherstellungscode.',
+				'Mit einem Passkey meldest du dich ohne Name und Passwort an, mit der PIN, dem Fingerabdruck oder dem Gesicht, nach dem dein Gerät fragt. Er zählt als zweiter Faktor.',
+			once: 'Mit einem Passkey öffnet dein Passwort allein dein Konto nicht mehr.',
 			none: 'Noch kein Passkey.',
 			made: (when) => `hinzugefügt ${when}`,
 			used: (when) => `zuletzt benutzt ${when}`,
@@ -613,7 +611,7 @@ const de: Messages = {
 			confirmWith: 'Mit Passkey bestätigen',
 			codesTitle: 'Deine Wiederherstellungscodes',
 			codesIntro:
-				'Dein erster Passkey hat den zweiten Faktor eingeschaltet. Jeder dieser Codes bringt dich einmal ohne ihn hinein, falls du dein Gerät verlierst. Bewahre sie sicher auf: Sie werden nur jetzt gezeigt.',
+				'Dein erster Passkey hat den zweiten Faktor eingeschaltet. Jeder Code bringt dich einmal hinein, falls du dein Gerät verlierst. Bewahre sie sicher auf: Sie werden nur jetzt gezeigt.',
 			copyCodes: 'Codes kopieren',
 			copied: 'Kopiert',
 			codesDone: 'Ich habe sie aufbewahrt',
@@ -635,8 +633,7 @@ const de: Messages = {
 		},
 		reports: {
 			send: 'Fehlerberichte aus diesem Browser an diesen Server schicken',
-			intro:
-				'Wenn auf der Seite etwas schiefgeht, erfahren die Admins davon und können es beheben. Berichte gehen an diesen Server und nirgendwo sonst hin.',
+			intro: 'Wenn auf der Seite etwas schiefgeht, erfahren die Admins dieses Servers davon.',
 			what: 'Ein Bericht enthält:',
 			holds: [
 				'die Meldung des Fehlers, ohne Adressen und ohne Zahlen, die etwas benennen',
@@ -644,7 +641,7 @@ const de: Messages = {
 				'die Version von rueder und deinen Browser mit seiner Hauptversion'
 			],
 			never:
-				'Nie, was du liest, deine Feeds, Labels oder Regeln. Admins sehen, wie viele Konten ein Fehler trifft, nicht welche. Berichte verschwinden nach 30 Tagen.',
+				'Nie, was du liest, deine Feeds, Labels oder Regeln. Berichte verschwinden nach 30 Tagen.',
 			off: 'Ausschalten löscht die Berichte, die du geschickt hast.'
 		}
 	},
@@ -796,11 +793,10 @@ const de: Messages = {
 
 	move: {
 		intro:
-			'Nimm dein Konto zu einem anderen rueder mit, oder hol es von dort hierher: Einstellungen, Ordner und Feeds, was du gelesen hast, Sterne, Labels und Filterregeln, alles in einer Datei.',
+			'Nimm dein Konto zu einem anderen rueder mit, oder hol es von dort hierher, in einer Datei.',
 		howItWorks:
-			'Ein Import fügt zu dem hinzu, was hier ist, und nimmt nichts weg. Feeds werden an ihrer Adresse erkannt, Artikel an ihrer Kennung im Feed, denn die Nummern sind von rueder zu rueder verschieden. Deine Einstellungen werden die aus der Datei.',
-		notInIt:
-			'Nicht in der Datei: dein Passwort, deine Sitzungen, die Zustimmung zu Fehlerberichten und die Texte der Artikel. Einen Artikel, den dieser rueder nicht kennt, kann der Import deshalb nicht übernehmen.',
+			'Ein Import fügt zu dem hinzu, was hier ist, und nimmt nichts weg. Deine Einstellungen werden die aus der Datei.',
+		notInIt: 'Nicht in der Datei: dein Passwort, deine Sitzungen und die Texte der Artikel.',
 		export: 'Konto exportieren',
 		import: 'Kontodatei importieren',
 		importing: 'Importiere …',
@@ -817,7 +813,7 @@ const de: Messages = {
 			`${n(count)} ${plural(count, { one: 'Eintrag', other: 'Einträge' })} der Datei ließen sich nicht übernehmen.`,
 		settings: 'Deine Einstellungen sind jetzt die aus der Datei.',
 		later:
-			'Feeds, die dieser rueder noch nicht hatte, bringen ihre Artikel mit der nächsten Runde des Abrufs. Was du vorher gelesen hattest, bleibt gelesen.',
+			'Neue Feeds bringen ihre Artikel mit der nächsten Runde des Abrufs. Was du gelesen hattest, bleibt gelesen.',
 		busy: (seconds) =>
 			seconds
 				? `Zu viele Importe. Versuch es in ${n(Math.ceil(seconds / 60))} ${plural(Math.ceil(seconds / 60), { one: 'Minute', other: 'Minuten' })} wieder.`
