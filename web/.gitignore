@@ -28,3 +28,4 @@ vite.config.ts.timestamp-*
 /test-results
 /playwright-report
 /screenshots/out
+/showcase/out

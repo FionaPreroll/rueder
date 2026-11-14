@@ -10,6 +10,7 @@ The README says what rueder is and where to find what. `docs/` holds the rewrite
 
 ## Docs
 
+- The pictures in the README are taken by `web/showcase/` from the demo and published with the site on GitHub Pages, by the workflow `pages.yml`; no picture of them is ever committed. The README names them by their address on the site, and the site's build fails if one is missing.
 - Whoever finishes a work package ticks it off in `docs/implementation.md` and brings the state there up to date, in the same pull request.
 - Whoever departs from the plan or the architecture changes `docs/plan.md` or `docs/architecture.md` in the same pull request and gives the reason. What Fiona decided stays decided until she decides otherwise, the detail questions at the end of `docs/plan.md` included.
 - Measurements go into "Messung" in `docs/implementation.md`, with date, amount of data and machine.

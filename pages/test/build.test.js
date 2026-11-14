@@ -5,7 +5,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
-import { build, demoLinks, foreignLinks, redirect, withoutFonts } from '../build.js';
+import {
+	build,
+	demoLinks,
+	foreignLinks,
+	readmePictures,
+	redirect,
+	withoutFonts
+} from '../build.js';
 
 const commit = '0123456789abcdef0123456789abcdef01234567';
 const from = { repo: 'someone/rueder', commit, day: '2026-11-13' };
@@ -53,6 +60,15 @@ function madeUp() {
 	put('web/static/icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
 	put('docs/images/logo.png', 'png');
 	put('server/openapi.json', '{"openapi": "3.1.0"}');
+	put('web/showcase/out/reading-light.png', 'png');
+	put('web/showcase/out/reading-dark.png', 'png');
+	put(
+		'README.md',
+		'# rueder\n\n<picture>\n' +
+			'<source media="(prefers-color-scheme: dark)" srcset="https://someone.github.io/rueder/screenshots/reading-dark.png">\n' +
+			'<img alt="Reading" src="https://someone.github.io/rueder/screenshots/reading-light.png">\n' +
+			'</picture>\n'
+	);
 }
 
 describe('build', () => {
@@ -172,6 +188,16 @@ describe('build', () => {
 		);
 	});
 
+	it('stops at a picture of the README that the site does not have', () => {
+		rmSync(join(repo, 'web/showcase/out/reading-dark.png'));
+		assert.throws(
+			() => build({ repo, out, from }),
+			(error) =>
+				error.message.startsWith('1 links lead nowhere') &&
+				error.message.includes('README.md: screenshots/reading-dark.png')
+		);
+	});
+
 	it('lets other crates’ links pass only in the Rust documentation', () => {
 		put('web/build-docs/index.html', '<a href="dispatcher#setting-the-default-subscriber">x</a>');
 		assert.throws(() => build({ repo, out, from }), /docs\/frontend\/index.html: dispatcher/);
@@ -186,6 +212,19 @@ describe('demoLinks', () => {
 				'<link rel="manifest" href="/manifest.webmanifest" /><link href="//cdn.example/x" /><a href="/x">'
 			),
 			'<link rel="manifest" href="./manifest.webmanifest" /><link href="//cdn.example/x" /><a href="/x">'
+		);
+	});
+});
+
+describe('readmePictures', () => {
+	it('finds the pictures on the site by their whole address, and only those', () => {
+		assert.deepEqual(
+			readmePictures(
+				'<img src="https://someone.github.io/rueder/screenshots/a-light.png">\n' +
+					'![b](https://someone.github.io/rueder/screenshots/b.png)\n' +
+					'![logo](docs/images/logo.png) [demo](https://someone.github.io/rueder/demo/)'
+			),
+			['a-light.png', 'b.png']
 		);
 	});
 });
