@@ -22,7 +22,7 @@ use super::{
     read::{self, Folders, Source, feed_of, source},
 };
 use crate::{
-    AppError, AppState, api, filters, labels,
+    AppError, AppState, accounts, api, filters, labels,
     reading::{self, Many},
     sessions::Session,
     subscribe, tree,
@@ -283,7 +283,7 @@ async fn place(
 ) -> Result<(), AppError> {
     let account_id = session.account_id;
     let mut tx = state.db.begin().await?;
-    tree::lock(&mut tx, account_id).await?;
+    accounts::lock(&mut tx, account_id).await?;
     let now = sqlx::query_scalar!(
         "SELECT folder_id FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
         account_id,

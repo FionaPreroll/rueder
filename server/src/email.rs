@@ -149,8 +149,7 @@ pub async fn state(conn: &mut PgConnection, account_id: i32) -> anyhow::Result<E
     let row = sqlx::query!(
         "SELECT a.email,
                 (SELECT l.email FROM email_links l
-                 WHERE l.account_id = a.id AND l.expires_at > now()
-                 ORDER BY l.created_at DESC LIMIT 1) AS pending
+                 WHERE l.account_id = a.id AND l.expires_at > now()) AS pending
          FROM accounts a WHERE a.id = $1",
         account_id
     )
@@ -181,29 +180,18 @@ pub(crate) async fn send_link(
     getrandom::fill(&mut random).map_err(|err| anyhow::anyhow!("no random numbers: {err}"))?;
     let token = URL_SAFE_NO_PAD.encode(random);
     let hash = sessions::token_hash(&token);
-    let mut tx = state.db.begin().await?;
-    // One at a time per account, so that of two asked at once only the
-    // newer link is left.
-    sqlx::query!(
-        "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
-        account_id
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
-    sqlx::query!("DELETE FROM email_links WHERE account_id = $1", account_id)
-        .execute(&mut *tx)
-        .await?;
     sqlx::query!(
         "INSERT INTO email_links (token_hash, account_id, email, expires_at)
-         VALUES ($1, $2, $3, now() + $4::int4 * interval '1 hour')",
+         VALUES ($1, $2, $3, now() + $4::int4 * interval '1 hour')
+         ON CONFLICT (account_id) DO UPDATE SET token_hash = excluded.token_hash,
+           email = excluded.email, created_at = now(), expires_at = excluded.expires_at",
         hash,
         account_id,
         address,
         LINK_HOURS,
     )
-    .execute(&mut *tx)
+    .execute(&state.db)
     .await?;
-    tx.commit().await?;
     let link = mailer.link("confirm", &token);
     let hours = LINK_HOURS.to_string();
     let site = mailer.site();
@@ -595,8 +583,7 @@ async fn resend(
     state.logins.succeeded(&keys);
     let waiting = sqlx::query!(
         r#"SELECT a.awaiting_email, COALESCE(a.language, 'en') AS "language!: Language",
-                  (SELECT l.email FROM email_links l WHERE l.account_id = a.id
-                   ORDER BY l.created_at DESC LIMIT 1) AS address
+                  (SELECT l.email FROM email_links l WHERE l.account_id = a.id) AS address
            FROM accounts a WHERE a.id = $1"#,
         account.id
     )
