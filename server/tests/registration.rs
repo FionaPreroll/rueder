@@ -6,7 +6,7 @@ mod common;
 use axum::http::{Method, StatusCode, header};
 use common::{call, raw};
 use rueder::{
-    AppState, accounts,
+    AppState, accounts, email, mail,
     registration::{self, Outcome, Refused, Settings},
 };
 use serde_json::{Value, json};
@@ -97,6 +97,7 @@ async fn nothing_is_open_until_the_operator_says_so(db: PgPool) {
             invites_per_account: 0,
             invite_days: 7,
             admin_invite_accounts: None,
+            email: email::Mode::Off,
         }
     );
     let (_, ways) = call(&state, Method::GET, "/api/login/ways", None, None).await;
@@ -105,7 +106,7 @@ async fn nothing_is_open_until_the_operator_says_so(db: PgPool) {
         (&json!(false), &json!(false))
     );
     let (_, asked) = call(&state, Method::GET, "/api/register", None, None).await;
-    assert_eq!(asked, json!({ "open": false }));
+    assert_eq!(asked, json!({ "open": false, "email": "off" }));
 
     assert_eq!(refused(&state, "ada", None).await, "closed");
     assert_eq!(refused(&state, "ada", Some("made up")).await, "invite");
@@ -304,7 +305,10 @@ async fn a_link_that_ran_out_or_was_taken_back_gives_its_place_back(db: PgPool) 
     assert_eq!(left(&state, &ada).await, 0);
     let asked = format!("/api/register?invite={link}");
     let (_, answer) = call(&state, Method::GET, &asked, None, None).await;
-    assert_eq!(answer, json!({ "open": false, "invite": true }));
+    assert_eq!(
+        answer,
+        json!({ "open": false, "email": "off", "invite": true })
+    );
 
     // Run out: nobody gets in with it, and the two places it did not use are
     // the reader's again. The one it used stays used.
@@ -314,7 +318,10 @@ async fn a_link_that_ran_out_or_was_taken_back_gives_its_place_back(db: PgPool) 
         .unwrap();
     assert_eq!(refused(&state, "carol", Some(&link)).await, "invite");
     let (_, answer) = call(&state, Method::GET, &asked, None, None).await;
-    assert_eq!(answer, json!({ "open": false, "invite": false }));
+    assert_eq!(
+        answer,
+        json!({ "open": false, "email": "off", "invite": false })
+    );
     assert_eq!(left(&state, &ada).await, 2);
 
     // Taken back: the same.
@@ -478,15 +485,21 @@ async fn many_at_once_get_no_more_places_than_there_are(db: PgPool) {
         let (db, link) = (db.clone(), link.clone());
         tries.push(tokio::spawn(async move {
             let token = (n % 2 == 0).then_some(link.as_str());
-            registration::make(&db, &format!("reader-{n}"), PASSWORD, token)
-                .await
-                .unwrap()
+            let name = format!("reader-{n}");
+            let applicant = registration::Applicant {
+                name: &name,
+                password: PASSWORD,
+                token,
+                email: None,
+                language: mail::Language::En,
+            };
+            registration::make(&db, &applicant).await.unwrap()
         }));
     }
     let mut made = 0;
     for outcome in tries {
         match outcome.await.unwrap() {
-            Outcome::Made(_) => made += 1,
+            Outcome::Made(..) => made += 1,
             Outcome::Refused(Refused::Full | Refused::Invite) => {}
             other => panic!("{other:?}"),
         }

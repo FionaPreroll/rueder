@@ -35,6 +35,9 @@ allow = [
     "MPL-2.0",
     # The list of root certificates in webpki-roots.
     "CDLA-Permissive-2.0",
+    # quoted_printable, which lettre uses to encode mail: BSD without even
+    # the condition to keep the notice, more permissive than MIT.
+    "0BSD",
 ]
 confidence-threshold = 0.9
 

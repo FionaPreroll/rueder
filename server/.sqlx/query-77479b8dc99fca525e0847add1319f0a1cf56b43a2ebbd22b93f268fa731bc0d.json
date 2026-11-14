@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.email,\n                (SELECT l.email FROM email_links l\n                 WHERE l.account_id = a.id AND l.expires_at > now()\n                 ORDER BY l.created_at DESC LIMIT 1) AS pending\n         FROM accounts a WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pending",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "77479b8dc99fca525e0847add1319f0a1cf56b43a2ebbd22b93f268fa731bc0d"
+}

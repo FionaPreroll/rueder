@@ -18,6 +18,11 @@
 //!   no account takes the database's connections and the processors from
 //!   everybody else.
 //!
+//! - mail the server sends ([`MAILS_PER_ACCOUNT`], [`MAILS_PER_ADDRESS`],
+//!   [`MAILS_PER_DAY`]): per account, per address it goes to and for the whole
+//!   server, so that nobody uses rueder to fill somebody's inbox, nor the
+//!   relay's allowance.
+//!
 //! Wrong passwords have their own, much smaller limit in [`crate::login`].
 //! Who is over a limit gets 429 with `Retry-After`.
 
@@ -71,6 +76,14 @@ pub const APP_CHANGES: Rate = Rate::new(60, Duration::from_secs(1));
 /// one more every two hours. Each can bring a lot (see `transfer`), and a
 /// move is done once.
 pub const IMPORTS: Rate = Rate::new(3, Duration::from_secs(2 * 60 * 60));
+/// How many mails one account may have the server send: 5 at once, and one
+/// more every hour.
+pub const MAILS_PER_ACCOUNT: Rate = Rate::new(5, Duration::from_secs(60 * 60));
+/// How many mails may go to one address: 3 at once, and one more every two
+/// hours, whichever accounts ask for them.
+pub const MAILS_PER_ADDRESS: Rate = Rate::new(3, Duration::from_secs(2 * 60 * 60));
+/// How many mails the whole server sends: 1000 at once, and 1000 more a day.
+pub const MAILS_PER_DAY: Rate = Rate::new(1000, Duration::from_millis(86_400));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
 /// How many costly requests run at once on the whole server: fewer than the
@@ -200,6 +213,9 @@ pub struct Rates {
     content_reports: Limiter<i32>,
     imports: Limiter<i32>,
     app_changes: Limiter<i32>,
+    mails_per_account: Limiter<i32>,
+    mails_per_address: Limiter<String>,
+    mails_per_day: Limiter<()>,
     heavy: Heavy,
 }
 
@@ -213,6 +229,9 @@ impl Rates {
             content_reports: Limiter::new(CONTENT_REPORTS),
             imports: Limiter::new(IMPORTS),
             app_changes: Limiter::new(APP_CHANGES),
+            mails_per_account: Limiter::new(MAILS_PER_ACCOUNT),
+            mails_per_address: Limiter::new(MAILS_PER_ADDRESS),
+            mails_per_day: Limiter::new(MAILS_PER_DAY),
             heavy: Heavy {
                 running: Semaphore::new(HEAVY_AT_ONCE),
                 accounts: Mutex::default(),
@@ -315,6 +334,30 @@ impl Rates {
         self.app_changes
             .take(&account_id, now)
             .map_err(|wait| AppError::TooMany(wait, "too many changes, try again later"))
+    }
+
+    /// Other limits for mail than [`MAILS_PER_ACCOUNT`], [`MAILS_PER_ADDRESS`]
+    /// and [`MAILS_PER_DAY`].
+    pub fn with_mails(self, account: Rate, address: Rate, day: Rate) -> Self {
+        Self {
+            mails_per_account: Limiter::new(account),
+            mails_per_address: Limiter::new(address),
+            mails_per_day: Limiter::new(day),
+            ..self
+        }
+    }
+
+    /// Counts a mail the server is to send for the account to the address:
+    /// against the account, the address and the day. Whichever is over first
+    /// says how long to wait.
+    pub fn mail(&self, account_id: i32, address: &str, now: Instant) -> Result<(), AppError> {
+        let address = address.to_lowercase();
+        let message = "too many mails, try again later";
+        self.mails_per_account
+            .take(&account_id, now)
+            .and_then(|()| self.mails_per_address.take(&address, now))
+            .and_then(|()| self.mails_per_day.take(&(), now))
+            .map_err(|wait| AppError::TooMany(wait, message))
     }
 
     /// Counts a report of an error the account's browser sends.

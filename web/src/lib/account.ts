@@ -7,6 +7,7 @@ import type { Reader } from './reader.ts';
 /** The tabs of the account settings, in the order they are shown. */
 export const accountTabs = [
 	'password',
+	'email',
 	'security',
 	'apps',
 	'invites',
@@ -23,6 +24,8 @@ export function tabsOf(reader: Reader): AccountTab[] {
 		switch (name) {
 			case 'password':
 				return reader.can.password && reader.account !== null;
+			case 'email':
+				return reader.can.email && reader.account !== null;
 			case 'security':
 				return reader.can.secondFactor;
 			case 'apps':

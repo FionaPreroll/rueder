@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET awaiting_email = false WHERE awaiting_email",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "fef27a80203e62a9b7d100031fcd164900f6c3e086a97c40b559874e4e2da878"
+}

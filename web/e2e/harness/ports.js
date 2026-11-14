@@ -9,6 +9,21 @@ export const RUEDER_LISTEN = '127.0.0.1:3210';
 export const SITE_PORT = 3211;
 export const SITE = `http://127.0.0.1:${SITE_PORT}`;
 
+/**
+ * The made-up mail relay (mail.js): rueder hands its mail over by SMTP on the
+ * one port, the tests read it over HTTP on the other.
+ */
+export const SMTP_PORT = 3212;
+export const MAILBOX_PORT = 3213;
+export const MAILBOX = `http://127.0.0.1:${MAILBOX_PORT}`;
+
+/** What rueder needs to send mail to that relay. */
+export const MAIL_ENV = {
+	SMTP_URL: `smtp://127.0.0.1:${SMTP_PORT}`,
+	MAIL_FROM: 'rueder <rueder@rueder.test>',
+	PUBLIC_URL: RUEDER
+};
+
 /** The database of a run; it is made anew every time. */
 export const DATABASE = 'rueder_e2e';
 
@@ -48,5 +63,6 @@ export const ACCOUNTS = [
 	'unverified',
 	'unreader',
 	'cutoff',
-	'waiter'
+	'waiter',
+	'addressee'
 ];

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET language = COALESCE(language, $2) WHERE id = $1\n           RETURNING language AS \"language!: Language\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "language!: Language",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "language"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0c177ee1ddc2d10f436e0480da0a5639f04dbe2df7274093bf4946c8ad00e3cf"
+}

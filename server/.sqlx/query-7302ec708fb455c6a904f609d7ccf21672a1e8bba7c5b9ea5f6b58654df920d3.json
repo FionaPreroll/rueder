@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.awaiting_email, COALESCE(a.language, 'en') AS \"language!: Language\",\n                  (SELECT l.email FROM email_links l WHERE l.account_id = a.id\n                   ORDER BY l.created_at DESC LIMIT 1) AS address\n           FROM accounts a WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "awaiting_email",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "awaiting_email"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "language!: Language",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "address",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "7302ec708fb455c6a904f609d7ccf21672a1e8bba7c5b9ea5f6b58654df920d3"
+}

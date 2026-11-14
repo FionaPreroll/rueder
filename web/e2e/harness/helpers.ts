@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { expect, type Page } from '@playwright/test';
-import { PASSWORD, SITE, database } from './ports.js';
+import { MAILBOX, MAIL_ENV, PASSWORD, SITE, database } from './ports.js';
 
 export { PASSWORD, SITE };
 
@@ -102,9 +102,29 @@ export function rueder(...args: string[]) {
 	const web = resolve(import.meta.dirname, '../..');
 	const program = resolve(web, process.env.RUEDER_BIN ?? '../server/target/debug/rueder');
 	return execFileSync(program, args, {
-		env: { ...process.env, DATABASE_URL: database() },
+		// Asking for addresses needs a way to send mail, which the server has.
+		env: { ...process.env, ...MAIL_ENV, DATABASE_URL: database() },
 		encoding: 'utf8'
 	});
+}
+
+/** The mails the made-up relay was given for this address, oldest first. */
+export async function mailsTo(address: string) {
+	const answer = await fetch(`${MAILBOX}/mails?${new URLSearchParams({ to: address })}`);
+	return (await answer.json()) as { to: string; subject: string; body: string }[];
+}
+
+/** The link in the newest mail to this address, once it has come. */
+export async function linkIn(address: string) {
+	let link: string | undefined;
+	await expect
+		.poll(async () => {
+			const mails = await mailsTo(address);
+			link = /https?:\/\/\S+\?confirm=[\w-]+/.exec(mails.at(-1)?.body ?? '')?.[0];
+			return link;
+		})
+		.toBeTruthy();
+	return link as string;
 }
 
 /** How long a test waits for what a fetch brings: a round of the server and some. */

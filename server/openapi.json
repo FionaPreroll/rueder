@@ -105,7 +105,7 @@
             "description": "A wrong name or password (the same answer for both), a wrong code, or `second factor needed`."
           },
           "403": {
-            "description": "The account is disabled; said only after the right password."
+            "description": "The account is disabled (`disabled`), or waits for its address to be confirmed (`unconfirmed`); said only after the right password."
           },
           "429": {
             "description": "Too many wrong tries for this name or from this sender; see `Retry-After`."
@@ -3271,8 +3271,18 @@
               }
             }
           },
+          "202": {
+            "description": "Made, where every account needs a confirmed address: it logs in once the link mailed to it is opened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Awaiting"
+                }
+              }
+            }
+          },
           "400": {
-            "description": "A name or password that is not allowed."
+            "description": "A name, password or address that is not allowed."
           },
           "403": {
             "description": "Registration is closed, the invitation is not good (any more), the server or the day is full, or the terms were not agreed to (`terms`)."
@@ -3282,6 +3292,9 @@
           },
           "429": {
             "description": "Too many registrations from this sender; see `Retry-After`."
+          },
+          "503": {
+            "description": "The link could not be mailed; no account was made."
           }
         }
       }
@@ -3393,6 +3406,206 @@
             "session": []
           }
         ]
+      }
+    },
+    "/api/email": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "The address of the account that is logged in, and the one waiting for its link.",
+        "operationId": "email_state",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Gives the account a new address: it counts once the link mailed to it is opened, and until then the one before stays.",
+        "operationId": "change_email",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewEmail"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "The link is on its way to the address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No address mail can go to."
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          },
+          "403": {
+            "description": "A wrong password or code, or `second factor needed`."
+          },
+          "409": {
+            "description": "Addresses are off on this server, or this is the address already."
+          },
+          "429": {
+            "description": "Too many wrong tries or too many mails; see `Retry-After`."
+          },
+          "503": {
+            "description": "The mail could not be sent."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Takes the address from the account, and any link that waits; only where an address is optional.",
+        "operationId": "remove_email",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailProof"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The account has no address any more."
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          },
+          "403": {
+            "description": "A wrong password or code, or `second factor needed`."
+          },
+          "409": {
+            "description": "Addresses are off, or every account needs one."
+          },
+          "429": {
+            "description": "Too many wrong tries; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/email/confirm": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Opens a link from a mail: the address in it is the account's from now on. For anybody who has the link, with or without a session; it does not log in. An unknown, used or old link gets the same answer.",
+        "operationId": "confirm_email",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmEmail"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Confirmed"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link, or not any more: used, replaced by a newer one, or older than a day."
+          },
+          "409": {
+            "description": "Another account has the address meanwhile (`taken`)."
+          }
+        }
+      }
+    },
+    "/api/email/resend": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Sends the link again to an account that registered and has not confirmed its address yet, which cannot log in to ask otherwise. Wrong passwords count as at login.",
+        "operationId": "resend_email_link",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Resend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "The link is on its way again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pending"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A wrong name or password (the same answer for both)."
+          },
+          "409": {
+            "description": "The account waits for no address."
+          },
+          "429": {
+            "description": "Too many wrong tries or too many mails; see `Retry-After`."
+          },
+          "503": {
+            "description": "The mail could not be sent."
+          }
+        }
       }
     },
     "/api/status": {
@@ -5448,6 +5661,19 @@
           }
         }
       },
+      "Awaiting": {
+        "type": "object",
+        "description": "What `POST /api/register` answers where every account needs a confirmed\naddress: the account is made, and logs in once the link mailed to it is\nopened.",
+        "required": [
+          "awaiting_email"
+        ],
+        "properties": {
+          "awaiting_email": {
+            "type": "string",
+            "description": "Where the link went."
+          }
+        }
+      },
       "BuildInfo": {
         "type": "object",
         "description": "How this rueder was built and where it runs.\n\nPart of what `GET /api/status` answers, for admins only.",
@@ -5564,6 +5790,41 @@
             "items": {
               "$ref": "#/components/schemas/ClientReport"
             }
+          }
+        }
+      },
+      "ConfirmEmail": {
+        "type": "object",
+        "description": "What `POST /api/email/confirm` reads: the token from the link.",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "Confirmed": {
+        "type": "object",
+        "description": "What a confirmed link did.",
+        "required": [
+          "username",
+          "email",
+          "activated"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The account it was for."
+          },
+          "email": {
+            "type": "string",
+            "description": "Its address now."
+          },
+          "activated": {
+            "type": "boolean",
+            "description": "The account was waiting for its address and can log in now."
           }
         }
       },
@@ -5715,6 +5976,69 @@
               "null"
             ],
             "format": "double"
+          }
+        }
+      },
+      "EmailMode": {
+        "type": "string",
+        "description": "Whether accounts have an address, as the operator set it.",
+        "enum": [
+          "off",
+          "optional",
+          "required"
+        ]
+      },
+      "EmailProof": {
+        "type": "object",
+        "description": "How the reader shows that they are the account's owner.",
+        "properties": {
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "passkey": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PasskeyAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EmailState": {
+        "type": "object",
+        "description": "The address of an account and the one waiting for its link, as the\naccount's own page sees them.",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/EmailMode"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The confirmed address, if the account has one."
+          },
+          "pending": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An address whose link was sent and not yet opened."
           }
         }
       },
@@ -6783,7 +7107,8 @@
           "admin_needs_second_factor",
           "content_reports",
           "app_api",
-          "passkeys"
+          "passkeys",
+          "email_mode"
         ],
         "properties": {
           "id": {
@@ -6822,6 +7147,24 @@
           "passkeys": {
             "type": "boolean",
             "description": "Whether this server has passkeys (see `PUBLIC_URL`)."
+          },
+          "email_mode": {
+            "$ref": "#/components/schemas/EmailMode",
+            "description": "Whether accounts here have an address, and whether they must; the page\nasks for one where the account has none."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account's confirmed address."
+          },
+          "email_pending": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An address whose link was mailed and not yet opened."
           }
         }
       },
@@ -6913,6 +7256,32 @@
             ]
           }
         }
+      },
+      "NewEmail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EmailProof"
+          },
+          {
+            "type": "object",
+            "required": [
+              "email"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "language": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The language of the page, `en` or `de`: the account's mail is written\nin it from now on, unless a page made the account, whose language\nstays."
+              }
+            }
+          }
+        ],
+        "description": "What `PUT /api/email` reads: the new address, and the account's password\nand, where the second factor is on, one of its codes; or a passkey instead\nof both. A stolen session must not be able to send the account's mail\nelsewhere."
       },
       "NewFolder": {
         "type": "object",
@@ -7043,6 +7412,20 @@
               "null"
             ],
             "description": "The version of the terms of use agreed to, where the server names one."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The address, where the server asks for one (`email` in\n`GET /api/register`)."
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The language of the page, `en` or `de`: the account's mail is\nwritten in it."
           }
         }
       },
@@ -7247,6 +7630,18 @@
           }
         }
       },
+      "Pending": {
+        "type": "object",
+        "description": "An address that waits for its link.",
+        "required": [
+          "pending"
+        ],
+        "properties": {
+          "pending": {
+            "type": "string"
+          }
+        }
+      },
       "RecoveryCodes": {
         "type": "object",
         "description": "The recovery codes, shown once.\n\n`POST /api/second-factor/confirm` answers with them.",
@@ -7287,12 +7682,17 @@
         "type": "object",
         "description": "What the page for registering needs to know before anybody typed a name.\n\n`GET /api/register` answers with it, to anybody; with `?invite=<token>` it\nalso says whether that invitation can be used.",
         "required": [
-          "open"
+          "open",
+          "email"
         ],
         "properties": {
           "open": {
             "type": "boolean",
             "description": "Anybody can register, and there is room."
+          },
+          "email": {
+            "$ref": "#/components/schemas/EmailMode",
+            "description": "Whether the form asks for an address, and whether it must be one."
           },
           "invite": {
             "type": [
@@ -7449,6 +7849,22 @@
         "properties": {
           "on": {
             "type": "boolean"
+          }
+        }
+      },
+      "Resend": {
+        "type": "object",
+        "description": "What `POST /api/email/resend` reads: the name and password of an account\nthat waits for its address.",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
           }
         }
       },

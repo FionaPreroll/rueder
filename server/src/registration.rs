@@ -17,6 +17,10 @@
 //! An invitation is a link with a random token, like a session's; the database
 //! keeps its SHA-256. It is good for a number of accounts and for a number of
 //! days, and whoever made it can take it back.
+//!
+//! Where the operator wants addresses (`--email optional|required`, see
+//! [`crate::email`]), registration asks for one and mails the link that
+//! confirms it. With `required` the new account logs in only after that.
 
 use axum::{
     Json,
@@ -33,8 +37,11 @@ use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    AppError, AppState, accounts, legal,
+    AppError, AppState, accounts,
+    email::{self, Mode},
+    legal,
     login::Me,
+    mail::{self, Language},
     sessions::{self, Session},
 };
 
@@ -51,6 +58,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<AskedInvite>()
         .add::<Registering>()
         .add::<NewRegistration>()
+        .add::<Awaiting>()
         .add::<Invite>()
         .add::<Invites>()
         .add::<NewInvite>()
@@ -79,6 +87,8 @@ pub struct Settings {
     pub invite_days: i32,
     /// The most accounts admins' invitations make; `None` is no limit.
     pub admin_invite_accounts: Option<i32>,
+    /// Whether registration asks for an address, and whether it must be one.
+    pub email: Mode,
 }
 
 pub async fn settings(db: &PgPool) -> anyhow::Result<Settings> {
@@ -91,18 +101,18 @@ async fn read_settings(conn: &mut PgConnection, lock: bool) -> anyhow::Result<Se
     let settings = if lock {
         sqlx::query_as!(
             Settings,
-            "SELECT open, max_accounts, per_day, invites_per_account, invite_days,
-                    admin_invite_accounts
-             FROM registration FOR UPDATE"
+            r#"SELECT open, max_accounts, per_day, invites_per_account, invite_days,
+                      admin_invite_accounts, email AS "email: Mode"
+               FROM registration FOR UPDATE"#
         )
         .fetch_one(conn)
         .await?
     } else {
         sqlx::query_as!(
             Settings,
-            "SELECT open, max_accounts, per_day, invites_per_account, invite_days,
-                    admin_invite_accounts
-             FROM registration"
+            r#"SELECT open, max_accounts, per_day, invites_per_account, invite_days,
+                      admin_invite_accounts, email AS "email: Mode"
+               FROM registration"#
         )
         .fetch_one(conn)
         .await?
@@ -111,19 +121,29 @@ async fn read_settings(conn: &mut PgConnection, lock: bool) -> anyhow::Result<Se
 }
 
 pub async fn set_settings(db: &PgPool, settings: &Settings) -> anyhow::Result<()> {
+    let mut tx = db.begin().await?;
     sqlx::query!(
         "UPDATE registration
          SET open = $1, max_accounts = $2, per_day = $3, invites_per_account = $4,
-             invite_days = $5, admin_invite_accounts = $6",
+             invite_days = $5, admin_invite_accounts = $6, email = $7",
         settings.open,
         settings.max_accounts,
         settings.per_day,
         settings.invites_per_account,
         settings.invite_days,
         settings.admin_invite_accounts,
+        settings.email as Mode,
     )
-    .execute(db)
+    .execute(&mut *tx)
     .await?;
+    // Where an address is no longer a must, accounts that waited for theirs
+    // log in now; a link they still have confirms it all the same.
+    if settings.email != Mode::Required {
+        sqlx::query!("UPDATE accounts SET awaiting_email = false WHERE awaiting_email")
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -292,27 +312,60 @@ async fn way_in(
 /// What became of a try to register.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
-    /// The number of the new account.
-    Made(i32),
+    /// The number of the new account, and the address it gave, which waits
+    /// for its link.
+    Made(i32, Option<String>),
+    /// Made, but it logs in only once the address in its link is confirmed.
+    Awaiting(i32, String),
     Refused(Refused),
     Invalid(accounts::Invalid),
+    /// The server asks for an address and got none, or none mail can go to.
+    Email,
+}
+
+/// Who registers, as `make` needs it.
+pub struct Applicant<'a> {
+    pub name: &'a str,
+    pub password: &'a str,
+    /// The token of an invitation.
+    pub token: Option<&'a str>,
+    /// The address given, where the server asks for one.
+    pub email: Option<&'a str>,
+    /// The language of the page, which the account's mail is written in.
+    pub language: Language,
 }
 
 /// Makes an account for somebody who registers, with an invitation or, where
-/// registration is open, without one.
-pub async fn make(
-    db: &PgPool,
-    name: &str,
-    password: &str,
-    token: Option<&str>,
-) -> anyhow::Result<Outcome> {
+/// registration is open, without one. Where the server asks for an address,
+/// the one given is checked here; the link that confirms it is the caller's.
+pub async fn make(db: &PgPool, applicant: &Applicant<'_>) -> anyhow::Result<Outcome> {
+    let Applicant {
+        name,
+        password,
+        token,
+        ..
+    } = *applicant;
     // Asked before the password is hashed, which is work: whoever cannot get
     // in does not make the server do it.
     let mut conn = db.acquire().await?;
     if let Err(refused) = way_in(&mut conn, token, false).await? {
         return Ok(Outcome::Refused(refused));
     }
+    let mode = email::mode(&mut conn).await?;
     drop(conn);
+    let given = applicant
+        .email
+        .map(str::trim)
+        .filter(|email| !email.is_empty());
+    let address = match (mode, given) {
+        (Mode::Off, _) | (Mode::Optional, None) => None,
+        (Mode::Required, None) => return Ok(Outcome::Email),
+        (_, Some(given)) => match mail::address(given) {
+            Some(address) => Some(address),
+            None => return Ok(Outcome::Email),
+        },
+    };
+    let awaiting = mode == Mode::Required;
     let name = match accounts::check_name(name) {
         Ok(name) => name,
         Err(invalid) => return Ok(Outcome::Invalid(invalid)),
@@ -338,12 +391,14 @@ pub async fn make(
         Way::Invite { id, .. } => Some(id),
     };
     let made = sqlx::query_scalar!(
-        "INSERT INTO accounts (username, password_hash, origin, invite_id)
-         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id",
+        "INSERT INTO accounts (username, password_hash, origin, invite_id, language, awaiting_email)
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id",
         name,
         hash,
         way.origin(),
         invite_id,
+        applicant.language as Language,
+        awaiting,
     )
     .fetch_optional(&mut *tx)
     .await?;
@@ -359,7 +414,10 @@ pub async fn make(
         .await?;
     }
     tx.commit().await?;
-    Ok(Outcome::Made(id))
+    Ok(match address {
+        Some(address) if awaiting => Outcome::Awaiting(id, address),
+        address => Outcome::Made(id, address),
+    })
 }
 
 /// What the page for registering needs to know before anybody typed a name.
@@ -370,6 +428,8 @@ pub async fn make(
 struct Registering {
     /// Anybody can register, and there is room.
     open: bool,
+    /// Whether the form asks for an address, and whether it must be one.
+    email: Mode,
     /// Whether the invitation that was asked about is good: known, not taken
     /// back, not run out, not used up. Left out if none was asked about.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -407,7 +467,12 @@ async fn registering(
         Some(token) => Some(usable(&mut conn, token, false).await?.is_some()),
         None => None,
     };
-    Ok(Json(Registering { open, invite }))
+    let email = email::mode(&mut conn).await?;
+    Ok(Json(Registering {
+        open,
+        email,
+        invite,
+    }))
 }
 
 /// Whether anybody can register without an invitation right now, for the
@@ -438,6 +503,16 @@ struct NewRegistration {
     #[serde(default)]
     #[ts(optional)]
     accepted_terms: Option<String>,
+    /// The address, where the server asks for one (`email` in
+    /// `GET /api/register`).
+    #[serde(default)]
+    #[ts(optional)]
+    email: Option<String>,
+    /// The language of the page, `en` or `de`: the account's mail is
+    /// written in it.
+    #[serde(default)]
+    #[ts(optional)]
+    language: Option<String>,
 }
 
 /// Makes an account: through open registration, or with an invitation; the new
@@ -447,7 +522,7 @@ struct NewRegistration {
     path = "/register",
     tag = "Registration",
     request_body = NewRegistration,
-    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = BAD_REQUEST, description = "A name or password that is not allowed."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, or the terms were not agreed to (`terms`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from this sender; see `Retry-After`.")),
+    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = ACCEPTED, description = "Made, where every account needs a confirmed address: it logs in once the link mailed to it is opened.", body = Awaiting), (status = BAD_REQUEST, description = "A name, password or address that is not allowed."), (status = SERVICE_UNAVAILABLE, description = "The link could not be mailed; no account was made."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, or the terms were not agreed to (`terms`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from this sender; see `Retry-After`.")),
 )]
 async fn register(
     State(state): State<AppState>,
@@ -460,14 +535,49 @@ async fn register(
         return Err(AppError::Status(StatusCode::FORBIDDEN, "terms".into()));
     }
     let token = new.invite.as_deref().filter(|token| !token.is_empty());
-    let id = match make(&state.db, &new.username, &new.password, token).await? {
-        Outcome::Made(id) => id,
+    let language = email::language(new.language.as_deref());
+    let applicant = Applicant {
+        name: &new.username,
+        password: &new.password,
+        token,
+        email: new.email.as_deref(),
+        language,
+    };
+    let name = new.username.trim();
+    let (id, address) = match make(&state.db, &applicant).await? {
+        Outcome::Made(id, address) => (id, address),
+        Outcome::Awaiting(id, address) => {
+            if let Some(version) = terms {
+                legal::agreed(&state.db, id, version).await?;
+            }
+            // Without its link the account could never log in: it goes again,
+            // and the invitation gets its use back.
+            if let Err(err) = email::send_link(&state, id, name, language, &address).await {
+                sqlx::query!(
+                    "WITH gone AS (DELETE FROM accounts WHERE id = $1 RETURNING invite_id)
+                     UPDATE invites SET uses = uses - 1 WHERE id IN (SELECT invite_id FROM gone)",
+                    id
+                )
+                .execute(&state.db)
+                .await?;
+                return Err(err);
+            }
+            let waiting = Awaiting {
+                awaiting_email: address,
+            };
+            return Ok((StatusCode::ACCEPTED, Json(waiting)).into_response());
+        }
         Outcome::Refused(refused) => return Err(refused.into()),
         Outcome::Invalid(accounts::Invalid::NameTaken) => {
             let message = accounts::Invalid::NameTaken.to_string();
             return Err(AppError::Status(StatusCode::CONFLICT, message));
         }
         Outcome::Invalid(invalid) => return Err(AppError::BadRequest(invalid.to_string())),
+        Outcome::Email => {
+            return Err(AppError::BadRequest(
+                "that is no address mail can go to".into(),
+            ));
+        }
     };
     // Whoever was logged in in this browser is not any more.
     if let Some(old) = sessions::token(&headers) {
@@ -476,10 +586,31 @@ async fn register(
     if let Some(version) = terms {
         legal::agreed(&state.db, id, version).await?;
     }
+    // An address that is optional waits for its link; the account is there
+    // without it. Whether the mail went is in what `me` says.
+    if let Some(address) = &address
+        && email::send_link(&state, id, name, language, address)
+            .await
+            .is_err()
+    {
+        tracing::warn!("the link of a new account was not sent; it can ask again");
+    }
     let token = sessions::start(&state.db, id, false).await?;
-    let me = Me::new(id, new.username.trim().to_owned(), false, true).offering(&state);
+    let me = Me::new(id, name.to_owned(), false, true)
+        .offering(&state)
+        .emailing(&state.db)
+        .await?;
     let cookie = [(header::SET_COOKIE, sessions::cookie(&token))];
     Ok((StatusCode::CREATED, cookie, Json(me)).into_response())
+}
+
+/// What `POST /api/register` answers where every account needs a confirmed
+/// address: the account is made, and logs in once the link mailed to it is
+/// opened.
+#[derive(Serialize, TS, ToSchema)]
+struct Awaiting {
+    /// Where the link went.
+    awaiting_email: String,
 }
 
 /// An invitation as the one who made it sees it. The link itself is shown

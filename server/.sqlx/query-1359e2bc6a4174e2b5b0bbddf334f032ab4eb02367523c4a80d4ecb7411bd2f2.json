@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM accounts\n         WHERE awaiting_email AND created_at < now() - $1::int4 * interval '1 day'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1359e2bc6a4174e2b5b0bbddf334f032ab4eb02367523c4a80d4ecb7411bd2f2"
+}

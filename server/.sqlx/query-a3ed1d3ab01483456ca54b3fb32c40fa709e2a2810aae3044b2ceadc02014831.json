@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT open, max_accounts, per_day, invites_per_account, invite_days,\n                    admin_invite_accounts\n             FROM registration",
+  "query": "SELECT open, max_accounts, per_day, invites_per_account, invite_days,\n                      admin_invite_accounts, email AS \"email: Mode\"\n               FROM registration FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "admin_invite_accounts"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "email: Mode",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "registration",
+            "name": "email"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +90,9 @@
       true,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "3961e814f4b0ec9eaefdc3e290cf6f4a6e5422f09380b7afd3275ce18c5c8c64"
+  "hash": "a3ed1d3ab01483456ca54b3fb32c40fa709e2a2810aae3044b2ceadc02014831"
 }

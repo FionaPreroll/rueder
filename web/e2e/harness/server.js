@@ -15,8 +15,8 @@ import { join, resolve } from 'node:path';
 import {
 	ACCOUNTS,
 	DATABASE,
+	MAIL_ENV,
 	PASSWORD,
-	RUEDER,
 	RUEDER_LISTEN,
 	database,
 	postgres
@@ -55,8 +55,9 @@ const env = {
 	// Readers may report feeds and articles (reporting.spec.ts).
 	CONTENT_REPORTS: 'on',
 	// Passkeys, for the address the browser reaches the server at
-	// (passkeys.spec.ts); browsers allow them over HTTP for localhost.
-	PUBLIC_URL: RUEDER
+	// (passkeys.spec.ts); browsers allow them over HTTP for localhost. Mail
+	// goes to the made-up relay (email.spec.ts), and its links lead here.
+	...MAIL_ENV
 };
 
 // The screenshots (screenshots/) name accounts of their own, all of them

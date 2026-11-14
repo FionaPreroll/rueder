@@ -247,6 +247,12 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/passkeys/proof", None),
         ("/api/passkeys", area(Area::Session)),
         ("/api/passkeys/4", area(Area::Session)),
+        // An address: a new or a removed one shows in the account's tabs; the
+        // link and asking for it again publish for themselves or change
+        // nothing a tab shows.
+        ("/api/email", area(Area::Session)),
+        ("/api/email/confirm", None),
+        ("/api/email/resend", None),
     ] {
         assert_eq!(changed(path), what, "{path}");
     }

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT email AS \"email: Mode\" FROM registration",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email: Mode",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "registration",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f9c33252560893f8bf1107f7951b3fdf18f8c75f19f1665c99f8ef2495e69f22"
+}

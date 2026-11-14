@@ -1,0 +1,9 @@
+Confirm your address for rueder
+Hello {name},
+
+somebody, most likely you, gave this address for the account "{name}" on
+{site}. To confirm it, open this link within {hours} hours:
+
+{link}
+
+If that was not you, ignore this mail: without the link nothing happens.

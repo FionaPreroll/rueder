@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM email_links l USING accounts a\n         WHERE a.id = l.account_id AND l.expires_at <= now() AND NOT a.awaiting_email",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "cffb016b56c8da1159ac522bd335774d055c77dfc7a7faddda54b42fea062241"
+}

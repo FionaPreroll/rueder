@@ -10,6 +10,7 @@
 	import { watchInstall } from '#lib/install.svelte.ts';
 	import { Session } from '#lib/api/session.svelte.ts';
 	import Login from '#lib/components/Login.svelte';
+	import EmailConfirmation from '#lib/components/EmailConfirmation.svelte';
 	import ReaderPage from '#lib/components/ReaderPage.svelte';
 	import { m } from '#lib/i18n/index.ts';
 
@@ -17,6 +18,8 @@
 
 	onMount(() => {
 		void session.check();
+		// The page may have been opened with the link from a mail.
+		void session.confirmFromAddress();
 		// The dev server has no worker, and one would keep its files from changing.
 		if (dev) return;
 		const stopping = registerServiceWorker();
@@ -52,4 +55,5 @@
 	<Login {session} />
 {/if}
 
+<EmailConfirmation {session} />
 <UpdateNotice />

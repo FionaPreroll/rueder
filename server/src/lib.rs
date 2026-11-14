@@ -38,6 +38,7 @@ pub mod articles;
 pub mod asset_links;
 pub mod bench;
 pub mod cleaning;
+pub mod email;
 pub mod events;
 pub mod feeds;
 pub mod fetch;
@@ -52,6 +53,7 @@ pub mod import;
 pub mod labels;
 pub mod legal;
 pub mod login;
+pub mod mail;
 pub mod moderation;
 pub mod monitor;
 pub mod oidc;
@@ -142,6 +144,9 @@ pub struct AppState {
     pub app_api: bool,
     /// Passkeys, for the site at `PUBLIC_URL`; none without it.
     pub passkeys: Option<Arc<passkeys::Passkeys>>,
+    /// What sends mail (`SMTP_URL`, see `mail`); none without it, and then
+    /// accounts have no address.
+    pub mail: Option<Arc<mail::Mailer>>,
 }
 
 impl AppState {
@@ -163,10 +168,19 @@ impl AppState {
             content_reports: false,
             app_api: true,
             passkeys: None,
+            mail: None,
         }
     }
 
     /// Has passkeys, for the site at this address (see `PUBLIC_URL`).
+    /// Sends mail through this mailer (see `mail`).
+    pub fn with_mail(self, mailer: mail::Mailer) -> Self {
+        Self {
+            mail: Some(Arc::new(mailer)),
+            ..self
+        }
+    }
+
     pub fn with_passkeys(self, passkeys: passkeys::Passkeys) -> Self {
         Self {
             passkeys: Some(Arc::new(passkeys)),
@@ -398,6 +412,7 @@ fn api_routes() -> OpenApiRouter<AppState> {
         .merge(app_passwords::routes())
         .merge(passkeys::routes())
         .merge(registration::routes())
+        .merge(email::routes())
         .merge(status::routes())
         .merge(reports::routes())
         .merge(transfer::routes())

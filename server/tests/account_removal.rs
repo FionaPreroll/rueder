@@ -214,6 +214,23 @@ async fn fill(db: &PgPool, account_id: i32, name: &str, shared: i32) -> i32 {
     .execute(db)
     .await
     .unwrap();
+    // A confirmed address, and a link for a new one that waits.
+    sqlx::query("UPDATE accounts SET email = $2 WHERE id = $1")
+        .bind(account_id)
+        .bind(format!("{name}@example.org"))
+        .execute(db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO email_links (token_hash, account_id, email, expires_at)
+         VALUES (sha256($2::bytea), $1, $3, now() + interval '1 day')",
+    )
+    .bind(account_id)
+    .bind(name.as_bytes())
+    .bind(format!("{name}@new.example"))
+    .execute(db)
+    .await
+    .unwrap();
     assert!(
         oidc::link(db, name, "https://id.example", &format!("{name}-subject"))
             .await

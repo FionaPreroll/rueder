@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO accounts (username, password_hash, origin, invite_id)\n         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id",
+  "query": "INSERT INTO accounts (username, password_hash, origin, invite_id, language, awaiting_email)\n         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING id",
   "describe": {
     "columns": [
       {
@@ -20,12 +20,14 @@
         "Text",
         "Text",
         "Text",
-        "Int4"
+        "Int4",
+        "Text",
+        "Bool"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "50fac2fdb4046f0b8c5684aabf81143ea3f1a4da876369f86417e89834d8ef5d"
+  "hash": "0343e9f5189c42f130cf8d03f4c012bde6ca0aa02932ba703c6e6dbfa68b136a"
 }

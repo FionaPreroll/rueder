@@ -81,6 +81,12 @@ What is here:
   server names it at `/.well-known/assetlinks.json` and takes its answers,
   which name the app's key as their origin; `PASSKEY_ANDROID_APPS` says which
   apps, by default the one released on GitHub.
+- An account's email address (`src/email.rs`, `src/mail.rs`): with
+  `rueder registration set --email optional|required` registration asks for an
+  address, and a link mailed to it confirms it (`/api/email`,
+  `/api/email/confirm`); with `required` a new account logs in only after
+  that. Mail goes by SMTP to the relay in `SMTP_URL`, from `MAIL_FROM`, with
+  links to `PUBLIC_URL`; its texts are in `templates/mail/`.
 - Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
   readers report a feed or an article with a reason and a note, at most 20 a
   day; the status page lists the reported feeds with their address, never who
@@ -158,6 +164,7 @@ cargo run -- account remove ada         # deletes ada and all that is hers, for 
 cargo run -- registration show          # who may make an account, the limits, how many there are
 cargo run -- registration set --open true --max-accounts 50 --per-day 5
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20
+cargo run -- registration set --email optional   # or required; needs SMTP_URL, MAIL_FROM, PUBLIC_URL
 cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
 cargo run -- retention show             # how long what is kept; everything, until it is set
 cargo run -- retention set --articles 24 --remove text --versions 12 --orphans 90
@@ -192,6 +199,13 @@ Wrong passwords are counted per name, per address and per network (an IPv6
 header the proxy puts the sender's address in (e.g. `X-Forwarded-For`), or all
 readers count as one address. Do not set it if no proxy sets that header:
 senders could then name any address.
+
+Mail to readers (the links that confirm an address) goes by SMTP to the relay
+`SMTP_URL` names, from `MAIL_FROM`, with links to `PUBLIC_URL`. A relay on this
+machine may go without TLS, for development
+`SMTP_URL=smtp://127.0.0.1:1025` with any program that catches mail there;
+any other needs `smtps://` or `smtp://…?tls=required`. Without `SMTP_URL` no
+mail goes out, and `registration set --email` stays at `off`.
 
 For the login through an OpenID Connect provider set `OIDC_ISSUER`,
 `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_REDIRECT_URL` (the address of

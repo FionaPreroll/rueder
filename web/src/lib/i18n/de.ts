@@ -210,6 +210,12 @@ const de: Messages = {
 		oidcUnknown:
 			'Zu dieser Anmeldung gehört hier kein Konto. Bitte die Person, die diesen rueder betreibt, es zu verknüpfen.',
 		disabled: 'Dieses Konto ist gesperrt. Frag die Person, die diesen rueder betreibt, warum.',
+		unconfirmed:
+			'Dieses Konto wartet darauf, dass seine E-Mail-Adresse bestätigt wird. Öffne den Link in der Mail, oder lass ihn noch einmal schicken.',
+		resend: 'Link noch einmal schicken',
+		resent: 'Der Link ist wieder unterwegs. Schau in deine Mails, auch in den Spam-Ordner.',
+		resendWrong:
+			'Gib Name und Passwort des Kontos ein, um den Link noch einmal schicken zu lassen.',
 		removed: 'Dein Konto ist gelöscht, mit allem, was deins war.',
 		note: 'Registrieren kann man sich nicht. Konten legt an, wer diesen rueder betreibt.'
 	},
@@ -243,7 +249,61 @@ const de: Messages = {
 		today: 'Für heute wurden hier genug Konten angelegt. Versuch es morgen wieder.',
 		taken: 'Ein Konto mit diesem Namen gibt es schon.',
 		terms: 'Stimm den Nutzungsbedingungen zu, um ein Konto anzulegen.',
-		invalid: (reason) => `Das kann kein Konto werden. Der Server sagt: ${reason}`
+		invalid: (reason) => `Das kann kein Konto werden. Der Server sagt: ${reason}`,
+		email: 'E-Mail-Adresse',
+		emailOptional: 'E-Mail-Adresse (freiwillig)',
+		emailNote: 'Du bekommst einen Link, um sie zu bestätigen. Niemand sonst sieht sie.',
+		emailRequiredNote:
+			'Du bekommst einen Link, um sie zu bestätigen; das Konto kann sich anmelden, sobald du ihn geöffnet hast. Niemand sonst sieht die Adresse.',
+		emailInvalid: 'Gib eine E-Mail-Adresse an, an die Mails gehen können.',
+		unsent:
+			'Der Link konnte nicht verschickt werden, darum wurde kein Konto angelegt. Versuch es später noch einmal.',
+		tooMany: (minutes) =>
+			`Zu viele Versuche. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
+		awaitingTitle: 'Schau in deine Mails',
+		awaiting: (address, hours) =>
+			`Das Konto ist angelegt. Ein Link ging an ${address}: Öffne ihn innerhalb von ${n(hours)} Stunden, dann melde dich an.`
+	},
+
+	email: {
+		title: 'E-Mail-Adresse',
+		intro:
+			'rueder schreibt dir nur zu deinem Konto: Links, die eine Adresse bestätigen, und eine Nachricht, wenn sie sich ändert. Niemand sonst sieht sie.',
+		current: 'Deine Adresse',
+		none: 'Das Konto hat keine Adresse.',
+		pending: (address, hours) =>
+			`Ein Link ging an ${address}. Die Adresse gilt, sobald er geöffnet ist, innerhalb von ${n(hours)} Stunden; bis dahin bleibt die bisherige.`,
+		address: 'Neue Adresse',
+		password: 'Dein Passwort',
+		passwordNote: 'Damit niemand sonst, der diesen Browser hat, deine Mails anderswohin schickt.',
+		code: 'Code des zweiten Faktors',
+		submit: 'Link schicken',
+		sent: 'Der Link ist unterwegs. Schau in deine Mails, auch in den Spam-Ordner.',
+		remove: 'Adresse entfernen',
+		removeIntro: 'Ohne Adresse bekommst du keine Mails. Sonst bleibt das Konto, wie es ist.',
+		removed: 'Die Adresse ist entfernt.',
+		wrong: 'Das Passwort oder der Code stimmt nicht.',
+		codeNeeded: 'Dieses Konto hat einen zweiten Faktor. Gib auch seinen Code ein.',
+		invalid: 'Gib eine E-Mail-Adresse an, an die Mails gehen können.',
+		same: 'Das ist die Adresse, die das Konto schon hat.',
+		required:
+			'Jedes Konto auf diesem rueder braucht eine Adresse; sie lässt sich ändern, nicht entfernen.',
+		busy: (minutes) =>
+			`Zu viele Versuche oder Mails. Versuch es in ${n(minutes)} ${plural(minutes, { one: 'Minute', other: 'Minuten' })} wieder.`,
+		unsent: 'Die Mail konnte nicht verschickt werden. Versuch es später noch einmal.',
+		unreachable: 'Der Server antwortet nicht. Es wurde nichts geändert.',
+		askTitle: 'E-Mail-Adresse angeben',
+		askIntro:
+			'Jedes Konto auf diesem rueder braucht jetzt eine E-Mail-Adresse. Gib deine an und öffne den Link, der an sie geht.',
+		askWaiting:
+			'Sobald du den Link öffnest, verschwindet das hier von selbst. Kam nichts? Schick ihn noch einmal, oder an eine andere Adresse.',
+		logOut: 'Abmelden',
+		confirmed: (address) => `Die Adresse ${address} ist bestätigt.`,
+		confirmedLogIn: 'Das Konto ist bereit: Melde dich an.',
+		gone: 'Dieser Link gilt nicht mehr: Er wurde schon benutzt, ein neuerer wurde geschickt, oder er ist älter als ein Tag.',
+		taken: 'Ein anderes Konto hat diese Adresse inzwischen.',
+		confirmUnreachable: 'Der Server antwortet nicht. Öffne den Link gleich noch einmal.',
+		close: 'Schließen'
 	},
 
 	invites: {
@@ -302,6 +362,7 @@ const de: Messages = {
 		title: 'Kontoeinstellungen',
 		tabs: {
 			password: 'Passwort',
+			email: 'E-Mail',
 			security: 'Sicherheit',
 			apps: 'Apps',
 			invites: 'Einladungen',

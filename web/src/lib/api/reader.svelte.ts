@@ -55,6 +55,7 @@ import {
 	type Notice,
 	type Reader,
 	type Refusal,
+	type EmailRefusal,
 	type PasswordRefusal,
 	type RemoveRefusal,
 	type Resumed,
@@ -64,6 +65,7 @@ import {
 	type SecondFactorState,
 	type Subscribed
 } from '#lib/reader.ts';
+import { language } from '#lib/i18n/locale.svelte.ts';
 import { createPasskey, passkeysWork, usePasskey } from '#lib/webauthn.ts';
 import {
 	ancestorIds,
@@ -495,7 +497,8 @@ export class ServerReader implements Reader {
 			remove: true,
 			reportContent: account.contentReports === true,
 			apps: account.appApi === true,
-			passkeys: account.passkeys === true && passkeysWork()
+			passkeys: account.passkeys === true && passkeysWork(),
+			email: (account.emailMode ?? 'off') !== 'off'
 		};
 		this.session = session;
 		this.api = api;
@@ -2188,8 +2191,20 @@ export class ServerReader implements Reader {
 		try {
 			// What another tab changed, such as agreeing to the terms, shows here too.
 			const me = await this.api.me();
-			if (me.terms_to_accept !== (this.account.termsToAccept ?? null)) {
-				this.account = { ...this.account, termsToAccept: me.terms_to_accept };
+			const was = this.account;
+			if (
+				me.terms_to_accept !== (was.termsToAccept ?? null) ||
+				me.email_mode !== (was.emailMode ?? 'off') ||
+				me.email !== (was.email ?? null) ||
+				me.email_pending !== (was.emailPending ?? null)
+			) {
+				this.account = {
+					...was,
+					termsToAccept: me.terms_to_accept,
+					emailMode: me.email_mode,
+					email: me.email,
+					emailPending: me.email_pending
+				};
 			}
 		} catch (error) {
 			if (error instanceof ApiError && error.signedOut) this.session.expired();
@@ -2484,6 +2499,59 @@ export class ServerReader implements Reader {
 		// gave this browser a new session; the others are gone.
 		this.account = { ...this.account, password: true };
 		return null;
+	}
+
+	async changeEmail(
+		address: string,
+		password: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<EmailRefusal | null> {
+		try {
+			const proof = passkey ? { passkey } : { password, code: code?.trim() };
+			const { pending } = await this.api.changeEmail({
+				email: address.trim(),
+				language: language(),
+				...proof
+			});
+			this.account = { ...this.account, emailPending: pending };
+			return null;
+		} catch (error) {
+			return this.emailRefusal(error, code, passkey);
+		}
+	}
+
+	async removeEmail(
+		password: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<EmailRefusal | null> {
+		try {
+			await this.api.removeEmail(passkey ? { passkey } : { password, code: code?.trim() });
+			this.account = { ...this.account, email: null, emailPending: null };
+			return null;
+		} catch (error) {
+			return this.emailRefusal(error, code, passkey);
+		}
+	}
+
+	private emailRefusal(error: unknown, code?: string, passkey?: PasskeyProof): EmailRefusal {
+		if (!(error instanceof ApiError)) return { problem: 'unreachable' };
+		const said = error.message.trim();
+		if (error.status === 403) {
+			const missing = said === 'second factor needed';
+			return { problem: missing && !code && !passkey ? 'code' : 'wrong' };
+		}
+		if (error.status === 400) return { problem: 'invalid' };
+		if (error.status === 409) {
+			return { problem: said === 'that is the address already' ? 'same' : 'required' };
+		}
+		if (error.status === 429) {
+			return { problem: 'busy', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
+		}
+		if (error.status === 503) return { problem: 'unsent' };
+		if (error.signedOut) this.session.expired();
+		return { problem: 'unreachable' };
 	}
 
 	async invite(uses: number) {

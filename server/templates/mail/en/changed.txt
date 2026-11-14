@@ -1,0 +1,8 @@
+The address of your rueder account changed
+Hello {name},
+
+the account "{name}" on {site} has a new address now: {address}. Mail for
+the account goes there from now on, this one gets none.
+
+If that was not you, someone may know your password. Write to whoever runs
+{site} soon.
