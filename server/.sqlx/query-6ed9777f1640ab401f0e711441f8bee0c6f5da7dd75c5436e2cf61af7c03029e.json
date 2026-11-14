@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.email,\n                (SELECT l.email FROM email_links l\n                 WHERE l.account_id = a.id AND l.expires_at > now()\n                 ORDER BY l.created_at DESC LIMIT 1) AS pending\n         FROM accounts a WHERE a.id = $1",
+  "query": "SELECT a.email,\n                (SELECT l.email FROM email_links l\n                 WHERE l.account_id = a.id AND l.expires_at > now()) AS pending\n         FROM accounts a WHERE a.id = $1",
   "describe": {
     "columns": [
       {
@@ -31,5 +31,5 @@
       null
     ]
   },
-  "hash": "77479b8dc99fca525e0847add1319f0a1cf56b43a2ebbd22b93f268fa731bc0d"
+  "hash": "6ed9777f1640ab401f0e711441f8bee0c6f5da7dd75c5436e2cf61af7c03029e"
 }

@@ -64,7 +64,7 @@ use webauthn_rs::prelude::{
 };
 
 use crate::{
-    AppError, AppState,
+    AppError, AppState, accounts,
     asset_links::AndroidApp,
     login::{self, Key, Sender},
     second_factor::{self, Proof},
@@ -615,7 +615,6 @@ async fn finish_registration(
             AppError::BadRequest("the passkey could not be checked".into())
         })?;
     let mut tx = state.db.begin().await?;
-    tree::lock(&mut tx, session.account_id).await?;
     let before = sqlx::query!(
         r#"SELECT totp_secret IS NOT NULL AS "app!",
                   (SELECT count(*) FROM passkeys p WHERE p.account_id = a.id) AS "passkeys!"
@@ -808,7 +807,9 @@ async fn remove(
     let proof = proof(&remove.password, &remove.code, remove.passkey.as_ref());
     second_factor::prove(&state, &session, &headers, proof).await?;
     let mut tx = state.db.begin().await?;
-    tree::lock(&mut tx, session.account_id).await?;
+    // Two passkeys taken away at once would each see the other one left, and
+    // the second factor would stay on with nothing to show.
+    accounts::lock(&mut tx, session.account_id).await?;
     let gone = sqlx::query!(
         "DELETE FROM passkeys WHERE id = $1 AND account_id = $2",
         id,

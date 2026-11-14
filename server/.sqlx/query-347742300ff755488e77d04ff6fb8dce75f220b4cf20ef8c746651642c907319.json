@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO email_links (token_hash, account_id, email, expires_at)\n         VALUES ($1, $2, $3, now() + $4::int4 * interval '1 hour')\n         ON CONFLICT (account_id) DO UPDATE SET token_hash = excluded.token_hash,\n           email = excluded.email, created_at = now(), expires_at = excluded.expires_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "347742300ff755488e77d04ff6fb8dce75f220b4cf20ef8c746651642c907319"
+}

@@ -33,7 +33,7 @@ use utoipa_axum::{
 };
 
 use crate::{
-    AppError, AppState,
+    AppError, AppState, accounts,
     cleaning::{self, Rules},
     feeds,
     fetch::{self, Outcome},
@@ -485,7 +485,7 @@ pub(crate) async fn subscribe(
         }
     };
     let mut tx = state.db.begin().await?;
-    tree::lock(&mut tx, account_id).await?;
+    accounts::lock(&mut tx, account_id).await?;
     if let Some(folder) = new.folder_id {
         own_folder(&mut tx, account_id, folder).await?;
     }
@@ -833,7 +833,7 @@ pub(crate) async fn take(
     account_id: i32,
     outline: &Outline,
 ) -> Result<Taken, AppError> {
-    tree::lock(&mut *tx, account_id).await?;
+    accounts::lock(&mut *tx, account_id).await?;
     let mut taken = Taken {
         folders: HashMap::new(),
         folders_made: 0,

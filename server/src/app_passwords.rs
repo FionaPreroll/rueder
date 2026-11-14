@@ -272,7 +272,6 @@ async fn create(
     let proof = passkeys::proof(&new.password, &new.code, new.passkey.as_ref());
     second_factor::prove(&state, &session, &headers, proof).await?;
     let mut tx = state.db.begin().await?;
-    tree::lock(&mut tx, session.account_id).await?;
     let have = sqlx::query_scalar!(
         r#"SELECT count(*) AS "n!" FROM app_passwords WHERE account_id = $1"#,
         session.account_id

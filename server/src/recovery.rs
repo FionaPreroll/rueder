@@ -152,32 +152,18 @@ async fn send_link(state: &AppState, who: &str) -> anyhow::Result<()> {
     getrandom::fill(&mut random).map_err(|err| anyhow::anyhow!("no random numbers: {err}"))?;
     let token = URL_SAFE_NO_PAD.encode(random);
     let hash = sessions::token_hash(&token);
-    let mut tx = state.db.begin().await?;
-    // One at a time per account, so that of two asked at once only the
-    // newer link is left.
-    sqlx::query!(
-        "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
-        account.id
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
-    sqlx::query!(
-        "DELETE FROM password_resets WHERE account_id = $1",
-        account.id
-    )
-    .execute(&mut *tx)
-    .await?;
     sqlx::query!(
         "INSERT INTO password_resets (token_hash, account_id, email, expires_at)
-         VALUES ($1, $2, $3, now() + $4::int4 * interval '1 minute')",
+         VALUES ($1, $2, $3, now() + $4::int4 * interval '1 minute')
+         ON CONFLICT (account_id) DO UPDATE SET token_hash = excluded.token_hash,
+           email = excluded.email, created_at = now(), expires_at = excluded.expires_at",
         hash,
         account.id,
         account.email,
         LINK_MINUTES,
     )
-    .execute(&mut *tx)
+    .execute(&state.db)
     .await?;
-    tx.commit().await?;
     let link = mailer.link("reset", &token);
     let (site, minutes) = (mailer.site(), LINK_MINUTES.to_string());
     let values = [

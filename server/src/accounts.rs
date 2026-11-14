@@ -242,6 +242,19 @@ pub(crate) async fn replace_password(
     Ok(())
 }
 
+/// Holds the account's row until the transaction ends, so that changes which
+/// depend on what the account has come one after the other: the order of its
+/// tree, and whether a second factor is left once one goes.
+pub(crate) async fn lock(conn: &mut PgConnection, account_id: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
+        account_id
+    )
+    .fetch_one(conn)
+    .await?;
+    Ok(())
+}
+
 /// Makes an account an admin, or an admin a reader again. False if there is
 /// no account of that name. What an admin may do counts from the next request
 /// on, as every request reads it anew.

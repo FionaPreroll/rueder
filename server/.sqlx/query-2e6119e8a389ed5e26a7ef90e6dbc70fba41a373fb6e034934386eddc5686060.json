@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.awaiting_email, COALESCE(a.language, 'en') AS \"language!: Language\",\n                  (SELECT l.email FROM email_links l WHERE l.account_id = a.id\n                   ORDER BY l.created_at DESC LIMIT 1) AS address\n           FROM accounts a WHERE a.id = $1",
+  "query": "SELECT a.awaiting_email, COALESCE(a.language, 'en') AS \"language!: Language\",\n                  (SELECT l.email FROM email_links l WHERE l.account_id = a.id) AS address\n           FROM accounts a WHERE a.id = $1",
   "describe": {
     "columns": [
       {
@@ -38,5 +38,5 @@
       null
     ]
   },
-  "hash": "7302ec708fb455c6a904f609d7ccf21672a1e8bba7c5b9ea5f6b58654df920d3"
+  "hash": "2e6119e8a389ed5e26a7ef90e6dbc70fba41a373fb6e034934386eddc5686060"
 }
