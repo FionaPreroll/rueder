@@ -10,7 +10,9 @@ on:
 
 jobs:
   analyze:
-    name: Analyze
+    # Only the language in the name, as before build-mode came into the
+    # matrix: the required checks of the branch are "Analyze (<language>)".
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
       actions: read
