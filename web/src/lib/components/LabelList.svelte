@@ -142,7 +142,7 @@
 								{m.labels.rename}
 							</button>
 							<div
-								class="flex flex-wrap gap-1.5 px-3 py-1.5"
+								class="grid grid-cols-[repeat(8,1.25rem)] gap-1.5 px-3 py-1.5 pointer-coarse:grid-cols-[repeat(4,2.75rem)]"
 								role="group"
 								aria-label={m.labels.color}
 							>

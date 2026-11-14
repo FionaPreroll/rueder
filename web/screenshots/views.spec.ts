@@ -12,6 +12,7 @@ import { PASSWORD, SITE } from '../e2e/harness/helpers.ts';
 import { OUT, api, catalogs, importFeeds, shoot } from './harness.ts';
 import { TERMS_VERSION, projects } from './projects.ts';
 import { createHmac } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** The bytes of a key in base32, as the page shows it in groups. */
@@ -106,6 +107,8 @@ test('every view', async ({ page, isMobile }, info) => {
 	const m = catalogs[shots.language];
 	const phone = isMobile;
 	const folder = join(OUT, shots.name);
+	// What a run before measured (harness.ts, measure).
+	rmSync(join(folder, 'measure.jsonl'), { force: true });
 
 	let number = 0;
 	const failed: string[] = [];

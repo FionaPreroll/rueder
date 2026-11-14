@@ -6,20 +6,29 @@
 
 /* The colors of the page by what they are for. Components use these (bg-paper,
    text-soft, border-line …) and no fixed grays, so the themes below only repaint
-   the variables. Text colors keep a contrast of 4.5:1 on paper and panel. */
+   the variables. What they must keep is tested in colors.test.ts: text 4.5:1 on
+   paper, panel, hover and chosen, ink and soft 7:1 on paper and panel, the frames
+   of fields, the star and the accent as a line 3:1 (docs/design_review.md). */
 @theme {
 	--color-paper: #ffffff;
 	--color-panel: #f4f5f7;
 	--color-line: #dde1e6;
+	/* The frame of a field, which has to be seen to be found. */
+	--color-field: #7d858f;
 	--color-ink: #1f2328;
-	--color-soft: #59626d;
+	--color-soft: #4a525c;
 	--color-link: #1a55c4;
 	--color-hover: #e9ecf1;
-	--color-chosen: #dfe8fb;
+	/* What is picked, tinted with the accent. */
+	--color-chosen: color-mix(in srgb, var(--color-accent) 12%, var(--color-paper));
 	--color-accent: #c8402e;
 	--color-on-accent: #ffffff;
-	--color-star: #d99a00;
+	/* The accent as a line or a frame: the cursor in the list, the tab that is open. */
+	--color-accent-line: var(--color-accent);
+	--color-star: #b07800;
+	/* Warnings, and the buttons of what cannot be undone. */
 	--color-warn: #a8500a;
+	--color-on-warn: #ffffff;
 	--color-live: #1a7f43;
 	--color-added: #d6f3dc;
 	--color-removed: #fbdcdc;
@@ -40,20 +49,24 @@
 	--color-paper: #15171b;
 	--color-panel: #1c1f25;
 	--color-line: #30353d;
+	--color-field: #6b7480;
 	--color-ink: #e7e9ec;
-	--color-soft: #a4acb8;
+	--color-soft: #b8bfca;
 	--color-link: #8cb4ff;
 	--color-hover: #262b33;
-	--color-chosen: #25324f;
+	--color-chosen: color-mix(in srgb, var(--color-accent) 22%, var(--color-paper));
+	--color-accent-line: #e0604d;
 	--color-star: #f0b429;
 	--color-warn: #f0a35c;
+	--color-on-warn: #15171b;
 	--color-live: #4cc37d;
 	--color-added: #17402a;
 	--color-removed: #55232a;
 }
 
 /* Accent colors: the Subscribe button, the cursor in the list, what is switched on.
-   White text is readable on each of them. */
+   White text is readable on each of them. On the dark theme, the line of each is
+   lighter, as the button's color would hardly stand out from the dark paper. */
 :root[data-accent='blue'] {
 	--color-accent: #1a62d0;
 }
@@ -69,8 +82,21 @@
 :root[data-accent='graphite'] {
 	--color-accent: #4b5563;
 }
+:root[data-theme='dark'][data-accent='blue'] {
+	--color-accent-line: #4d8eff;
+}
+:root[data-theme='dark'][data-accent='green'] {
+	--color-accent-line: #3fae69;
+}
+:root[data-theme='dark'][data-accent='orange'] {
+	--color-accent-line: #e07a3c;
+}
+:root[data-theme='dark'][data-accent='purple'] {
+	--color-accent-line: #a57fe8;
+}
 :root[data-theme='dark'][data-accent='graphite'] {
 	--color-accent: #66707f;
+	--color-accent-line: #8a93a0;
 }
 
 :root[data-density='comfortable'] {
@@ -103,7 +129,7 @@
 	   theme's colors. `:root` in front makes them win over the plugin's own selectors. */
 	:root :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
 		background-color: var(--color-paper);
-		border-color: var(--color-line);
+		border-color: var(--color-field);
 		color: var(--color-ink);
 	}
 	:root :is(input, textarea)::placeholder {
@@ -112,7 +138,51 @@
 	}
 	:root :is([type='checkbox'], [type='radio']):not(:checked) {
 		background-color: var(--color-paper);
-		border-color: var(--color-soft);
+		border-color: var(--color-field);
+	}
+
+	/* Images stay a little dimmer on the dark theme, so a bright one does not glare,
+	   until the pointer is on them. */
+	[data-theme='dark'] :is(.article-body :where(img, video), img.dimmed):not(:hover) {
+		filter: brightness(0.85);
+	}
+
+	/* A finger needs 44 by 44 pixels to hit a target (WCAG 2.5.5), so on a screen
+	   worked with one every button, tab, field and option gets them. In the base
+	   layer and without weight, so a class of a component still has the last word.
+	   A target in a line of text (`reach`) keeps its size and gets the 44 pixels
+	   as an area around it that can be pressed. */
+	@media (pointer: coarse) {
+		:where(
+			button:not(.reach),
+			summary,
+			select,
+			[role='tab'],
+			[role='menuitem'],
+			label:has(> input[type='file']),
+			input:not([type='checkbox'], [type='radio'], [type='hidden'])
+		) {
+			min-height: 2.75rem;
+			min-width: 2.75rem;
+		}
+		:where(label:has(> input[type='checkbox'], > input[type='radio'])) {
+			display: inline-flex;
+			align-items: center;
+			min-height: 2.75rem;
+			min-width: 2.75rem;
+		}
+		.reach {
+			position: relative;
+		}
+		.reach::after {
+			content: '';
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			width: max(100%, 2.75rem);
+			height: max(100%, 2.75rem);
+			transform: translate(-50%, -50%);
+		}
 	}
 
 	kbd {
@@ -144,6 +214,11 @@
 		@apply bg-chosen;
 	}
 
+	/* The button of what cannot be undone: unsubscribing, deleting the account. */
+	.danger {
+		@apply inline-flex cursor-pointer items-center justify-center rounded bg-warn px-3 py-1 text-sm font-semibold text-on-warn hover:brightness-110 disabled:cursor-default disabled:opacity-50;
+	}
+
 	/* A button without a frame, for icons in rows. */
 	.plain {
 		@apply inline-flex cursor-pointer items-center justify-center rounded text-soft hover:bg-hover hover:text-ink;
@@ -158,7 +233,8 @@
 		font-family: var(--reader-font);
 		font-size: var(--reader-size);
 		line-height: 1.6;
-		max-width: 44rem;
+		/* At most about 80 characters to the line, at every size of text. */
+		max-width: 60ch;
 		overflow-wrap: anywhere;
 	}
 	.article-body :where(p, ul, ol, blockquote, pre, figure) {

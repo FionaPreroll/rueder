@@ -764,3 +764,27 @@ fn an_article_is_shown_by_the_first_picture_of_its_text_where_the_feed_names_non
         Some("https://example.org/named.jpg")
     );
 }
+
+#[test]
+fn an_author_with_an_address_keeps_only_the_name() {
+    let feed = |author: &str| {
+        format!(
+            "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Example</title>\
+             <link>https://example.org/</link><item><guid>a</guid><title>A</title>\
+             <author>{author}</author><description>Text</description></item></channel></rss>"
+        )
+        .into_bytes()
+    };
+    for (written, name) in [
+        ("desk@example.org (Jonas Erbe)", "Jonas Erbe"),
+        ("Jonas Erbe &lt;desk@example.org&gt;", "Jonas Erbe"),
+        ("Jonas Erbe", "Jonas Erbe"),
+        ("(Klammern) im Namen", "(Klammern) im Namen"),
+        ("desk@example.org", ""),
+    ] {
+        let parsed = parse(&feed(written));
+        let authors = &parsed.articles[0].original.authors;
+        let expected: Vec<&str> = if name.is_empty() { vec![] } else { vec![name] };
+        assert_eq!(authors, &expected, "{written}");
+    }
+}

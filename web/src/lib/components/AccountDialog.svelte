@@ -44,7 +44,7 @@
 				class={[
 					'-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm',
 					open === name
-						? 'border-accent font-semibold'
+						? 'border-accent-line font-semibold'
 						: 'border-transparent text-soft hover:text-ink'
 				]}
 				onclick={() => (tab = name)}

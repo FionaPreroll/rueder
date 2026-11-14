@@ -20,6 +20,7 @@
 		"test:coverage": "vitest run --coverage",
 		"e2e": "playwright test",
 		"screenshots": "playwright test --config playwright.screenshots.config.ts",
+		"screenshots:report": "node screenshots/report.ts",
 		"format": "prettier --write ."
 	},
 	"devDependencies": {

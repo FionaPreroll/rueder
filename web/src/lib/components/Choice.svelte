@@ -12,7 +12,7 @@
 	<div class="mt-1.5 flex flex-wrap gap-1.5">
 		{#each options as option (option.value)}
 			<label
-				class="cursor-pointer rounded border border-line px-3 py-1 text-sm hover:bg-hover has-checked:border-accent has-checked:bg-chosen has-focus-visible:outline-2 has-focus-visible:outline-link"
+				class="cursor-pointer rounded border border-line px-3 py-1 text-sm hover:bg-hover has-checked:border-accent-line has-checked:bg-chosen has-focus-visible:outline-2 has-focus-visible:outline-link"
 			>
 				<input type="radio" class="sr-only" bind:group={value} value={option.value} />
 				{option.label}
