@@ -19,7 +19,7 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppError, AppState, filters, sessions::Session};
+use crate::{AppError, AppState, accounts, filters, sessions::Session};
 
 /// The longest name of a folder or a subscription, in characters.
 pub const MAX_TITLE: usize = 100;
@@ -94,17 +94,6 @@ pub(crate) fn rule(err: sqlx::Error) -> AppError {
         Some("folders_no_circle") => bad("a folder cannot move into itself"),
         _ => err.into(),
     }
-}
-
-/// One change to an account's tree at a time.
-pub(crate) async fn lock(conn: &mut PgConnection, account_id: i32) -> Result<(), AppError> {
-    sqlx::query!(
-        "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
-        account_id
-    )
-    .fetch_one(conn)
-    .await?;
-    Ok(())
 }
 
 /// Whether a folder, or the top level, can take one more feed.
@@ -313,7 +302,7 @@ async fn move_node(
         return Err(bad("a node cannot move onto itself"));
     }
     let mut tx = state.db.begin().await?;
-    lock(&mut tx, account_id).await?;
+    accounts::lock(&mut tx, account_id).await?;
     let Some(from) = parent_of(&mut tx, account_id, change.node).await? else {
         return Err(AppError::NotFound);
     };
@@ -397,7 +386,7 @@ pub(crate) async fn add_folder(
     let account_id = session.account_id;
     let title = title(&new.title)?;
     let mut tx = state.db.begin().await?;
-    lock(&mut tx, account_id).await?;
+    accounts::lock(&mut tx, account_id).await?;
     if let Some(parent) = new.parent_id
         && parent_of(&mut tx, account_id, Node::Folder(parent))
             .await?
@@ -487,7 +476,7 @@ pub(crate) async fn remove_folder(
 ) -> Result<StatusCode, AppError> {
     let account_id = session.account_id;
     let mut tx = state.db.begin().await?;
-    lock(&mut tx, account_id).await?;
+    accounts::lock(&mut tx, account_id).await?;
     let Some(parent) = parent_of(&mut tx, account_id, Node::Folder(id)).await? else {
         return Err(AppError::NotFound);
     };

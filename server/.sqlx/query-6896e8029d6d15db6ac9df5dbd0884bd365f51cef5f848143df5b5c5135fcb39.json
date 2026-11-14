@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO password_resets (token_hash, account_id, email, expires_at)\n         VALUES ($1, $2, $3, now() + $4::int4 * interval '1 minute')\n         ON CONFLICT (account_id) DO UPDATE SET token_hash = excluded.token_hash,\n           email = excluded.email, created_at = now(), expires_at = excluded.expires_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6896e8029d6d15db6ac9df5dbd0884bd365f51cef5f848143df5b5c5135fcb39"
+}

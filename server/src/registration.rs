@@ -749,14 +749,6 @@ async fn invite(
         return Err(AppError::BadRequest(message));
     }
     let mut tx = state.db.begin().await?;
-    // One at a time per account, so that two requests cannot both take the
-    // last of a quota.
-    sqlx::query!(
-        "SELECT id FROM accounts WHERE id = $1 FOR UPDATE",
-        session.account_id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
     let settings = read_settings(&mut tx, false).await?;
     if !session.is_admin && left(&mut tx, session.account_id, &settings).await? < uses {
         let message = "no invitations left";
