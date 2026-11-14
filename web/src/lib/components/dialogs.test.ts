@@ -1,9 +1,11 @@
 import { cleanup, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ServerReader } from '#lib/api/reader.svelte.ts';
+import { ServerAccount } from '#lib/api/account.svelte.ts';
+import { ServerReader, type SessionEnds } from '#lib/api/reader.svelte.ts';
 import { fakeDevice, noDevice } from '#lib/api/test/fake-device.ts';
 import { FakeServer } from '#lib/api/test/fake-server.ts';
+import { DemoApps } from '#lib/demo/apps.svelte.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { demoStatus } from '#lib/demo/status.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
@@ -20,6 +22,12 @@ import SubscribeDialog from './SubscribeDialog.svelte';
 import VersionCompare from './VersionCompare.svelte';
 
 const now = Date.parse('2026-11-10T14:30:00Z');
+
+/** What the page gives the account settings for a reader with a server (Session.svelte.ts). */
+function withServer(reader: ServerReader, session: SessionEnds) {
+	const accountSettings = new ServerAccount(reader, session);
+	return { reader, accountSettings, apps: reader.account.appApi === true ? accountSettings : null };
+}
 
 afterEach(() => {
 	Object.assign(settings, defaults);
@@ -554,7 +562,7 @@ describe('Privacy in the account settings', () => {
 		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
 		const stop = reader.start();
 		await vi.waitFor(() => expect(reader.reportsConsent).not.toBeNull());
-		render(AccountDialog, { reader, onclose: () => {} });
+		render(AccountDialog, { ...withServer(reader, session), onclose: () => {} });
 		return { reader, stop };
 	}
 
@@ -601,7 +609,7 @@ describe('Moving the account in the account settings', () => {
 		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
 		const stop = reader.start();
 		await vi.waitFor(() => expect(reader.reportsConsent).not.toBeNull());
-		render(AccountDialog, { reader, onclose: () => {} });
+		render(AccountDialog, { ...withServer(reader, session), onclose: () => {} });
 		await userEvent.click(screen.getByRole('tab', { name: 'Move' }));
 		return { reader, stop };
 	}
@@ -687,7 +695,7 @@ describe('The password in the account settings', () => {
 
 	function opened(password = true) {
 		const reader = new ServerReader({ name: 'fiona', admin: false, password }, session);
-		render(AccountDialog, { reader, onclose: () => {} });
+		render(AccountDialog, { ...withServer(reader, session), onclose: () => {} });
 		return reader;
 	}
 
@@ -809,7 +817,7 @@ describe('The email address in the account settings', () => {
 			{ name: 'fiona', admin: false, emailMode: mode, email },
 			session
 		);
-		render(AccountDialog, { reader, tab: 'email', onclose: () => {} });
+		render(AccountDialog, { ...withServer(reader, session), tab: 'email', onclose: () => {} });
 		return reader;
 	}
 
@@ -884,7 +892,7 @@ describe('Asking for an address where every account needs one', () => {
 			{ name: 'fiona', admin: false, emailMode: 'required', email: null },
 			session
 		);
-		render(EmailDialog, { reader });
+		render(EmailDialog, withServer(reader, session));
 		const window = screen.getByRole('alertdialog', { name: 'Add an email address' });
 		expect(window).toHaveFocus();
 		await userEvent.type(within(window).getByLabelText('New address'), 'fiona@example.org');
@@ -914,7 +922,7 @@ describe('Deleting the account in the account settings', () => {
 		const removed = vi.fn();
 		const session = { signOut: () => {}, expired: () => {}, removed };
 		const reader = new ServerReader({ name: 'fiona', admin: false, password }, session);
-		render(AccountDialog, { reader, onclose: () => {} });
+		render(AccountDialog, { ...withServer(reader, session), onclose: () => {} });
 		await userEvent.click(screen.getByRole('tab', { name: 'Delete account' }));
 		return removed;
 	}
@@ -1000,7 +1008,7 @@ describe('passkeys in the account settings', () => {
 	function open() {
 		onclose.mockClear();
 		const reader = new ServerReader({ name: 'fiona', admin: false, passkeys: true }, session);
-		render(AccountDialog, { reader, tab: 'security', onclose });
+		render(AccountDialog, { ...withServer(reader, session), tab: 'security', onclose });
 		return reader;
 	}
 
@@ -1117,7 +1125,7 @@ describe('passkeys in the account settings', () => {
 		fakeDevice();
 		server.passkeysOn = false;
 		const reader = new ServerReader({ name: 'fiona', admin: false, passkeys: false }, session);
-		render(AccountDialog, { reader, tab: 'security', onclose });
+		render(AccountDialog, { ...withServer(reader, session), tab: 'security', onclose });
 		expect(await screen.findByText('Off.')).toBeInTheDocument();
 		expect(screen.queryByText('Passkeys')).toBeNull();
 		cleanup();
@@ -1144,7 +1152,7 @@ describe('the second factor in the account settings', () => {
 	function open(account = { name: 'fiona', admin: false }) {
 		onclose.mockClear();
 		const reader = new ServerReader(account, session);
-		render(AccountDialog, { reader, tab: 'security', onclose });
+		render(AccountDialog, { ...withServer(reader, session), tab: 'security', onclose });
 		return reader;
 	}
 
@@ -1332,7 +1340,7 @@ describe('Apps in the account settings', () => {
 	function open(account: Partial<{ appApi: boolean }> = { appApi: true }) {
 		const reader = new ServerReader({ name: 'fiona', admin: false, ...account }, session);
 		reader.start();
-		render(AccountDialog, { reader, tab: 'apps', onclose });
+		render(AccountDialog, { ...withServer(reader, session), tab: 'apps', onclose });
 		return reader;
 	}
 
@@ -1436,12 +1444,17 @@ describe('Apps in the account settings', () => {
 	it('is not there where the server lets no app in', async () => {
 		server.appApi = false;
 		const reader = new ServerReader({ name: 'fiona', admin: false, appApi: false }, session);
-		render(AccountDialog, { reader, onclose });
+		render(AccountDialog, { ...withServer(reader, session), onclose });
 		expect(screen.queryByRole('tab', { name: 'Apps' })).toBeNull();
 	});
 
 	it('shows in the draft, with app passwords that open nothing', async () => {
-		render(AccountDialog, { reader: new DemoReader(() => now), tab: 'apps', onclose });
+		render(AccountDialog, {
+			reader: new DemoReader(() => now),
+			apps: new DemoApps(() => now),
+			tab: 'apps',
+			onclose
+		});
 		await userEvent.click(await screen.findByRole('button', { name: 'Set up an app' }));
 		await userEvent.click(screen.getByRole('button', { name: 'NetNewsWire' }));
 		await userEvent.click(screen.getByRole('button', { name: 'Create the app password' }));

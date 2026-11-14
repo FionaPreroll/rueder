@@ -3,9 +3,9 @@
 	// page beside it; in the view of three panes the list and, beside it, the open
 	// article, where there is room for both. The keyboard shortcuts are handled here, for the whole page.
 	// Where the feeds and articles come from is the business of the `reader` it is
-	// given.
+	// given; the account's own settings come apart from it, where there are any.
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
-	import type { AccountTab } from '#lib/account.ts';
+	import type { AccountSettings, AccountTab, AppPasswordKeeper } from '#lib/account.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { formatNumber } from '#lib/i18n/intl.ts';
 	import { showOnIcon } from '#lib/install.svelte.ts';
@@ -32,7 +32,17 @@
 	import VersionCompare from './VersionCompare.svelte';
 
 	/** Where the feeds and articles come from: the server, or made-up data. */
-	let { reader }: { reader: Reader } = $props();
+	let {
+		reader,
+		accountSettings = null,
+		apps = null
+	}: {
+		reader: Reader;
+		/** The account's own settings, which only a server has. */
+		accountSettings?: AccountSettings | null;
+		/** App passwords, also with made-up data. */
+		apps?: AppPasswordKeeper | null;
+	} = $props();
 
 	/** The time the page counts from; it ticks so "5 minutes ago" stays true. */
 	let now = $state(Date.now());
@@ -44,7 +54,7 @@
 	let accountTab: AccountTab = $state('password');
 	/** Every account here needs an address and this one has none: the page asks before anything else. */
 	const asksEmail = $derived(
-		reader.can.email && reader.account?.emailMode === 'required' && !reader.account.email
+		accountSettings?.can.email && reader.account?.emailMode === 'required' && !reader.account.email
 	);
 	/** The article whose versions are compared, by id: it is replaced when it changes. */
 	let comparing: { id: string; versions: ArticleVersion[] } | null = $state(null);
@@ -323,6 +333,8 @@
 <div class="flex h-dvh flex-col bg-paper text-ink">
 	<TopBar
 		{reader}
+		{accountSettings}
+		{apps}
 		{sidebarOpen}
 		ontogglesidebar={() => (sidebarOpen = !sidebarOpen)}
 		onsettings={() => openSettings('look')}
@@ -467,14 +479,20 @@
 
 {#if reader.account?.termsToAccept}
 	<TermsDialog {reader} />
-{:else if asksEmail}
-	<EmailDialog {reader} />
+{:else if asksEmail && accountSettings}
+	<EmailDialog {reader} {accountSettings} />
 {/if}
 
 {#if dialog === 'settings'}
 	<SettingsDialog {reader} bind:tab={settingsTab} onclose={() => (dialog = null)} />
 {:else if dialog === 'account'}
-	<AccountDialog {reader} bind:tab={accountTab} onclose={() => (dialog = null)} />
+	<AccountDialog
+		{reader}
+		{accountSettings}
+		{apps}
+		bind:tab={accountTab}
+		onclose={() => (dialog = null)}
+	/>
 {:else if dialog === 'subscribe'}
 	<SubscribeDialog {reader} onclose={() => (dialog = null)} />
 {:else if dialog === 'status'}

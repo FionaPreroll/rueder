@@ -144,7 +144,7 @@ describe('Login', () => {
 		server.signedIn = 'fiona';
 		const session = new Session();
 		await session.check();
-		await session.reader!.removeAccount('correct horse');
+		await session.accountSettings!.removeAccount('correct horse');
 		render(Login, { session });
 		expect(screen.getByRole('status')).toHaveTextContent('Your account is deleted');
 	});

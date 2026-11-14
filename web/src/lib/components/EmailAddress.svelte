@@ -9,13 +9,18 @@
 	import { m } from '#lib/i18n/index.ts';
 	import {
 		EMAIL_LINK_HOURS,
+		type AccountSettings,
 		type EmailRefusal,
-		type PasskeyProof as Proof,
-		type Reader
-	} from '#lib/reader.ts';
+		type PasskeyProof as Proof
+	} from '#lib/account.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import PasskeyProof from './PasskeyProof.svelte';
 
-	let { reader, asking = false }: { reader: Reader; asking?: boolean } = $props();
+	let {
+		reader,
+		accountSettings,
+		asking = false
+	}: { reader: Reader; accountSettings: AccountSettings; asking?: boolean } = $props();
 
 	const texts = $derived(m.email);
 	const account = $derived(reader.account);
@@ -88,8 +93,8 @@
 			const typed = asksCode ? code : undefined;
 			const outcome =
 				what === 'sent'
-					? await reader.changeEmail(address, password, typed, passkey)
-					: await reader.removeEmail(password, typed, passkey);
+					? await accountSettings.changeEmail(address, password, typed, passkey)
+					: await accountSettings.removeEmail(password, typed, passkey);
 			settle(outcome, what);
 		} finally {
 			busy = false;
@@ -172,7 +177,7 @@
 		<button type="submit" class="primary" disabled={!ready}>{texts.submit}</button>
 	</div>
 	<PasskeyProof
-		{reader}
+		{accountSettings}
 		disabled={busy || address.trim() === ''}
 		onproof={(proof) => run('sent', proof)}
 	/>

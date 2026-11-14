@@ -4,7 +4,7 @@
 	// is logged in. The menu of the account holds the account's own settings and
 	// logging out. With made-up data there are the draft's own switches instead of
 	// an account, and they lead to what a reader with an account finds in its menu.
-	import { tabsOf } from '#lib/account.ts';
+	import { tabsOf, type AccountSettings, type AppPasswordKeeper } from '#lib/account.ts';
 	import { APP_SETTINGS, inAndroidApp } from '#lib/app.ts';
 	import { install } from '#lib/install.svelte.ts';
 	import type { Reader } from '#lib/reader.ts';
@@ -15,6 +15,8 @@
 
 	let {
 		reader,
+		accountSettings = null,
+		apps = null,
 		sidebarOpen,
 		ontogglesidebar,
 		onsettings,
@@ -23,6 +25,8 @@
 		onstatus
 	}: {
 		reader: Reader;
+		accountSettings?: AccountSettings | null;
+		apps?: AppPasswordKeeper | null;
 		sidebarOpen: boolean;
 		ontogglesidebar: () => void;
 		onsettings: () => void;
@@ -34,8 +38,8 @@
 	} = $props();
 
 	const demo = $derived(reader.demo);
-	/** The account's own settings, where this reader has any of them. */
-	const hasAccountSettings = $derived(tabsOf(reader).length > 0);
+	/** The account's own settings, where there are any of them. */
+	const hasAccountSettings = $derived(tabsOf(reader, accountSettings, apps).length > 0);
 
 	/** Searching from the start page searches all articles. */
 	function search(words: string) {

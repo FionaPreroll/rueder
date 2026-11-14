@@ -8,24 +8,15 @@
 import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filters.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from '#lib/model.ts';
 import type {
-	AppPassword,
-	AppPasswords,
-	NewAppPassword,
 	Abilities,
 	Found,
 	Fresh,
 	Imported,
 	Moved,
-	EmailRefusal,
-	PasswordRefusal,
 	Reader,
-	RemoveRefusal,
 	Resumed,
 	RulePreview,
 	ReportOutcome,
-	SecondFactorRefusal,
-	PasskeyList,
-	PasskeyRefusal,
 	ServerStatus,
 	Subscribed
 } from '#lib/reader.ts';
@@ -120,17 +111,8 @@ export class DemoReader implements Reader {
 		opml: false,
 		move: false,
 		status: true,
-		invites: false,
 		reports: false,
-		secondFactor: false,
-		password: false,
-		remove: false,
-		reportContent: false,
-		apps: true,
-		// Without a server there is nobody to check a passkey.
-		passkeys: false,
-		// Nor anybody to send mail.
-		email: false
+		reportContent: false
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -150,59 +132,6 @@ export class DemoReader implements Reader {
 	}
 	/** The draft has nobody to report to. */
 	async reportContent(): Promise<ReportOutcome> {
-		return 'unreachable';
-	}
-	/**
-	 * The draft makes app passwords to show how apps are set up; they open
-	 * nothing, as there is no server for an app to reach.
-	 */
-	private apps = $state.raw<AppPassword[]>([]);
-	appsVersion = $state(0);
-	async appPasswords(): Promise<AppPasswords> {
-		return { list: this.apps, max: 20 };
-	}
-	async createAppPassword(name: string): Promise<NewAppPassword> {
-		const letters = 'abcdefghijklmnopqrstuvwxyz234567';
-		const random = crypto.getRandomValues(new Uint8Array(24));
-		const groups = [0, 4, 8, 12, 16, 20].map((at) =>
-			[...random.slice(at, at + 4)].map((byte) => letters[byte & 31]).join('')
-		);
-		const made = {
-			id: Math.max(0, ...this.apps.map((app) => app.id)) + 1,
-			name: name.trim(),
-			createdAt: this.now(),
-			usedAt: null
-		};
-		this.apps = [...this.apps, made];
-		return { ...made, secret: groups.join('-') };
-	}
-	async revokeAppPassword(id: number) {
-		this.apps = this.apps.filter((app) => app.id !== id);
-		return true;
-	}
-	/** The draft has no accounts, so nothing to secure. */
-	async secondFactor() {
-		return null;
-	}
-	async setUpSecondFactor(): Promise<SecondFactorRefusal> {
-		return 'unreachable';
-	}
-	async confirmSecondFactor(): Promise<SecondFactorRefusal> {
-		return 'unreachable';
-	}
-	async passkeys(): Promise<PasskeyList | null> {
-		return null;
-	}
-	async provePasskey(): Promise<PasskeyRefusal> {
-		return 'unreachable';
-	}
-	async addPasskey(): Promise<PasskeyRefusal> {
-		return 'unreachable';
-	}
-	async removePasskey(): Promise<PasskeyRefusal> {
-		return 'unreachable';
-	}
-	async switchOffSecondFactor(): Promise<SecondFactorRefusal> {
 		return 'unreachable';
 	}
 	/** The draft keeps the settings in the browser only. */
@@ -693,38 +622,6 @@ export class DemoReader implements Reader {
 	setReportsConsent() {}
 
 	noteError() {}
-
-	/** There is no server to make an account on, so nobody to invite. */
-	async invites() {
-		return null;
-	}
-
-	async invite() {
-		return null;
-	}
-
-	async revokeInvite() {
-		return false;
-	}
-
-	/** Nobody is logged in, so there is no account to delete. */
-	async removeAccount(): Promise<RemoveRefusal | null> {
-		return { problem: 'unreachable' };
-	}
-
-	/** Nobody is logged in, so there is no password to change either. */
-	async changePassword(): Promise<PasswordRefusal> {
-		return { problem: 'unreachable' };
-	}
-
-	/** Nor an address, nor anybody to mail its link. */
-	async changeEmail(): Promise<EmailRefusal> {
-		return { problem: 'unreachable' };
-	}
-
-	async removeEmail(): Promise<EmailRefusal> {
-		return { problem: 'unreachable' };
-	}
 
 	/** A made-up status, so the page can be seen without a server. */
 	async status(): Promise<ServerStatus | null> {

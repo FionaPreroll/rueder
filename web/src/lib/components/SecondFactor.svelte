@@ -7,21 +7,24 @@
 	// it is not closed by mistake.
 	import { m } from '#lib/i18n/index.ts';
 	import type {
+		AccountSettings,
 		PasskeyProof as Proof,
-		Reader,
 		SecondFactorRefusal,
 		SecondFactorSetup,
 		SecondFactorState
-	} from '#lib/reader.ts';
+	} from '#lib/account.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import PasskeyProof from './PasskeyProof.svelte';
 
 	let {
 		reader,
+		accountSettings,
 		busy: settingUp = $bindable(false),
 		version = 0,
 		onchange
 	}: {
 		reader: Reader;
+		accountSettings: AccountSettings;
 		busy?: boolean;
 		/** Counts up when something else changed the second factor. */
 		version?: number;
@@ -55,7 +58,7 @@
 	}
 
 	async function load() {
-		current = await reader.secondFactor();
+		current = await accountSettings.secondFactor();
 	}
 	$effect(() => {
 		void version;
@@ -79,7 +82,7 @@
 
 	function startWith(passkey?: Proof) {
 		return step(async () => {
-			const answer = await reader.setUpSecondFactor(password, code, passkey);
+			const answer = await accountSettings.setUpSecondFactor(password, code, passkey);
 			code = '';
 			if (isRefusal(answer)) return answer;
 			setup = answer;
@@ -97,7 +100,7 @@
 	function confirm(event: SubmitEvent) {
 		event.preventDefault();
 		void step(async () => {
-			const answer = await reader.confirmSecondFactor(code);
+			const answer = await accountSettings.confirmSecondFactor(code);
 			code = '';
 			if (isRefusal(answer)) return answer;
 			setup = null;
@@ -110,7 +113,7 @@
 
 	function switchOffWith(passkey?: Proof) {
 		return step(async () => {
-			const answer = await reader.switchOffSecondFactor(password, code, passkey);
+			const answer = await accountSettings.switchOffSecondFactor(password, code, passkey);
 			code = '';
 			if (answer) return answer;
 			await load();
@@ -240,7 +243,7 @@
 			</button>
 		</form>
 		<PasskeyProof
-			{reader}
+			{accountSettings}
 			has={current.passkeys > 0}
 			label={current.app ? texts.switchOffWithPasskey : texts.startWithPasskey}
 			disabled={busy}

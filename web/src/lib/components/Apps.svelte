@@ -9,15 +9,28 @@
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type {
+		AccountSettings,
+		AppPasswordKeeper,
 		AppPasswordRefusal,
 		AppPasswords,
 		NewAppPassword,
-		PasskeyProof as PasskeyProofAnswer,
-		Reader
-	} from '#lib/reader.ts';
+		PasskeyProof as PasskeyProofAnswer
+	} from '#lib/account.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import PasskeyProof from './PasskeyProof.svelte';
 
-	let { reader, busy: settingUp = $bindable(false) }: { reader: Reader; busy?: boolean } = $props();
+	let {
+		reader,
+		apps: keeper,
+		accountSettings = null,
+		busy: settingUp = $bindable(false)
+	}: {
+		reader: Reader;
+		apps: AppPasswordKeeper;
+		/** Null in the demo, which has app passwords and nothing else of an account. */
+		accountSettings?: AccountSettings | null;
+		busy?: boolean;
+	} = $props();
 
 	const texts = m.settings.apps;
 
@@ -55,18 +68,18 @@
 	});
 
 	async function load() {
-		apps = await reader.appPasswords();
+		apps = await keeper.appPasswords();
 	}
 
 	// Again whenever app passwords change elsewhere, or an app logs in.
 	$effect(() => {
-		void reader.appsVersion;
+		void keeper.appsVersion;
 		void load();
 	});
 
 	onMount(() => {
-		if (reader.can.secondFactor) {
-			void reader.secondFactor().then((state) => (needsCode = state?.on ?? false));
+		if (accountSettings) {
+			void accountSettings.secondFactor().then((state) => (needsCode = state?.on ?? false));
 		}
 	});
 
@@ -89,7 +102,7 @@
 		if (sending) return;
 		sending = true;
 		refusal = null;
-		const answer = await reader.createAppPassword(name, password, code, passkey);
+		const answer = await keeper.createAppPassword(name, password, code, passkey);
 		sending = false;
 		password = '';
 		code = '';
@@ -120,7 +133,7 @@
 	}
 
 	async function revoke(id: number) {
-		if (await reader.revokeAppPassword(id)) await load();
+		if (await keeper.revokeAppPassword(id)) await load();
 	}
 
 	const appName = (app: Choice | null) =>
@@ -251,7 +264,13 @@
 				<button type="button" class="tool" onclick={() => (step = 'choose')}>{texts.back}</button>
 			</div>
 		</form>
-		<PasskeyProof {reader} disabled={sending || name.trim() === ''} onproof={createWith} />
+		{#if accountSettings}
+			<PasskeyProof
+				{accountSettings}
+				disabled={sending || name.trim() === ''}
+				onproof={createWith}
+			/>
+		{/if}
 	{:else if made}
 		<h3 class="font-semibold">{appName(chosen)}</h3>
 		<p>{how(chosen)}</p>

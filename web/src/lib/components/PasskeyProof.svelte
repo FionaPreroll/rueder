@@ -4,16 +4,16 @@
 	// passkey and the browser can use it; `has` says so where the caller knows,
 	// else this asks the server.
 	import { m } from '#lib/i18n/index.ts';
-	import type { PasskeyProof, PasskeyRefusal, Reader } from '#lib/reader.ts';
+	import type { AccountSettings, PasskeyProof, PasskeyRefusal } from '#lib/account.ts';
 
 	let {
-		reader,
+		accountSettings,
 		has,
 		label,
 		disabled = false,
 		onproof
 	}: {
-		reader: Reader;
+		accountSettings: AccountSettings;
 		has?: boolean;
 		/** What the button says, where "Confirm with a passkey" says too little. */
 		label?: string;
@@ -28,18 +28,18 @@
 	let refusal = $state<PasskeyRefusal | null>(null);
 
 	$effect(() => {
-		if (has !== undefined || !reader.can.passkeys) return;
-		void reader.secondFactor().then((state) => (asked = (state?.passkeys ?? 0) > 0));
+		if (has !== undefined || !accountSettings.can.passkeys) return;
+		void accountSettings.secondFactor().then((state) => (asked = (state?.passkeys ?? 0) > 0));
 	});
 
-	const shown = $derived(reader.can.passkeys && (has ?? asked ?? false));
+	const shown = $derived(accountSettings.can.passkeys && (has ?? asked ?? false));
 
 	async function confirm() {
 		if (asking) return;
 		asking = true;
 		refusal = null;
 		try {
-			const answer = await reader.provePasskey();
+			const answer = await accountSettings.provePasskey();
 			if (typeof answer === 'string') refusal = answer;
 			else await onproof(answer);
 		} finally {
