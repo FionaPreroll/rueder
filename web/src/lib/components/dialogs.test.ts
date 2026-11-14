@@ -724,7 +724,7 @@ describe('The password in the account settings', () => {
 		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
 		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secret{Enter}');
 		expect(await screen.findByRole('alert')).toHaveTextContent(
-			'The current password is not right.'
+			'The current password or the code is not right.'
 		);
 		expect(server.accounts.get('fiona')).toBe('correct horse');
 
@@ -734,6 +734,39 @@ describe('The password in the account settings', () => {
 		await userEvent.clear(screen.getByLabelText('New password again'));
 		await userEvent.type(screen.getByLabelText('New password again'), 'short');
 		expect(screen.getByRole('button', { name: 'Change the password' })).toBeDisabled();
+	});
+
+	it('asks for the code where the second factor is on, then takes it', async () => {
+		server.secondFactor = { code: '123456', recovery: [] };
+		opened();
+		await userEvent.type(screen.getByLabelText('Current password'), 'correct horse');
+		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
+		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secret{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('This account has a second factor.');
+		expect(server.accounts.get('fiona')).toBe('correct horse');
+		const button = screen.getByRole('button', { name: 'Change the password' });
+		expect(button).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('Code of the second factor'), '123456');
+		await userEvent.click(button);
+		expect(await screen.findByRole('status')).toHaveTextContent('The password is changed.');
+		expect(server.accounts.get('fiona')).toBe('a longer secret');
+		expect(server.requests.at(-1)?.body).toEqual({
+			current: 'correct horse',
+			new: 'a longer secret',
+			code: '123456'
+		});
+		expect(screen.queryByLabelText('Code of the second factor')).toBeNull();
+	});
+
+	it('says when an account without password has to log in again first', async () => {
+		server.accounts.delete('fiona');
+		server.refuse('PUT', /^\/password$/, 403, 1, 'log in again first');
+		opened(false);
+		await userEvent.type(screen.getByLabelText('New password'), 'a longer secret');
+		await userEvent.type(screen.getByLabelText('New password again'), 'a longer secret');
+		await userEvent.click(screen.getByRole('button', { name: 'Set the password' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('Log in again');
+		expect(server.accounts.has('fiona')).toBe(false);
 	});
 
 	it('sets a first one for an account that logs in through single sign-on', async () => {

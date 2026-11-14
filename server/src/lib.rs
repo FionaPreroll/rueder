@@ -416,6 +416,7 @@ fn api_routes() -> OpenApiRouter<AppState> {
         .routes(routes!(passkeys::start_login))
         .routes(routes!(passkeys::finish_login))
         .routes(routes!(oidc::start))
+        .routes(routes!(oidc::link_ticket))
         .routes(routes!(oidc::callback))
         .merge(api::routes())
         .merge(tree::routes())

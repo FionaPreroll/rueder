@@ -154,7 +154,8 @@ export type Device = {
 };
 
 /**
- * What `PUT /api/password` reads.
+ * What `PUT /api/password` reads: the new password, and what shows that the
+ * owner asks, as for an app password.
  */
 export type NewPassword = {
 	/**
@@ -162,6 +163,23 @@ export type NewPassword = {
 	 */
 	current?: string,
 	new: string,
+	/**
+	 * Where the second factor is on: a code from the app or a recovery code.
+	 */
+	code?: string,
+	/**
+	 * A passkey of the account, instead of the password so far and the code.
+	 */
+	passkey?: PasskeyAnswer,
+};
+
+/**
+ * The device's answer to a ceremony that asked for a passkey, which logs in
+ * or shows that the owner is there.
+ */
+export type PasskeyAnswer = {
+	ceremony: string,
+	credential: unknown,
 };
 
 /**
@@ -181,15 +199,6 @@ export type Farewell = {
 	 * A passkey of the account, instead of all the above.
 	 */
 	passkey?: PasskeyAnswer,
-};
-
-/**
- * The device's answer to a ceremony that asked for a passkey, which logs in
- * or shows that the owner is there.
- */
-export type PasskeyAnswer = {
-	ceremony: string,
-	credential: unknown,
 };
 
 /**
@@ -219,6 +228,22 @@ export type NewAccount = {
 	 */
 	password: string,
 	is_admin?: boolean,
+	/**
+	 * That the admin is there: their own password and code, or a passkey.
+	 */
+	proof: OwnerProof,
+};
+
+/**
+ * How the owner of a session's account shows, for a change that needs it,
+ * that they are there: the password, which an account without one does
+ * without, and where the second factor is on, a code from the app or a
+ * recovery code; or a passkey instead of both (see [`prove`]).
+ */
+export type OwnerProof = {
+	password?: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
 };
 
 /**
@@ -732,6 +757,17 @@ export type ForgotPassword = {
 export type ResetPassword = {
 	token: string,
 	new: string,
+};
+
+/**
+ * What `POST /api/oidc/link` answers.
+ */
+export type OidcLink = {
+	/**
+	 * For `GET /api/oidc/start?link=<ticket>`, once, within five minutes,
+	 * from this session.
+	 */
+	ticket: string,
 };
 
 /**

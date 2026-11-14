@@ -1506,6 +1506,12 @@ describe('the email address', () => {
 		expect(reader.account.email).toBeUndefined();
 	});
 
+	it('says when only logging in again lets an account without password give one', async () => {
+		server.emailMode = 'optional';
+		server.refuse('PUT', /^\/email$/, 403, 1, 'log in again first');
+		expect(await asking().changeEmail('new@example.org', '')).toEqual({ problem: 'loginAgain' });
+	});
+
 	it('takes the address away where it is optional, and not where it is required', async () => {
 		server.emailMode = 'optional';
 		server.emails.set('fiona', 'fiona@example.org');
@@ -1518,6 +1524,53 @@ describe('the email address', () => {
 
 		server.emailMode = 'required';
 		expect(await reader.removeEmail('correct horse')).toEqual({ problem: 'required' });
+	});
+});
+
+describe('a new password', () => {
+	const reader = () => new ServerReader({ name: 'fiona', admin: false }, session);
+
+	it('takes the password so far, and the code where the second factor is on', async () => {
+		const fiona = reader();
+		expect(await fiona.changePassword('wrong', 'a new password')).toEqual({ problem: 'wrong' });
+		server.secondFactor = { code: '123456', recovery: [] };
+		expect(await fiona.changePassword('correct horse', 'a new password')).toEqual({
+			problem: 'code'
+		});
+		expect(await fiona.changePassword('correct horse', 'a new password', '000000')).toEqual({
+			problem: 'wrong'
+		});
+		expect(await fiona.changePassword('correct horse', 'a new password', ' 123456 ')).toBeNull();
+		expect(server.requests.at(-1)).toMatchObject({
+			method: 'PUT',
+			path: '/password',
+			body: { current: 'correct horse', new: 'a new password', code: '123456' }
+		});
+		expect(fiona.account.password).toBe(true);
+	});
+
+	it('says when only logging in again lets an account without password set one', async () => {
+		server.refuse('PUT', /^\/password$/, 403, 1, 'log in again first');
+		expect(await reader().changePassword('', 'a first password')).toEqual({
+			problem: 'loginAgain'
+		});
+	});
+
+	it('sends a passkey instead of the password so far and the code', async () => {
+		const passkey = { ceremony: 'c', credential: {} };
+		await reader().changePassword('ignored', 'a new password', undefined, passkey);
+		const asked = server.requests.find((request) => request.path === '/password');
+		expect(asked?.body).toEqual({ new: 'a new password', passkey });
+	});
+});
+
+describe('young sessions', () => {
+	it('say where an account without password and second factor has to log in again', async () => {
+		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
+		server.refuse('POST', /^\/app-passwords$/, 403, 1, 'log in again first');
+		expect(await reader.createAppPassword('Reeder', '', '')).toBe('loginAgain');
+		server.refuse('POST', /^\/second-factor\/setup$/, 403, 1, 'log in again first');
+		expect(await reader.setUpSecondFactor('')).toBe('loginAgain');
 	});
 });
 

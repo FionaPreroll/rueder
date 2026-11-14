@@ -6,7 +6,15 @@
 //! ID token that says who logged in there. Who that is in rueder says
 //! `account_identities`: nobody gets an account by logging in. An identity is
 //! tied to an account on the command line, or by a reader who is logged in and
-//! starts the flow with `?link` from a page of rueder itself.
+//! starts the flow with `?link=<ticket>` from a page of rueder itself.
+//!
+//! A login through the provider asks for no second factor of rueder's own, so
+//! an identity tied to an account is a way in that outlasts the session it was
+//! tied in. The ticket comes from `POST /api/oidc/link` only after the owner
+//! showed with password and code, or a passkey, that they are there, as for
+//! an app password (`second_factor::prove`): a stolen session alone ties
+//! nobody's identity to the account. It counts once, for five minutes, in the
+//! session it was given to.
 //!
 //! Starting is a `GET`, which the check of where changes come from lets pass
 //! (see `hardening`), so `?link` checks for itself: a page of another site
@@ -21,12 +29,14 @@
 //! must be https.
 
 use std::{
-    sync::Arc,
+    collections::HashMap,
+    sync::{Arc, Mutex as StdMutex, PoisonError},
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, bail, ensure};
 use axum::{
+    Json,
     extract::{Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
@@ -36,17 +46,19 @@ use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
-use utoipa::IntoParams;
+use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    AppState, accounts,
+    AppError, AppState, accounts,
     http_client::{HttpClient, Request},
-    sessions,
+    second_factor::{self, OwnerProof},
+    sessions::{self, Session},
 };
 
 /// The cookie that holds one login on its way to the provider and back.
@@ -60,6 +72,26 @@ const MAX_ANSWER: usize = 256 * 1024;
 const MAX_TOKEN: usize = 16 * 1024;
 /// How far the provider's clock may be behind, in seconds.
 const LEEWAY: i64 = 60;
+/// How long a ticket to link an identity counts: the way to the provider
+/// starts right after it is given.
+const TICKET_TIME: Duration = Duration::from_secs(5 * 60);
+/// How many tickets are open at most, of all accounts; one each.
+const MAX_TICKETS: usize = 1000;
+/// The longest ticket that is looked up.
+const MAX_TICKET: usize = 64;
+
+/// The types this module sends and reads, for the frontend.
+pub(crate) fn types(types: &mut crate::typescript::Types) {
+    types.add::<LinkTicket>();
+}
+
+/// A ticket to link an identity: for which account, given to which session
+/// (the hash of its token), until when.
+struct Ticket {
+    account_id: i32,
+    session: Vec<u8>,
+    until: Instant,
+}
 
 /// The provider and what rueder is to it.
 #[derive(Debug, Clone)]
@@ -145,6 +177,7 @@ pub struct Oidc {
     config: Config,
     client: HttpClient,
     provider: Mutex<Option<(Instant, Arc<Provider>)>>,
+    tickets: StdMutex<HashMap<String, Ticket>>,
 }
 
 fn random() -> anyhow::Result<String> {
@@ -161,6 +194,7 @@ impl Oidc {
             config,
             client,
             provider: Mutex::new(None),
+            tickets: StdMutex::default(),
         };
         oidc.endpoint(&oidc.config.issuer)
             .context("OIDC_ISSUER is no address of a provider")?;
@@ -170,6 +204,44 @@ impl Oidc {
             "OIDC_REDIRECT_URL is no web address"
         );
         Ok(oidc)
+    }
+
+    /// A ticket for the account's session to start linking an identity with,
+    /// once its owner showed that they are there. A new one replaces the
+    /// account's last. None when too many are open.
+    fn ticket(
+        &self,
+        account_id: i32,
+        session: Vec<u8>,
+        now: Instant,
+    ) -> anyhow::Result<Option<String>> {
+        let mut tickets = self.tickets.lock().unwrap_or_else(PoisonError::into_inner);
+        tickets.retain(|_, ticket| ticket.until > now && ticket.account_id != account_id);
+        if tickets.len() >= MAX_TICKETS {
+            return Ok(None);
+        }
+        let id = random()?;
+        let until = now + TICKET_TIME;
+        tickets.insert(
+            id.clone(),
+            Ticket {
+                account_id,
+                session,
+                until,
+            },
+        );
+        Ok(Some(id))
+    }
+
+    /// The account a ticket was given to, if it was given to this session and
+    /// has not run out. It counts once, whatever comes of it.
+    fn redeem(&self, ticket: &str, session: &[u8], now: Instant) -> Option<i32> {
+        if ticket.len() > MAX_TICKET {
+            return None;
+        }
+        let mut tickets = self.tickets.lock().unwrap_or_else(PoisonError::into_inner);
+        let found = tickets.remove(ticket)?;
+        (found.until > now && found.session == session).then_some(found.account_id)
     }
 
     pub fn issuer(&self) -> &str {
@@ -404,8 +476,8 @@ fn back(outcome: Option<&str>) -> Response {
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct Start {
-    /// Present to link the provider's account to the one logged in, instead
-    /// of logging in.
+    /// To link the provider's account to the one logged in, instead of
+    /// logging in: a ticket from `POST /api/oidc/link`, given to this session.
     link: Option<String>,
 }
 
@@ -421,15 +493,84 @@ fn from_own_page(headers: &HeaderMap) -> bool {
 
 /// The account a flow with `?link` is for: the one logged in, if the request
 /// comes from rueder's own page.
-async fn linking(state: &AppState, headers: &HeaderMap) -> anyhow::Result<Option<i32>> {
+/// The account to tie an identity to: the one logged in, if the browser
+/// comes from a page of rueder with a ticket given to this session.
+async fn linking(
+    state: &AppState,
+    oidc: &Oidc,
+    headers: &HeaderMap,
+    ticket: &str,
+) -> anyhow::Result<Option<i32>> {
     if !from_own_page(headers) {
         return Ok(None);
     }
-    let session = match sessions::token(headers) {
-        Some(token) => sessions::find(&state.db, token).await?,
-        None => None,
+    let Some(token) = sessions::token(headers) else {
+        return Ok(None);
     };
-    Ok(session.map(|session| session.account_id))
+    let Some(session) = sessions::find(&state.db, token).await? else {
+        return Ok(None);
+    };
+    let given = oidc.redeem(ticket, &sessions::token_hash(token), Instant::now());
+    Ok(given.filter(|account_id| *account_id == session.account_id))
+}
+
+/// What `POST /api/oidc/link` answers.
+#[derive(Serialize, TS, ToSchema)]
+#[ts(rename = "OidcLink")]
+#[schema(as = OidcLink)]
+pub struct LinkTicket {
+    /// For `GET /api/oidc/start?link=<ticket>`, once, within five minutes,
+    /// from this session.
+    ticket: String,
+}
+
+/// Gives the session a ticket to tie an identity at the provider to its
+/// account, once the owner showed with their password and, where the second
+/// factor is on, a code, or with a passkey, that they are there: a login
+/// through the provider asks for no second factor of rueder's own, so a stolen
+/// session must not be enough to tie somebody else's identity to the account.
+#[utoipa::path(
+    post,
+    path = "/oidc/link",
+    tag = "Session",
+    request_body = OwnerProof,
+    security(("session" = [])),
+    responses(
+        (status = OK, body = LinkTicket),
+        crate::openapi::NeedsSession,
+        (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong, `second factor needed`, or `log in again first` for an account without password and second factor in a session that is not young."),
+        (status = NOT_FOUND, description = "This server has no OpenID Connect."),
+        (status = TOO_MANY_REQUESTS, description = "Too many wrong tries, or too many links under way; see `Retry-After`."),
+    ),
+)]
+pub async fn link_ticket(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Json(proof): Json<OwnerProof>,
+) -> Result<Json<LinkTicket>, AppError> {
+    let Some(oidc) = state.oidc.clone() else {
+        return Err(AppError::NotFound);
+    };
+    second_factor::prove(&state, &session, &headers, proof.proof()).await?;
+    let Some(token) = sessions::token(&headers) else {
+        return Err(AppError::Status(
+            StatusCode::UNAUTHORIZED,
+            "not logged in".into(),
+        ));
+    };
+    let given = oidc.ticket(
+        session.account_id,
+        sessions::token_hash(token),
+        Instant::now(),
+    )?;
+    match given {
+        Some(ticket) => Ok(Json(LinkTicket { ticket })),
+        None => Err(AppError::TooMany(
+            TICKET_TIME,
+            "too many links under way, try again later",
+        )),
+    }
 }
 
 /// Starts logging in through the OpenID Connect provider: sends the browser
@@ -455,7 +596,7 @@ pub async fn start(
     };
     let link = match query.link {
         None => None,
-        Some(_) => match linking(&state, &headers).await {
+        Some(ticket) => match linking(&state, &oidc, &headers, &ticket).await {
             Ok(Some(account_id)) => Some(account_id),
             Ok(None) => {
                 tracing::debug!("OpenID Connect: refused to link from another site or nobody");

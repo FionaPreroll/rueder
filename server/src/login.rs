@@ -249,6 +249,10 @@ pub struct Credentials {
 
 /// What the answer to a login says when the account needs a code.
 pub const CODE_NEEDED: &str = "second factor needed";
+/// What a change that needs the owner answers when the account has neither a
+/// password nor a second factor and its session is not young: only logging in
+/// again shows that the owner is there (see `second_factor::prove`).
+pub const LOGIN_AGAIN: &str = "log in again first";
 
 /// Who is logged in, as the API says it.
 ///

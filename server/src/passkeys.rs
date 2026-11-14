@@ -85,7 +85,9 @@ const MAX_PER_SENDER: usize = 20;
 /// characters long.
 const MAX_CEREMONY_ID: usize = 64;
 /// How young a session has to be for an account without a password and
-/// without a second factor to add its first passkey.
+/// without a second factor to show that its owner is there: to add its first
+/// passkey, or anything else that needs the owner (see
+/// `second_factor::prove`).
 pub const FRESH: Duration = Duration::from_secs(10 * 60);
 
 /// What the server knows about passkeys: the site they belong to, and the
@@ -480,7 +482,7 @@ async fn list(State(state): State<AppState>, session: Session) -> Result<Json<Li
 }
 
 /// Whether the session of these headers began within [`FRESH`].
-async fn is_fresh(db: &PgPool, headers: &HeaderMap) -> anyhow::Result<bool> {
+pub(crate) async fn is_fresh(db: &PgPool, headers: &HeaderMap) -> anyhow::Result<bool> {
     let Some(token) = sessions::token(headers) else {
         return Ok(false);
     };
@@ -523,26 +525,10 @@ async fn start_registration(
 ) -> Result<Json<Challenge>, AppError> {
     let keys = passkeys(&state)?;
     let name = tree::title(&new.name)?.to_owned();
-    let proof = proof(&new.password, &new.code, new.passkey.as_ref());
-    let by_password = matches!(proof, Proof::Password { .. });
-    second_factor::prove(&state, &session, &headers, proof).await?;
     // Without a password and a second factor, the session is all there is:
-    // only a young one adds a key.
-    if by_password {
-        let found = sqlx::query!(
-            r#"SELECT password_hash IS NULL AS "none!" FROM accounts WHERE id = $1"#,
-            session.account_id
-        )
-        .fetch_one(&state.db)
-        .await?;
-        if found.none
-            && !second_factor::is_on(&state.db, session.account_id).await?
-            && !is_fresh(&state.db, &headers).await?
-        {
-            let message = "log in again first";
-            return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
-        }
-    }
+    // only a young one adds a key (see `second_factor::prove`).
+    let proof = proof(&new.password, &new.code, new.passkey.as_ref());
+    second_factor::prove(&state, &session, &headers, proof).await?;
     let have = of_account(&state.db, session.account_id).await?;
     if i64::try_from(have.len()).unwrap_or(i64::MAX) >= MAX_PER_ACCOUNT {
         let message = format!("an account has at most {MAX_PER_ACCOUNT} passkeys");

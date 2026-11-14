@@ -57,5 +57,7 @@ test('the one so far has to be right', async ({ page }) => {
 	await dialog.getByLabel('New password', { exact: true }).fill('something else entirely');
 	await dialog.getByLabel('New password again').fill('something else entirely');
 	await dialog.getByRole('button', { name: 'Change the password' }).click();
-	await expect(dialog.getByRole('alert')).toHaveText('The current password is not right.');
+	await expect(dialog.getByRole('alert')).toHaveText(
+		'The current password or the code is not right.'
+	);
 });

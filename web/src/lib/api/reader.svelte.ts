@@ -623,6 +623,7 @@ export class ServerReader implements Reader {
 			if (error.status === 429) return 'tooMany';
 			if (error.status === 400) return 'tooManyApps';
 			if (error.status === 403 && said === 'second factor needed') return 'codeNeeded';
+			if (error.status === 403 && said === 'log in again first') return 'loginAgain';
 			if (error.status === 403 && said === 'the code is wrong') return 'wrongCode';
 			if (error.status === 403 && said === 'the passkey is wrong') return 'wrongCode';
 			if (error.status === 403) return 'wrongPassword';
@@ -667,6 +668,7 @@ export class ServerReader implements Reader {
 		} catch (error) {
 			const said = error instanceof ApiError ? error.message.trim() : '';
 			if (said === 'second factor needed') return 'codeNeeded';
+			if (said === 'log in again first') return 'loginAgain';
 			const codeWrong = said === 'the code is wrong' || said === 'the passkey is wrong';
 			return this.refusalOf(error, codeWrong ? 'wrongCode' : 'wrongPassword');
 		}
@@ -2482,11 +2484,22 @@ export class ServerReader implements Reader {
 		return null;
 	}
 
-	async changePassword(current: string, fresh: string): Promise<PasswordRefusal | null> {
+	async changePassword(
+		current: string,
+		fresh: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<PasswordRefusal | null> {
 		try {
-			await this.api.changePassword(current, fresh);
+			const proof = passkey ? { passkey } : { current, code: code?.trim() };
+			await this.api.changePassword({ new: fresh, ...proof });
 		} catch (error) {
-			if (error instanceof ApiError && error.status === 403) return { problem: 'wrong' };
+			if (error instanceof ApiError && error.status === 403) {
+				const said = error.message.trim();
+				if (said === 'log in again first') return { problem: 'loginAgain' };
+				const missing = said === 'second factor needed' && !code && !passkey;
+				return { problem: missing ? 'code' : 'wrong' };
+			}
 			if (error instanceof ApiError && error.status === 400) return { problem: 'invalid' };
 			if (error instanceof ApiError && error.status === 429) {
 				return { problem: 'busy', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
@@ -2538,6 +2551,7 @@ export class ServerReader implements Reader {
 		if (!(error instanceof ApiError)) return { problem: 'unreachable' };
 		const said = error.message.trim();
 		if (error.status === 403) {
+			if (said === 'log in again first') return { problem: 'loginAgain' };
 			const missing = said === 'second factor needed';
 			return { problem: missing && !code && !passkey ? 'code' : 'wrong' };
 		}

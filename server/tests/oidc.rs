@@ -224,6 +224,29 @@ async fn log_in(
     (headers, flow)
 }
 
+/// A ticket to link an identity to the account of this session, with what the
+/// owner shows (`{}` for an account without password and second factor, in a
+/// young session).
+async fn link_ticket(state: &AppState, cookie: &str, proof: Value) -> (StatusCode, String) {
+    let (status, answer) = common::call(
+        state,
+        axum::http::Method::POST,
+        "/api/oidc/link",
+        Some(cookie),
+        Some(proof),
+    )
+    .await;
+    let ticket = answer["ticket"].as_str().unwrap_or_default().to_owned();
+    (status, ticket)
+}
+
+/// Where to start linking, with a new ticket of this session.
+async fn link_path(state: &AppState, cookie: &str) -> String {
+    let (status, ticket) = link_ticket(state, cookie, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    format!("/api/oidc/start?link={ticket}")
+}
+
 async fn count(db: &PgPool, table: &str) -> i64 {
     let query = match table {
         "accounts" => "SELECT count(*) FROM accounts",
@@ -427,8 +450,16 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
         (Some(ada_session.as_str()), Some("cross-site")),
         (Some(ada_session.as_str()), Some("same-site")),
         (Some(ada_session.as_str()), None),
+        // Nor without a ticket of the session.
+        (Some(ada_session.as_str()), Some("same-origin")),
     ] {
-        let path = "/api/oidc/start?link";
+        // A ticket Ada got, used where it does not count.
+        let with_ticket = link_path(&state, &ada_session).await;
+        let path = if site == Some("same-origin") && bring == Some(ada_session.as_str()) {
+            "/api/oidc/start?link"
+        } else {
+            with_ticket.as_str()
+        };
         let bringing = Vec::from_iter(bring);
         let (status, headers, _) = send_from(&state, path, &bringing, site).await;
         assert_eq!(status, StatusCode::SEE_OTHER);
@@ -437,7 +468,8 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
     }
     // Started for Ada, it ties nothing to whoever is logged in when the
     // browser comes back.
-    let flow = start_with(&state, "/api/oidc/start?link", &[&ada_session]).await;
+    let path = link_path(&state, &ada_session).await;
+    let flow = start_with(&state, &path, &[&ada_session]).await;
     answer_with(&provider, &claims(&issuer, "subject-1", &flow.nonce));
     let path = format!("/api/oidc/callback?code=the-code&state={}", flow.state);
     let (_, headers, _) = send(&state, &path, &[&flow.cookie, &grace_session]).await;
@@ -447,12 +479,13 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
     assert_eq!(count(&db, "sessions").await, 2);
 
     // Ada is logged in and ties the identity to her account.
+    let path = link_path(&state, &ada_session).await;
     let (headers, _) = log_in(
         &state,
         &provider,
         &issuer,
         "subject-1",
-        "/api/oidc/start?link",
+        &path,
         Some(&ada_session),
     )
     .await;
@@ -464,9 +497,10 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
     );
 
     // From now on it logs in as her, whoever else was logged in before.
+    let grace_link = link_path(&state, &grace_session).await;
     for (at, bring) in [
         ("/api/oidc/start", None),
-        ("/api/oidc/start?link", Some(grace_session.as_str())),
+        (grace_link.as_str(), Some(grace_session.as_str())),
     ] {
         let (headers, _) = log_in(&state, &provider, &issuer, "subject-1", at, bring).await;
         assert_eq!(location(&headers), "/");
@@ -492,6 +526,73 @@ async fn nobody_gets_an_account_by_logging_in(db: PgPool) {
     )
     .await;
     assert_eq!(location(&headers), "/?oidc=unknown");
+}
+
+#[sqlx::test]
+async fn linking_takes_the_owner_and_a_ticket_of_the_session_once(db: PgPool) {
+    let (state, provider, issuer) = setup(&db).await;
+    // Made up for this test, so that nothing here looks like a real password.
+    let password = uuid::Uuid::new_v4().to_string();
+    let ada = rueder::accounts::create(&db, "ada", Some(&password), false)
+        .await
+        .unwrap()
+        .unwrap();
+    let session = || async { common::session(&db, ada).await };
+    let (laptop, phone) = (session().await, session().await);
+
+    // A session alone gets no ticket, nor does a wrong password: a login
+    // through the provider asks for no second factor of rueder's own.
+    for proof in [json!({}), json!({ "password": "battery staple" })] {
+        let (status, ticket) = link_ticket(&state, &laptop, proof.clone()).await;
+        assert_eq!(
+            (status, ticket.as_str()),
+            (StatusCode::FORBIDDEN, ""),
+            "{proof}"
+        );
+    }
+    let (status, ticket) = link_ticket(&state, &laptop, json!({ "password": password })).await;
+    assert_eq!(status, StatusCode::OK);
+    let path = format!("/api/oidc/start?link={ticket}");
+    // Given to the laptop, it does not count on the phone, and is gone then.
+    for bring in [&phone, &laptop] {
+        let (status, headers, _) = send_from(&state, &path, &[bring], Some("same-origin")).await;
+        assert_eq!(status, StatusCode::SEE_OTHER);
+        assert_eq!(location(&headers), "/?oidc=failed");
+    }
+    // A new one starts once on the laptop, and ties the identity there.
+    let (_, ticket) = link_ticket(&state, &laptop, json!({ "password": password })).await;
+    let path = format!("/api/oidc/start?link={ticket}");
+    let (headers, _) = log_in(
+        &state,
+        &provider,
+        &issuer,
+        "subject-1",
+        &path,
+        Some(&laptop),
+    )
+    .await;
+    assert_eq!(location(&headers), "/?oidc=linked");
+    let (status, headers, _) = send_from(&state, &path, &[&laptop], Some("same-origin")).await;
+    assert_eq!(
+        (status, location(&headers)),
+        (StatusCode::SEE_OTHER, "/?oidc=failed")
+    );
+    assert_eq!(count(&db, "account_identities").await, 1);
+    // A newer ticket replaces the account's last.
+    let proof = json!({ "password": password });
+    let (_, first) = link_ticket(&state, &laptop, proof.clone()).await;
+    let (_, second) = link_ticket(&state, &laptop, proof).await;
+    let path = format!("/api/oidc/start?link={first}");
+    let (_, headers, _) = send_from(&state, &path, &[&laptop], Some("same-origin")).await;
+    assert_eq!(location(&headers), "/?oidc=failed");
+    let path = format!("/api/oidc/start?link={second}");
+    let (status, headers, _) = send_from(&state, &path, &[&laptop], Some("same-origin")).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(
+        location(&headers).starts_with(&issuer),
+        "{}",
+        location(&headers)
+    );
 }
 
 #[sqlx::test]
