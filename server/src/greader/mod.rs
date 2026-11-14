@@ -42,7 +42,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::{
     AppError, AppState, MAX_BODY,
     app_passwords::{self, AppLogin},
-    events::{self, Area, Change},
+    events::{self, ServerEvent},
     login::{Key, Sender},
 };
 use parse::Params;
@@ -161,11 +161,8 @@ async fn around_each(State(state): State<AppState>, mut request: Request, next: 
 /// Tells the account's tabs that an app logged in with an app password for
 /// the first time, so that the page that set it up can say so.
 fn connected(state: &AppState, account_id: i32) {
-    let change = Change::Area {
-        area: Area::Apps,
-        by: None,
-    };
-    state.events.publish(vec![account_id], change);
+    let event = ServerEvent::Apps { by: None };
+    state.events.publish(vec![account_id], event);
 }
 
 /// The parameters of a request: its query and its form body, as apps send

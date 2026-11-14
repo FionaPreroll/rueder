@@ -272,7 +272,7 @@ export const api = {
 	tab: TAB,
 	/**
 	 * The live updates: one connection that stays open and comes back by itself
-	 * after a break, saying the last event it got. Null where the browser has none.
+	 * after a break. Null where the browser has none.
 	 */
 	events: (): EventStream | null =>
 		typeof EventSource === 'undefined' ? null : new EventSource('/api/events'),

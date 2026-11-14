@@ -36,22 +36,8 @@
           "Live updates"
         ],
         "summary": "The account's events as they happen.",
-        "description": "A stream of server-sent events, one for each change of the account,\nwhichever tab, app or fetch made it. An event names what changed; the page\nthen asks the API for it again. With `Last-Event-ID`, the events since that\none come first, as far as the server still has them; otherwise an event says\nto load everything anew.",
+        "description": "A stream of server-sent events, one for each change of the account,\nwhichever tab, app or fetch made it. It begins with `hello`. An event names\nwhat changed; the page then asks the API for it again. Events missed while\nthe connection was away are not sent again: a browser that comes back\nloads what it shows anew.",
         "operationId": "stream",
-        "parameters": [
-          {
-            "name": "Last-Event-ID",
-            "in": "header",
-            "description": "The last event the browser had, to go on from there.",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "The events, as `text/event-stream`, until the session ends.",

@@ -31,7 +31,7 @@ use std::{collections::HashSet, fmt, ops::RangeInclusive, str::FromStr, time::In
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 
-use crate::events::{Change, Events};
+use crate::events::{Events, ServerEvent};
 
 /// How many months an article or a version may be kept at most before it goes,
 /// when the operator sets it.
@@ -273,12 +273,12 @@ pub async fn sweep(
                 && what == Remove::Article
                 && let Some(events) = events
             {
-                let change = Change::Reading {
+                let event = ServerEvent::Reading {
                     feed: None,
                     seq: None,
                     by: None,
                 };
-                events.publish_to_readers(db, feed_id, change).await?;
+                events.publish_to_readers(db, feed_id, event).await?;
             }
         }
     }
