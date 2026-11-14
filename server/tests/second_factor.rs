@@ -450,6 +450,26 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
     // Where the operator wants it, not without it, and the page says why.
     let (status, _) = call(&strict, Method::GET, "/api/status", Some(&without), None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+    // Nor for a request that changes something.
+    let new = json!({ "username": "hopper", "password": PASSWORD });
+    let (status, _) = call(
+        &strict,
+        Method::POST,
+        "/api/accounts",
+        Some(&without),
+        Some(new.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = call(
+        &lax,
+        Method::POST,
+        "/api/accounts",
+        Some(&without),
+        Some(new),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
     let (_, me) = call(&strict, Method::GET, "/api/me", Some(&without), None).await;
     assert_eq!(
         (&me["is_admin"], &me["admin_needs_second_factor"]),

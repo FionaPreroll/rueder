@@ -621,7 +621,7 @@ fn sse(events: impl Stream<Item = Result<SseEvent, Infallible>> + Send + 'static
 /// endpoint needs no code for it, and one that is added later is announced
 /// too. A tab can name itself in the header `X-Rueder-Tab`; the name comes back
 /// in the event as `by`, so the tab knows its own change when it sees it.
-pub async fn announce(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
+pub async fn announce(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let reads_only = matches!(
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
@@ -639,14 +639,11 @@ pub async fn announce(State(state): State<AppState>, mut request: Request, next:
             !tab.is_empty() && tab.len() <= 64 && tab.chars().all(plain)
         })
         .map(str::to_owned);
-    // Who asks is found out here, once, and handed on to the endpoint.
+    // Found before the request, which may end the session, as logging out does.
     let session = match sessions::token(request.headers()) {
         Some(token) => sessions::find(&state.db, token).await.ok().flatten(),
         None => None,
     };
-    if let Some(session) = &session {
-        request.extensions_mut().insert(session.clone());
-    }
     let response = next.run(request).await;
     if response.status().is_success()
         && let Some(session) = session
