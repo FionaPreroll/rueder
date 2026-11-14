@@ -211,6 +211,11 @@ const en = {
 		oidcDenied: 'The login through single sign-on was cancelled.',
 		oidcUnknown: 'No account here belongs to that login. Ask whoever runs this rueder to link it.',
 		disabled: 'This account is disabled. Ask whoever runs this rueder why.',
+		unconfirmed:
+			'This account waits for its email address to be confirmed. Open the link in the mail, or have it sent again.',
+		resend: 'Send the link again',
+		resent: 'The link is on its way again. Look in your mail, and in its spam folder too.',
+		resendWrong: 'Enter the name and the password of the account to have the link sent again.',
 		removed: 'Your account is deleted, with everything that was yours.',
 		note: 'There is no sign-up. Accounts are made by whoever runs this rueder.'
 	},
@@ -243,7 +248,60 @@ const en = {
 		today: 'Enough accounts were made here for one day. Try again tomorrow.',
 		taken: 'There is an account with this name already.',
 		terms: 'Agree to the terms of use to make an account.',
-		invalid: (reason: string) => `That cannot be an account. The server says: ${reason}`
+		invalid: (reason: string) => `That cannot be an account. The server says: ${reason}`,
+		email: 'Email address',
+		emailOptional: 'Email address (optional)',
+		emailNote: 'You get a link to confirm it. Nobody else sees it.',
+		emailRequiredNote:
+			'You get a link to confirm it; the account can log in once you have opened it. Nobody else sees the address.',
+		emailInvalid: 'Enter an email address mail can go to.',
+		unsent: 'The link could not be mailed, so no account was made. Try again later.',
+		tooMany: (minutes: number) =>
+			`Too many tries. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
+		awaitingTitle: 'Check your mail',
+		awaiting: (address: string, hours: number) =>
+			`The account is made. A link went to ${address}: open it within ${n(hours)} hours, then log in.`
+	},
+
+	email: {
+		title: 'Email address',
+		intro:
+			'rueder mails you only about your account: links to confirm an address, and a note when it changes. Nobody else sees it.',
+		current: 'Your address',
+		none: 'The account has no address.',
+		pending: (address: string, hours: number) =>
+			`A link went to ${address}. The address counts once it is opened, within ${n(hours)} hours; until then the one before stays.`,
+		address: 'New address',
+		password: 'Your password',
+		passwordNote: 'So that nobody else who has this browser sends your mail elsewhere.',
+		code: 'Code of the second factor',
+		submit: 'Send the link',
+		sent: 'The link is on its way. Look in your mail, and in its spam folder too.',
+		remove: 'Remove the address',
+		removeIntro:
+			'Without an address nothing is mailed to you. The account stays as it is otherwise.',
+		removed: 'The address is removed.',
+		wrong: 'The password or the code is not right.',
+		codeNeeded: 'This account has a second factor. Enter its code as well.',
+		invalid: 'Enter an email address mail can go to.',
+		same: 'That is the address the account has.',
+		required: 'Every account on this rueder needs an address; it can be changed, not removed.',
+		busy: (minutes: number) =>
+			`Too many tries or mails. Try again in ${n(minutes)} ${plural(minutes, { one: 'minute', other: 'minutes' })}.`,
+		unsent: 'The mail could not be sent. Try again later.',
+		unreachable: 'The server does not answer. Nothing was changed.',
+		askTitle: 'Add an email address',
+		askIntro:
+			'Every account on this rueder needs an email address now. Give yours, and open the link that is mailed to it.',
+		askWaiting:
+			'Once you open the link, this goes away by itself. Did nothing come? Send it again, or to another address.',
+		logOut: 'Log out',
+		confirmed: (address: string) => `The address ${address} is confirmed.`,
+		confirmedLogIn: 'The account is ready: log in.',
+		gone: 'This link cannot be used any more: it was used, a newer one was sent, or it is more than a day old.',
+		taken: 'Another account has this address meanwhile.',
+		confirmUnreachable: 'The server does not answer. Open the link again in a moment.',
+		close: 'Close'
 	},
 
 	invites: {
@@ -304,6 +362,7 @@ const en = {
 		title: 'Account settings',
 		tabs: {
 			password: 'Password',
+			email: 'Email',
 			security: 'Security',
 			apps: 'Apps',
 			invites: 'Invitations',

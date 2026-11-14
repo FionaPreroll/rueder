@@ -172,6 +172,16 @@ export class FakeServer {
 	/** The version of the terms the account agreed to. */
 	agreedTerms: string | null = null;
 	noRoom: 'full' | 'today' | null = null;
+	/** Whether accounts have an address: not at all, if they like, or each one. */
+	emailMode: 'off' | 'optional' | 'required' = 'off';
+	/** The confirmed address of each account, by its name. */
+	emails = new Map<string, string>();
+	/** Accounts made where an address must be confirmed first, which do not log in yet. */
+	awaitingEmail = new Set<string>();
+	/** The links mailed, by their token: for which account and which address. */
+	links = new Map<string, { name: string; email: string }>();
+	/** The mails sent, oldest first. */
+	mails: { to: string; token: string; language: unknown }[] = [];
 	/** The invitations of the account that is logged in, the newest first. */
 	invites: FakeInvite[] = [];
 	/** For how many accounts a reader who is no admin may invite in all, and how long a link is good. */
@@ -442,7 +452,31 @@ export class FakeServer {
 		if (method === 'GET' && path === '/register') {
 			const token = query.get('invite');
 			const open = this.registrationOpen && !this.noRoom;
-			return json(token === null ? { open } : { open, invite: !!this.usable(token) });
+			const email = this.emailMode;
+			return json(token === null ? { open, email } : { open, email, invite: !!this.usable(token) });
+		}
+		if (method === 'POST' && path === '/email/confirm') {
+			const link = this.links.get(String(data.token));
+			if (!link) return refused(404);
+			for (const [token, other] of this.links)
+				if (other.name === link.name) this.links.delete(token);
+			const taken = [...this.emails].some(
+				([name, email]) => name !== link.name && email.toLowerCase() === link.email.toLowerCase()
+			);
+			if (taken) return refused(409, 'taken');
+			this.emails.set(link.name, link.email);
+			const activated = this.awaitingEmail.delete(link.name);
+			return json({ username: link.name, email: link.email, activated });
+		}
+		if (method === 'POST' && path === '/email/resend') {
+			const name = String(data.username).trim().toLowerCase();
+			if (this.accounts.get(name) !== data.password) return refused(401, 'wrong name or password');
+			const waiting = [...this.links.values()].find((link) => link.name === name);
+			if (!this.awaitingEmail.has(name) || !waiting) {
+				return refused(409, 'this account waits for no address');
+			}
+			this.mail(name, waiting.email, undefined);
+			return json({ pending: waiting.email }, 202);
 		}
 		if (method === 'POST' && path === '/register') {
 			const invite = typeof data.invite === 'string' ? this.usable(data.invite) : undefined;
@@ -459,11 +493,23 @@ export class FakeServer {
 			if (this.accounts.has(name.toLowerCase())) {
 				return refused(409, 'there is an account with this name already');
 			}
+			const given = typeof data.email === 'string' ? data.email.trim() : '';
+			if (this.emailMode === 'required' && !given) {
+				return refused(400, 'that is no address mail can go to');
+			}
+			if (this.emailMode !== 'off' && given && !given.includes('@')) {
+				return refused(400, 'that is no address mail can go to');
+			}
 			this.accounts.set(name.toLowerCase(), String(data.password));
 			if (invite) invite.uses++;
-			this.signedIn = name.toLowerCase();
 			if (terms) this.agreedTerms = terms;
 			this.admin = false;
+			if (this.emailMode !== 'off' && given) this.mail(name.toLowerCase(), given, data.language);
+			if (this.emailMode === 'required') {
+				this.awaitingEmail.add(name.toLowerCase());
+				return json({ awaiting_email: given }, 202);
+			}
+			this.signedIn = name.toLowerCase();
 			return json(this.me(), 201);
 		}
 		if (method === 'POST' && path === '/login') {
@@ -472,6 +518,7 @@ export class FakeServer {
 			const name = String(data.username).trim().toLowerCase();
 			if (this.accounts.get(name) !== data.password) return refused(401, 'wrong name or password');
 			if (this.disabled.has(name)) return refused(403, 'disabled');
+			if (this.awaitingEmail.has(name)) return refused(403, 'unconfirmed');
 			if (this.secondFactor) {
 				const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : '';
 				if (!code) return refused(401, 'second factor needed');
@@ -519,6 +566,8 @@ export class FakeServer {
 			this.signedIn = null;
 			return empty();
 		}
+		const email = this.answerEmail(method, path, data);
+		if (email) return email;
 		if (method === 'PUT' && path === '/password') {
 			const name = this.signedIn;
 			const password = this.accounts.get(name);
@@ -781,6 +830,59 @@ export class FakeServer {
 		return null;
 	}
 
+	/** Mails a link for the address, in place of any the account had. */
+	private mail(name: string, to: string, language: unknown) {
+		for (const [token, link] of this.links) if (link.name === name) this.links.delete(token);
+		const token = `link-${this.mails.length + 1}`;
+		this.links.set(token, { name, email: to });
+		this.mails.push({ to, token, language });
+	}
+
+	/** The address that waits for its link, of the account. */
+	private pendingEmail(name: string | null) {
+		return [...this.links.values()].find((link) => link.name === name)?.email ?? null;
+	}
+
+	private answerEmail(method: string, path: string, data: Record<string, unknown>) {
+		if (path !== '/email') return null;
+		const name = this.signedIn ?? '';
+		if (method === 'GET') {
+			return json({
+				mode: this.emailMode,
+				email: this.emails.get(name) ?? null,
+				pending: this.pendingEmail(name)
+			});
+		}
+		if (method !== 'PUT' && method !== 'DELETE') return null;
+		if (this.emailMode === 'off') return refused(409, 'this server keeps no addresses');
+		const address = String(data.email ?? '').trim();
+		if (method === 'PUT' && !address.includes('@')) {
+			return refused(400, 'that is no address mail can go to');
+		}
+		if (method === 'PUT' && address.toLowerCase() === this.emails.get(name)?.toLowerCase()) {
+			return refused(409, 'that is the address already');
+		}
+		if (method === 'DELETE' && this.emailMode === 'required') {
+			return refused(409, 'every account here needs an address');
+		}
+		const password = this.accounts.get(name);
+		if (password !== undefined && data.password !== password && data.passkey === undefined) {
+			return refused(403, 'the password is wrong');
+		}
+		if (this.secondFactor && data.passkey === undefined) {
+			const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : '';
+			if (!code) return refused(403, 'second factor needed');
+			if (code !== this.secondFactor.code) return refused(403, 'the code is wrong');
+		}
+		if (method === 'DELETE') {
+			this.emails.delete(name);
+			for (const [token, link] of this.links) if (link.name === name) this.links.delete(token);
+			return empty();
+		}
+		this.mail(name, address, data.language);
+		return json({ pending: address }, 202);
+	}
+
 	private me() {
 		return {
 			id: 1,
@@ -794,7 +896,10 @@ export class FakeServer {
 			terms_to_accept:
 				this.legal.terms_version && this.agreedTerms !== this.legal.terms_version
 					? this.legal.terms_version
-					: null
+					: null,
+			email_mode: this.emailMode,
+			email: this.emails.get(this.signedIn ?? '') ?? null,
+			email_pending: this.pendingEmail(this.signedIn)
 		};
 	}
 

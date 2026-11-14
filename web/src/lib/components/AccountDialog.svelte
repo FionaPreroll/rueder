@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The account itself, apart from the settings of how the page looks and
-	// behaves (SettingsDialog.svelte): the password, the second factor, apps of
+	// behaves (SettingsDialog.svelte): the password, the email address where the
+	// server keeps one, the second factor, apps of
 	// other makers, invitations, moving the account to another rueder, whether
 	// this browser reports its errors, and deleting the account. It opens from the
 	// menu of the account, where logging out is.
@@ -10,6 +11,7 @@
 	import Apps from './Apps.svelte';
 	import ChangePassword from './ChangePassword.svelte';
 	import Dialog from './Dialog.svelte';
+	import EmailAddress from './EmailAddress.svelte';
 	import Invitations from './Invitations.svelte';
 	import MoveAccount from './MoveAccount.svelte';
 	import Passkeys from './Passkeys.svelte';
@@ -42,6 +44,8 @@
 	<div class="pt-4 sm:min-h-[28rem]" role="tabpanel">
 		{#if open === 'password'}
 			<ChangePassword {reader} />
+		{:else if open === 'email'}
+			<EmailAddress {reader} />
 		{:else if open === 'security'}
 			<SecondFactor {reader} bind:busy version={security} onchange={() => security++} />
 			{#if reader.can.passkeys}

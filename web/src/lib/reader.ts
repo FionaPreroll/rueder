@@ -40,7 +40,23 @@ export interface Account {
 	appApi?: boolean;
 	/** The server has passkeys. */
 	passkeys?: boolean;
+	/**
+	 * Whether accounts on the server have an address: not at all (`off`, also
+	 * when left out), if they like, or each one; the page asks an account
+	 * without one where it is `required`.
+	 */
+	emailMode?: EmailMode;
+	/** The confirmed address. */
+	email?: string | null;
+	/** An address whose link was mailed and not yet opened. */
+	emailPending?: string | null;
 }
+
+/** Whether accounts have an address, as the operator set it. */
+export type EmailMode = 'off' | 'optional' | 'required';
+
+/** How many hours the link that confirms an address is good for (`email::LINK_HOURS`). */
+export const EMAIL_LINK_HOURS = 24;
 
 /** A passkey, as the list shows it. */
 export interface PasskeyItem {
@@ -142,6 +158,24 @@ export type RemoveRefusal =
 	| { problem: 'busy'; minutes: number }
 	| { problem: 'unreachable' };
 
+/** Why an address was not taken, or not taken away. The page has the words. */
+export type EmailRefusal =
+	/** The password, or the code of the second factor, was not right. */
+	| { problem: 'wrong' }
+	/** The password was right; the account has a second factor, whose code is missing. */
+	| { problem: 'code' }
+	/** No address mail can go to. */
+	| { problem: 'invalid' }
+	/** It is the address the account has. */
+	| { problem: 'same' }
+	/** Every account here needs an address, so it cannot go. */
+	| { problem: 'required' }
+	/** Too many wrong tries or too many mails; wait so many minutes. */
+	| { problem: 'busy'; minutes: number }
+	/** The server could not hand the mail on; it may later. */
+	| { problem: 'unsent' }
+	| { problem: 'unreachable' };
+
 /** Why a new password was not taken. The page has the words. */
 export type PasswordRefusal =
 	/** The password so far is not right. */
@@ -237,6 +271,8 @@ export interface Abilities {
 	apps: boolean;
 	/** The account can log in and confirm changes with passkeys: the server has them, and so does the browser. */
 	passkeys: boolean;
+	/** The account can have an address the server mails to: the operator lets it. */
+	email: boolean;
 }
 
 /** A feed found at an address. */
@@ -624,6 +660,26 @@ export interface Reader {
 	 * (`can.password`).
 	 */
 	changePassword(current: string, fresh: string): Promise<PasswordRefusal | null>;
+
+	/**
+	 * Mails a link to a new address for the account (`can.email`), with the
+	 * password (none for an account that has none) and the code of its second
+	 * factor where it has one, or a passkey's proof instead. The address counts
+	 * once the link is opened; until then `account.emailPending` names it. Null
+	 * when the link went.
+	 */
+	changeEmail(
+		address: string,
+		password: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<EmailRefusal | null>;
+	/** Takes the address from the account, where it is optional; proved as above. */
+	removeEmail(
+		password: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<EmailRefusal | null>;
 
 	/**
 	 * How the server fares, for an admin (`can.status`), counted over the last

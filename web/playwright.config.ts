@@ -1,10 +1,11 @@
 // End-to-end tests: the built page in a real browser against the real server,
-// with a database of its own and a made-up website to fetch feeds from (e2e/).
+// with a database of its own, a made-up website to fetch feeds from and a
+// made-up mail relay (e2e/).
 //
 //   pnpm e2e
 
 import { defineConfig, devices } from '@playwright/test';
-import { RUEDER, SITE } from './e2e/harness/ports.js';
+import { MAILBOX, RUEDER, SITE } from './e2e/harness/ports.js';
 
 export default defineConfig({
 	testDir: 'e2e',
@@ -25,6 +26,7 @@ export default defineConfig({
 	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 	webServer: [
 		{ command: 'node e2e/harness/site.js', url: `${SITE}/harbour/`, reuseExistingServer: false },
+		{ command: 'node e2e/harness/mail.js', url: `${MAILBOX}/mails`, reuseExistingServer: false },
 		{
 			command: 'node e2e/harness/server.js',
 			url: `${RUEDER}/api/health`,

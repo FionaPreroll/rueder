@@ -3,7 +3,8 @@
 // reader of the account that is logged in.
 
 import { api as theApi, ApiError, type Api, type ApiAccount, type ApiLoginWays } from './client.ts';
-import type { LegalLinks } from '#lib/reader.ts';
+import type { EmailMode, LegalLinks } from '#lib/reader.ts';
+import { language } from '#lib/i18n/locale.svelte.ts';
 import { ServerReader } from './reader.svelte.ts';
 import { passkeysWork, usePasskey } from '#lib/webauthn.ts';
 import { forgetView } from '#lib/view.ts';
@@ -18,6 +19,8 @@ export type LoginFailure =
 	| { kind: 'tooMany'; minutes: number }
 	/** The password was right, but the operator disabled the account. */
 	| { kind: 'disabled' }
+	/** The password was right, but the account waits for its address to be confirmed. */
+	| { kind: 'unconfirmed' }
 	/** The reader closed the browser's window for the passkey, or it timed out. */
 	| { kind: 'passkeyCancelled' }
 	/** The browser or the device could not use a passkey. */
@@ -40,7 +43,45 @@ export type RegisterFailure =
 	| { kind: 'taken' }
 	/** The name or the password cannot be one; the server says why. */
 	| { kind: 'invalid'; reason: string }
+	/** The address is none mail can go to, or the server asks for one and there was none. */
+	| { kind: 'email' }
+	/** The link could not be mailed, so no account was made. */
+	| { kind: 'unsent' }
+	/** Too many registrations or mails; wait so many minutes. */
+	| { kind: 'tooMany'; minutes: number }
 	| { kind: 'unreachable' };
+
+/** How sending the link again went. */
+export type ResendOutcome =
+	| { kind: 'sent' }
+	| { kind: 'wrong' }
+	| { kind: 'tooMany'; minutes: number }
+	| { kind: 'unsent' }
+	| { kind: 'unreachable' };
+
+/** What the link from a mail did, opened in this page. */
+export type Confirmation =
+	/** The address is the account's now; `activated` if the account waited for it to log in. */
+	| { kind: 'confirmed'; name: string; email: string; activated: boolean }
+	/** No such link, or not any more: used, replaced by a newer one, or more than a day old. */
+	| { kind: 'gone' }
+	/** Another account has the address meanwhile. */
+	| { kind: 'taken' }
+	| { kind: 'unreachable' };
+
+/** An account that was made and waits for its address, which the login page says. */
+export interface Awaiting {
+	name: string;
+	address: string;
+}
+
+/** The token of a link from a mail in the page's address: `/?confirm=<token>`. */
+function confirmToken(): string | null {
+	if (typeof location === 'undefined') return null;
+	return new URLSearchParams(location.search).get('confirm') || null;
+}
+
+const minutes = (error: ApiError) => Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60));
 
 /** A server that does not say: no other ways, no legal texts. */
 const NO_WAYS: ApiLoginWays = {
@@ -82,6 +123,12 @@ export class Session {
 	invitation = $state.raw<Invitation | null>(null);
 	/** The account was deleted here a moment ago, which the login page says. */
 	farewell = $state(false);
+	/** Whether registration asks for an address, and whether it must be one. */
+	emailMode = $state<EmailMode>('off');
+	/** An account made here a moment ago that waits for the link mailed to it. */
+	awaiting = $state.raw<Awaiting | null>(null);
+	/** What the link the page was opened with did, until the reader closes the note. */
+	confirmation = $state.raw<Confirmation | null>(null);
 
 	private api: Api;
 
@@ -110,7 +157,10 @@ export class Session {
 				termsToAccept: account.terms_to_accept,
 				contentReports: account.content_reports,
 				appApi: account.app_api,
-				passkeys: account.passkeys
+				passkeys: account.passkeys,
+				emailMode: account.email_mode,
+				email: account.email,
+				emailPending: account.email_pending
 			},
 			{
 				signOut: () => void this.signOut(),
@@ -120,6 +170,7 @@ export class Session {
 			this.api
 		);
 		this.farewell = false;
+		this.awaiting = null;
 		this.reader.legal = legalLinks(this.ways);
 		this.state = 'in';
 		// The account menu links to the operator's texts, which come with the ways.
@@ -148,11 +199,53 @@ export class Session {
 		}
 		if (this.reader) this.reader.legal = legalLinks(this.ways);
 		const token = invitedBy();
-		if (!token) return;
+		// Whether the form asks for an address, where there is a form.
+		if (!token && !this.ways.registration) return;
 		try {
-			this.invitation = { token, valid: (await this.api.registering(token)).invite === true };
+			const asked = await this.api.registering(token ?? undefined);
+			this.emailMode = asked.email;
+			if (token) this.invitation = { token, valid: asked.invite === true };
 		} catch {
-			this.invitation = { token, valid: false };
+			if (token) this.invitation = { token, valid: false };
+		}
+	}
+
+	/**
+	 * Opens the link from a mail the page was opened with, if it was, and takes
+	 * it from the address, so that a reload does not open it again.
+	 */
+	async confirmFromAddress() {
+		const token = confirmToken();
+		if (!token) return;
+		history.replaceState(history.state, '', location.pathname);
+		try {
+			const done = await this.api.confirmEmail(token);
+			this.confirmation = {
+				kind: 'confirmed',
+				name: done.username,
+				email: done.email,
+				activated: done.activated
+			};
+			if (this.awaiting?.name.toLowerCase() === done.username.toLowerCase()) this.awaiting = null;
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 404) this.confirmation = { kind: 'gone' };
+			else if (error instanceof ApiError && error.status === 409)
+				this.confirmation = { kind: 'taken' };
+			else this.confirmation = { kind: 'unreachable' };
+		}
+	}
+
+	/** Sends the link again to an account that waits for its address. */
+	async resend(name: string, password: string): Promise<ResendOutcome> {
+		try {
+			await this.api.resendEmail(name, password);
+			return { kind: 'sent' };
+		} catch (error) {
+			if (!(error instanceof ApiError)) throw error;
+			if (error.status === 429) return { kind: 'tooMany', minutes: minutes(error) };
+			if (error.status === 503) return { kind: 'unsent' };
+			if (error.status === 401 || error.status === 409) return { kind: 'wrong' };
+			return { kind: 'unreachable' };
 		}
 	}
 
@@ -160,11 +253,27 @@ export class Session {
 	 * Makes an account and logs it in; null if it worked, else why it did not.
 	 * `agreed` says the reader agreed to the terms of use the server names.
 	 */
-	async register(name: string, password: string, agreed = false): Promise<RegisterFailure | null> {
+	async register(
+		name: string,
+		password: string,
+		agreed = false,
+		email = ''
+	): Promise<RegisterFailure | null> {
 		try {
 			const terms = agreed ? (this.ways.legal.terms_version ?? undefined) : undefined;
-			this.enter(await this.api.register(name, password, this.invitation?.token, terms));
+			const address = this.emailMode === 'off' ? undefined : email.trim() || undefined;
+			const made = await this.api.register(
+				name,
+				password,
+				this.invitation?.token,
+				terms,
+				address,
+				language()
+			);
 			this.invitation = null;
+			// Where every account needs its address, the account waits for its link.
+			if ('awaiting_email' in made) this.awaiting = { name, address: made.awaiting_email };
+			else this.enter(made);
 			return null;
 		} catch (error) {
 			if (!(error instanceof ApiError)) throw error;
@@ -173,9 +282,14 @@ export class Session {
 				return { kind: word as 'closed' | 'invite' | 'full' | 'today' | 'terms' };
 			}
 			if (error.status === 409) return { kind: 'taken' };
+			if (error.status === 400 && word === 'that is no address mail can go to') {
+				return { kind: 'email' };
+			}
 			if (error.status === 400 || error.status === 422) {
 				return { kind: 'invalid', reason: error.message };
 			}
+			if (error.status === 429) return { kind: 'tooMany', minutes: minutes(error) };
+			if (error.status === 503) return { kind: 'unsent' };
 			return { kind: 'unreachable' };
 		}
 	}
@@ -187,9 +301,7 @@ export class Session {
 			return null;
 		} catch (error) {
 			if (!(error instanceof ApiError)) throw error;
-			if (error.status === 429) {
-				return { kind: 'tooMany', minutes: Math.max(1, Math.ceil((error.retryAfter ?? 60) / 60)) };
-			}
+			if (error.status === 429) return { kind: 'tooMany', minutes: minutes(error) };
 			if (error.status === 401 && error.message.trim() === 'second factor needed') {
 				return { kind: code ? 'wrongCode' : 'codeNeeded' };
 			}
@@ -197,6 +309,9 @@ export class Session {
 				return { kind: 'wrongCode' };
 			}
 			if (error.status === 403 && error.message.trim() === 'disabled') return { kind: 'disabled' };
+			if (error.status === 403 && error.message.trim() === 'unconfirmed') {
+				return { kind: 'unconfirmed' };
+			}
 			// A name or a password the server cannot even read is a wrong one too.
 			if (error.status >= 400 && error.status < 500) return { kind: 'wrong' };
 			return { kind: 'unreachable' };

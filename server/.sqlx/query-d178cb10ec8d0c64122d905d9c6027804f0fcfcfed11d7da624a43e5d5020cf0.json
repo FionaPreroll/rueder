@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH gone AS (DELETE FROM accounts WHERE id = $1 RETURNING invite_id)\n                     UPDATE invites SET uses = uses - 1 WHERE id IN (SELECT invite_id FROM gone)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d178cb10ec8d0c64122d905d9c6027804f0fcfcfed11d7da624a43e5d5020cf0"
+}

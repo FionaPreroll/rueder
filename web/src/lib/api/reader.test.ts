@@ -1011,7 +1011,9 @@ describe('reading', () => {
 			reportContent: false,
 			apps: false,
 			// The server here has no passkeys.
-			passkeys: false
+			passkeys: false,
+			// Nor does it keep addresses.
+			email: false
 		});
 	});
 });
@@ -1439,6 +1441,83 @@ describe('the session', () => {
 		reader.showNew();
 		await settle();
 		expect(server.writes).toEqual([]);
+	});
+});
+
+describe('the email address', () => {
+	const asking = () =>
+		new ServerReader({ name: 'fiona', admin: false, emailMode: 'optional' }, session);
+
+	it('is there only where the server keeps addresses', () => {
+		expect(new ServerReader({ name: 'fiona', admin: false }, session).can.email).toBe(false);
+		expect(
+			new ServerReader({ name: 'fiona', admin: false, emailMode: 'off' }, session).can.email
+		).toBe(false);
+		expect(asking().can.email).toBe(true);
+	});
+
+	it('mails a link to a new address, with the password and the language of the page', async () => {
+		server.emailMode = 'optional';
+		const reader = asking();
+		expect(await reader.changeEmail(' fiona@example.org ', 'correct horse')).toBeNull();
+		expect(reader.account.emailPending).toBe('fiona@example.org');
+		expect(server.requests.at(-1)).toMatchObject({
+			method: 'PUT',
+			path: '/email',
+			body: { email: 'fiona@example.org', password: 'correct horse', language: 'en' }
+		});
+		expect(server.mails).toHaveLength(1);
+	});
+
+	it('says why an address was not taken', async () => {
+		server.emailMode = 'optional';
+		server.emails.set('fiona', 'fiona@example.org');
+		const reader = asking();
+		expect(await reader.changeEmail('new@example.org', 'wrong')).toEqual({ problem: 'wrong' });
+		expect(await reader.changeEmail('nowhere', 'correct horse')).toEqual({ problem: 'invalid' });
+		expect(await reader.changeEmail('FIONA@example.org', 'correct horse')).toEqual({
+			problem: 'same'
+		});
+		server.refuse('PUT', /^\/email$/, 429, 1, 'too many mails', { 'Retry-After': '600' });
+		expect(await reader.changeEmail('new@example.org', 'correct horse')).toEqual({
+			problem: 'busy',
+			minutes: 10
+		});
+		server.refuse('PUT', /^\/email$/, 503);
+		expect(await reader.changeEmail('new@example.org', 'correct horse')).toEqual({
+			problem: 'unsent'
+		});
+		server.down = true;
+		expect(await reader.changeEmail('new@example.org', 'correct horse')).toEqual({
+			problem: 'unreachable'
+		});
+		server.down = false;
+
+		// With a second factor the code is asked for, then checked.
+		server.secondFactor = { code: '123456', recovery: [] };
+		expect(await reader.changeEmail('new@example.org', 'correct horse')).toEqual({
+			problem: 'code'
+		});
+		expect(await reader.changeEmail('new@example.org', 'correct horse', '000000')).toEqual({
+			problem: 'wrong'
+		});
+		expect(await reader.changeEmail('new@example.org', 'correct horse', '123456')).toBeNull();
+		expect(server.mails.at(-1)?.to).toBe('new@example.org');
+		expect(reader.account.email).toBeUndefined();
+	});
+
+	it('takes the address away where it is optional, and not where it is required', async () => {
+		server.emailMode = 'optional';
+		server.emails.set('fiona', 'fiona@example.org');
+		const reader = asking();
+		reader.account = { ...reader.account, email: 'fiona@example.org' };
+		expect(await reader.removeEmail('wrong')).toEqual({ problem: 'wrong' });
+		expect(await reader.removeEmail('correct horse')).toBeNull();
+		expect(reader.account).toMatchObject({ email: null, emailPending: null });
+		expect(server.emails.has('fiona')).toBe(false);
+
+		server.emailMode = 'required';
+		expect(await reader.removeEmail('correct horse')).toEqual({ problem: 'required' });
 	});
 });
 
@@ -1928,6 +2007,15 @@ describe('live updates', () => {
 		server.emit({ event: 'session', data: { by: 'another-tab' } });
 		await settle();
 		expect(session.expired).toHaveBeenCalledOnce();
+	});
+
+	it('shows an address confirmed in another tab or by the link', async () => {
+		server.emailMode = 'required';
+		const reader = await started();
+		server.emails.set('fiona', 'fiona@example.org');
+		server.emit({ event: 'session', data: { by: null } });
+		await settle();
+		expect(reader.account).toMatchObject({ emailMode: 'required', email: 'fiona@example.org' });
 	});
 
 	it('loads everything anew when the server cannot say what was missed', async () => {

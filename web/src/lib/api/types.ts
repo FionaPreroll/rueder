@@ -69,7 +69,25 @@ export type Me = {
 	 * Whether this server has passkeys (see `PUBLIC_URL`).
 	 */
 	passkeys: boolean,
+	/**
+	 * Whether accounts here have an address, and whether they must; the page
+	 * asks for one where the account has none.
+	 */
+	email_mode: EmailMode,
+	/**
+	 * The account's confirmed address.
+	 */
+	email: string | null,
+	/**
+	 * An address whose link was mailed and not yet opened.
+	 */
+	email_pending: string | null,
 };
+
+/**
+ * Whether accounts have an address, as the operator set it.
+ */
+export type EmailMode = "off" | "optional" | "required";
 
 /**
  * The ways to log in this server has besides name and password.
@@ -488,6 +506,10 @@ export type Registering = {
 	 */
 	open: boolean,
 	/**
+	 * Whether the form asks for an address, and whether it must be one.
+	 */
+	email: EmailMode,
+	/**
 	 * Whether the invitation that was asked about is good: known, not taken
 	 * back, not run out, not used up. Left out if none was asked about.
 	 */
@@ -516,6 +538,28 @@ export type NewRegistration = {
 	 * The version of the terms of use agreed to, where the server names one.
 	 */
 	accepted_terms?: string,
+	/**
+	 * The address, where the server asks for one (`email` in
+	 * `GET /api/register`).
+	 */
+	email?: string,
+	/**
+	 * The language of the page, `en` or `de`: the account's mail is
+	 * written in it.
+	 */
+	language?: string,
+};
+
+/**
+ * What `POST /api/register` answers where every account needs a confirmed
+ * address: the account is made, and logs in once the link mailed to it is
+ * opened.
+ */
+export type Awaiting = {
+	/**
+	 * Where the link went.
+	 */
+	awaiting_email: string,
 };
 
 /**
@@ -577,6 +621,96 @@ export type MadeInvite = {
 	id: number,
 	token: string,
 	expires_at: string,
+};
+
+/**
+ * The languages mail is written in: those of the page.
+ */
+export type Language = "en" | "de";
+
+/**
+ * The address of an account and the one waiting for its link, as the
+ * account's own page sees them.
+ */
+export type EmailState = {
+	mode: EmailMode,
+	/**
+	 * The confirmed address, if the account has one.
+	 */
+	email: string | null,
+	/**
+	 * An address whose link was sent and not yet opened.
+	 */
+	pending: string | null,
+};
+
+/**
+ * What `PUT /api/email` reads: the new address, and the account's password
+ * and, where the second factor is on, one of its codes; or a passkey instead
+ * of both. A stolen session must not be able to send the account's mail
+ * elsewhere.
+ */
+export type NewEmail = {
+	email: string,
+	/**
+	 * The language of the page, `en` or `de`: the account's mail is written
+	 * in it from now on, unless a page made the account, whose language
+	 * stays.
+	 */
+	language?: string,
+	password?: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
+};
+
+/**
+ * How the reader shows that they are the account's owner.
+ */
+export type EmailProof = {
+	password?: string,
+	code?: string,
+	passkey?: PasskeyAnswer,
+};
+
+/**
+ * An address that waits for its link.
+ */
+export type Pending = {
+	pending: string,
+};
+
+/**
+ * What `POST /api/email/confirm` reads: the token from the link.
+ */
+export type ConfirmEmail = {
+	token: string,
+};
+
+/**
+ * What a confirmed link did.
+ */
+export type Confirmed = {
+	/**
+	 * The account it was for.
+	 */
+	username: string,
+	/**
+	 * Its address now.
+	 */
+	email: string,
+	/**
+	 * The account was waiting for its address and can log in now.
+	 */
+	activated: boolean,
+};
+
+/**
+ * What `POST /api/email/resend` reads: the name and password of an account
+ * that waits for its address.
+ */
+export type Resend = {
+	username: string,
+	password: string,
 };
 
 /**

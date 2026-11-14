@@ -16,6 +16,7 @@ import type {
 	Fresh,
 	Imported,
 	Moved,
+	EmailRefusal,
 	PasswordRefusal,
 	Reader,
 	RemoveRefusal,
@@ -127,7 +128,9 @@ export class DemoReader implements Reader {
 		reportContent: false,
 		apps: true,
 		// Without a server there is nobody to check a passkey.
-		passkeys: false
+		passkeys: false,
+		// Nor anybody to send mail.
+		email: false
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -711,6 +714,15 @@ export class DemoReader implements Reader {
 
 	/** Nobody is logged in, so there is no password to change either. */
 	async changePassword(): Promise<PasswordRefusal> {
+		return { problem: 'unreachable' };
+	}
+
+	/** Nor an address, nor anybody to mail its link. */
+	async changeEmail(): Promise<EmailRefusal> {
+		return { problem: 'unreachable' };
+	}
+
+	async removeEmail(): Promise<EmailRefusal> {
 		return { problem: 'unreachable' };
 	}
 

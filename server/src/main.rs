@@ -12,11 +12,12 @@ use clap::{Parser, Subcommand};
 use rueder::{
     AppState, accounts, articles, bench,
     cleaning::Rules,
+    email,
     events::Events,
     fetch, health, history,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import, moderation,
+    import, mail, moderation,
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
@@ -215,6 +216,13 @@ enum RegistrationCommand {
         /// limit. They count here and nowhere else.
         #[arg(long, value_name = "N|none")]
         admin_invite_accounts: Option<Limit>,
+        /// Whether registration asks for an address: `off`, `optional`, or
+        /// `required`, where a new account logs in only once its address is
+        /// confirmed and one from before is asked for it. Leaving `required`
+        /// lets in the accounts that still wait. Not `off` needs SMTP_URL,
+        /// MAIL_FROM and PUBLIC_URL.
+        #[arg(long, value_name = "off|optional|required")]
+        email: Option<email::Mode>,
     },
 }
 
@@ -549,8 +557,15 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
         invites,
         invite_days,
         admin_invite_accounts,
+        email,
     } = command
     {
+        if let Some(mode) = email {
+            if mode != email::Mode::Off && mail::Mailer::from_env()?.is_none() {
+                anyhow::bail!("addresses need mail: set SMTP_URL, MAIL_FROM and PUBLIC_URL first");
+            }
+            settings.email = mode;
+        }
         settings.open = open.unwrap_or(settings.open);
         if let Some(Limit(limit)) = max_accounts {
             settings.max_accounts = limit;
@@ -589,6 +604,12 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
         counts.by_admins,
         limit(settings.admin_invite_accounts)
     );
+    let email = match settings.email {
+        email::Mode::Off => "not asked for",
+        email::Mode::Optional => "asked for, and optional",
+        email::Mode::Required => "required: a new account logs in once it is confirmed",
+    };
+    println!("An address: {email}");
     Ok(())
 }
 
@@ -894,6 +915,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             if let Err(err) = sessions::sweep(&sessions).await {
                 tracing::error!("removing old sessions: {err:#}");
             }
+            if let Err(err) = rueder::email::sweep(&sessions).await {
+                tracing::error!("removing old links and unconfirmed accounts: {err:#}");
+            }
             if let Err(err) = reports::sweep(&sessions).await {
                 tracing::error!("removing old reports of errors: {err:#}");
             }
@@ -997,6 +1021,23 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             url.trim()
         );
         state = state.with_passkeys(passkeys);
+    }
+    // SMTP_URL, MAIL_FROM and PUBLIC_URL: the relay mail goes through (see
+    // `mail`). Where registration asks for addresses there has to be one:
+    // otherwise nobody who registers could ever confirm theirs.
+    match mail::Mailer::from_env()? {
+        Some(mailer) => {
+            tracing::info!("mail goes through the relay in SMTP_URL");
+            state = state.with_mail(mailer);
+        }
+        None => {
+            let mode = rueder::email::mode(&mut *state.db.acquire().await?).await?;
+            if mode != rueder::email::Mode::Off {
+                anyhow::bail!(
+                    "registration asks for addresses (--email {mode}), but SMTP_URL is not set"
+                );
+            }
+        }
     }
     // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:
     // the operator's legal texts, and the terms an account has to agree to.

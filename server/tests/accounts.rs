@@ -230,7 +230,10 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
             "terms_to_accept": null,
             "content_reports": false,
             "app_api": true,
-            "passkeys": false
+            "passkeys": false,
+            "email_mode": "off",
+            "email": null,
+            "email_pending": null
         })
     );
 
@@ -267,7 +270,10 @@ async fn a_login_gives_the_browser_a_session_cookie(db: PgPool) {
             "terms_to_accept": null,
             "content_reports": false,
             "app_api": true,
-            "passkeys": false
+            "passkeys": false,
+            "email_mode": "off",
+            "email": null,
+            "email_pending": null
         })
     );
     // Among other cookies too.

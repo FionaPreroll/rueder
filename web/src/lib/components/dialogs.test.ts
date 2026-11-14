@@ -13,6 +13,7 @@ import { ancestorIds } from '#lib/tree.ts';
 import ReportDialog from './ReportDialog.svelte';
 import TopBar from './TopBar.svelte';
 import AccountDialog from './AccountDialog.svelte';
+import EmailDialog from './EmailDialog.svelte';
 import SettingsDialog from './SettingsDialog.svelte';
 import StatusDialog from './StatusDialog.svelte';
 import SubscribeDialog from './SubscribeDialog.svelte';
@@ -785,6 +786,113 @@ describe('The password in the account settings', () => {
 	it('is not there with made-up data, which has no account', () => {
 		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
 		expect(screen.queryByRole('tab', { name: 'Password' })).toBeNull();
+	});
+});
+
+describe('The email address in the account settings', () => {
+	let server: FakeServer;
+	const session = { signOut: vi.fn(), expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => vi.unstubAllGlobals());
+
+	function opened(mode: 'off' | 'optional' | 'required', email: string | null = null) {
+		server.emailMode = mode;
+		if (email) server.emails.set('fiona', email);
+		const reader = new ServerReader(
+			{ name: 'fiona', admin: false, emailMode: mode, email },
+			session
+		);
+		render(AccountDialog, { reader, tab: 'email', onclose: () => {} });
+		return reader;
+	}
+
+	it('is there only where the server keeps addresses', () => {
+		opened('off');
+		expect(screen.queryByRole('tab', { name: 'Email' })).toBeNull();
+		cleanup();
+		render(AccountDialog, { reader: new DemoReader(() => now), onclose: () => {} });
+		expect(screen.queryByRole('tab', { name: 'Email' })).toBeNull();
+	});
+
+	it('mails a link to a new address, with the password, and says the address waits', async () => {
+		opened('optional', 'fiona@old.example');
+		expect(screen.getByRole('tab', { name: 'Email' })).toHaveAttribute('aria-selected', 'true');
+		expect(screen.getByText('fiona@old.example')).toBeInTheDocument();
+		const send = screen.getByRole('button', { name: 'Send the link' });
+		expect(send).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('New address'), 'fiona@new.example');
+		expect(send).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('Your password'), 'wrong{Enter}');
+		expect(await screen.findByRole('alert')).toHaveTextContent('The password or the code');
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(send);
+		expect(await screen.findByText(/A link went to fiona@new\.example/)).toBeInTheDocument();
+		expect(screen.getByText(/The link is on its way/)).toBeInTheDocument();
+		// The one before stays until the link is opened.
+		expect(screen.getByText('fiona@old.example')).toBeInTheDocument();
+		expect(screen.getByLabelText('Your password')).toHaveValue('');
+		expect(server.mails.at(-1)?.to).toBe('fiona@new.example');
+	});
+
+	it('asks for the code of the second factor where the account has one', async () => {
+		server.secondFactor = { code: '135790', recovery: [] };
+		opened('optional');
+		await userEvent.type(screen.getByLabelText('New address'), 'fiona@example.org');
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse{Enter}');
+		const code = await screen.findByLabelText('Code of the second factor');
+		expect(screen.getByRole('alert')).toHaveTextContent('second factor');
+		await userEvent.type(code, '135790{Enter}');
+		expect(await screen.findByText(/The link is on its way/)).toBeInTheDocument();
+	});
+
+	it('takes the address away where it is optional, and not where it is required', async () => {
+		const reader = opened('optional', 'fiona@example.org');
+		const remove = screen.getByRole('button', { name: 'Remove the address' });
+		expect(remove).toBeDisabled();
+		await userEvent.type(screen.getByLabelText('Your password'), 'correct horse');
+		await userEvent.click(remove);
+		expect(await screen.findByText('The address is removed.')).toBeInTheDocument();
+		expect(reader.account.email).toBeNull();
+		expect(screen.getByText('The account has no address.')).toBeInTheDocument();
+		cleanup();
+		opened('required', 'fiona@example.org');
+		expect(screen.queryByRole('button', { name: 'Remove the address' })).toBeNull();
+	});
+});
+
+describe('Asking for an address where every account needs one', () => {
+	let server: FakeServer;
+	const session = { signOut: vi.fn(), expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		server.emailMode = 'required';
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('cannot be closed past, and says where the link went', async () => {
+		const reader = new ServerReader(
+			{ name: 'fiona', admin: false, emailMode: 'required', email: null },
+			session
+		);
+		render(EmailDialog, { reader });
+		const window = screen.getByRole('alertdialog', { name: 'Add an email address' });
+		expect(window).toHaveFocus();
+		await userEvent.type(within(window).getByLabelText('New address'), 'fiona@example.org');
+		await userEvent.type(within(window).getByLabelText('Your password'), 'correct horse{Enter}');
+		expect(
+			await within(window).findByText(/A link went to fiona@example\.org/)
+		).toBeInTheDocument();
+		expect(within(window).getByText(/this goes away by itself/)).toBeInTheDocument();
+		await userEvent.click(within(window).getByRole('button', { name: 'Log out' }));
+		expect(session.signOut).toHaveBeenCalledOnce();
 	});
 });
 

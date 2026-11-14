@@ -1,0 +1,11 @@
+Bestätige deine Adresse für rueder
+Hallo {name},
+
+jemand, vermutlich du, hat diese Adresse für das Konto „{name}“ auf {site}
+angegeben. Um sie zu bestätigen, öffne innerhalb von {hours} Stunden diesen
+Link:
+
+{link}
+
+Warst du das nicht, kannst du diese Mail übergehen: Ohne den Link geschieht
+nichts.

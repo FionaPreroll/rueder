@@ -732,6 +732,11 @@ pub fn changed(path: &str) -> Option<Changed> {
         // Nor does making an account, and invitations are shown where they
         // are made.
         ["register"] | ["invites", ..] => return None,
+        // A link that is opened or sent again has no session to announce it
+        // by; opening it tells the account's tabs itself (see `email`).
+        ["email", "confirm" | "resend"] => return None,
+        // A new address waits for its link, or one goes: `me` says it.
+        ["email"] => Changed::Area(Area::Session),
         // Questions that are sent like changes: what a rule would do, and
         // which feeds a page has.
         ["rules", "preview"] | ["feeds", "find"] => return None,

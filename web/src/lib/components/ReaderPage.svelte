@@ -24,6 +24,7 @@
 	import SettingsDialog from './SettingsDialog.svelte';
 	import StatusDialog from './StatusDialog.svelte';
 	import TermsDialog from './TermsDialog.svelte';
+	import EmailDialog from './EmailDialog.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import SubscribeDialog from './SubscribeDialog.svelte';
 	import Toolbar from './Toolbar.svelte';
@@ -41,6 +42,10 @@
 	let settingsTab: 'look' | 'reading' | 'rules' | 'keys' = $state('look');
 	/** Which of the account's settings is open; it stays as it was left. */
 	let accountTab: AccountTab = $state('password');
+	/** Every account here needs an address and this one has none: the page asks before anything else. */
+	const asksEmail = $derived(
+		reader.can.email && reader.account?.emailMode === 'required' && !reader.account.email
+	);
 	/** The article whose versions are compared, by id: it is replaced when it changes. */
 	let comparing: { id: string; versions: ArticleVersion[] } | null = $state(null);
 
@@ -248,7 +253,8 @@
 
 	function keydown(event: KeyboardEvent) {
 		if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-		if (dialog || comparing || reader.account?.termsToAccept || typing(event.target)) return;
+		if (dialog || comparing || reader.account?.termsToAccept || asksEmail || typing(event.target))
+			return;
 
 		const key = event.key;
 		const article = reader.current;
@@ -461,6 +467,8 @@
 
 {#if reader.account?.termsToAccept}
 	<TermsDialog {reader} />
+{:else if asksEmail}
+	<EmailDialog {reader} />
 {/if}
 
 {#if dialog === 'settings'}

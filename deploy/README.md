@@ -230,6 +230,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `TERMS_VERSION` | A name for the version of your terms of use, such as `2026-11`. Registering then takes the agreement to it, and every account is asked to agree to a new one at its next visit. Needs `LEGAL_TERMS_URL`. |
 | `ADMIN_SECOND_FACTOR` | `required` makes admins admins only after logging in with a second factor (an authenticator app or a passkey); readers set one up under Account settings, Security. |
 | `PUBLIC_URL` | The address browsers reach rueder at, such as `https://reader.example`: HTTPS, scheme and host only. With it, readers can add passkeys under Account settings, Security and log in with them, without name or password. A passkey belongs to this address; one made for another address does not work. Without it there are no passkeys. |
+| `SMTP_URL`, `MAIL_FROM` | Mail to readers about their account, through your SMTP relay: `smtps://user:password@smtp.example:465` or `smtp://user:password@smtp.example:587?tls=required`; plain `smtp://` only to a relay on the same machine. `MAIL_FROM` is the address it comes from, such as `rueder <rueder@reader.example>`, and the links in it lead to `PUBLIC_URL`, which it needs too. Without them rueder sends no mail. See [Letting people register](#letting-people-register). |
 | `PASSKEY_ANDROID_APPS` | The Android apps that may use the passkeys too, as `package=fingerprint` separated by commas, the fingerprint the SHA-256 of the app's signing certificate as `keytool -printcert` writes it (`AB:CD:…`). Without it, it is the app released on GitHub; `none` names none. rueder names them to Android at `/.well-known/assetlinks.json`, which Google reads from the internet, so the app's passkeys need rueder reachable from there at the host of `PUBLIC_URL`, on port 443. Add the fingerprint of Play App Signing for the Play Store's build, or your own for a build you sign yourself. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | Login through an OpenID Connect provider. |
 | `METRICS_TOKEN` | Metrics for Prometheus under `/metrics`, for whoever sends this token, 32 characters or more. Off if not set; see [Metrics for Prometheus](#metrics-for-prometheus). |
@@ -311,8 +312,28 @@ docker compose exec rueder rueder registration set --admin-invite-accounts 20
 
 `none` lifts a limit (`--max-accounts none`), `registration show` says what is
 set and how many accounts there are. Readers make their links in the account
-settings, in the menu of their account, under "Invitations". There is no confirmation by email and no CAPTCHA: if you
-open registration to everybody, set `--per-day`.
+settings, in the menu of their account, under "Invitations". There is no
+CAPTCHA: if you open registration to everybody, set `--per-day`.
+
+With `SMTP_URL`, `MAIL_FROM` and `PUBLIC_URL` set (see [Settings](#settings)),
+accounts can have an email address, which a link mailed to it confirms:
+
+```sh
+# Registration asks for an address, and readers can give, change or remove one
+# under Account settings, Email.
+docker compose exec rueder rueder registration set --email optional
+
+# Every account needs one: a new account logs in once its link is opened, and
+# one from before is asked for its address when it logs in.
+docker compose exec rueder rueder registration set --email required
+```
+
+`--email off`, the default, asks nobody. A link is good for 24 hours and once;
+an account made with `required` that never opens its link goes after 7 days.
+rueder sends at most 5 mails an hour for an account, 3 to an address and one
+more every two hours, and 1,000 a day in all. Mail goes out in the language the
+account was made in. The status page names no address, and moving an account
+to another rueder takes none along.
 
 ## Keeping old articles, or not
 

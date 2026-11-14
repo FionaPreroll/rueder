@@ -23,6 +23,10 @@ hmac = "0.13.0"
 html5ever = "0.40.1"
 # Only the formats the image proxy lets through; no SVG, nothing that needs C code.
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+# Mail goes to the operator's SMTP relay (see `mail`), over rustls with ring like
+# everything else, checking certificates against Mozilla's roots compiled in, as
+# the HTTP client does.
+lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1", "tokio1-rustls", "ring", "webpki-roots"] }
 markup5ever_rcdom = "=0.40.1"
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 quick-xml = { version = "0.42", features = ["encoding"] }

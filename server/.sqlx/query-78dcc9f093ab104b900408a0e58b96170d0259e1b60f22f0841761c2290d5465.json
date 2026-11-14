@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.account_id, l.email, a.username, a.email AS before,\n                  COALESCE(a.language, 'en') AS \"language!: Language\", a.awaiting_email\n           FROM email_links l JOIN accounts a ON a.id = l.account_id\n           WHERE l.token_hash = $1 AND l.expires_at > now()\n           FOR UPDATE OF a",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "email_links",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_links",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "username",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "before",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "language!: Language",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "awaiting_email",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "awaiting_email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      false
+    ]
+  },
+  "hash": "78dcc9f093ab104b900408a0e58b96170d0259e1b60f22f0841761c2290d5465"
+}

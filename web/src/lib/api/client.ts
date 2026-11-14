@@ -10,6 +10,14 @@ import type { DropPosition } from '#lib/tree.ts';
 import type {
 	AccountImported,
 	AppPasswords as AppPasswordsJson,
+	Awaiting,
+	ConfirmEmail,
+	Confirmed,
+	EmailProof,
+	EmailState,
+	NewEmail,
+	Pending,
+	Resend,
 	CreatedAppPassword,
 	NewAppPassword as NewAppPasswordJson,
 	Article,
@@ -287,14 +295,40 @@ export const api = {
 			'GET',
 			invite ? `/register?invite=${encodeURIComponent(invite)}` : '/register'
 		),
-	/** Makes an account and logs it in. A refusal is 403 with one word, see `NewRegistration`. */
-	register: (username: string, password: string, invite?: string, acceptedTerms?: string) =>
-		call<ApiAccount>('POST', '/register', {
+	/**
+	 * Makes an account and logs it in; where every account needs a confirmed
+	 * address, it is made and waits for its link instead (`Awaiting`). A refusal
+	 * is 403 with one word, see `NewRegistration`.
+	 */
+	register: (
+		username: string,
+		password: string,
+		invite?: string,
+		acceptedTerms?: string,
+		email?: string,
+		language?: string
+	) =>
+		call<ApiAccount | Awaiting>('POST', '/register', {
 			username,
 			password,
 			...(invite ? { invite } : {}),
-			...(acceptedTerms ? { accepted_terms: acceptedTerms } : {})
+			...(acceptedTerms ? { accepted_terms: acceptedTerms } : {}),
+			...(email ? { email } : {}),
+			...(language ? { language } : {})
 		} satisfies NewRegistration),
+
+	/** The account's address and the one that waits for its link. */
+	emailState: () => call<EmailState>('GET', '/email'),
+	/** Mails a link to a new address, which counts once it is opened. */
+	changeEmail: (body: NewEmail) => call<Pending>('PUT', '/email', body),
+	/** Takes the address from the account, where it is optional. */
+	removeEmail: (proof: EmailProof) => call<void>('DELETE', '/email', proof),
+	/** Opens the link from a mail, with or without a session. */
+	confirmEmail: (token: string) =>
+		call<Confirmed>('POST', '/email/confirm', { token } satisfies ConfirmEmail),
+	/** Sends the link again to an account that waits for its address. */
+	resendEmail: (username: string, password: string) =>
+		call<Pending>('POST', '/email/resend', { username, password } satisfies Resend),
 
 	invites: () => call<Invites>('GET', '/invites'),
 	invite: (uses: number) => call<MadeInvite>('POST', '/invites', { uses } satisfies NewInvite),

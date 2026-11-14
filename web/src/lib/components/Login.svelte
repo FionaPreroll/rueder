@@ -2,8 +2,14 @@
 	// The login: name and password, and where the server has it, the way through an
 	// OpenID Connect provider. Where the server lets anybody register, or the page
 	// was opened with an invitation, it is also where an account is made.
-	import type { LoginFailure, RegisterFailure, Session } from '#lib/api/session.svelte.ts';
+	import type {
+		LoginFailure,
+		RegisterFailure,
+		ResendOutcome,
+		Session
+	} from '#lib/api/session.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
+	import { EMAIL_LINK_HOURS } from '#lib/reader.ts';
 	import Icon from './Icon.svelte';
 
 	let { session }: { session: Session } = $props();
@@ -19,7 +25,13 @@
 	/** Making an account instead of logging in to one. */
 	let registering = $state(false);
 	let again = $state('');
+	let email = $state('');
 	let refusal: RegisterFailure | null = $state(null);
+	/** Whether registration asks for an address, and whether it must be one. */
+	const asksEmail = $derived(session.emailMode !== 'off');
+	const needsEmail = $derived(session.emailMode === 'required');
+	/** How asking for the link again went. */
+	let resent: ResendOutcome | null = $state(null);
 	/** The reader agreed to the terms of use, where the server names a version of them. */
 	let agreed = $state(false);
 	const legal = $derived(session.ways.legal);
@@ -43,6 +55,7 @@
 		name.trim() !== '' &&
 			password.length >= MIN_PASSWORD &&
 			again === password &&
+			(!needsEmail || email.trim() !== '') &&
 			(agreed || !needsAgreement)
 	);
 
@@ -62,6 +75,27 @@
 				return m.register.taken;
 			case 'invalid':
 				return m.register.invalid(refusal.reason);
+			case 'email':
+				return m.register.emailInvalid;
+			case 'unsent':
+				return m.register.unsent;
+			case 'tooMany':
+				return m.register.tooMany(refusal.minutes);
+			case 'unreachable':
+				return m.login.unreachable;
+		}
+	}
+
+	function resendSaid(outcome: ResendOutcome) {
+		switch (outcome.kind) {
+			case 'sent':
+				return { hint: m.login.resent };
+			case 'wrong':
+				return m.login.resendWrong;
+			case 'tooMany':
+				return m.register.tooMany(outcome.minutes);
+			case 'unsent':
+				return m.email.unsent;
 			case 'unreachable':
 				return m.login.unreachable;
 		}
@@ -83,6 +117,7 @@
 	const said = $derived.by(() => {
 		if (session.state === 'unreachable') return m.login.unreachable;
 		if (registering) return refusal ? refused(refusal) : null;
+		if (resent) return resendSaid(resent);
 		// An invitation that cannot be used is said once, where the login is.
 		if (invitation && !invitation.valid && !failure) return m.register.inviteGone;
 		switch (failure?.kind) {
@@ -96,6 +131,8 @@
 				return m.login.tooMany(failure.minutes);
 			case 'disabled':
 				return m.login.disabled;
+			case 'unconfirmed':
+				return { hint: m.login.unconfirmed };
 			case 'passkeyCancelled':
 				return { hint: m.login.passkeyCancelled };
 			case 'passkeyFailed':
@@ -116,12 +153,14 @@
 		if (busy || !name.trim() || !password) return;
 		busy = true;
 		failure = null;
+		resent = null;
 		try {
 			failure = await session.login(name, password, needsCode ? code : undefined);
 			if (failure?.kind === 'codeNeeded' || failure?.kind === 'wrongCode') {
 				needsCode = true;
 				code = '';
-			} else if (failure) {
+			} else if (failure && failure.kind !== 'unconfirmed') {
+				// The password of an account that waits is kept, to send its link again.
 				password = '';
 			}
 		} finally {
@@ -147,18 +186,42 @@
 		busy = true;
 		refusal = null;
 		try {
-			refusal = await session.register(name, password, agreed);
+			refusal = await session.register(name, password, agreed, email);
 			// The invitation did its work; the address no longer needs to carry it.
 			if (!refusal) history.replaceState(history.state, '', location.pathname);
+			// Made, the account waits for its link: the login says so and logs in once it is opened.
+			if (!refusal && session.awaiting) {
+				registering = false;
+				again = '';
+			}
 		} finally {
 			busy = false;
 		}
 	}
 
+	/** Has the link mailed to an account that waits for its address sent again. */
+	async function resend() {
+		if (busy || !name.trim() || !password) return;
+		busy = true;
+		failure = null;
+		try {
+			resent = await session.resend(name, password);
+		} finally {
+			busy = false;
+		}
+	}
+
+	/** The account waits for its link: said after registering, or after the right password. */
+	const waiting = $derived.by(
+		() => !registering && (session.awaiting !== null || failure?.kind === 'unconfirmed')
+	);
+
 	function turn(to: boolean) {
 		registering = to;
 		failure = null;
 		refusal = null;
+		resent = null;
+		session.awaiting = null;
 		password = '';
 		again = '';
 		needsCode = false;
@@ -193,6 +256,13 @@
 
 		{#if session.farewell && !said}
 			<p class="mt-4 rounded bg-panel px-3 py-2 text-sm" role="status">{m.login.removed}</p>
+		{/if}
+
+		{#if session.awaiting && !registering}
+			<div class="mt-4 rounded bg-panel px-3 py-2 text-sm" role="status">
+				<p class="font-medium">{m.register.awaitingTitle}</p>
+				<p class="mt-1">{m.register.awaiting(session.awaiting.address, EMAIL_LINK_HOURS)}</p>
+			</div>
 		{/if}
 
 		{#if problem}
@@ -261,6 +331,28 @@
 				</label>
 				{#if mismatch}
 					<p id="password-mismatch" class="-mt-2 text-xs text-warn">{m.register.mismatch}</p>
+				{/if}
+				{#if asksEmail}
+					<label class="block text-sm">
+						<span class="font-medium"
+							>{needsEmail ? m.register.email : m.register.emailOptional}</span
+						>
+						<input
+							class="mt-1.5 block w-full rounded py-1.5 text-sm"
+							type="email"
+							name="email"
+							autocomplete="email"
+							autocapitalize="none"
+							spellcheck="false"
+							maxlength="254"
+							required={needsEmail}
+							aria-describedby="email-note"
+							bind:value={email}
+						/>
+					</label>
+					<p id="email-note" class="-mt-2 text-xs text-soft">
+						{needsEmail ? m.register.emailRequiredNote : m.register.emailNote}
+					</p>
 				{/if}
 				{#if needsAgreement && legal.terms}
 					<p class="flex items-start gap-2 text-sm pointer-coarse:items-center">
@@ -349,6 +441,16 @@
 				>
 					{m.login.submit}
 				</button>
+				{#if waiting}
+					<button
+						type="button"
+						class="tool w-full justify-center"
+						disabled={busy || !name.trim() || !password}
+						onclick={resend}
+					>
+						{m.login.resend}
+					</button>
+				{/if}
 			</form>
 
 			{#if session.passkeys}

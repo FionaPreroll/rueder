@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT awaiting_email FROM accounts WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "awaiting_email",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "awaiting_email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4d9e403adf77a70448e5de3b75ec78edf0b7b72f9d035e783f7cf9c6e83b17e9"
+}

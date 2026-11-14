@@ -267,6 +267,61 @@ describe('registering', () => {
 		expect(server.accounts.get('grace')).toBe('a long password');
 	});
 
+	it('asks for an address only where the server keeps them', async () => {
+		server.registrationOpen = true;
+		await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Make an account' }));
+		expect(screen.queryByLabelText(/Email address/)).toBeNull();
+	});
+
+	it('takes an address that is optional, and logs in at once', async () => {
+		server.registrationOpen = true;
+		server.emailMode = 'optional';
+		const session = await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Make an account' }));
+		const field = await screen.findByLabelText('Email address (optional)');
+		expect(field).toHaveAttribute('autocomplete', 'email');
+		expect(field).not.toBeRequired();
+		await fillNew('grace', 'a long password');
+		await userEvent.type(field, 'grace@example.org');
+		await userEvent.click(make());
+		await vi.waitFor(() => expect(session.state).toBe('in'));
+		expect(server.mails.map((mail) => mail.to)).toEqual(['grace@example.org']);
+	});
+
+	it('waits for the link where every account needs an address, and sends it again', async () => {
+		server.registrationOpen = true;
+		server.emailMode = 'required';
+		const session = await loginPage();
+		await userEvent.click(await screen.findByRole('button', { name: 'Make an account' }));
+		const field = await screen.findByLabelText('Email address');
+		expect(field).toBeRequired();
+		await fillNew('grace', 'a long password');
+		expect(make()).toBeDisabled();
+		await userEvent.type(field, 'grace@example.org');
+		await userEvent.click(make());
+		expect(await screen.findByText('Check your mail')).toBeInTheDocument();
+		expect(screen.getByText(/A link went to grace@example\.org/)).toBeInTheDocument();
+		expect(session.state).toBe('out');
+		// The login is there, with the name and the password, to send the link again.
+		expect(screen.getByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Send the link again' }));
+		expect(await screen.findByText(/The link is on its way again/)).toBeInTheDocument();
+		expect(server.mails).toHaveLength(2);
+	});
+
+	it('says after the right password that the account waits for its address', async () => {
+		server.emailMode = 'required';
+		server.accounts.set('grace', 'a long password');
+		server.awaitingEmail.add('grace');
+		await loginPage();
+		await fill('grace', 'a long password');
+		await userEvent.click(submit());
+		expect(await screen.findByText(/waits for its email address/)).toBeInTheDocument();
+		expect(screen.getByLabelText('Password')).toHaveValue('a long password');
+		expect(screen.getByRole('button', { name: 'Send the link again' })).toBeEnabled();
+	});
+
 	it('takes the agreement to the terms of use, where the server names them', async () => {
 		server.registrationOpen = true;
 		server.legal = {

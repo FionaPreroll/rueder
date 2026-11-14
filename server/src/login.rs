@@ -23,7 +23,7 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::{
-    AppError, AppState, accounts,
+    AppError, AppState, accounts, email,
     legal::Legal,
     registration, second_factor,
     sessions::{self, Session},
@@ -274,6 +274,13 @@ pub struct Me {
     app_api: bool,
     /// Whether this server has passkeys (see `PUBLIC_URL`).
     passkeys: bool,
+    /// Whether accounts here have an address, and whether they must; the page
+    /// asks for one where the account has none.
+    email_mode: email::Mode,
+    /// The account's confirmed address.
+    email: Option<String>,
+    /// An address whose link was mailed and not yet opened.
+    email_pending: Option<String>,
 }
 
 impl Me {
@@ -288,6 +295,9 @@ impl Me {
             content_reports: false,
             app_api: false,
             passkeys: false,
+            email_mode: email::Mode::Off,
+            email: None,
+            email_pending: None,
         }
     }
 
@@ -304,6 +314,9 @@ impl Me {
             content_reports: false,
             app_api: false,
             passkeys: false,
+            email_mode: email::Mode::Off,
+            email: None,
+            email_pending: None,
         }
     }
 
@@ -313,6 +326,19 @@ impl Me {
             content_reports,
             ..self
         }
+    }
+
+    /// With the account's address and the one waiting for its link, as far as
+    /// the server keeps addresses.
+    pub(crate) async fn emailing(self, db: &sqlx::PgPool) -> anyhow::Result<Self> {
+        let mut conn = db.acquire().await?;
+        let state = email::state(&mut conn, self.id).await?;
+        Ok(Self {
+            email_mode: state.mode,
+            email: state.email,
+            email_pending: state.pending,
+            ..self
+        })
     }
 
     /// Says what this server lets in besides the page: reports of feeds and
@@ -371,7 +397,7 @@ pub async fn ways(State(state): State<AppState>) -> Result<Json<Ways>, AppError>
     responses(
         (status = OK, description = "Logged in; the answer sets the cookie `__Host-rueder`.", body = Me),
         (status = UNAUTHORIZED, description = "A wrong name or password (the same answer for both), a wrong code, or `second factor needed`."),
-        (status = FORBIDDEN, description = "The account is disabled; said only after the right password."),
+        (status = FORBIDDEN, description = "The account is disabled (`disabled`), or waits for its address to be confirmed (`unconfirmed`); said only after the right password."),
         (status = TOO_MANY_REQUESTS, description = "Too many wrong tries for this name or from this sender; see `Retry-After`."),
     ),
 )]
@@ -401,6 +427,15 @@ pub async fn login(
     if account.disabled {
         state.logins.succeeded(&keys);
         return Err(AppError::Status(StatusCode::FORBIDDEN, "disabled".into()));
+    }
+    // Registered where an address must be confirmed first: said only after
+    // the password, as above. The page offers to send the link again.
+    if email::awaiting(&state.db, account.id).await? {
+        state.logins.succeeded(&keys);
+        return Err(AppError::Status(
+            StatusCode::FORBIDDEN,
+            "unconfirmed".into(),
+        ));
     }
     let second_factor = second_factor::is_on(&state.db, account.id).await?;
     if second_factor {
@@ -459,7 +494,9 @@ pub(crate) async fn start_session(
         account.has_password,
         &state.legal,
     )
-    .offering(state);
+    .offering(state)
+    .emailing(&state.db)
+    .await?;
     Ok(([(header::SET_COOKIE, sessions::cookie(&token))], Json(me)).into_response())
 }
 
@@ -502,7 +539,10 @@ pub async fn me(State(state): State<AppState>, session: Session) -> Result<Json<
     .await?
     .unwrap_or(false);
     Ok(Json(
-        Me::of(session, has_password, &state.legal).offering(&state),
+        Me::of(session, has_password, &state.legal)
+            .offering(&state)
+            .emailing(&state.db)
+            .await?,
     ))
 }
 

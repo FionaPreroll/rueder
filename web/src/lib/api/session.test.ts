@@ -31,7 +31,10 @@ describe('Session', () => {
 			termsToAccept: null,
 			contentReports: false,
 			appApi: true,
-			passkeys: false
+			passkeys: false,
+			emailMode: 'off',
+			email: null,
+			emailPending: null
 		});
 	});
 
@@ -212,7 +215,10 @@ describe('registering', () => {
 			termsToAccept: null,
 			contentReports: false,
 			appApi: true,
-			passkeys: false
+			passkeys: false,
+			emailMode: 'off',
+			email: null,
+			emailPending: null
 		});
 		expect(server.requests.find((request) => request.method === 'POST')).toMatchObject({
 			method: 'POST',
@@ -313,5 +319,127 @@ describe('the API client', () => {
 	it('finds the server’s number in an id of the page', () => {
 		expect(serverId('feed-12')).toBe(12);
 		expect(serverId('folder-3')).toBe(3);
+	});
+});
+
+describe('Session with addresses', () => {
+	it('sends the address along where the server asks for one, and logs in at once where it is optional', async () => {
+		server.signedIn = null;
+		server.registrationOpen = true;
+		server.emailMode = 'optional';
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.emailMode).toBe('optional'));
+		expect(
+			await session.register('grace', 'a long password', false, ' grace@example.org ')
+		).toBeNull();
+		expect(session.state).toBe('in');
+		expect(session.reader?.account).toMatchObject({
+			emailMode: 'optional',
+			email: null,
+			emailPending: 'grace@example.org'
+		});
+		const sent = server.requests.find(
+			(request) => request.method === 'POST' && request.path === '/register'
+		);
+		expect(sent?.body).toMatchObject({ email: 'grace@example.org', language: 'en' });
+	});
+
+	it('sends no address where the server keeps none', async () => {
+		server.signedIn = null;
+		server.registrationOpen = true;
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(server.requests.some((r) => r.path === '/register')).toBe(true));
+		expect(
+			await session.register('grace', 'a long password', false, 'grace@example.org')
+		).toBeNull();
+		const sent = server.requests.find((r) => r.method === 'POST' && r.path === '/register');
+		expect(sent?.body).not.toHaveProperty('email');
+		expect(server.mails).toEqual([]);
+	});
+
+	it('waits for the link where every account needs its address, and can have it sent again', async () => {
+		server.signedIn = null;
+		server.registrationOpen = true;
+		server.emailMode = 'required';
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.emailMode).toBe('required'));
+		expect(await session.register('grace', 'a long password', false, '')).toEqual({
+			kind: 'email'
+		});
+		expect(
+			await session.register('grace', 'a long password', false, 'grace@example.org')
+		).toBeNull();
+		expect(session.state).toBe('out');
+		expect(session.awaiting).toEqual({ name: 'grace', address: 'grace@example.org' });
+
+		expect(await session.login('grace', 'a long password')).toEqual({ kind: 'unconfirmed' });
+		expect(await session.resend('grace', 'wrong')).toEqual({ kind: 'wrong' });
+		expect(await session.resend('grace', 'a long password')).toEqual({ kind: 'sent' });
+		expect(server.mails.map((mail) => mail.token)).toEqual(['link-1', 'link-2']);
+		server.refuse('POST', /^\/email\/resend$/, 429, 1, 'too many mails', { 'Retry-After': '120' });
+		expect(await session.resend('grace', 'a long password')).toEqual({
+			kind: 'tooMany',
+			minutes: 2
+		});
+		server.refuse('POST', /^\/email\/resend$/, 503);
+		expect(await session.resend('grace', 'a long password')).toEqual({ kind: 'unsent' });
+
+		// The link, opened in this page, lets the account in and leaves the address.
+		history.replaceState(null, '', '/?confirm=link-2');
+		await session.confirmFromAddress();
+		expect(session.confirmation).toEqual({
+			kind: 'confirmed',
+			name: 'grace',
+			email: 'grace@example.org',
+			activated: true
+		});
+		expect(session.awaiting).toBeNull();
+		expect(location.search).toBe('');
+		expect(await session.login('grace', 'a long password')).toBeNull();
+		expect(session.reader?.account?.email).toBe('grace@example.org');
+	});
+
+	it('says why a link did nothing', async () => {
+		const session = new Session();
+		await session.confirmFromAddress();
+		expect(session.confirmation).toBeNull();
+
+		history.replaceState(null, '', '/?confirm=unknown');
+		await session.confirmFromAddress();
+		expect(session.confirmation).toEqual({ kind: 'gone' });
+
+		server.refuse('POST', /^\/email\/confirm$/, 409, 1, 'taken');
+		history.replaceState(null, '', '/?confirm=link-1');
+		await session.confirmFromAddress();
+		expect(session.confirmation).toEqual({ kind: 'taken' });
+
+		server.down = true;
+		history.replaceState(null, '', '/?confirm=link-1');
+		await session.confirmFromAddress();
+		expect(session.confirmation).toEqual({ kind: 'unreachable' });
+	});
+
+	it('says what keeps an address from being taken at registration', async () => {
+		server.signedIn = null;
+		server.registrationOpen = true;
+		server.emailMode = 'optional';
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.emailMode).toBe('optional'));
+		expect(await session.register('grace', 'a long password', false, 'nowhere')).toEqual({
+			kind: 'email'
+		});
+		server.refuse('POST', /^\/register$/, 503);
+		expect(await session.register('grace', 'a long password', false, 'g@example.org')).toEqual({
+			kind: 'unsent'
+		});
+		server.refuse('POST', /^\/register$/, 429, 1, 'too many', { 'Retry-After': '30' });
+		expect(await session.register('grace', 'a long password', false, 'g@example.org')).toEqual({
+			kind: 'tooMany',
+			minutes: 1
+		});
 	});
 });
