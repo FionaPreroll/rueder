@@ -245,7 +245,7 @@
           {
             "name": "link",
             "in": "query",
-            "description": "Present to link the provider's account to the one logged in, instead\nof logging in.",
+            "description": "To link the provider's account to the one logged in, instead of\nlogging in: a ticket from `POST /api/oidc/link`, given to this session.",
             "required": false,
             "schema": {
               "type": "string"
@@ -260,6 +260,54 @@
             "description": "This server has no OpenID Connect."
           }
         }
+      }
+    },
+    "/api/oidc/link": {
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Gives the session a ticket to tie an identity at the provider to its account, once the owner showed with their password and, where the second factor is on, a code, or with a passkey, that they are there: a login through the provider asks for no second factor of rueder's own, so a stolen session must not be enough to tie somebody else's identity to the account.",
+        "operationId": "link_ticket",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerProof"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          },
+          "403": {
+            "description": "Password, code or passkey of the account are wrong, `second factor needed`, or `log in again first` for an account without password and second factor in a session that is not young."
+          },
+          "404": {
+            "description": "This server has no OpenID Connect."
+          },
+          "429": {
+            "description": "Too many wrong tries, or too many links under way; see `Retry-After`."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/api/oidc/callback": {
@@ -2402,7 +2450,7 @@
         "tags": [
           "Account"
         ],
-        "summary": "Gives the reader a new password. That ends every session of the account; the browser that asks gets a new one.",
+        "summary": "Gives the reader a new password. That ends every session of the account; the browser that asks gets a new one. It takes the password so far and, where the second factor is on, a code, or a passkey instead of both: a session together with a password that got out must not be enough to lock the owner out. An account without a password and without a second factor sets its first one only in a young session (see `second_factor::prove`).",
         "operationId": "change_password",
         "requestBody": {
           "content": {
@@ -2425,7 +2473,7 @@
             "description": "No valid session: log in first."
           },
           "403": {
-            "description": "Password, code or passkey of the account are wrong."
+            "description": "Password, code or passkey of the account are wrong, `second factor needed`, or `log in again first` for an account without password and second factor in a session that is not young."
           },
           "429": {
             "description": "Too many wrong tries; see `Retry-After`."
@@ -2517,7 +2565,7 @@
         "tags": [
           "Admin"
         ],
-        "summary": "Makes an account, as an admin.",
+        "summary": "Makes an account, as an admin, who shows with their own password and, where the second factor is on, a code, or with a passkey, that they are there: a stolen session of an admin must not be a way to make accounts, admins among them, that outlast it.",
         "operationId": "add_account",
         "requestBody": {
           "content": {
@@ -2547,7 +2595,10 @@
             "description": "No valid session: log in first."
           },
           "403": {
-            "description": "The account is no admin, or an admin without the second factor where the operator asks for it."
+            "description": "The account is no admin, or an admin without the second factor where the operator asks for it; or the admin's password, code or passkey are wrong, or `second factor needed`."
+          },
+          "429": {
+            "description": "Too many wrong tries; see `Retry-After`."
           }
         },
         "security": [
@@ -7293,6 +7344,17 @@
               "boolean",
               "null"
             ]
+          },
+          "proof": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OwnerProof",
+                "description": "That the admin is there: their own password and code, or a passkey."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -7453,7 +7515,7 @@
       },
       "NewPassword": {
         "type": "object",
-        "description": "What `PUT /api/password` reads.",
+        "description": "What `PUT /api/password` reads: the new password, and what shows that the\nowner asks, as for an app password.",
         "required": [
           "new"
         ],
@@ -7467,6 +7529,24 @@
           },
           "new": {
             "type": "string"
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where the second factor is on: a code from the app or a recovery code."
+          },
+          "passkey": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PasskeyAnswer",
+                "description": "A passkey of the account, instead of the password so far and the code."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -7576,6 +7656,19 @@
         ],
         "description": "A folder or a subscription, as the tree's changes name them."
       },
+      "OidcLink": {
+        "type": "object",
+        "description": "What `POST /api/oidc/link` answers.",
+        "required": [
+          "ticket"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "For `GET /api/oidc/start?link=<ticket>`, once, within five minutes,\nfrom this session."
+          }
+        }
+      },
       "OpmlImported": {
         "type": "object",
         "description": "What an import did.\n\n`POST /api/opml` answers with it; the request is the file itself.",
@@ -7621,6 +7714,34 @@
               "type": "integer",
               "format": "int32"
             }
+          }
+        }
+      },
+      "OwnerProof": {
+        "type": "object",
+        "description": "How the owner of a session's account shows, for a change that needs it,\nthat they are there: the password, which an account without one does\nwithout, and where the second factor is on, a code from the app or a\nrecovery code; or a passkey instead of both (see [`prove`]).",
+        "properties": {
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "passkey": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PasskeyAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

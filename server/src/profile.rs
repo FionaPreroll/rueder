@@ -143,7 +143,8 @@ async fn end_others(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// What `PUT /api/password` reads.
+/// What `PUT /api/password` reads: the new password, and what shows that the
+/// owner asks, as for an app password.
 #[derive(Deserialize, TS, ToSchema)]
 struct NewPassword {
     /// The password so far. An account that has none needs none.
@@ -152,41 +153,43 @@ struct NewPassword {
     #[schema(value_type = Option<String>)]
     current: String,
     new: String,
+    /// Where the second factor is on: a code from the app or a recovery code.
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
+    code: String,
+    /// A passkey of the account, instead of the password so far and the code.
+    #[serde(default)]
+    #[ts(optional)]
+    passkey: Option<passkeys::Answer>,
 }
 
 /// Gives the reader a new password. That ends every session of the account;
-/// the browser that asks gets a new one.
+/// the browser that asks gets a new one. It takes the password so far and,
+/// where the second factor is on, a code, or a passkey instead of both: a
+/// session together with a password that got out must not be enough to lock
+/// the owner out. An account without a password and without a second factor
+/// sets its first one only in a young session (see `second_factor::prove`).
 #[utoipa::path(
     put,
     path = "/password",
     tag = "Account",
     request_body = NewPassword,
     security(("session" = [])),
-    responses((status = NO_CONTENT, description = "Changed; the answer sets the new session's cookie."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A new password that is too short or too long."), (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
+    responses((status = NO_CONTENT, description = "Changed; the answer sets the new session's cookie."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A new password that is too short or too long."), (status = FORBIDDEN, description = "Password, code or passkey of the account are wrong, `second factor needed`, or `log in again first` for an account without password and second factor in a session that is not young."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
 )]
 async fn change_password(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Json(change): Json<NewPassword>,
 ) -> Result<Response, AppError> {
-    // A stolen session must not be a way to try passwords without end.
-    let keys = [Key::name(&session.username)];
-    // Counted as wrong until it turns out right, as at login.
-    if let Err(wait) = state.logins.attempt(&keys, Instant::now()) {
-        let message = "too many wrong tries, try again later";
-        return Err(AppError::TooMany(wait, message));
+    // A new password that cannot be one costs no try.
+    if let Err(invalid) = accounts::check_password(&change.new) {
+        return Err(AppError::BadRequest(invalid.to_string()));
     }
-    let hash = sqlx::query_scalar!(
-        "SELECT password_hash FROM accounts WHERE id = $1",
-        session.account_id
-    )
-    .fetch_one(&state.db)
-    .await?;
-    if hash.is_some() && !accounts::verify(&change.current, hash).await? {
-        let message = "the current password is wrong";
-        return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
-    }
-    state.logins.succeeded(&keys);
+    let proof = passkeys::proof(&change.current, &change.code, change.passkey.as_ref());
+    second_factor::prove(&state, &session, &headers, proof).await?;
     match accounts::set_password(&state.db, &session.username, &change.new).await? {
         Err(invalid) => Err(AppError::BadRequest(invalid.to_string())),
         Ok(false) => Err(AppError::NotFound),
@@ -359,6 +362,10 @@ struct NewAccount {
     #[ts(as = "Option<bool>", optional)]
     #[schema(value_type = Option<bool>)]
     is_admin: bool,
+    /// That the admin is there: their own password and code, or a passkey.
+    #[serde(default)]
+    #[ts(optional)]
+    proof: Option<second_factor::OwnerProof>,
 }
 
 /// The answer to making something: the number it got.
@@ -367,21 +374,27 @@ struct Created {
     id: i32,
 }
 
-/// Makes an account, as an admin.
+/// Makes an account, as an admin, who shows with their own password and,
+/// where the second factor is on, a code, or with a passkey, that they are
+/// there: a stolen session of an admin must not be a way to make accounts,
+/// admins among them, that outlast it.
 #[utoipa::path(
     post,
     path = "/accounts",
     tag = "Admin",
     request_body = NewAccount,
     security(("session" = [])),
-    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A name that is taken or not allowed, or a password that is too short or too long."), (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it.")),
+    responses((status = CREATED, body = Created), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "A name that is taken or not allowed, or a password that is too short or too long."), (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it; or the admin's password, code or passkey are wrong, or `second factor needed`."), (status = TOO_MANY_REQUESTS, description = "Too many wrong tries; see `Retry-After`.")),
 )]
 async fn add_account(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Json(new): Json<NewAccount>,
 ) -> Result<(StatusCode, Json<Created>), AppError> {
     admin(&session)?;
+    let proof = new.proof.unwrap_or_default();
+    second_factor::prove(&state, &session, &headers, proof.proof()).await?;
     let made = accounts::create(&state.db, &new.username, Some(&new.password), new.is_admin);
     match made.await? {
         Ok(id) => Ok((StatusCode::CREATED, Json(Created { id }))),

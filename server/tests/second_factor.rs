@@ -451,7 +451,8 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
     let (status, _) = call(&strict, Method::GET, "/api/status", Some(&without), None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     // Nor for a request that changes something.
-    let new = json!({ "username": "hopper", "password": PASSWORD });
+    let new =
+        json!({ "username": "hopper", "password": PASSWORD, "proof": { "password": PASSWORD } });
     let (status, _) = call(
         &strict,
         Method::POST,
@@ -517,4 +518,135 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
     let reader = common::session(&db, grace).await;
     let (_, me) = call(&strict, Method::GET, "/api/me", Some(&reader), None).await;
     assert_eq!(me["admin_needs_second_factor"], false);
+}
+
+/// What `raw` answers to a JSON body: the status and the text of the answer.
+async fn said(
+    state: &AppState,
+    method: Method,
+    path: &str,
+    cookie: &str,
+    body: Value,
+) -> (StatusCode, String) {
+    let body = Some(("application/json", body.to_string().into_bytes()));
+    let (status, _, text) = common::raw(state, method, path, Some(cookie), body).await;
+    (status, String::from_utf8(text).unwrap())
+}
+
+#[sqlx::test]
+async fn a_new_password_takes_the_code_too(db: PgPool) {
+    let ada = accounts::create(&db, "ada", Some(PASSWORD), false)
+        .await
+        .unwrap()
+        .unwrap();
+    let state = AppState::new(db.clone());
+    let (_, headers, _) = log_in(&state, "ada", None).await;
+    let cookie = cookie(&headers);
+    let codes = set_up(&state, ada, &cookie).await;
+
+    // The password so far alone no longer does: a session and a password that
+    // got out together must not lock the owner out.
+    let new = json!({ "current": PASSWORD, "new": "a new password" });
+    let answer = said(&state, Method::PUT, "/api/password", &cookie, new.clone()).await;
+    assert_eq!(
+        answer,
+        (StatusCode::FORBIDDEN, "second factor needed".into())
+    );
+    let mut wrong = new.clone();
+    wrong["code"] = json!("000000");
+    let (status, text) = said(&state, Method::PUT, "/api/password", &cookie, wrong).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{text}");
+    assert!(
+        accounts::login(&db, "ada", PASSWORD)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    // With a recovery code it does, and the code is gone.
+    let mut right = new;
+    right["code"] = json!(codes[0]);
+    let (status, text) = said(&state, Method::PUT, "/api/password", &cookie, right).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{text}");
+    assert!(
+        accounts::login(&db, "ada", "a new password")
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[sqlx::test]
+async fn without_password_or_second_factor_only_a_young_session_proves(db: PgPool) {
+    // Logs in through OpenID Connect alone: nothing to show but the session.
+    let id = accounts::create(&db, "oidc", None, false)
+        .await
+        .unwrap()
+        .unwrap();
+    let state = AppState::new(db.clone());
+    let old = common::session(&db, id).await;
+    sqlx::query("UPDATE sessions SET created_at = now() - interval '11 minutes'")
+        .execute(&db)
+        .await
+        .unwrap();
+
+    // What would outlast the session: a first password, an app password, the
+    // authenticator app, an address. A session that is not young makes none.
+    for (method, path, body) in [
+        (
+            Method::PUT,
+            "/api/password",
+            json!({ "new": "a first password" }),
+        ),
+        (
+            Method::POST,
+            "/api/app-passwords",
+            json!({ "name": "Reeder" }),
+        ),
+        (Method::POST, "/api/second-factor/setup", json!({})),
+    ] {
+        let answer = said(&state, method, path, &old, body).await;
+        assert_eq!(
+            answer,
+            (StatusCode::FORBIDDEN, "log in again first".into()),
+            "{path}"
+        );
+    }
+    let made: i64 = sqlx::query_scalar("SELECT count(*) FROM app_passwords")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(made, 0);
+    assert!(
+        accounts::login(&db, "oidc", "a first password")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // Too old is no wrong try: logging in again and doing it still works.
+    let young = common::session(&db, id).await;
+    let (status, text) = said(
+        &state,
+        Method::POST,
+        "/api/app-passwords",
+        &young,
+        json!({ "name": "Reeder" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    let (status, text) = said(
+        &state,
+        Method::PUT,
+        "/api/password",
+        &young,
+        json!({ "new": "a first password" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{text}");
+    assert!(
+        accounts::login(&db, "oidc", "a first password")
+            .await
+            .unwrap()
+            .is_some()
+    );
 }

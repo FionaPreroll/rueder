@@ -238,7 +238,9 @@ async fn only_an_admin_lists_and_makes_accounts(db: PgPool) {
         common::session(&db, root).await,
         common::session(&db, ada).await,
     );
-    let new = json!({ "username": "grace", "password": "battery staple" });
+    // The admin shows with their own password that they are there.
+    let proof = json!({ "password": "correct horse" });
+    let new = json!({ "username": "grace", "password": "battery staple", "proof": proof });
     let add = async |cookie: Option<&str>, body: &Value| {
         call(
             &state,
@@ -266,6 +268,25 @@ async fn only_an_admin_lists_and_makes_accounts(db: PgPool) {
             .is_none()
     );
 
+    // A session of an admin alone makes nobody, nor does a wrong password:
+    // a stolen one must not let in accounts, admins among them, that outlast it.
+    let without = json!({ "username": "grace", "password": "battery staple", "is_admin": true });
+    let wrong = json!({ "username": "grace", "password": "battery staple", "is_admin": true,
+                        "proof": { "password": "battery staple" } });
+    for refused in [&without, &wrong] {
+        assert_eq!(
+            add(Some(&admin), refused).await.0,
+            StatusCode::FORBIDDEN,
+            "{refused}"
+        );
+    }
+    assert!(
+        accounts::login(&db, "grace", "battery staple")
+            .await
+            .unwrap()
+            .is_none()
+    );
+
     let (status, made) = add(Some(&admin), &new).await;
     assert_eq!(status, StatusCode::CREATED);
     let grace = accounts::login(&db, "grace", "battery staple")
@@ -278,9 +299,9 @@ async fn only_an_admin_lists_and_makes_accounts(db: PgPool) {
     );
 
     for wrong in [
-        json!({ "username": "Grace", "password": "battery staple" }),
-        json!({ "username": "heidi", "password": "short" }),
-        json!({ "username": "  ", "password": "battery staple" }),
+        json!({ "username": "Grace", "password": "battery staple", "proof": proof }),
+        json!({ "username": "heidi", "password": "short", "proof": proof }),
+        json!({ "username": "  ", "password": "battery staple", "proof": proof }),
     ] {
         assert_eq!(
             add(Some(&admin), &wrong).await.0,

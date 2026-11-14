@@ -134,7 +134,14 @@ export interface NewAppPassword extends AppPassword {
 
 /** Why no app password was made. */
 export type AppPasswordRefusal =
-	'wrongPassword' | 'codeNeeded' | 'wrongCode' | 'tooManyApps' | 'tooMany' | 'unreachable';
+	| 'wrongPassword'
+	| 'codeNeeded'
+	| 'wrongCode'
+	/** The account has neither a password nor a second factor, and the session is not young. */
+	| 'loginAgain'
+	| 'tooManyApps'
+	| 'tooMany'
+	| 'unreachable';
 
 /** Why a feed or an article is reported, as the server knows them. */
 export const reportReasons = ['illegal', 'copyright', 'malicious', 'spam', 'other'] as const;
@@ -167,6 +174,8 @@ export type EmailRefusal =
 	| { problem: 'wrong' }
 	/** The password was right; the account has a second factor, whose code is missing. */
 	| { problem: 'code' }
+	/** The account has neither a password nor a second factor, and the session is not young. */
+	| { problem: 'loginAgain' }
 	/** No address mail can go to. */
 	| { problem: 'invalid' }
 	/** It is the address the account has. */
@@ -181,8 +190,12 @@ export type EmailRefusal =
 
 /** Why a new password was not taken. The page has the words. */
 export type PasswordRefusal =
-	/** The password so far is not right. */
+	/** The password so far, or the code of the second factor, is not right. */
 	| { problem: 'wrong' }
+	/** The password was right; the account has a second factor, whose code is missing. */
+	| { problem: 'code' }
+	/** The account has neither a password nor a second factor, and the session is not young. */
+	| { problem: 'loginAgain' }
 	/** The server does not take the new one: too short, or too long. */
 	| { problem: 'invalid' }
 	/** Too many wrong tries; wait so many minutes. */
@@ -216,6 +229,8 @@ export type SecondFactorRefusal =
 	/** Passkeys have the second factor on: setting up the app takes a code too. */
 	| 'codeNeeded'
 	| 'wrongCode'
+	/** The account has neither a password nor a second factor, and the session is not young. */
+	| 'loginAgain'
 	| 'tooMany'
 	| 'unreachable';
 
@@ -658,11 +673,17 @@ export interface Reader {
 
 	/**
 	 * Gives the account another password, with the one so far; an account that
-	 * logs in through single sign-on alone has none and sends nothing. Null when
-	 * it worked: every other session of the account ends, this one goes on
-	 * (`can.password`).
+	 * logs in through single sign-on alone has none and sends nothing. Where
+	 * the second factor is on, a code goes with it, or a passkey stands for
+	 * both. Null when it worked: every other session of the account ends, this
+	 * one goes on (`can.password`).
 	 */
-	changePassword(current: string, fresh: string): Promise<PasswordRefusal | null>;
+	changePassword(
+		current: string,
+		fresh: string,
+		code?: string,
+		passkey?: PasskeyProof
+	): Promise<PasswordRefusal | null>;
 
 	/**
 	 * Mails a link to a new address for the account (`can.email`), with the

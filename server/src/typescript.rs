@@ -18,7 +18,7 @@ use std::any::TypeId;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use crate::{
-    api, app_passwords, email, events, filters, labels, legal, login, moderation, passkeys,
+    api, app_passwords, email, events, filters, labels, legal, login, moderation, oidc, passkeys,
     profile, recovery, registration, reports, second_factor, status, subscribe, transfer, tree,
 };
 
@@ -135,6 +135,7 @@ pub fn generate() -> anyhow::Result<String> {
     registration::types(&mut types);
     email::types(&mut types);
     recovery::types(&mut types);
+    oidc::types(&mut types);
     api::types(&mut types);
     tree::types(&mut types);
     subscribe::types(&mut types);

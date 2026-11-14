@@ -45,7 +45,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, accounts,
-    login::{CODE_NEEDED, Key},
+    login::{CODE_NEEDED, Key, LOGIN_AGAIN},
     passkeys,
     sessions::{self, Session},
 };
@@ -84,7 +84,8 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<SwitchOff>()
         .add::<Setup>()
         .add::<Code>()
-        .add::<RecoveryCodes>();
+        .add::<RecoveryCodes>()
+        .add::<OwnerProof>();
 }
 
 /// Whether an account has the second factor, by the app or by passkeys, and
@@ -296,6 +297,32 @@ pub async fn is_on(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
     .unwrap_or(false))
 }
 
+/// How the owner of a session's account shows, for a change that needs it,
+/// that they are there: the password, which an account without one does
+/// without, and where the second factor is on, a code from the app or a
+/// recovery code; or a passkey instead of both (see [`prove`]).
+#[derive(Default, Deserialize, TS, ToSchema)]
+pub struct OwnerProof {
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
+    pub password: String,
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    #[schema(value_type = Option<String>)]
+    pub code: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub passkey: Option<passkeys::Answer>,
+}
+
+impl OwnerProof {
+    /// What it says, as a [`Proof`].
+    pub(crate) fn proof(&self) -> Proof<'_> {
+        passkeys::proof(&self.password, &self.code, self.passkey.as_ref())
+    }
+}
+
 /// What shows, for a change that needs it, that the owner of the account is
 /// at the keyboard and not only somebody with the session.
 pub(crate) enum Proof<'a> {
@@ -310,6 +337,13 @@ pub(crate) enum Proof<'a> {
 /// like one at login: a stolen session must not be a way to try passwords or
 /// codes without end. Without a code where one is needed, the answer is 403
 /// with `second factor needed`.
+///
+/// An account with neither a password nor a second factor, which logs in
+/// through OpenID Connect alone, has nothing to show but its session. Then
+/// only a session younger than [`passkeys::FRESH`] counts, and an older one
+/// gets 403 with `log in again first`: what such a change makes (a password,
+/// an app password, the app, an address) outlasts the session, so a stolen
+/// one must not be enough for it.
 pub(crate) async fn prove(
     state: &AppState,
     session: &Session,
@@ -323,7 +357,7 @@ pub(crate) async fn prove(
         Proof::Password { password, code } => (password, code),
     };
     let keys = [Key::name(&session.username)];
-    tried_password(state, session, &keys, password).await?;
+    let has_password = tried_password(state, session, &keys, password).await?;
     if is_on(&state.db, session.account_id).await? {
         let code = code.trim();
         if code.is_empty() {
@@ -336,6 +370,10 @@ pub(crate) async fn prove(
             let message = "the code is wrong";
             return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
         }
+    } else if !has_password && !passkeys::is_fresh(&state.db, headers).await? {
+        // Nothing wrong was tried; the session is only too old to count.
+        state.logins.succeeded(&keys);
+        return Err(AppError::Status(StatusCode::FORBIDDEN, LOGIN_AGAIN.into()));
     }
     state.logins.succeeded(&keys);
     Ok(())
@@ -519,13 +557,14 @@ async fn status(
 }
 
 /// Counts a try against the limit of the account's name and checks the
-/// password; the caller says when the whole of it succeeded.
+/// password; the caller says when the whole of it succeeded. Whether the
+/// account has a password at all: one without checks none.
 pub(crate) async fn tried_password(
     state: &AppState,
     session: &Session,
     keys: &[Key],
     password: &str,
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     if let Err(wait) = state.logins.attempt(keys, Instant::now()) {
         let message = "too many wrong tries, try again later";
         return Err(AppError::TooMany(wait, message));
@@ -536,11 +575,12 @@ pub(crate) async fn tried_password(
     )
     .fetch_one(&state.db)
     .await?;
-    if hash.is_some() && !accounts::verify(password, hash).await? {
+    let has_password = hash.is_some();
+    if has_password && !accounts::verify(password, hash).await? {
         let message = "the password is wrong";
         return Err(AppError::Status(StatusCode::FORBIDDEN, message.into()));
     }
-    Ok(())
+    Ok(has_password)
 }
 
 /// Starts setting up the authenticator app: a new secret, as text and as an

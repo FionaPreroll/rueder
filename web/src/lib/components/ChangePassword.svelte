@@ -1,11 +1,13 @@
 <script lang="ts">
 	// Another password for the account, with the one so far to show that whoever
-	// asks is the reader. An account that logs in through single sign-on alone has
+	// asks is the reader, and where the second factor is on, its code; a passkey
+	// stands for both. An account that logs in through single sign-on alone has
 	// no password yet and sets a first one here, which lets it log in with its
 	// name as well. The server ends every other session of the account and gives
 	// this browser a new one, so the page stays as it is.
 	import { m } from '#lib/i18n/index.ts';
-	import type { PasswordRefusal, Reader } from '#lib/reader.ts';
+	import type { PasskeyProof as Proof, PasswordRefusal, Reader } from '#lib/reader.ts';
+	import PasskeyProof from './PasskeyProof.svelte';
 
 	let { reader }: { reader: Reader } = $props();
 
@@ -19,20 +21,29 @@
 	let current = $state('');
 	let fresh = $state('');
 	let again = $state('');
+	let code = $state('');
+	/** The server asked for the code of the second factor. */
+	let asksCode = $state(false);
 	let busy = $state(false);
 	let refusal = $state<PasswordRefusal | null>(null);
 	/** It worked: what was done, as the account had a password or had none. */
 	let done = $state<'first' | 'again' | null>(null);
 
 	const mismatch = $derived(again.length > 0 && fresh !== again);
+	/** The new password itself is fine, whatever shows that the owner asks. */
+	const chosen = $derived(!busy && fresh.length >= MIN && fresh === again);
 	const ready = $derived(
-		!busy && (first || current.length > 0) && fresh.length >= MIN && fresh === again
+		chosen && (first || current.length > 0) && (!asksCode || code.trim() !== '')
 	);
 
 	function say(refusal: PasswordRefusal) {
 		switch (refusal.problem) {
 			case 'wrong':
 				return texts.wrong;
+			case 'code':
+				return texts.codeNeeded;
+			case 'loginAgain':
+				return texts.loginAgain;
 			case 'invalid':
 				return texts.invalid(MIN);
 			case 'busy':
@@ -42,9 +53,7 @@
 		}
 	}
 
-	async function submit(event: SubmitEvent) {
-		event.preventDefault();
-		if (!ready) return;
+	async function change(passkey?: Proof) {
 		busy = true;
 		refusal = null;
 		done = null;
@@ -52,16 +61,28 @@
 		const wasFirst = first;
 		try {
 			// An account without one so far sends nothing for it.
-			refusal = await reader.changePassword(wasFirst ? '' : current, fresh);
-			if (!refusal) {
+			const typed = asksCode ? code : undefined;
+			refusal = await reader.changePassword(wasFirst ? '' : current, fresh, typed, passkey);
+			if (refusal?.problem === 'code') {
+				asksCode = true;
+			} else if (refusal) {
+				code = '';
+			} else {
 				done = wasFirst ? 'first' : 'again';
 				current = '';
 				fresh = '';
 				again = '';
+				code = '';
+				asksCode = false;
 			}
 		} finally {
 			busy = false;
 		}
+	}
+
+	function submit(event: SubmitEvent) {
+		event.preventDefault();
+		if (ready) void change();
 	}
 </script>
 
@@ -106,6 +127,19 @@
 	{#if mismatch}
 		<p class="text-warn">{texts.mismatch}</p>
 	{/if}
+	{#if asksCode}
+		<label class="block">
+			<span class="font-medium">{texts.code}</span>
+			<input
+				class="mt-1.5 block w-full max-w-xs rounded py-1.5 text-sm"
+				name="one-time-code"
+				autocomplete="one-time-code"
+				autocapitalize="none"
+				spellcheck="false"
+				bind:value={code}
+			/>
+		</label>
+	{/if}
 	{#if refusal}
 		<p class="text-warn" role="alert">{say(refusal)}</p>
 	{/if}
@@ -115,4 +149,5 @@
 	<button type="submit" class="primary" disabled={!ready}>
 		{first ? texts.submitFirst : texts.submit}
 	</button>
+	<PasskeyProof {reader} disabled={!chosen} onproof={(proof) => change(proof)} />
 </form>

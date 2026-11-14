@@ -43,6 +43,8 @@
 				return texts.wrong;
 			case 'code':
 				return texts.codeNeeded;
+			case 'loginAgain':
+				return texts.loginAgain;
 			case 'invalid':
 				return texts.invalid;
 			case 'same':

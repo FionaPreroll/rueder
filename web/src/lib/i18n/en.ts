@@ -311,6 +311,8 @@ const en = {
 		removed: 'The address is removed.',
 		wrong: 'The password or the code is not right.',
 		codeNeeded: 'This account has a second factor. Enter its code as well.',
+		loginAgain:
+			'Your account has no password and no second factor yet. Log in again, then give the address within ten minutes.',
 		invalid: 'Enter an email address mail can go to.',
 		same: 'That is the address the account has.',
 		required: 'Every account on this rueder needs an address; it can be changed, not removed.',
@@ -414,7 +416,12 @@ const en = {
 			done: 'The password is changed. Every other browser and device is logged out, and app passwords are revoked.',
 			doneFirst: 'The password is set.',
 			mismatch: 'The two do not match.',
-			wrong: 'The current password is not right.',
+			code: 'Code of the second factor',
+			wrong: 'The current password or the code is not right.',
+			codeNeeded:
+				'This account has a second factor. Enter a code of your authenticator app or a recovery code as well, or confirm with a passkey.',
+			loginAgain:
+				'Your account has no password and no second factor yet. Log in again, then set the password within ten minutes.',
 			invalid: (characters: number) =>
 				`The server did not take that password. At least ${n(characters)} characters.`,
 			busy: (minutes: number) =>
@@ -529,6 +536,8 @@ const en = {
 				codeNeeded:
 					'Enter a code of your authenticator app or a recovery code as well, or confirm with a passkey.',
 				wrongCode: 'That code is not right. Codes change every 30 seconds.',
+				loginAgain:
+					'Your account has no password and no second factor yet. Log in again, then make the app password within ten minutes.',
 				tooManyApps: 'An account has at most 20 app passwords.',
 				tooMany: 'Too many wrong tries. Try again in a few minutes.',
 				unreachable: 'The server does not answer. Try again in a moment.'
@@ -573,6 +582,8 @@ const en = {
 				wrongPassword: 'The password is not right.',
 				codeNeeded: 'Your passkeys have the second factor on. Enter a recovery code as well.',
 				wrongCode: 'That code is not right. Codes change every 30 seconds.',
+				loginAgain:
+					'Your account has no password and no second factor yet. Log in again, then set up the app within ten minutes.',
 				tooMany: 'Too many wrong tries. Try again in a few minutes.',
 				unreachable: 'The server does not answer. Try again in a moment.'
 			}

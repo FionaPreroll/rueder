@@ -288,8 +288,7 @@ export const api = {
 	 * Gives the account another password. The server ends every other session of
 	 * it and answers with a fresh cookie for this browser.
 	 */
-	changePassword: (current: string, fresh: string) =>
-		call<void>('PUT', '/password', { current, new: fresh } satisfies NewPassword),
+	changePassword: (body: NewPassword) => call<void>('PUT', '/password', body),
 
 	/**
 	 * Asks for a link that sets a new password, by the account's name or its

@@ -312,6 +312,8 @@ const de: Messages = {
 		removed: 'Die Adresse ist entfernt.',
 		wrong: 'Das Passwort oder der Code stimmt nicht.',
 		codeNeeded: 'Dieses Konto hat einen zweiten Faktor. Gib auch seinen Code ein.',
+		loginAgain:
+			'Dein Konto hat noch kein Passwort und keinen zweiten Faktor. Melde dich neu an und gib die Adresse innerhalb von zehn Minuten ein.',
 		invalid: 'Gib eine E-Mail-Adresse an, an die Mails gehen können.',
 		same: 'Das ist die Adresse, die das Konto schon hat.',
 		required:
@@ -413,7 +415,12 @@ const de: Messages = {
 			done: 'Das Passwort ist geändert. Jeder andere Browser und jedes andere Gerät ist abgemeldet, App-Passwörter sind widerrufen.',
 			doneFirst: 'Das Passwort ist gesetzt.',
 			mismatch: 'Die beiden stimmen nicht überein.',
-			wrong: 'Das bisherige Passwort ist nicht richtig.',
+			code: 'Code des zweiten Faktors',
+			wrong: 'Das bisherige Passwort oder der Code ist nicht richtig.',
+			codeNeeded:
+				'Dieses Konto hat einen zweiten Faktor. Gib auch einen Code deiner Authenticator-App oder einen Wiederherstellungscode ein, oder bestätige mit einem Passkey.',
+			loginAgain:
+				'Dein Konto hat noch kein Passwort und keinen zweiten Faktor. Melde dich neu an und setze das Passwort innerhalb von zehn Minuten.',
 			invalid: (characters) =>
 				`Der Server hat das Passwort nicht angenommen. Mindestens ${n(characters)} Zeichen.`,
 			busy: (minutes) =>
@@ -528,6 +535,8 @@ const de: Messages = {
 				codeNeeded:
 					'Gib auch einen Code deiner Authenticator-App oder einen Wiederherstellungscode ein, oder bestätige mit einem Passkey.',
 				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+				loginAgain:
+					'Dein Konto hat noch kein Passwort und keinen zweiten Faktor. Melde dich neu an und lege das App-Passwort innerhalb von zehn Minuten an.',
 				tooManyApps: 'Ein Konto hat höchstens 20 App-Passwörter.',
 				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
 				unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
@@ -573,6 +582,8 @@ const de: Messages = {
 				codeNeeded:
 					'Deine Passkeys halten den zweiten Faktor an. Gib dazu einen Wiederherstellungscode ein.',
 				wrongCode: 'Dieser Code stimmt nicht. Codes wechseln alle 30 Sekunden.',
+				loginAgain:
+					'Dein Konto hat noch kein Passwort und keinen zweiten Faktor. Melde dich neu an und richte die App innerhalb von zehn Minuten ein.',
 				tooMany: 'Zu viele falsche Versuche. Versuch es in ein paar Minuten noch einmal.',
 				unreachable: 'Der Server antwortet nicht. Versuch es gleich noch einmal.'
 			}
