@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "rueder",
-    "description": "The HTTP interface of a rueder server: the API the web page lives on, under\n`/api`, and the Google Reader API for feed reader apps of other makers, under\n`/greader`. This description is written from the server's code\n(`server/src/openapi.rs` and the `#[utoipa::path]` of each handler), so it\nlists every route the server answers, besides the files of the page.\n\n## Logging in\n\n- **The page's API** (`/api`) knows a reader by the session cookie\n  `__Host-rueder`, which `POST /api/login` (or a passkey, or OpenID Connect)\n  sets. It is `HttpOnly`, `Secure` and `SameSite=Lax`, so it needs HTTPS, or\n  `http://localhost` while developing.\n- **A request that changes something** (anything but `GET`, `HEAD` and\n  `OPTIONS`) is refused with 403 if a browser says it comes from a page of\n  another site: by `Sec-Fetch-Site`, or by an `Origin` that is not this\n  server. A request without either, such as one from a script, passes this\n  check.\n- **The Google Reader API** (`/greader`) knows an app by an app password,\n  which the reader makes in the page's settings (Settings, Apps).\n  `POST /greader/accounts/ClientLogin` takes the account's name and the app\n  password as a form and answers with `Auth=<token>`; every other request\n  names that token in `Authorization: GoogleLogin auth=<token>`. No cookie\n  counts there.\n\n## Answers\n\n- What the page's API sends and takes is JSON, except where an operation says\n  otherwise (OPML, the file of an account). The Google Reader API takes forms\n  or query parameters, as the apps send them, and answers with JSON or plain\n  text.\n- **A refusal** has its status and a short plain-text reason, never the\n  details of what went wrong inside: 400 for a request the server cannot\n  use, 401 without a valid session or app password, 403 for what the account\n  may not do, 404 for what is not there or not the account's, 413 for a body\n  over the limit (256 KiB, larger only where an operation says so), 429 with\n  `Retry-After` (in seconds) over a limit, 500 for a fault of the server.\n- **Limits:** every sender and every account has limits on how much it asks\n  of the server; logins, lookups of addresses on the internet and what an\n  account can make more of (feeds, folders, labels, rules, app passwords)\n  have limits of their own.\n- **Live updates:** what changes for an account through either API reaches\n  its open pages over `GET /api/events` (server-sent events).\n\n## Images\n\nEvery image in an article, every thumbnail and icon goes through the server's\nimage proxy, at addresses the server signs: `/img/...` for the page (with the\nsession), `/greader/img/...` for an app (signed for its app password).\nAddresses are never made by hand; they come in what the API sends.\n",
+    "description": "The HTTP interface of a rueder server: the API the web page lives on, under\n`/api`, and the Google Reader API for feed reader apps of other makers, under\n`/greader`. This description is written from the server's code\n(`server/src/openapi.rs` and the `#[utoipa::path]` of each handler), so it\nlists every route the server answers, besides the files of the page.\n\n## Logging in\n\n- **The page's API** (`/api`) knows a reader by the session cookie\n  `__Host-rueder`, which `POST /api/login` (or a passkey, or OpenID Connect)\n  sets. It is `HttpOnly`, `Secure` and `SameSite=Lax`, so it needs HTTPS, or\n  `http://localhost` while developing.\n- **A request that changes something** (anything but `GET`, `HEAD` and\n  `OPTIONS`) is refused with 403 if a browser says it comes from a page of\n  another site: by `Sec-Fetch-Site`, or by an `Origin` that is not this\n  server. A request without either, such as one from a script, passes this\n  check.\n- **The Google Reader API** (`/greader`) knows an app by an app password,\n  which the reader makes in the page's settings (Settings, Apps).\n  `POST /greader/accounts/ClientLogin` takes the account's name and the app\n  password as a form and answers with `Auth=<token>`; every other request\n  names that token in `Authorization: GoogleLogin auth=<token>`. No cookie\n  counts there.\n- **The metrics for Prometheus** (`/metrics`) are there only where the\n  operator set `METRICS_TOKEN`, and only for a request that names that token\n  in `Authorization: Bearer <token>`. Neither a session nor an app password\n  counts there.\n\n## Answers\n\n- What the page's API sends and takes is JSON, except where an operation says\n  otherwise (OPML, the file of an account). The Google Reader API takes forms\n  or query parameters, as the apps send them, and answers with JSON or plain\n  text.\n- **A refusal** has its status and a short plain-text reason, never the\n  details of what went wrong inside: 400 for a request the server cannot\n  use, 401 without a valid session or app password, 403 for what the account\n  may not do, 404 for what is not there or not the account's, 413 for a body\n  over the limit (256 KiB, larger only where an operation says so), 429 with\n  `Retry-After` (in seconds) over a limit, 500 for a fault of the server.\n- **Limits:** every sender and every account has limits on how much it asks\n  of the server; logins, lookups of addresses on the internet and what an\n  account can make more of (feeds, folders, labels, rules, app passwords)\n  have limits of their own.\n- **Live updates:** what changes for an account through either API reaches\n  its open pages over `GET /api/events` (server-sent events).\n\n## Images\n\nEvery image in an article, every thumbnail and icon goes through the server's\nimage proxy, at addresses the server signs: `/img/...` for the page (with the\nsession), `/greader/img/...` for an app (signed for its app password).\nAddresses are never made by hand; they come in what the API sends.\n",
     "license": {
       "name": ""
     },
@@ -5264,6 +5264,38 @@
           }
         }
       }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "The metrics of the server for Prometheus, in its text format 0.0.4, for whoever names the token in `METRICS_TOKEN`: requests by route, fetching, the feed search, the image proxy, the warnings and errors of the log and what PostgreSQL says. Counters count since the process started. Nothing in it names an account, a feed or an address.",
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": "The metrics, in the text format of Prometheus 0.0.4.",
+            "content": {
+              "text/plain; version=0.0.4; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No token, or not the one in METRICS_TOKEN."
+          },
+          "404": {
+            "description": "The server gives no metrics: METRICS_TOKEN is not set."
+          }
+        },
+        "security": [
+          {
+            "metrics_token": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -9374,6 +9406,11 @@
         "in": "header",
         "name": "Authorization",
         "description": "GoogleLogin auth=<token>, with the token that POST /greader/accounts/ClientLogin answers for an app password."
+      },
+      "metrics_token": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The token the operator set in METRICS_TOKEN, for Prometheus."
       },
       "session": {
         "type": "apiKey",

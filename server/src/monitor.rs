@@ -91,12 +91,17 @@ pub trait Tally: Default + Clone + Serialize + DeserializeOwned {
 }
 
 /// Counts for the last hour, in parts of ten minutes. A part that is older
-/// than an hour is used again for the part of now.
+/// than an hour is used again for the part of now. Next to them, all that was
+/// counted since the process started, for Prometheus ([`crate::metrics`]).
 #[derive(Clone)]
 pub struct Window<T> {
     slots: [(u64, T); SLOTS],
     /// The parts that were counted in since they were last taken to be saved.
     changed: [bool; SLOTS],
+    /// All that was counted since the start. What is read back from the
+    /// database after a restart is not in it: it begins at 0 with every
+    /// process, as Prometheus expects of a counter.
+    total: T,
 }
 
 impl<T: Tally> Default for Window<T> {
@@ -104,13 +109,25 @@ impl<T: Tally> Default for Window<T> {
         Self {
             slots: std::array::from_fn(|_| (0, T::default())),
             changed: [false; SLOTS],
+            total: T::default(),
         }
     }
 }
 
 impl<T: Tally> Window<T> {
+    /// Counts in the part `now` falls in and in the total since the start.
+    pub fn count(&mut self, now: Instant, count: impl Fn(&mut T)) {
+        count(self.at(now));
+        count(&mut self.total);
+    }
+
+    /// All that was counted since the start.
+    pub fn total(&self) -> T {
+        self.total.clone()
+    }
+
     /// The count of the part `now` falls in.
-    pub fn at(&mut self, now: Instant) -> &mut T {
+    fn at(&mut self, now: Instant) -> &mut T {
         let current = slot(now);
         let index = (current % SLOTS as u64) as usize;
         let (number, tally) = &mut self.slots[index];
@@ -279,7 +296,32 @@ impl Timing {
     pub fn max(&self) -> Option<f64> {
         (self.count > 0).then(|| self.max_us as f64 / 1000.0)
     }
+
+    /// The sum of all times, in seconds.
+    pub fn sum_seconds(&self) -> f64 {
+        self.total_us as f64 / 1_000_000.0
+    }
+
+    /// The buckets of a histogram for Prometheus: for each upper end in
+    /// [`HISTOGRAM`], in seconds, how many took at most that long. Each upper
+    /// end is that of a bucket here, so the counts are exact.
+    pub fn histogram(&self) -> [(f64, u64); HISTOGRAM.len()] {
+        let mut seen = 0;
+        let mut counted = 0;
+        HISTOGRAM.map(|last| {
+            for count in &self.buckets[counted..=last] {
+                seen += count;
+            }
+            counted = last + 1;
+            (bound(last) / 1_000_000.0, seen)
+        })
+    }
 }
+
+/// The buckets of a [`Timing`] whose upper ends are those of a histogram for
+/// Prometheus: every sixth, four times as long each, from 0.4 ms to 6.6 s.
+/// Sixty buckets for each route would be more than Prometheus wants to keep.
+pub const HISTOGRAM: [usize; 8] = [6, 12, 18, 24, 30, 36, 42, 48];
 
 /// The requests to one route.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -455,13 +497,16 @@ impl Monitor {
         } else {
             "other"
         };
-        let requests = routes.entry(route.to_owned()).or_default().at(now);
-        requests.timing.note(took);
         let class = usize::from(status.as_u16() / 100).clamp(1, 5) - 1;
-        requests.answers[class] += 1;
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            requests.limited += 1;
-        }
+        let limited = status == StatusCode::TOO_MANY_REQUESTS;
+        let window = routes.entry(route.to_owned()).or_default();
+        window.count(now, |requests| {
+            requests.timing.note(took);
+            add(&mut requests.answers[class], 1);
+            if limited {
+                add(&mut requests.limited, 1);
+            }
+        });
     }
 
     /// The requests of the last hour, by route.
@@ -476,7 +521,20 @@ impl Monitor {
             .collect()
     }
 
-    /// Notes that the loop that fetches feeds runs.
+    /// The requests since the start, by route.
+    pub fn requests_total(&self) -> Vec<(String, Requests)> {
+        let Ok(routes) = self.requests.lock() else {
+            return Vec::new();
+        };
+        let mut total: Vec<(String, Requests)> = routes
+            .iter()
+            .map(|(route, window)| (route.clone(), window.total()))
+            .filter(|(_, requests)| requests.timing.count > 0)
+            .collect();
+        total.sort_by(|(a, _), (b, _)| a.cmp(b));
+        total
+    }
+
     /// Notes that the loop that fetches feeds runs, at this pace.
     pub fn fetching_runs(&self, pace: Pace) {
         if let Ok(mut running) = self.pace.lock() {
@@ -494,23 +552,32 @@ impl Monitor {
         let Ok(mut window) = self.fetches.lock() else {
             return;
         };
-        let fetches = window.at(now);
-        fetches.timing.note(took);
-        match fetched {
-            Fetched::Fetched { new } => {
-                fetches.fetched += 1;
-                fetches.new_articles += new;
+        window.count(now, |fetches| {
+            fetches.timing.note(took);
+            match fetched {
+                Fetched::Fetched { new } => {
+                    add(&mut fetches.fetched, 1);
+                    add(&mut fetches.new_articles, new);
+                }
+                Fetched::Unchanged => add(&mut fetches.unchanged, 1),
+                Fetched::Failed => add(&mut fetches.failed, 1),
+                Fetched::Broken => add(&mut fetches.broken, 1),
             }
-            Fetched::Unchanged => fetches.unchanged += 1,
-            Fetched::Failed => fetches.failed += 1,
-            Fetched::Broken => fetches.broken += 1,
-        }
+        });
     }
 
     pub fn fetches(&self, now: Instant) -> Fetches {
         self.fetches
             .lock()
             .map(|window| window.last_hour(now))
+            .unwrap_or_default()
+    }
+
+    /// The fetches since the start.
+    pub fn fetches_total(&self) -> Fetches {
+        self.fetches
+            .lock()
+            .map(|window| window.total())
             .unwrap_or_default()
     }
 
@@ -530,24 +597,36 @@ impl Monitor {
         let Ok(mut window) = self.lookups.lock() else {
             return;
         };
-        let lookups = window.at(now);
-        match looked {
-            Looked::Found => lookups.found += 1,
-            Looked::None => lookups.none += 1,
-            Looked::Failed => lookups.failed += 1,
-            // Refused before anything was fetched: no time to count.
-            Looked::Limited => {
-                lookups.limited += 1;
-                return;
+        window.count(now, |lookups| match looked {
+            Looked::Found => {
+                add(&mut lookups.found, 1);
+                lookups.timing.note(took);
             }
-        }
-        lookups.timing.note(took);
+            Looked::None => {
+                add(&mut lookups.none, 1);
+                lookups.timing.note(took);
+            }
+            Looked::Failed => {
+                add(&mut lookups.failed, 1);
+                lookups.timing.note(took);
+            }
+            // Refused before anything was fetched: no time to count.
+            Looked::Limited => add(&mut lookups.limited, 1),
+        });
     }
 
     pub fn lookups(&self, now: Instant) -> Lookups {
         self.lookups
             .lock()
             .map(|window| window.last_hour(now))
+            .unwrap_or_default()
+    }
+
+    /// The lookups since the start.
+    pub fn lookups_total(&self) -> Lookups {
+        self.lookups
+            .lock()
+            .map(|window| window.total())
             .unwrap_or_default()
     }
 
@@ -730,11 +809,10 @@ impl Problems {
         let Ok(mut kept) = self.kept.lock() else {
             return;
         };
-        let counts = kept.counts.at(now);
-        match severity {
-            Severity::Warning => counts.warnings += 1,
-            Severity::Error => counts.errors += 1,
-        }
+        kept.counts.count(now, |counts| match severity {
+            Severity::Warning => add(&mut counts.warnings, 1),
+            Severity::Error => add(&mut counts.errors, 1),
+        });
         let text = shortened(text);
         let at = OffsetDateTime::now_utc();
         kept.changed = true;
@@ -773,6 +851,14 @@ impl Problems {
         self.kept
             .lock()
             .map(|kept| kept.counts.last_hour(now))
+            .unwrap_or_default()
+    }
+
+    /// How many warnings and errors there were since the start.
+    pub fn total(&self) -> ProblemCount {
+        self.kept
+            .lock()
+            .map(|kept| kept.counts.total())
             .unwrap_or_default()
     }
 
@@ -1192,5 +1278,37 @@ mod tests {
             .find(|(route, _)| route == "GET /api/0")
             .unwrap();
         assert_eq!((first.1.answers, first.1.limited), ([0, 1, 0, 1, 0], 1));
+    }
+
+    proptest::proptest! {
+        /// The total since the start has all that was counted, whichever part
+        /// of the hour it fell in, and the histogram for Prometheus counts
+        /// exactly what took at most each of its upper ends.
+        #[test]
+        fn the_total_and_its_histogram_are_exact(
+            times in proptest::collection::vec((0u64..20_000_000, 0u32..20), 0..200),
+        ) {
+            let start = next_part();
+            let mut window = Window::<Lookups>::default();
+            for (us, part) in &times {
+                window.count(start + SLOT * *part, |lookups| {
+                    lookups.found += 1;
+                    lookups.timing.note(Duration::from_micros(*us));
+                });
+            }
+            let total = window.total();
+            proptest::prop_assert_eq!(total.found, times.len() as u64);
+            proptest::prop_assert_eq!(total.timing.count, times.len() as u64);
+            let sum: u64 = times.iter().map(|(us, _)| us).sum();
+            proptest::prop_assert!((total.timing.sum_seconds() - sum as f64 / 1e6).abs() < 1e-6);
+            let mut last = 0;
+            for (&bucket, (seconds, count)) in HISTOGRAM.iter().zip(total.timing.histogram()) {
+                let within = times.iter().filter(|(us, _)| *us as f64 <= bound(bucket)).count();
+                proptest::prop_assert_eq!(count, within as u64);
+                proptest::prop_assert!(count >= last);
+                proptest::prop_assert!((seconds * 1e6 - bound(bucket)).abs() < 1e-6);
+                last = count;
+            }
+        }
     }
 }

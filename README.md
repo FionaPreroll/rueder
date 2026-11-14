@@ -12,6 +12,13 @@ Android app, the REST API, and the code of the server and the web page.
 
 ![Temporary project logo: A red cartoon crab holding a newspaper titled 'rueder'](docs/images/logo.png)
 
+<a href="https://fionapreroll.github.io/rueder/demo/">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/three-panes-dark.png">
+<img alt="rueder with three panes: folders and feeds with their unread counts, the list of all items, and an opened article" src="https://fionapreroll.github.io/rueder/screenshots/three-panes-light.png">
+</picture>
+</a>
+
 - **Reading:** a dense list, an expanded view, three panes (tree, list,
   article) and a magazine view; keyboard shortcuts, dark mode, a layout for
   phones, and settings for theme, accent color, density, font and sorting.
@@ -38,6 +45,95 @@ Android app, the REST API, and the code of the server and the web page.
 - **Running it:** local accounts with passwords or login through OpenID
   Connect, open or invitation-only registration, a status page for admins, and
   moving an account between rueder installations as one file.
+
+## Screenshots
+
+The pictures show [the demo](https://fionapreroll.github.io/rueder/demo/)
+with its made-up feeds, light or dark as GitHub is for you. CI takes them anew
+for every change on `main` ([`web/showcase/`](web/showcase/)), so they show
+rueder as it is.
+
+<table>
+<tr>
+<td width="50%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/magazine-dark.png">
+<img alt="The magazine view: the newest article large with its picture, the others as cards below it" src="https://fionapreroll.github.io/rueder/screenshots/magazine-light.png">
+</picture>
+
+The magazine view, one of four views of a list.
+
+</td>
+<td width="50%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/versions-dark.png">
+<img alt="The versions of an article: the earlier title struck out, removed text in red and added text in green" src="https://fionapreroll.github.io/rueder/screenshots/versions-light.png">
+</picture>
+
+An article that changed at its source, compared with what it was.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/filter-rules-dark.png">
+<img alt="A new filter rule that hides articles whose title contains a word, saying how many articles it applies to" src="https://fionapreroll.github.io/rueder/screenshots/filter-rules-light.png">
+</picture>
+
+A filter rule says what it would catch before it is saved.
+
+</td>
+<td width="50%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/apps-dark.png">
+<img alt="Setting up NetNewsWire: what to enter in the app, the server address and a new app password, each with a button to copy it" src="https://fionapreroll.github.io/rueder/screenshots/apps-light.png">
+</picture>
+
+Feed reader apps get an app password each, and the page says what to enter.
+
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="33%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/phone-home-dark.png">
+<img alt="The start page on a phone: what is new, feed by feed" src="https://fionapreroll.github.io/rueder/screenshots/phone-home-light.png">
+</picture>
+
+The start page on a phone.
+
+</td>
+<td width="33%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/phone-sidebar-dark.png">
+<img alt="The sidebar on a phone: the lists, the labels and the folders with their unread counts" src="https://fionapreroll.github.io/rueder/screenshots/phone-sidebar-light.png">
+</picture>
+
+Folders and labels.
+
+</td>
+<td width="33%">
+
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://fionapreroll.github.io/rueder/screenshots/phone-article-dark.png">
+<img alt="An article opened on a phone, with its picture" src="https://fionapreroll.github.io/rueder/screenshots/phone-article-light.png">
+</picture>
+
+An article.
+
+</td>
+</tr>
+</table>
 
 ## Installing
 

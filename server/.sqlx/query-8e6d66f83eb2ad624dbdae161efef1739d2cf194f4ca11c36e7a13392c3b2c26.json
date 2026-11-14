@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FILTER (WHERE f.blocked_at IS NULL) AS \"open!\",\n                      count(*) FILTER (WHERE f.blocked_at IS NOT NULL) AS \"blocked!\"\n               FROM feeds f\n               WHERE EXISTS (SELECT 1 FROM content_reports r WHERE r.feed_id = f.id)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "open!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "blocked!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "8e6d66f83eb2ad624dbdae161efef1739d2cf194f4ca11c36e7a13392c3b2c26"
+}

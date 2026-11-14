@@ -24,6 +24,7 @@ use axum::{
     extract::{Query, State},
 };
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
@@ -295,7 +296,7 @@ struct FetchPace {
 #[serde(rename_all = "snake_case")]
 #[ts(rename = "FetchFailure")]
 #[schema(as = FetchFailure)]
-enum Failure {
+pub(crate) enum Failure {
     /// The site answered with an error.
     Status,
     Timeout,
@@ -315,11 +316,11 @@ enum Failure {
 #[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusFailing")]
 #[schema(as = StatusFailing)]
-struct Failing {
-    failure: Failure,
+pub(crate) struct Failing {
+    pub failure: Failure,
     /// The status the site answered with, for `status`.
-    status: Option<u16>,
-    feeds: i64,
+    pub status: Option<u16>,
+    pub feeds: i64,
 }
 
 /// The feed search, in the hours counted.
@@ -414,13 +415,6 @@ async fn status(
         .unwrap_or(1)
         .clamp(1, kept_days.saturating_mul(24));
 
-    let counts = sqlx::query!(
-        r#"SELECT (SELECT count(*) FROM accounts) AS "accounts!",
-                  (SELECT count(*) FROM feeds) AS "feeds!",
-                  (SELECT count(DISTINCT feed_id) FROM subscriptions) AS "subscribed!""#
-    )
-    .fetch_one(&state.db)
-    .await?;
     let tables = sqlx::query!(
         r#"SELECT c.relname::text AS "name!",
                   (SELECT coalesce(sum(pg_total_relation_size(t.relid)), 0)
@@ -445,67 +439,13 @@ async fn status(
             rows: table.rows,
         })
         .collect();
-    let articles = sqlx::query_scalar!(
-        r#"SELECT coalesce(sum(greatest(r.reltuples, 0)), 0)::bigint AS "n!"
-           FROM (SELECT relid FROM pg_partition_tree('articles'::regclass)
-                 UNION SELECT 'articles'::regclass) t
-           JOIN pg_class r ON r.oid = t.relid"#
-    )
-    .fetch_one(&state.db)
-    .await?;
-    let database = sqlx::query!(
-        r#"SELECT pg_database_size(current_database()) AS "size!",
-                  (SELECT count(*) FROM pg_stat_activity
-                   WHERE datname = current_database()) AS "connections!",
-                  (SELECT extract(epoch FROM max(now() - query_start))::float8
-                   FROM pg_stat_activity
-                   WHERE datname = current_database() AND state = 'active'
-                     AND pid <> pg_backend_pid()) AS longest,
-                  d.blks_hit AS "hit!", d.blks_read AS "read!", d.deadlocks AS "deadlocks!"
-           FROM pg_stat_database d WHERE d.datname = current_database()"#
-    )
-    .fetch_one(&state.db)
-    .await?;
-    let fetching = sqlx::query!(
-        r#"SELECT count(*) FILTER (WHERE f.fetched_at IS NULL) AS "waiting!",
-                  count(*) FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')
-                      AS "overdue!",
-                  extract(epoch FROM now() - min(f.next_fetch_at)
-                      FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')
-                  )::float8 AS most_overdue,
-                  extract(epoch FROM now() - min(f.next_fetch_at)
-                      FILTER (WHERE f.next_fetch_at < now()))::float8 AS behind
-           FROM feeds f
-           WHERE EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)"#,
-        OVERDUE_S,
-    )
-    .fetch_one(&state.db)
-    .await?;
-    let messages = sqlx::query!(
-        r#"SELECT f.error_message AS "message!", count(*) AS "feeds!"
-           FROM feeds f
-           WHERE f.error_message IS NOT NULL
-             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)
-           GROUP BY f.error_message"#
-    )
-    .fetch_all(&state.db)
-    .await?;
-    let mut failing: Vec<Failing> = Vec::new();
-    for row in messages {
-        let (failure, status) = failure(&row.message);
-        match failing
-            .iter_mut()
-            .find(|known| known.failure == failure && known.status == status)
-        {
-            Some(known) => known.feeds += row.feeds,
-            None => failing.push(Failing {
-                failure,
-                status,
-                feeds: row.feeds,
-            }),
-        }
-    }
-    failing.sort_by(|a, b| b.feeds.cmp(&a.feeds).then(a.status.cmp(&b.status)));
+    let FromDatabase {
+        counts,
+        articles,
+        database,
+        fetching,
+        failing,
+    } = from_database(&state.db).await?;
 
     // The last hour is in memory; the hints are about it.
     let images = state.images.as_deref();
@@ -676,6 +616,141 @@ async fn status(
     }))
 }
 
+/// What the status page and the metrics for Prometheus ([`crate::metrics`])
+/// read from PostgreSQL: how much there is, how the database fares and how
+/// far the fetching is behind. Nothing in it names a feed or an account.
+pub(crate) struct FromDatabase {
+    pub counts: DataCounts,
+    /// About how many articles: what PostgreSQL estimates.
+    pub articles: i64,
+    pub database: DatabaseNumbers,
+    pub fetching: Fetching,
+    /// Feeds whose last fetch failed, by why, the most first.
+    pub failing: Vec<Failing>,
+}
+
+pub(crate) struct DataCounts {
+    pub accounts: i64,
+    pub feeds: i64,
+    pub subscribed: i64,
+}
+
+pub(crate) struct DatabaseNumbers {
+    pub size: i64,
+    pub connections: i64,
+    /// How long the query that has been running longest has, in seconds.
+    pub longest: Option<f64>,
+    /// Blocks found in memory and read from the disk, since the statistics
+    /// began.
+    pub hit: i64,
+    pub read: i64,
+    pub deadlocks: i64,
+}
+
+pub(crate) struct Fetching {
+    /// Feeds not fetched yet at all.
+    pub waiting: i64,
+    /// Feeds more than ten minutes past their time.
+    pub overdue: i64,
+    pub most_overdue: Option<f64>,
+    /// How long the feed that waits longest past its time has, in seconds.
+    pub behind: Option<f64>,
+}
+
+pub(crate) async fn from_database(db: &PgPool) -> anyhow::Result<FromDatabase> {
+    let counts = sqlx::query!(
+        r#"SELECT (SELECT count(*) FROM accounts) AS "accounts!",
+                  (SELECT count(*) FROM feeds) AS "feeds!",
+                  (SELECT count(DISTINCT feed_id) FROM subscriptions) AS "subscribed!""#
+    )
+    .fetch_one(db)
+    .await?;
+    let articles = sqlx::query_scalar!(
+        r#"SELECT coalesce(sum(greatest(r.reltuples, 0)), 0)::bigint AS "n!"
+           FROM (SELECT relid FROM pg_partition_tree('articles'::regclass)
+                 UNION SELECT 'articles'::regclass) t
+           JOIN pg_class r ON r.oid = t.relid"#
+    )
+    .fetch_one(db)
+    .await?;
+    let database = sqlx::query!(
+        r#"SELECT pg_database_size(current_database()) AS "size!",
+                  (SELECT count(*) FROM pg_stat_activity
+                   WHERE datname = current_database()) AS "connections!",
+                  (SELECT extract(epoch FROM max(now() - query_start))::float8
+                   FROM pg_stat_activity
+                   WHERE datname = current_database() AND state = 'active'
+                     AND pid <> pg_backend_pid()) AS longest,
+                  d.blks_hit AS "hit!", d.blks_read AS "read!", d.deadlocks AS "deadlocks!"
+           FROM pg_stat_database d WHERE d.datname = current_database()"#
+    )
+    .fetch_one(db)
+    .await?;
+    let fetching = sqlx::query!(
+        r#"SELECT count(*) FILTER (WHERE f.fetched_at IS NULL) AS "waiting!",
+                  count(*) FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')
+                      AS "overdue!",
+                  extract(epoch FROM now() - min(f.next_fetch_at)
+                      FILTER (WHERE f.next_fetch_at < now() - $1::float8 * interval '1 second')
+                  )::float8 AS most_overdue,
+                  extract(epoch FROM now() - min(f.next_fetch_at)
+                      FILTER (WHERE f.next_fetch_at < now()))::float8 AS behind
+           FROM feeds f
+           WHERE EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)"#,
+        OVERDUE_S,
+    )
+    .fetch_one(db)
+    .await?;
+    let messages = sqlx::query!(
+        r#"SELECT f.error_message AS "message!", count(*) AS "feeds!"
+           FROM feeds f
+           WHERE f.error_message IS NOT NULL
+             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)
+           GROUP BY f.error_message"#
+    )
+    .fetch_all(db)
+    .await?;
+    let mut failing: Vec<Failing> = Vec::new();
+    for row in messages {
+        let (failure, status) = failure(&row.message);
+        match failing
+            .iter_mut()
+            .find(|known| known.failure == failure && known.status == status)
+        {
+            Some(known) => known.feeds += row.feeds,
+            None => failing.push(Failing {
+                failure,
+                status,
+                feeds: row.feeds,
+            }),
+        }
+    }
+    failing.sort_by(|a, b| b.feeds.cmp(&a.feeds).then(a.status.cmp(&b.status)));
+    Ok(FromDatabase {
+        counts: DataCounts {
+            accounts: counts.accounts,
+            feeds: counts.feeds,
+            subscribed: counts.subscribed,
+        },
+        articles,
+        database: DatabaseNumbers {
+            size: database.size,
+            connections: database.connections,
+            longest: database.longest,
+            hit: database.hit,
+            read: database.read,
+            deadlocks: database.deadlocks,
+        },
+        fetching: Fetching {
+            waiting: fetching.waiting,
+            overdue: fetching.overdue,
+            most_overdue: fetching.most_overdue,
+            behind: fetching.behind,
+        },
+        failing,
+    })
+}
+
 /// The requests by route, the slowest first by their 95th percentile, and all
 /// of them together.
 fn by_route(period: &history::Period) -> (Vec<(String, monitor::Requests)>, monitor::Requests) {
@@ -823,8 +898,25 @@ fn failure(message: &str) -> (Failure, Option<u16>) {
     (failure, None)
 }
 
+impl Failure {
+    /// Its name, as the API has it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::Timeout => "timeout",
+            Self::Blocked => "blocked",
+            Self::Dns => "dns",
+            Self::Network => "network",
+            Self::TooLarge => "too_large",
+            Self::Redirects => "redirects",
+            Self::Unreadable => "unreadable",
+            Self::Other => "other",
+        }
+    }
+}
+
 /// The memory the server holds, from Linux; None elsewhere.
-fn memory() -> Option<u64> {
+pub(crate) fn memory() -> Option<u64> {
     let status = fs::read_to_string("/proc/self/status").ok()?;
     let line = status.lines().find(|line| line.starts_with("VmRSS:"))?;
     let kilobytes: u64 = line

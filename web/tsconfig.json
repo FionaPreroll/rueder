@@ -7,8 +7,10 @@
 		"src",
 		"e2e/**/*.ts",
 		"screenshots/**/*.ts",
+		"showcase/**/*.ts",
 		"vite.config.ts",
 		"playwright.config.ts",
-		"playwright.screenshots.config.ts"
+		"playwright.screenshots.config.ts",
+		"playwright.showcase.config.ts"
 	]
 }

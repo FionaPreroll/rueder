@@ -155,6 +155,60 @@ To check an image yourself before you pull it:
 gh attestation verify oci://ghcr.io/fionapreroll/rueder:latest --repo FionaPreroll/rueder
 ```
 
+## Metrics for Prometheus
+
+rueder can give what its status page shows to a Prometheus of your own, at
+`/metrics` in Prometheus' text format: requests and how long they took by
+route, fetching, the feed search, the image proxy, the warnings and errors of
+the log, and what PostgreSQL says (accounts, feeds, size, connections, feeds
+that fail by why). Nothing in it names an account, a feed or an address.
+Counters count since rueder started and begin at 0 after a restart, which
+Prometheus handles by itself.
+
+It is off until you set a token of 32 characters or more:
+
+```sh
+# in .env
+METRICS_TOKEN=$(openssl rand -hex 32)   # write the value itself, not the command
+```
+
+```sh
+docker compose up --detach
+```
+
+Without the token `/metrics` answers 404; with a wrong one or none, 401. A
+session of an admin or an app password does not open it. Give Prometheus the
+same token in a file of its own and let it ask rueder directly, not through the
+proxy, here from the same machine:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: rueder
+    authorization:
+      credentials_file: /etc/prometheus/rueder-token
+    static_configs:
+      - targets: ["127.0.0.1:3000"]
+```
+
+Prometheus in a container of its own reaches rueder at `rueder:3000` when it
+is on the network of this Compose project (`rueder_default`), or at the
+address of the machine when `RUEDER_LISTEN` lets it.
+
+The token protects the metrics wherever they are reached, but they are for
+you, not for the internet. If Prometheus asks rueder directly, keep `/metrics`
+out of the proxy. With Caddy, inside the site's block:
+
+```caddyfile
+	respond /metrics 404
+```
+
+With nginx, in the `server` block:
+
+```nginx
+    location = /metrics { return 404; }
+```
+
 ## Settings
 
 All settings are in `.env`; `.env.example` lists them with what they do. After
@@ -179,6 +233,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `SMTP_URL`, `MAIL_FROM` | Mail to readers about their account, through your SMTP relay: `smtps://user:password@smtp.example:465` or `smtp://user:password@smtp.example:587?tls=required`; plain `smtp://` only to a relay on the same machine. `MAIL_FROM` is the address it comes from, such as `rueder <rueder@reader.example>`, and the links in it lead to `PUBLIC_URL`, which it needs too. Without them rueder sends no mail. See [Letting people register](#letting-people-register). |
 | `PASSKEY_ANDROID_APPS` | The Android apps that may use the passkeys too, as `package=fingerprint` separated by commas, the fingerprint the SHA-256 of the app's signing certificate as `keytool -printcert` writes it (`AB:CD:…`). Without it, it is the app released on GitHub; `none` names none. rueder names them to Android at `/.well-known/assetlinks.json`, which Google reads from the internet, so the app's passkeys need rueder reachable from there at the host of `PUBLIC_URL`, on port 443. Add the fingerprint of Play App Signing for the Play Store's build, or your own for a build you sign yourself. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | Login through an OpenID Connect provider. |
+| `METRICS_TOKEN` | Metrics for Prometheus under `/metrics`, for whoever sends this token, 32 characters or more. Off if not set; see [Metrics for Prometheus](#metrics-for-prometheus). |
 
 Changing `POSTGRES_PASSWORD` later does not change the password of a database
 that already exists. Change it there first

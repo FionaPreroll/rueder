@@ -21,6 +21,7 @@
 		"e2e": "playwright test",
 		"screenshots": "playwright test --config playwright.screenshots.config.ts",
 		"screenshots:report": "node screenshots/report.ts",
+		"showcase": "playwright test --config playwright.showcase.config.ts",
 		"format": "prettier --write ."
 	},
 	"devDependencies": {

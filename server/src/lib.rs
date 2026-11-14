@@ -54,6 +54,7 @@ pub mod labels;
 pub mod legal;
 pub mod login;
 pub mod mail;
+pub mod metrics;
 pub mod moderation;
 pub mod monitor;
 pub mod oidc;
@@ -147,6 +148,9 @@ pub struct AppState {
     /// What sends mail (`SMTP_URL`, see `mail`); none without it, and then
     /// accounts have no address.
     pub mail: Option<Arc<mail::Mailer>>,
+    /// The metrics for Prometheus under `/metrics`, for whoever knows the
+    /// token in `METRICS_TOKEN`; none without it.
+    pub metrics: Option<Arc<metrics::Metrics>>,
 }
 
 impl AppState {
@@ -169,6 +173,7 @@ impl AppState {
             app_api: true,
             passkeys: None,
             mail: None,
+            metrics: None,
         }
     }
 
@@ -225,6 +230,14 @@ impl AppState {
     pub fn with_legal(self, legal: Legal) -> Self {
         Self {
             legal: Arc::new(legal),
+            ..self
+        }
+    }
+
+    /// Gives the metrics for Prometheus under `/metrics`.
+    pub fn with_metrics(self, metrics: metrics::Metrics) -> Self {
+        Self {
+            metrics: Some(Arc::new(metrics)),
             ..self
         }
     }
@@ -433,11 +446,13 @@ fn api(routes: Router<AppState>, state: &AppState) -> Router<AppState> {
         .layer(DefaultBodyLimit::max(MAX_BODY))
 }
 
-/// The routes outside the two APIs: the image proxy and what Android asks.
+/// The routes outside the two APIs: the image proxy, what Android asks and
+/// the metrics for Prometheus.
 fn other_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(image))
         .routes(routes!(asset_links::serve))
+        .merge(metrics::routes())
 }
 
 /// The types of this module for the frontend, see [`typescript`].
