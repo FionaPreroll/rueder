@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(DISTINCT fingerprint) AS \"errors!\",\n                      coalesce(sum(count), 0)::bigint AS \"count!\"\n               FROM client_reports\n               WHERE last_at > now() - interval '1 day'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "errors!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e7812169293236ae9c671cc34d4c822cc6e7c897c7dbe0f5843fb09403c2849a"
+}

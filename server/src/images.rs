@@ -617,6 +617,14 @@ impl ImageProxy {
             .unwrap_or_default()
     }
 
+    /// What the proxy served since the start, for Prometheus.
+    pub fn served_total(&self) -> monitor::Images {
+        self.served
+            .lock()
+            .map(|window| window.total())
+            .unwrap_or_default()
+    }
+
     /// The parts of the hour that were counted in since the last time, to be
     /// saved ([`crate::history`]).
     pub fn take_changed(&self) -> Vec<(u64, monitor::Images)> {
@@ -675,18 +683,20 @@ impl ImageProxy {
         let got = found.map(|(picture, _)| picture);
         let now = Instant::now();
         if let Ok(mut window) = self.served.lock() {
-            let served = window.at(now);
-            match &got {
-                Ok(_) if cached => served.cached += 1,
-                Ok(_) => served.fetched += 1,
-                Err(Refused::NotFound) => served.not_found += 1,
-                Err(Refused::Source(_)) => served.source_failed += 1,
-                Err(Refused::NotAnImage) => served.not_image += 1,
-                Err(Refused::TooLarge) => served.too_large += 1,
-            }
-            if !cached && !matches!(got, Err(Refused::NotFound)) {
-                served.timing.note(now - started);
-            }
+            window.count(now, |served| {
+                let counted = match &got {
+                    Ok(_) if cached => &mut served.cached,
+                    Ok(_) => &mut served.fetched,
+                    Err(Refused::NotFound) => &mut served.not_found,
+                    Err(Refused::Source(_)) => &mut served.source_failed,
+                    Err(Refused::NotAnImage) => &mut served.not_image,
+                    Err(Refused::TooLarge) => &mut served.too_large,
+                };
+                *counted = counted.saturating_add(1);
+                if !cached && !matches!(got, Err(Refused::NotFound)) {
+                    served.timing.note(now - started);
+                }
+            });
         }
         got
     }

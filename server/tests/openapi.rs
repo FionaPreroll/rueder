@@ -65,7 +65,10 @@ fn every_operation_is_described_in_full() {
         .keys()
         .map(String::as_str)
         .collect();
-    assert_eq!(schemes, HashSet::from(["session", "app_password"]));
+    assert_eq!(
+        schemes,
+        HashSet::from(["session", "app_password", "metrics_token"])
+    );
 
     let operations = operations(&description);
     assert!(operations.len() > 100, "{} operations", operations.len());
@@ -115,7 +118,8 @@ fn every_operation_is_described_in_full() {
             assert!(!text.trim().is_empty(), "{what}: {parameter} is described");
         }
         // Who it is for: the page's API knows the session, the Google
-        // Reader API the app password, and nothing knows both.
+        // Reader API the app password, the metrics their token, and nothing
+        // knows two of them.
         let logins = logins(operation);
         assert!(logins.iter().all(|name| schemes.contains(name.as_str())));
         if path.starts_with("/greader/") {
@@ -129,8 +133,15 @@ fn every_operation_is_described_in_full() {
                     "{what}"
                 );
             }
+        } else if path == "/metrics" {
+            assert_eq!(
+                logins,
+                BTreeSet::from(["metrics_token".to_owned()]),
+                "{what}"
+            );
         } else {
             assert!(!logins.contains("app_password"), "{what}");
+            assert!(!logins.contains("metrics_token"), "{what}");
         }
         if !logins.is_empty() {
             assert!(
@@ -146,7 +157,9 @@ fn every_operation_is_described_in_full() {
 /// so (a login with wrong credentials).
 #[sqlx::test]
 async fn every_operation_needs_the_login_it_says(db: PgPool) {
-    let state = AppState::new(db);
+    // With the metrics on, which are not there without their token.
+    let metrics = rueder::metrics::Metrics::new(&"t".repeat(rueder::metrics::MIN_TOKEN)).unwrap();
+    let state = AppState::new(db).with_metrics(metrics);
     let frontend = std::env::temp_dir().join(format!("rueder-openapi-{}", std::process::id()));
     std::fs::create_dir_all(&frontend).unwrap();
     std::fs::write(frontend.join("index.html"), "<!doctype html>").unwrap();
