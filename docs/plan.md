@@ -126,7 +126,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: rueder ist täglich benutzbar.
 
-4. **Umstieg** (begonnen: in Betrieb, alter Code entfernt; Probelauf, Import und Übernahme aus dem Browser offen). Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach. Das alte System sollte am Ende abgebaut werden; auf Fionas Wunsch geschah das schon am 2026-11-12, nach der Inbetriebnahme und vor dem Import (siehe [Entscheidungen](#entscheidungen)).
+4. **Umstieg** (begonnen: in Betrieb, alter Code entfernt; Probelauf, Import, Übernahme aus dem Browser und das zweite Security-Review offen). Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach. Das alte System sollte am Ende abgebaut werden; auf Fionas Wunsch geschah das schon am 2026-11-12, nach der Inbetriebnahme und vor dem Import (siehe [Entscheidungen](#entscheidungen)).
 
    Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
 
@@ -134,7 +134,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass sich für eine selbst gehostete etwas ändert.
 
-Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) stand am Ende von Schritt 2 (Paket 2.12), davor wurde [gefuzzt](architecture.md#fuzzing). Ein zweites war vor der Inbetriebnahme vorgesehen (Paket 4.1); Fiona hat es am 2026-11-12 übersprungen, weil 2.12 gerade erst fertig geworden war, mit einem [Nachtrag](architecture.md#nachtrag-app-service-worker-ci-und-deploy) für App, CI und Deploy. Seit Paket 2.15 laufen die Fuzz-Targets jede Woche auf GitHub.
+Ein Security-Review gegen die Tabelle in [architecture.md](architecture.md#security) stand am Ende von Schritt 2 (Paket 2.12), davor wurde [gefuzzt](architecture.md#fuzzing). Ein zweites war vor der Inbetriebnahme vorgesehen (Paket 4.1); Fiona hat es am 2026-11-12 zurückgestellt, weil 2.12 gerade erst fertig geworden war, mit einem [Nachtrag](architecture.md#nachtrag-app-service-worker-ci-und-deploy) für App, CI und Deploy. Nachgeholt wird es, sobald Paket 5.5 (Passwort vergessen) gemergt ist (entschieden am 2026-11-14). Seit Paket 2.15 laufen die Fuzz-Targets jede Woche auf GitHub.
 
 ## Messziel
 
@@ -156,7 +156,7 @@ Vorgezogen hat Fiona am 2026-11-12 die beiden Ansichten, die hier standen: die A
 |---|---|
 | Die Messung an erzeugten Daten trifft die Produktion nicht (andere Verteilung der Feedgrößen und Textlängen). | Der Generator bildet schiefe Verteilungen nach (wenige sehr große Feeds, viele kleine). Bevor die alten Daten in die Produktion kommen, läuft der Import einmal zur Probe auf einer Kopie, mit denselben Messungen. |
 | Der Lesestand liegt nur in den Browsern der User und geht beim Umstieg verloren. | Das neue Frontend liest nach dem Import den alten `localStorage` und schickt ihn an den Server (Schritt 4). Dafür muss das neue Frontend unter derselben Adresse (Origin) laufen wie das alte, und der Browser muss den Speicher noch haben. Je später der Import, desto eher fehlt er; dann gilt alles Alte als gelesen. |
-| Eigener Bild-Proxy und eigener HTTP-Client sind Angriffsflächen. | Je eine zentrale, getestete Komponente, feste Grenzen, Fuzzing jede Woche, ein Security-Review mit Nachtrag. |
+| Eigener Bild-Proxy und eigener HTTP-Client sind Angriffsflächen. | Je eine zentrale, getestete Komponente, feste Grenzen, Fuzzing jede Woche, zwei Security-Reviews (das zweite nach Paket 5.5). |
 | Scheinversionen: Feeds ändern bei jedem Abruf Kleinigkeiten (Werbe-Token, Zeitstempel) und füllen das Archiv. | Prüfsumme über den normalisierten Inhalt, Obergrenze von 20 Versionen je Artikel. |
 | Seiten sperren den ehrlichen User-Agent. | Je Feed umstellbar; Abruffehler sind in der Oberfläche sichtbar. |
 | Der einmalige Import schreibt in eine Datenbank, die schon benutzt wird, und lässt sich nicht einfach wiederholen. | Der Server steht währenddessen. Davor ein Backup der neuen Datenbank, ein Lauf, der nur zeigt, was er täte, und ein Probelauf auf einer Kopie. Nach einem Abbruch lässt sich der Import fortsetzen. |
