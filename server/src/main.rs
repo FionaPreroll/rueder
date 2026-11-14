@@ -1001,6 +1001,15 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:
     // the operator's legal texts, and the terms an account has to agree to.
     state = state.with_legal(rueder::legal::Legal::from_env()?);
+    // METRICS_TOKEN: the metrics for Prometheus under /metrics, for whoever
+    // sends this token as "Authorization: Bearer". Without it there are none;
+    // one that is too short stops the start.
+    if let Some(metrics) =
+        rueder::metrics::Metrics::from_setting(env::var("METRICS_TOKEN").ok().as_deref())?
+    {
+        tracing::info!("metrics for Prometheus under /metrics (METRICS_TOKEN)");
+        state = state.with_metrics(metrics);
+    }
     let app = router(state, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on http://{listen_addr}");

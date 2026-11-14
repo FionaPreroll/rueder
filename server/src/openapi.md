@@ -21,6 +21,10 @@ lists every route the server answers, besides the files of the page.
   password as a form and answers with `Auth=<token>`; every other request
   names that token in `Authorization: GoogleLogin auth=<token>`. No cookie
   counts there.
+- **The metrics for Prometheus** (`/metrics`) are there only where the
+  operator set `METRICS_TOKEN`, and only for a request that names that token
+  in `Authorization: Bearer <token>`. Neither a session nor an app password
+  counts there.
 
 ## Answers
 

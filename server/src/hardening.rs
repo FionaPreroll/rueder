@@ -271,10 +271,11 @@ impl Policies {
     }
 }
 
-/// Whether the path belongs to the API or the image proxy, whose answers are
-/// data and never a page.
+/// Whether the path belongs to the API, the image proxy or the metrics, whose
+/// answers are data and never a page.
 fn is_data(path: &str) -> bool {
-    path == "/api"
+    path == "/metrics"
+        || path == "/api"
         || path.starts_with("/api/")
         || path.starts_with("/img/")
         || path.starts_with("/greader/")

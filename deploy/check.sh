@@ -203,6 +203,12 @@ on_server() {
 		if [ -n "$key" ] && [ "${#key}" -lt 32 ]; then
 			bad "IMAGE_PROXY_KEY has fewer than 32 characters"
 		fi
+		metrics=$(value METRICS_TOKEN)
+		if [ -n "$metrics" ] && [ "${#metrics}" -lt 32 ]; then
+			bad "METRICS_TOKEN has fewer than 32 characters: rueder does not start with it"
+		elif [ -n "$metrics" ]; then
+			ok "METRICS_TOKEN is set: metrics for Prometheus under /metrics"
+		fi
 		image=$(value RUEDER_IMAGE)
 	else
 		bad "no .env here"
