@@ -6,11 +6,7 @@
 //! names hints where something looks like a bottleneck, as kinds with numbers;
 //! the page has the words.
 //!
-//! By default it counts the last hour, from memory. With `?hours=` it counts
-//! over a longer time, as far back as the operator keeps the counts
-//! (`rueder retention set --status-days`), from the database
-//! ([`crate::history`]). The hints are always about the last hour: they say
-//! what wants looking at now.
+//! It counts the last hour, from memory: a restart begins anew.
 //!
 //! An admin sees how many feeds fail and why, but not which ones: the status
 //! names no feed, no address and no account, as no endpoint lists the feeds of
@@ -19,31 +15,25 @@
 
 use std::{fs, time::Instant};
 
-use axum::{
-    Json,
-    extract::{Query, State},
-};
-use serde::{Deserialize, Serialize};
+use axum::{Json, extract::State};
+use serde::Serialize;
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use ts_rs::TS;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    AppError, AppState, history, moderation,
-    monitor::{self, SLOTS, Severity, Timing},
-    profile, reports, retention,
+    AppError, AppState, moderation,
+    monitor::{self, Severity, Timing},
+    profile, reports,
     sessions::Session,
     version,
 };
 
 /// The types this module sends, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
-    types
-        .add::<version::Build>()
-        .add::<StatusQuery>()
-        .add::<Status>();
+    types.add::<version::Build>().add::<Status>();
 }
 
 pub fn routes() -> OpenApiRouter<AppState> {
@@ -61,16 +51,6 @@ const SLOW_MS: f64 = 500.0;
 /// From how many seconds past its time a feed counts as overdue.
 const OVERDUE_S: f64 = 10.0 * 60.0;
 
-/// What `GET /api/status` takes.
-#[derive(Deserialize, TS, ToSchema, IntoParams)]
-#[ts(optional_fields)]
-#[into_params(parameter_in = Query)]
-struct StatusQuery {
-    /// Over how many hours to count, up to the days the counts are kept;
-    /// 1 if not said.
-    hours: Option<u32>,
-}
-
 /// What `GET /api/status` answers, for admins only.
 #[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "ServerStatus")]
@@ -87,12 +67,6 @@ struct Status {
     uptime_s: u64,
     /// The memory the server holds, if the system says.
     memory_bytes: Option<u64>,
-    /// Over how many hours requests, fetches, the feed search, the images and
-    /// the problems of the log were counted.
-    hours: u32,
-    /// How many days the counts are kept for, so the most hours to ask for
-    /// are 24 times as many.
-    kept_days: u32,
     /// What looks like a bottleneck or a problem, the most pressing first.
     hints: Vec<Hint>,
     counts: Counts,
@@ -109,7 +83,7 @@ struct Status {
     reported: Vec<moderation::Reported>,
 }
 
-/// How long things took in the hours counted, in milliseconds. The times are null
+/// How long things took in the last hour, in milliseconds. The times are null
 /// when nothing was timed.
 #[derive(Serialize, TS, ToSchema)]
 struct Durations {
@@ -184,7 +158,7 @@ struct Counts {
     live_connections: usize,
 }
 
-/// The requests of the hours counted.
+/// The requests of the last hour.
 #[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusRequests")]
 #[schema(as = StatusRequests)]
@@ -262,7 +236,7 @@ struct Fetcher {
     last_round_at: Option<OffsetDateTime>,
     last_round_feeds: Option<usize>,
     last_round_s: Option<f64>,
-    /// The fetches of the hours counted.
+    /// The fetches of the last hour.
     took: Durations,
     fetched: u64,
     unchanged: u64,
@@ -323,7 +297,7 @@ pub(crate) struct Failing {
     pub feeds: i64,
 }
 
-/// The feed search, in the hours counted.
+/// The feed search, in the last hour.
 #[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusFinder")]
 #[schema(as = StatusFinder)]
@@ -347,7 +321,7 @@ struct Images {
     cache_max_bytes: u64,
     /// Sources left alone for now because they failed.
     failing_sources: usize,
-    /// Images not in the cache, in the hours counted.
+    /// Images not in the cache, in the last hour.
     took: Durations,
     cached: u64,
     fetched: u64,
@@ -362,7 +336,7 @@ struct Images {
 #[ts(rename = "StatusProblems")]
 #[schema(as = StatusProblems)]
 struct Problems {
-    /// In the hours counted.
+    /// In the last hour.
     errors: u64,
     warnings: u64,
     /// The latest first. The same text from the same place is one.
@@ -390,30 +364,20 @@ struct Problem {
 
 /// The status of the server, for admins: requests and how long they took, the
 /// server's own warnings and errors, the fetching of feeds, the feed search,
-/// the image proxy, the database and the reported feeds, over the hours asked
-/// for. Nothing in it names an account.
+/// the image proxy, the database and the reported feeds, over the last hour.
+/// Nothing in it names an account.
 #[utoipa::path(
     get,
     path = "/status",
     operation_id = "server_status",
     tag = "Admin",
-    params(StatusQuery),
     security(("session" = [])),
     responses((status = OK, body = Status), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it.")),
 )]
-async fn status(
-    State(state): State<AppState>,
-    session: Session,
-    Query(query): Query<StatusQuery>,
-) -> Result<Json<Status>, AppError> {
+async fn status(State(state): State<AppState>, session: Session) -> Result<Json<Status>, AppError> {
     profile::admin(&session)?;
     let now = Instant::now();
     let monitor = &state.monitor;
-    let kept_days = u32::try_from(retention::settings(&state.db).await?.status_days).unwrap_or(1);
-    let hours = query
-        .hours
-        .unwrap_or(1)
-        .clamp(1, kept_days.saturating_mul(24));
 
     let tables = sqlx::query!(
         r#"SELECT c.relname::text AS "name!",
@@ -447,34 +411,12 @@ async fn status(
         failing,
     } = from_database(&state.db).await?;
 
-    // The last hour is in memory; the hints are about it.
     let images = state.images.as_deref();
-    let hour = history::Period {
-        requests: monitor.requests(now).into_iter().collect(),
-        fetches: monitor.fetches(now),
-        lookups: monitor.lookups(now),
-        images: images.map(|images| images.served(now)).unwrap_or_default(),
-        problems: monitor.problems.last_hour(now),
-    };
-    // More than that is in the database, once what is in memory is there too.
-    let longer = if hours > 1 {
-        history::save(&state.db, monitor, images).await?;
-        let parts = u64::from(hours) * SLOTS as u64;
-        let first = monitor::slot(now).saturating_sub(parts - 1);
-        Some(history::period(&state.db, first).await?)
-    } else {
-        None
-    };
-    let (hour_routes, hour_all) = by_route(&hour);
-    let shown = longer.as_ref().unwrap_or(&hour);
-    let (routes, all) = match &longer {
-        Some(longer) => by_route(longer),
-        None => (hour_routes.clone(), hour_all.clone()),
-    };
-    let fetches = &shown.fetches;
-    let lookups = &shown.lookups;
-    let served = &shown.images;
-    let problems = &shown.problems;
+    let (routes, all) = by_route(monitor.requests(now));
+    let fetches = monitor.fetches(now);
+    let lookups = monitor.lookups(now);
+    let served = images.map(|images| images.served(now)).unwrap_or_default();
+    let problems = monitor.problems.last_hour(now);
     let round = monitor.last_round();
     let pace = monitor.fetching();
 
@@ -501,10 +443,7 @@ async fn status(
             every_s: pace.every.as_secs(),
             per_hour: pace.per_hour(),
         }),
-        per_hour: {
-            let hour = &hour.fetches;
-            hour.fetched + hour.unchanged + hour.failed + hour.broken
-        },
+        per_hour: fetches.fetched + fetches.unchanged + fetches.failed + fetches.broken,
         behind_s: fetching.behind.unwrap_or_default().max(0.0),
         last_round_at: round.map(|round| round.at),
         last_round_feeds: round.map(|round| round.feeds),
@@ -543,13 +482,13 @@ async fn status(
 
     let browsers = reports::summary(&state.db, state.reports).await?;
     let mut hints = hints(
-        &hour_routes,
-        &hour_all,
+        &routes,
+        &all,
         &database,
         &fetcher,
         &counts,
         &images,
-        hour.problems.errors,
+        problems.errors,
     );
     let day_ago = OffsetDateTime::now_utc() - time::Duration::DAY;
     let lately = browsers.errors.iter().filter(|error| error.last > day_ago);
@@ -590,8 +529,6 @@ async fn status(
         started_at: monitor.started_at,
         uptime_s: monitor.started.elapsed().as_secs(),
         memory_bytes: memory(),
-        hours,
-        kept_days,
         hints,
         counts,
         requests,
@@ -753,12 +690,12 @@ pub(crate) async fn from_database(db: &PgPool) -> anyhow::Result<FromDatabase> {
 
 /// The requests by route, the slowest first by their 95th percentile, and all
 /// of them together.
-fn by_route(period: &history::Period) -> (Vec<(String, monitor::Requests)>, monitor::Requests) {
-    let mut routes: Vec<(String, monitor::Requests)> = period
-        .requests
-        .iter()
+fn by_route(
+    requests: Vec<(String, monitor::Requests)>,
+) -> (Vec<(String, monitor::Requests)>, monitor::Requests) {
+    let mut routes: Vec<(String, monitor::Requests)> = requests
+        .into_iter()
         .filter(|(_, requests)| requests.timing.count > 0)
-        .map(|(route, requests)| (route.clone(), requests.clone()))
         .collect();
     let mut all = monitor::Requests::default();
     for (_, requests) in &routes {

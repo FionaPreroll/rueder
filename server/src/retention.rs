@@ -1,11 +1,8 @@
-//! How long the server keeps what it keeps: set by the operator with `rueder
-//! retention set`, shown with `rueder retention show`, and kept in the one row
-//! of the table `retention`, so that a change counts at once, without a restart.
-//!
-//! Two things are kept for a time. The status of the server ([`Settings`],
-//! see [`crate::history`]) for so many days, seven as rueder comes. And what
-//! is old of the articles ([`Articles`], work package 5.3, A21, E4), which as
-//! rueder comes stays for ever. Of that, once an hour [`sweep`] clears in small
+//! How long the server keeps what is old of the articles ([`Articles`], work
+//! package 5.3, A21, E4): set by the operator with `rueder retention set`,
+//! shown with `rueder retention show`, and kept in the one row of the table
+//! `retention`, so that a change counts at once, without a restart. As rueder
+//! comes, everything stays for ever. Once an hour [`sweep`] clears in small
 //! portions, each in a transaction of its own, so that fetching never waits
 //! for long:
 //!
@@ -43,40 +40,6 @@ pub const PORTION: i64 = 500;
 /// What PostgreSQL answers when dropping a month of versions waited longer for
 /// the table than it may (see `drop_versions_partitions`): left to the next run.
 const LOCK_NOT_AVAILABLE: &str = "55P03";
-
-/// The fewest and the most days the status is kept for.
-pub const DAYS: RangeInclusive<i32> = 1..=3650;
-
-/// How long the status is kept, as the operator set it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Settings {
-    /// How many days the counts of the status and the problems of the log are
-    /// kept for.
-    pub status_days: i32,
-}
-
-pub async fn settings(db: &PgPool) -> anyhow::Result<Settings> {
-    let settings = sqlx::query_as!(Settings, "SELECT status_days FROM retention")
-        .fetch_one(db)
-        .await?;
-    Ok(settings)
-}
-
-pub async fn set(db: &PgPool, settings: &Settings) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        DAYS.contains(&settings.status_days),
-        "the status is kept for {} to {} days",
-        DAYS.start(),
-        DAYS.end()
-    );
-    sqlx::query!(
-        "UPDATE retention SET status_days = $1",
-        settings.status_days
-    )
-    .execute(db)
-    .await?;
-    Ok(())
-}
 
 /// What goes of an article that is old.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
@@ -146,7 +109,7 @@ impl Articles {
         within(self.versions_months, &MONTHS, "the months of versions")?;
         within(
             self.orphans_days,
-            &DAYS,
+            &ORPHAN_DAYS,
             "the days of feeds without subscribers",
         )?;
         match (self.articles_months, self.articles_what) {

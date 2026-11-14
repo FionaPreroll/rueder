@@ -2,8 +2,8 @@
 	// The status of the server, for its admins: a few numbers at a glance and what
 	// wants looking at, then, each to be opened, the reported feeds, the server, its
 	// database, fetching, the feed search, the image proxy, the requests by route
-	// and what the log said, counted over the last hour or longer, as far as the
-	// server keeps its counts. It asks again every few seconds while it is open.
+	// and what the log said, counted over the last hour. It asks again every few
+	// seconds while it is open.
 	import { onMount } from 'svelte';
 	import type { Durations, StatusHint } from '#lib/api/types.ts';
 	import {
@@ -24,52 +24,20 @@
 	/** How often it asks again, in milliseconds. */
 	const EVERY = 15_000;
 
-	/** The times to count over that are offered, in hours, as far as the server keeps its counts. */
-	const PERIODS = [1, 24, 7 * 24, 30 * 24];
-
 	let status = $state.raw<ServerStatus | null>(null);
 	let failed = $state(false);
 	let asking = $state(false);
 	/** When the status was asked for, for "as of" and "ago". */
 	let at = $state(Date.now());
-	/** Over how many hours to count. */
-	let hours = $state(1);
-	/** Whether the hours were changed while the server was asked, so it is asked again. */
-	let again = false;
 
 	async function ask() {
-		if (asking) {
-			again = true;
-			return;
-		}
+		if (asking) return;
 		asking = true;
-		const answer = await reader.status(hours);
+		const answer = await reader.status();
 		asking = false;
 		at = Date.now();
 		failed = answer === null;
-		if (answer) {
-			status = answer;
-			// The server keeps its counts for less than was asked for now.
-			if (hours > answer.kept_days * 24) hours = answer.hours;
-		}
-		if (again) {
-			again = false;
-			void ask();
-		}
-	}
-
-	/** What can be counted over: the periods up to what the server keeps, and all it keeps. */
-	const periods = $derived.by(() => {
-		const most = (status?.kept_days ?? 1) * 24;
-		const offered = PERIODS.filter((period) => period <= most);
-		if (!offered.includes(most)) offered.push(most);
-		return offered;
-	});
-
-	function period(hours: number) {
-		const p = m.status.period;
-		if (hours === 1) return p.hour;
-		return hours <= 48 ? p.hours(hours) : p.days(Math.round(hours / 24));
+		if (answer) status = answer;
 	}
 
 	onMount(() => {
@@ -192,14 +160,6 @@
 		<p class="text-xs text-soft" role="status">
 			{#if status}{m.status.asOf(formatFull(at))}{:else if !failed}{m.status.loading}{/if}
 		</p>
-		<label class="flex items-center gap-2 text-sm">
-			<span class="text-soft">{m.status.period.label}</span>
-			<select class="rounded py-1 text-sm" bind:value={hours} onchange={() => void ask()}>
-				{#each periods as option (option)}
-					<option value={option}>{period(option)}</option>
-				{/each}
-			</select>
-		</label>
 		<button
 			type="button"
 			class="tool ml-auto aria-disabled:opacity-50"
@@ -210,9 +170,6 @@
 			{m.status.refresh}
 		</button>
 	</div>
-	{#if status}
-		<p class="mt-2 text-xs text-soft">{@render said(m.status.period.kept(status.kept_days))}</p>
-	{/if}
 	{#if reader.demo}
 		<p class="mt-2 text-xs text-soft">{m.status.demo}</p>
 	{/if}
@@ -500,7 +457,7 @@
 			{@render opener(
 				m.status.problems.title,
 				'status-problems',
-				m.status.problems.counts(s.problems.errors, s.problems.warnings, period(s.hours))
+				m.status.problems.counts(s.problems.errors, s.problems.warnings)
 			)}
 			{#if s.problems.recent.length === 0}
 				<p class="mt-2 text-sm text-soft">{m.status.problems.none}</p>

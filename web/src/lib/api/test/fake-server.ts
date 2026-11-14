@@ -655,10 +655,7 @@ export class FakeServer {
 			return empty();
 		}
 		if (method === 'GET' && path === '/status') {
-			const hours = Number(query.get('hours') ?? 1);
-			return this.admin
-				? json(demoStatus(Date.now(), hours))
-				: refused(403, 'only an admin can do this');
+			return this.admin ? json(demoStatus(Date.now())) : refused(403, 'only an admin can do this');
 		}
 
 		const labelled = this.labelling(method, path, query, body);

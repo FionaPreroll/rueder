@@ -106,10 +106,9 @@ What is here:
   reported. `rueder feed block <address>` stops fetching the feed, hides its
   articles from everybody, refuses new subscriptions and removes its images
   from the cache; `rueder feed unblock <address>` lifts it.
-- The status for admins (`src/monitor.rs`, `src/status.rs`, `src/history.rs`):
-  `GET /api/status`, kept across restarts for as long as
-  `rueder retention set --status-days` says (below), and the same numbers for
-  Prometheus under `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).
+- The status for admins (`src/monitor.rs`, `src/status.rs`): `GET /api/status`
+  for the last hour, in memory, and the same numbers for Prometheus under
+  `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).
 - Keeping old articles, or not (`src/retention.rs`): `rueder retention set`
   lets articles, their texts, versions and feeds nobody reads go after a
   time; by default everything stays. Starred and labelled articles
@@ -199,8 +198,6 @@ cargo run -- retention show             # how long what is kept; everything, unt
 cargo run -- retention set --articles 24 --remove text --versions 12 --orphans 90
 cargo run -- retention run              # clear all that is old now, not within the hour
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
-cargo run -- retention show             # how long the counts of the status page are kept
-cargo run -- retention set --status-days 30
 cargo run -- account second-factor-off ada   # ada lost the app and the recovery codes
 cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
 ```
@@ -208,11 +205,8 @@ cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unbl
 Admins see the status of the server in the account menu of the page
 (`GET /api/status`, `src/monitor.rs`, `src/status.rs`): how long requests take
 by route, the database, fetching, the feed search, the image proxy and the
-warnings and errors of the log, for the last hour or, if asked, longer. It
-counts in memory and writes the counts to the database every minute and when
-it stops (`src/history.rs`), so they survive a restart; they are kept for 7
-days unless `retention set --status-days` says otherwise. It counts failing
-feeds by why and names none.
+warnings and errors of the log, for the last hour, kept in memory. It counts
+failing feeds by why and names none.
 
 Readers who agree in the settings (Privacy) send reports of errors in their
 browser to `POST /api/reports` (`src/reports.rs`): scrubbed of addresses and

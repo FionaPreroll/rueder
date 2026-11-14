@@ -625,22 +625,6 @@ impl ImageProxy {
             .unwrap_or_default()
     }
 
-    /// The parts of the hour that were counted in since the last time, to be
-    /// saved ([`crate::history`]).
-    pub fn take_changed(&self) -> Vec<(u64, monitor::Images)> {
-        self.served
-            .lock()
-            .map(|mut window| window.take_changed())
-            .unwrap_or_default()
-    }
-
-    /// Puts back what was saved of a part of the hour.
-    pub fn restore(&self, number: u64, saved: &monitor::Images, now: Instant) {
-        if let Ok(mut window) = self.served.lock() {
-            window.restore(number, saved, now);
-        }
-    }
-
     /// How many sources are left alone for now because they failed.
     pub fn failing_sources(&self) -> usize {
         let now = Instant::now();
