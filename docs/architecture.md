@@ -1,16 +1,18 @@
 # rueder: Architektur des neuen Systems
 
-Stand 2026-11-12. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
+Stand 2026-11-14. Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
 
-Gebaut sind die Schritte 1 bis 3; das erste Security-Review (Paket 2.12) ist am 2026-11-12 gelaufen, sein Ergebnis steht unter [Security-Review vom 2026-11-12](#security-review-vom-2026-11-12). Jeder Abschnitt nennt das Paket, mit dem sein Teil kam. Was noch Entwurf ist, sagt der Abschnitt selbst. Der [einmalige Import in den laufenden Bestand](implementation.md#einmaliger-import-in-den-laufenden-bestand) aus Schritt 4 ist mit Paket 4.3 gebaut und dort beschrieben. Wo ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für die Endpunkte die Module in `server/src/`, für die Oberfläche `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
+Gebaut sind die Schritte 1 bis 3 und der größte Teil von Schritt 5 (öffentliche Instanz); das Security-Review (Paket 2.12) ist am 2026-11-12 gelaufen, sein Ergebnis steht unter [Security-Review vom 2026-11-12](#security-review-vom-2026-11-12). Das zweite (Paket 4.1) war vor der Inbetriebnahme vorgesehen und kommt nach Paket 5.5. Jeder Abschnitt nennt das Paket, mit dem sein Teil kam. Was noch Entwurf ist, sagt der Abschnitt selbst. Der [einmalige Import in den laufenden Bestand](implementation.md#einmaliger-import-in-den-laufenden-bestand) aus Schritt 4 ist mit Paket 4.3 gebaut und dort beschrieben. Wo ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für die Endpunkte die Module in `server/src/`, für die Oberfläche `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
 
 - [Überblick](#überblick)
 - [Bausteine](#bausteine)
 - [Datenmodell](#datenmodell)
 - [Artikelspeicher und Versionen](#artikelspeicher-und-versionen)
 - [Lesestand und Ungelesen-Zahlen](#lesestand-und-ungelesen-zahlen)
+- [Aufbewahrung](#aufbewahrung)
 - [Ordner und Abos](#ordner-und-abos)
 - [Filterregeln](#filterregeln)
+- [Suche](#suche)
 - [Abruf](#abruf)
 - [Bereinigung](#bereinigung)
 - [Bild-Proxy](#bild-proxy)
@@ -24,6 +26,7 @@ Gebaut sind die Schritte 1 bis 3; das erste Security-Review (Paket 2.12) ist am 
 - [Betrieb](#betrieb)
 - [Status für Admins](#status-für-admins)
 - [Android-App](#android-app)
+- [Seite auf GitHub Pages](#seite-auf-github-pages)
 
 ## Überblick
 
@@ -32,6 +35,7 @@ Ein Rust-Programm übernimmt API, Abruf, Bereinigung, Live-Updates, Login und Bi
 ```mermaid
 flowchart LR
     browser["Browser: Svelte-SPA"]
+    apps["Feedreader-Apps"]
     subgraph rueder["rueder (ein Rust-Programm)"]
         api["API, Sitzungen, statische Dateien"]
         events["Live-Updates (SSE)"]
@@ -42,8 +46,10 @@ flowchart LR
     end
     db[("PostgreSQL")]
     net["Feeds, Webseiten, Bilder"]
+    relay["SMTP-Relais des Betreibers"]
 
     browser -->|"/api, /api/events, /img"| api
+    apps -->|"/greader"| api
     api --> events
     api --> images
     fetcher --> cleaner
@@ -52,12 +58,13 @@ flowchart LR
     api --> db
     cleaner --> db
     client --> net
+    api -->|"Mails (E6)"| relay
 ```
 
 Zwei Regeln prägen den Aufbau:
 
 - **Der Browser spricht ausschließlich mit rueder.** Kein Bild, kein Skript, kein Tracker wird direkt von fremden Seiten geladen.
-- **Ins Internet geht nur der gehärtete HTTP-Client.** Feeds, Webseiten für die Feed-Suche und Bilder holt allein er. Deshalb gibt es genau eine Stelle für alle Schutzregeln gegen SSRF.
+- **Ins Internet geht nur der gehärtete HTTP-Client.** Feeds, Webseiten für die Feed-Suche und Bilder holt allein er. Deshalb gibt es genau eine Stelle für alle Schutzregeln gegen SSRF. Die einzige Ausnahme sind Mails (Entscheidung E6, Paket 5.4): Sie gehen über SMTP an das Relais, das der Betreiber einstellt, nie an eine Adresse, die ein User wählt, siehe [E-Mail am Konto](#e-mail-am-konto).
 
 ## Bausteine
 
@@ -69,9 +76,10 @@ Zwei Regeln prägen den Aufbau:
 | Bereinigung | `ammonia` plus eigene Regeln für Links und Bilder | Allowlist statt Sperrliste. |
 | Live-Updates | SSE, intern ein Broadcast-Kanal | Ersetzt RabbitMQ. Bei mehreren Prozessen übernimmt `LISTEN/NOTIFY` von PostgreSQL. |
 | Bilder | Eigener Proxy mit dem `image`-Crate | Ersetzt imgproxy, der Schlüssel für die Signatur bleibt auf dem Server. |
-| Login | Lokale Konten mit Argon2id, OpenID Connect als Option | Ersetzt loginsrv und den Dienst `authbackend`. |
+| Login | Lokale Konten mit Argon2id, OpenID Connect als Option, zweiter Faktor mit TOTP, Passkeys mit `webauthn-rs` | Ersetzt loginsrv und den Dienst `authbackend`. Passkeys seit Paket 5.15, siehe [Passkeys](#passkeys). |
+| E-Mail | `lettre` mit rustls, SMTP an ein Relais des Betreibers | Seit Paket 5.4, nur wenn der Betreiber es einschaltet, siehe [E-Mail am Konto](#e-mail-am-konto). |
 | Frontend | SvelteKit als SPA, Svelte 5, TypeScript, TailwindCSS 4 | Wird vom Server mit ausgeliefert. Die API-Typen werden aus dem Rust-Code erzeugt. |
-| Betrieb | Ein Container plus PostgreSQL hinter einem Reverse-Proxy | Heute sind es acht Container plus imgproxy. |
+| Betrieb | Ein Container plus PostgreSQL hinter einem Reverse-Proxy | Der alte rueder brauchte acht Container plus imgproxy. |
 
 Das Programm hat Unterbefehle: `rueder serve` (Standard) startet Server und Abruf, weitere Befehle erledigen einmalige Arbeiten (Import der alten Datenbank, Konten anlegen, Admins bestimmen, Messdaten erzeugen). Migrationen laufen beim Start von selbst.
 
@@ -81,7 +89,7 @@ Die Tabellen im Überblick. Die genauen Spalten stehen in den Migrationen, `serv
 
 | Bereich | Tabellen | Idee |
 |---|---|---|
-| Konten | `accounts`, `account_identities`, `sessions`, `registration`, `invites`, `recovery_codes`, `app_passwords` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON, dazu das Recht als Admin, die Zustimmung zu [Fehlerberichten](#fehlerberichte-aus-dem-browser) (`sends_reports`) und, woher es stammt (`origin`, `invite_id`, `invite_quota`, siehe [Registrierung und Einladungen](#registrierung-und-einladungen)) und den [zweiten Faktor](#zweiter-faktor) (`totp_secret`, `totp_pending`, `totp_last_step`, die Wiederherstellungscodes in `recovery_codes`, an der Sitzung `second_factor`). `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit, ein [App-Passwort](#apps-anderer-anbieter) der SHA-256 des Passworts mit Name und letzter Nutzung. |
+| Konten | `accounts`, `account_identities`, `sessions`, `registration`, `invites`, `recovery_codes`, `app_passwords`, `passkeys`, `email_links`, `password_resets` | Ein Konto hat einen Login-Namen, optional einen Argon2id-Hash und Einstellungen als JSON, dazu das Recht als Admin, die Zustimmung zu [Fehlerberichten](#fehlerberichte-aus-dem-browser) (`sends_reports`) und, woher es stammt (`origin`, `invite_id`, `invite_quota`, siehe [Registrierung und Einladungen](#registrierung-und-einladungen)) und den [zweiten Faktor](#zweiter-faktor) (`totp_secret`, `totp_pending`, `totp_last_step`, die Wiederherstellungscodes in `recovery_codes`, an der Sitzung `second_factor`). `account_identities` verknüpft Konten mit OpenID-Connect-Anbietern (Aussteller und Subject) und mit dem alten Login (`auth_origin`, `auth_subject`). Eine Sitzung ist der SHA-256 des Cookie-Tokens mit Ablaufzeit, ein [App-Passwort](#apps-anderer-anbieter) der SHA-256 des Passworts mit Name und letzter Nutzung. Dazu die [Passkeys](#passkeys) eines Kontos und seine [E-Mail-Adresse](#e-mail-am-konto) (`accounts.email`, die Links zur Bestätigung in `email_links`, die für [Passwort vergessen](#passwort-vergessen) in `password_resets`). |
 | Feeds | `feeds` | Ein Feed gehört allen seinen Abonnenten gemeinsam. Er kennt seine höchste Artikelnummer (`last_seq`), den Abrufstand (nächster Abruf, Intervall, ETag, Last-Modified, letzter Erfolg, letzter Fehler) und den User-Agent, mit dem er abgerufen wird. |
 | Baum | `folders`, `subscriptions` | Ordner mit Elternordner und Position. Ein Abo verbindet Konto und Feed, liegt in einem Ordner oder auf oberster Ebene, hat eine Position und trägt die Lesemarke. |
 | Artikel | `articles`, `article_content`, `article_versions`, `arrivals` | Heiß, warm und kalt getrennt, siehe [Artikelspeicher und Versionen](#artikelspeicher-und-versionen). Der Index der [Suche](#suche) liegt auf `article_content`. `arrivals` sagt je Minute, welche Nummer als erste eintraf, für die Zeiten der [Apps anderer Anbieter](#apps-anderer-anbieter). |
@@ -89,6 +97,8 @@ Die Tabellen im Überblick. Die genauen Spalten stehen in den Migrationen, `serv
 | Regeln | `filter_rules` | Filterregeln je Konto, siehe [Filterregeln](#filterregeln). |
 | Labels | `labels`, `article_labels` | Labels mit Farbe je Konto und ihre Zuordnung zu Artikeln. Der Stern ist kein Label, sondern eine Ausnahme in `article_states`. |
 | Fehlerberichte | `client_reports` | Fehler aus den Browsern der User, die zustimmen, je Konto und Fingerabdruck gezählt, siehe [Fehlerberichte aus dem Browser](#fehlerberichte-aus-dem-browser). |
+| Meldungen | `content_reports`, `feeds.blocked_at`, `blocked_images` | Meldungen von Feeds und Artikeln und gesperrte Feeds samt ihren Bildern, siehe [Meldungen und gesperrte Feeds](#meldungen-und-gesperrte-feeds). |
+| Status | `status_slots`, `status_problems` | Was die Statusseite zählt, über einen Neustart hinweg, siehe [Status für Admins](#status-für-admins). |
 | Aufbewahrung | `retention`, `article_tombstones`, `feeds.cut_seq`, `articles.arrived_at` | Wie lange was bleibt, die Kennungen ganz gelöschter Artikel und die Grenze, bis zu der ein Feed aufgeräumt ist, siehe [Aufbewahrung](#aufbewahrung). |
 
 Schlüssel sind fortlaufende Zahlen, keine UUIDs, `bigint` für Artikel und Fehlerberichte, `integer` für alles andere (Konten, Feeds, Ordner, Regeln, Labels, Einladungen): Sie halten Zeilen und Indizes schmal, und neue Artikel liegen im Index beieinander. Feeds und Konten behalten ihre alte UUID in einer Spalte `legacy_id`, Artikel in der Tabelle `legacy_articles`, damit der Import weiß, was er schon übernommen hat, und Lesestand und Labels aus dem Browser zugeordnet werden können. Die Tabelle statt einer Spalte hält die heiße Artikeltabelle schmal und kann nach dem Umstieg weg.
@@ -727,7 +737,7 @@ Der Server verarbeitet unbeaufsichtigt Eingaben, die Fremde bestimmen. Tests von
 - Die Targets liegen in `server/fuzz/` und laufen mit `cargo-fuzz`, das Nightly-Rust braucht. Der Startkorpus sind die aufgezeichneten Feeds des alten Systems (früher `backend/test/data/`, jetzt `server/tests/data/`) und die Fälle der Cleaner-Tests, dazu ein paar Feeds in RSS, Atom und JSON Feed und kleine Bilder jedes Formats.
 - Was gelten muss, steht einmal in `server/fuzz/checks.rs`. Die Targets binden die Datei ein, und `server/tests/fuzz_corpus.rs` auch: Der gespeicherte Korpus läuft so in der CI als gewöhnlicher Test mit stabilem Rust und prüft dasselbe wie der Fuzzer. Jeder Fund kommt als Datei in den Korpus, mit einem Namen, der sagt, was er fand (`found-…`), und bleibt so als Test erhalten.
 - Die Bereinigung wird mit zwei Basisadressen geprüft, mit und ohne Seite des Artikels, und danach so, wie der Text ausgeliefert wird: Jedes Bild zeigt dann auf `/img/`. Beim Bild-Proxy sagt das erste Byte der Eingabe, für welche Größe; was herauskommt, muss das Format haben, das der Proxy nennt, und in diese Größe passen.
-- Richtig gefuzzt wird von Hand vor den beiden Security-Reviews, etwa eine halbe Stunde je Target. Seit Paket 2.15 laufen alle Targets dazu auf GitHub (`.github/workflows/fuzz.yml`): drei Minuten bei einem Pull Request, der sie berührt, eine halbe Stunde jeden Montag, von Hand so lange wie angegeben (siehe [Apps anderer Anbieter](#apps-anderer-anbieter)).
+- Richtig gefuzzt wird vor den beiden Security-Reviews, etwa eine halbe Stunde je Target: vor 2.12 von Hand, vor 4.1 nach Paket 5.5. Seit Paket 2.15 laufen alle Targets dazu auf GitHub (`.github/workflows/fuzz.yml`): drei Minuten bei einem Pull Request, der sie berührt, eine halbe Stunde jeden Montag, von Hand so lange wie angegeben (siehe [Apps anderer Anbieter](#apps-anderer-anbieter)).
 - Für die Bereinigung gibt es seit Paket 2.3 schon einen Property-Test mit denselben Eigenschaften (`server/tests/cleaning.rs`): Er setzt Texte aus Bruchstücken von Auszeichnung zusammen. Das Fuzz-Target kommt dazu, es ersetzt ihn nicht.
 - Nicht gefuzzt werden die fremden Parser für sich und einmalige Eingaben (die alte Datenbank, der `localStorage` des alten Frontends). Für sie gelten Grenzen und Tests mit regelwidrigen Eingaben.
 
@@ -749,10 +759,10 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 
 | Bereich | Endpunkte |
 |---|---|
-| Zustand | `GET /api/health`; für Admins `GET /api/status`, siehe [Status für Admins](#status-für-admins) |
-| Sitzung | `POST /api/login`, `GET /api/login/ways`, `POST /api/logout`, `GET /api/me`, `PUT /api/terms` (siehe [Rechtliches](#rechtliches)), `GET /api/oidc/start`, `GET /api/oidc/callback` |
+| Zustand | `GET /api/health`; für Admins `GET /api/status`, siehe [Status für Admins](#status-für-admins); für Prometheus `GET /metrics` mit Token, siehe [Metriken für Prometheus](#metriken-für-prometheus) |
+| Sitzung | `POST /api/login`, `GET /api/login/ways`, `POST /api/login/passkey`, `POST /api/login/passkey/finish` (siehe [Passkeys](#passkeys)), `POST /api/logout`, `GET /api/me`, `PUT /api/terms` (siehe [Rechtliches](#rechtliches)), `GET /api/oidc/start`, `GET /api/oidc/callback` |
 | Registrierung | `GET` und `POST /api/register` (ohne Sitzung), `GET` und `POST /api/invites`, `DELETE /api/invites/{id}` |
-| Konto | `GET /api/sessions`, `DELETE /api/sessions`, `DELETE /api/sessions/{id}`, `PUT /api/password`, `GET` und `DELETE /api/second-factor`, `POST /api/second-factor/setup`, `POST /api/second-factor/confirm` (siehe [Zweiter Faktor](#zweiter-faktor)), `DELETE /api/account` (siehe [Konto löschen und sperren](#konto-löschen-und-sperren)), `GET` und `POST /api/app-passwords`, `DELETE /api/app-passwords/{id}` (siehe [Apps anderer Anbieter](#apps-anderer-anbieter)); für Admins `GET` und `POST /api/accounts` |
+| Konto | `GET /api/sessions`, `DELETE /api/sessions`, `DELETE /api/sessions/{id}`, `PUT /api/password`, ohne Sitzung `POST /api/password/forgot` und `POST /api/password/reset` (siehe [Passwort vergessen](#passwort-vergessen)), `GET` und `DELETE /api/second-factor`, `POST /api/second-factor/setup`, `POST /api/second-factor/confirm` (siehe [Zweiter Faktor](#zweiter-faktor)), `GET` und `POST /api/passkeys`, `POST /api/passkeys/register`, `POST /api/passkeys/proof`, `DELETE /api/passkeys/{id}` (siehe [Passkeys](#passkeys)), `GET`, `PUT` und `DELETE /api/email`, dazu ohne Sitzung `POST /api/email/confirm` und `POST /api/email/resend` (siehe [E-Mail am Konto](#e-mail-am-konto)), `DELETE /api/account` (siehe [Konto löschen und sperren](#konto-löschen-und-sperren)), `GET` und `POST /api/app-passwords`, `DELETE /api/app-passwords/{id}` (siehe [Apps anderer Anbieter](#apps-anderer-anbieter)); für Admins `GET` und `POST /api/accounts` |
 | Baum | `GET /api/tree` (Ordner, Abos, Feeds mit `last_seq`, Lesemarken, Ungelesen-Zahlen und dem Fehler des letzten Abrufs, dazu die Zahl der ausgeblendeten Artikel), `POST /api/tree/move`, `POST /api/folders`, `PATCH` und `DELETE /api/folders/{id}` |
 | Abos | `POST /api/feeds/find`, `POST /api/feeds`, `PATCH` und `DELETE /api/feeds/{id}`, `PUT /api/feeds/{id}/agent`, `GET` und `POST /api/opml` |
 | Listen | `GET /api/feeds/{id}/articles`, `GET /api/folders/{id}/articles`, `GET /api/articles` (alle), `GET /api/starred`, `GET /api/hidden`, `GET /api/labels/{id}/articles`, jeweils mit `before` oder `after`, `limit` und `unread` |
@@ -762,11 +772,13 @@ JSON unter `/api`, Sitzung über das Cookie. Gebaut in den Paketen 2.5 und 2.6; 
 | Regeln | `GET` und `POST /api/rules`, `PUT` und `DELETE /api/rules/{id}`, `POST /api/rules/order`, `POST /api/rules/preview`, `GET /api/rules/hits` |
 | Labels | `GET` und `POST /api/labels`, `PATCH` und `DELETE /api/labels/{id}`, `POST /api/labels/order`, `PUT` und `DELETE /api/feeds/{id}/articles/{seq}/labels/{label}` |
 | Einstellungen | `GET` und `PUT /api/settings` |
+| Meldungen | `POST /api/feeds/{id}/report`, `POST /api/feeds/{id}/articles/{seq}/report`, siehe [Meldungen und gesperrte Feeds](#meldungen-und-gesperrte-feeds) |
 | Fehlerberichte | `POST /api/reports`, `GET` und `PUT /api/reports/consent`, siehe [Fehlerberichte aus dem Browser](#fehlerberichte-aus-dem-browser) |
 | Umzug | `GET /api/export`, `POST /api/import`, siehe [Umzug eines Kontos](#umzug-eines-kontos) |
 | Live | `GET /api/events` (SSE), siehe [Live-Updates](#live-updates) |
 | Bilder | `GET /img/<signatur>/<größe>/<adresse>`; für Apps `GET /greader/img/<app-passwort>/<signatur>/<größe>/<adresse>` |
 | Apps anderer Anbieter | die Google-Reader-API unter `/greader`, angemeldet mit App-Passwörtern, siehe [Apps anderer Anbieter](#apps-anderer-anbieter) |
+| Android-App | `GET /.well-known/assetlinks.json` (ohne Sitzung), siehe [Passkeys](#passkeys) |
 
 Was für alle gilt:
 
