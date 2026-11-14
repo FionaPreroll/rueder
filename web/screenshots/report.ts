@@ -44,7 +44,8 @@ export function report(project: string, measured: Measured[]): string {
 			const seen = [...pictures];
 			const shown =
 				seen.slice(0, 3).join(', ') + (seen.length > 3 ? ` and ${seen.length - 3} more` : '');
-			out.push(`| ${key.replace(/\|/g, '\\|')} | ${shown} |`);
+			// Backslashes too, so a name cannot undo the escape of a bar.
+			out.push(`| ${key.replace(/[\\|]/g, '\\$&')} | ${shown} |`);
 		}
 	}
 	if (lines.length) {
