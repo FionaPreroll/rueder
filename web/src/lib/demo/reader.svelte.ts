@@ -65,36 +65,6 @@ const PAGE = 40;
 /** Unread articles the made-up account starts with, feed by feed in the order of the data. */
 const startUnread = [3, 0, 2, 7, 1, 12, 18, 9, 1, 0, 4, 0, 2, 5];
 
-const startRules: FilterRule[] = [
-	{
-		id: 'rule-1',
-		enabled: true,
-		scope: { kind: 'all' },
-		field: 'title',
-		match: 'word',
-		pattern: 'Anzeige',
-		action: 'hide'
-	},
-	{
-		id: 'rule-2',
-		enabled: true,
-		scope: { kind: 'all' },
-		field: 'author',
-		match: 'contains',
-		pattern: 'Sponsored Desk',
-		action: 'hide'
-	},
-	{
-		id: 'rule-3',
-		enabled: false,
-		scope: { kind: 'folder', id: 'folder-news' },
-		field: 'title',
-		match: 'regex',
-		pattern: 'Hafenfest|Stadtbad',
-		action: 'read'
-	}
-];
-
 /** What a reader typed, as an address of the web; without a scheme it is https. */
 function webAddress(text: string): URL | null {
 	const trimmed = text.trim();
@@ -109,12 +79,6 @@ function webAddress(text: string): URL | null {
 	}
 }
 
-/** Labels to start with; two articles of the Tagesbote have them. */
-const startLabels: Label[] = [
-	{ id: 'label-later', title: 'Später lesen', color: '#1a73e8' },
-	{ id: 'label-work', title: 'Arbeit', color: '#1e8e3e' }
-];
-
 export class DemoReader implements Reader {
 	tree = $state.raw<TreeNode[]>([]);
 	feeds = $state.raw<Record<string, Feed>>({});
@@ -122,7 +86,7 @@ export class DemoReader implements Reader {
 	articles = $state.raw<Record<string, DemoArticle[]>>({});
 	states = $state.raw<Record<string, FeedState>>({});
 	rules = $state.raw<FilterRule[]>([]);
-	labels = $state.raw<Label[]>(startLabels);
+	labels = $state.raw<Label[]>([]);
 	/** The labels of each article, by its id. */
 	articleLabels = $state.raw<Record<string, string[]>>({});
 	/** Folders shown closed in the sidebar. */
@@ -269,7 +233,8 @@ export class DemoReader implements Reader {
 		this.tree = data.tree;
 		this.feeds = data.feeds;
 		this.articles = data.articles;
-		this.rules = startRules;
+		this.rules = data.rules;
+		this.labels = data.labels;
 		const tagesbote = data.articles['feed-tagesbote'] ?? [];
 		const [last, before] = [tagesbote.at(-1), tagesbote.at(-2)];
 		if (last) this.articleLabels = { [last.id]: ['label-later'] };

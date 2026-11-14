@@ -4,6 +4,7 @@ import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
+import { demoData } from '#lib/demo/data.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { VIEW_KEY } from '#lib/view.ts';
@@ -41,11 +42,22 @@ describe('the start page', () => {
 		expect(screen.getByRole('heading', { name: 'Recently starred' })).toBeInTheDocument();
 	});
 
+	it('has its made-up feeds in the language it starts in', () => {
+		render(Page);
+		const sidebar = () => screen.getByRole('navigation');
+		expect(within(sidebar()).getByText('The Daily Courier')).toBeInTheDocument();
+		document.body.innerHTML = '';
+		settings.language = 'de';
+		render(Page);
+		expect(within(sidebar()).getByText('Tagesbote')).toBeInTheDocument();
+		expect(within(sidebar()).queryByText('The Daily Courier')).toBeNull();
+	});
+
 	it('goes to a feed and to an article', async () => {
 		render(Page);
 		const main = screen.getByRole('main');
-		await userEvent.click(within(main).getByRole('button', { name: 'Tagesbote' }));
-		expect(heading()).toHaveTextContent('Tagesbote');
+		await userEvent.click(within(main).getByRole('button', { name: 'The Daily Courier' }));
+		expect(heading()).toHaveTextContent('The Daily Courier');
 		await userEvent.click(screen.getByRole('button', { name: /rueder/ }));
 		expect(heading()).toHaveTextContent('New in your subscriptions');
 		const unread = unreadInTitle();
@@ -350,16 +362,16 @@ describe('the keyboard', () => {
 		const body = article.parentElement!.parentElement!;
 		const menu = () => within(body).getByRole('button', { name: 'Labels' });
 		await userEvent.click(menu());
-		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' }));
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Work' }));
 		// The row shows it as a dot, the article as a chip.
-		expect(within(body).getAllByLabelText('Label: Arbeit')).toHaveLength(2);
+		expect(within(body).getAllByLabelText('Label: Work')).toHaveLength(2);
 		await userEvent.click(menu());
-		expect(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' })).toHaveAttribute(
+		expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveAttribute(
 			'aria-checked',
 			'true'
 		);
-		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Arbeit' }));
-		expect(within(body).queryAllByLabelText('Label: Arbeit')).toHaveLength(0);
+		await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Work' }));
+		expect(within(body).queryAllByLabelText('Label: Work')).toHaveLength(0);
 
 		// A new label is made from the same menu and goes on the article at once.
 		await userEvent.click(menu());
@@ -478,7 +490,8 @@ describe('on a phone', () => {
 });
 
 describe('after a reload', () => {
-	const tagesbote = new DemoReader().articles['feed-tagesbote'];
+	// The page starts in English here, so its feeds are the English corpus.
+	const tagesbote = new DemoReader(Date.now, demoData(Date.now(), 'en')).articles['feed-tagesbote'];
 	const keep = (view: Record<string, unknown>) =>
 		localStorage.setItem(
 			VIEW_KEY,
@@ -502,7 +515,7 @@ describe('after a reload', () => {
 	it('shows the list and the article it was left at', async () => {
 		const first = render(Page);
 		await userEvent.click(
-			within(screen.getByRole('main')).getByRole('button', { name: 'Tagesbote' })
+			within(screen.getByRole('main')).getByRole('button', { name: 'The Daily Courier' })
 		);
 		const row = within(screen.getByRole('main')).getAllByRole('listitem')[2];
 		await userEvent.click(within(row).getAllByRole('button')[0]);
@@ -518,7 +531,7 @@ describe('after a reload', () => {
 		first.unmount();
 
 		render(Page);
-		expect(heading()).toHaveTextContent('Tagesbote');
+		expect(heading()).toHaveTextContent('The Daily Courier');
 		expect(openArticle()?.textContent?.trim()).toBe(title);
 		await userEvent.click(screen.getByRole('button', { name: 'Unread only' }));
 		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeChecked();
