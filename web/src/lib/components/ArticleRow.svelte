@@ -87,7 +87,7 @@
 	<div
 		class={[
 			'flex items-start border-l-3 pr-3',
-			reader.cursor === article.id ? 'border-l-accent' : 'border-l-transparent',
+			reader.cursor === article.id ? 'border-l-accent-line-line' : 'border-l-transparent',
 			opened ? 'bg-chosen' : read ? 'bg-panel' : 'bg-paper'
 		]}
 	>
@@ -129,7 +129,7 @@
 	<div
 		class={[
 			'flex items-center border-l-3 pr-3',
-			reader.cursor === article.id ? 'border-l-accent' : 'border-l-transparent',
+			reader.cursor === article.id ? 'border-l-accent-line-line' : 'border-l-transparent',
 			read ? 'bg-panel' : 'bg-paper'
 		]}
 	>

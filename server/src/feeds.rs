@@ -182,7 +182,7 @@ fn article(
         .authors
         .into_iter()
         .filter_map(|person| person.name)
-        .map(|name| text(&name))
+        .map(|name| author(&text(&name)))
         .filter(|name| !name.is_empty())
         .collect();
 
@@ -204,6 +204,21 @@ fn article(
             url,
         },
     })
+}
+
+/// The name of an author as a reader would write it. RSS writes an author as
+/// `desk@example.org (Jonas Erbe)`; feed-rs takes the address out and leaves
+/// the name in its parentheses, or angle brackets in `Name <address>`.
+fn author(name: &str) -> String {
+    let bare = name
+        .strip_prefix('(')
+        .and_then(|inner| inner.strip_suffix(')'))
+        .or_else(|| {
+            name.strip_prefix('<')
+                .and_then(|inner| inner.strip_suffix('>'))
+        })
+        .unwrap_or(name);
+    bare.trim().to_owned()
 }
 
 /// What tells the article apart within its feed: the id the feed gives, else

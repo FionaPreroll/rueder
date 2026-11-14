@@ -218,7 +218,7 @@ describe('the expanded view', () => {
 		await userEvent.click(within(row(second.id)).getByText(/^from/));
 		expect(reader.cursor).toBe(second.id);
 		expect(reader.isRead(second)).toBe(true);
-		expect(row(second.id)).toHaveClass('border-accent');
+		expect(row(second.id)).toHaveClass('border-accent-line');
 	});
 
 	it('brings a row that opens or closes above the view back into it', async () => {

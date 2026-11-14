@@ -156,7 +156,7 @@
 		class={[
 			'group relative flex items-center gap-0.5 pr-1 select-none',
 			chosen ? 'bg-chosen' : 'hover:bg-hover',
-			(landing === 'inside' || landing === 'group') && 'ring-2 ring-accent ring-inset',
+			(landing === 'inside' || landing === 'group') && 'ring-2 ring-accent-line ring-inset',
 			drag.id === node.id && 'opacity-40'
 		]}
 		style:padding-left="{0.4 + depth * 0.85}rem"
@@ -168,9 +168,10 @@
 		ondragend={dragend}
 	>
 		{#if landing === 'before'}
-			<span class="pointer-events-none absolute inset-x-1 -top-px h-0.5 rounded bg-accent"></span>
+			<span class="pointer-events-none absolute inset-x-1 -top-px h-0.5 rounded bg-accent-line"
+			></span>
 		{:else if landing === 'after'}
-			<span class="pointer-events-none absolute inset-x-1 -bottom-px h-0.5 rounded bg-accent"
+			<span class="pointer-events-none absolute inset-x-1 -bottom-px h-0.5 rounded bg-accent-line"
 			></span>
 		{/if}
 
@@ -308,7 +309,7 @@
 			<div class="mt-4 flex gap-2">
 				<button
 					type="button"
-					class="cursor-pointer rounded bg-accent px-3 py-1 text-sm font-semibold text-on-accent hover:brightness-110"
+					class="danger"
 					onclick={() => {
 						unsubscribing = false;
 						reader.unsubscribe(node.id);

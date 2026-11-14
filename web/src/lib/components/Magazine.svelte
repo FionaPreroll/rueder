@@ -60,7 +60,7 @@
 			src={url}
 			alt=""
 			loading={big ? 'eager' : 'lazy'}
-			class={['w-full object-cover', big ? 'aspect-[21/9] max-h-[26rem]' : 'aspect-video']}
+			class={['dimmed w-full object-cover', big ? 'aspect-[21/9] max-h-[26rem]' : 'aspect-video']}
 		/>
 	{:else}
 		<!-- Without a picture, the feed's first letter on a quiet ground keeps the grid even. -->
@@ -83,7 +83,7 @@
 			data-article={lead.id}
 			class={[
 				'relative mb-4 overflow-hidden rounded-md border bg-paper',
-				reader.cursor === lead.id ? 'border-accent shadow-sm' : 'border-line',
+				reader.cursor === lead.id ? 'border-accent-line shadow-sm' : 'border-line',
 				read && 'opacity-75'
 			]}
 		>
@@ -120,7 +120,7 @@
 				data-article={article.id}
 				class={[
 					'relative overflow-hidden rounded-md border bg-paper',
-					reader.cursor === article.id ? 'border-accent shadow-sm' : 'border-line',
+					reader.cursor === article.id ? 'border-accent-line shadow-sm' : 'border-line',
 					read && 'opacity-75'
 				]}
 			>

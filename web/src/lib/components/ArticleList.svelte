@@ -314,7 +314,7 @@
 							data-article={article.id}
 							class={[
 								'scroll-mt-3 rounded-md border bg-paper',
-								reader.cursor === article.id ? 'border-accent shadow-sm' : 'border-line'
+								reader.cursor === article.id ? 'border-accent-line shadow-sm' : 'border-line'
 							]}
 							onclick={() => reader.select(article)}
 						>
@@ -332,7 +332,7 @@
 						<li data-article={article.id} use:measure={article.id}>
 							<ArticleRow {reader} {article} {now} {showFeed} stacked={pane} />
 							{#if !pane && reader.open === article.id}
-								<div class="border-t border-l-3 border-line border-l-accent bg-paper">
+								<div class="border-l-accent-line-line border-t border-l-3 border-line bg-paper">
 									<ArticleBody {reader} {article} {now} {onversions} />
 								</div>
 							{/if}

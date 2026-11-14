@@ -110,6 +110,14 @@ picture per screen. On GitHub the workflow Screenshots does the same when starte
 by hand, and for a pull request that changes how the pictures are taken, and
 attaches the pictures to its run as the artifact `screenshots`.
 
+Next to each picture the walk notes what can be measured of the page: the
+size of every target that can be pressed and the characters to a line of
+article text (`measure.jsonl` in each folder). `pnpm screenshots:report` adds
+it up in `screenshots/out/measure.md`, against the measure of the design review
+(`../docs/design_review.md`): 44 by 44 pixels on a phone, 24 by 24 elsewhere, at
+most 80 characters to the line. The colors are checked by
+`src/routes/colors.test.ts` with the other tests.
+
 ## Conventions
 
 - Texts live in `src/lib/i18n/` (English and German); components read them as

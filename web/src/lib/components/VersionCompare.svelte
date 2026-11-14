@@ -35,7 +35,7 @@
 
 	<label class="mt-3 block text-sm">
 		<span class="font-medium">{m.versions.compareWith}</span>
-		<select class="mt-1 block rounded py-1 text-sm" bind:value={rev}>
+		<select class="mt-1 block w-full max-w-full rounded py-1 text-sm sm:w-auto" bind:value={rev}>
 			{#each versions.toReversed() as version (version.rev)}
 				<option value={version.rev}>
 					{m.versions.version(version.rev)}, {m.versions.fetched(formatFull(version.fetchedAt))}

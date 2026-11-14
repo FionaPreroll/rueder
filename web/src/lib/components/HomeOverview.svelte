@@ -32,7 +32,7 @@
 						<FeedIcon {feed} />
 						<button
 							type="button"
-							class="cursor-pointer text-link hover:underline"
+							class="reach cursor-pointer text-link hover:underline"
 							title={m.home.showFeed(feed.title)}
 							onclick={() => reader.show({ kind: 'feed', id: feed.id })}
 						>
@@ -45,7 +45,7 @@
 							<li>
 								<button
 									type="button"
-									class="cursor-pointer text-left text-sm font-semibold wrap-anywhere hover:underline"
+									class="reach cursor-pointer text-left text-sm font-semibold wrap-anywhere hover:underline"
 									onclick={() => open(article)}
 								>
 									{article.title}
@@ -70,7 +70,7 @@
 						<li>
 							<button
 								type="button"
-								class="cursor-pointer text-left wrap-anywhere text-link hover:underline"
+								class="reach cursor-pointer text-left wrap-anywhere text-link hover:underline"
 								onclick={() => open(article)}
 							>
 								{article.title}
@@ -95,7 +95,7 @@
 								<span>
 									<button
 										type="button"
-										class="cursor-pointer text-link hover:underline"
+										class="reach cursor-pointer text-link hover:underline"
 										onclick={() => reader.show({ kind: 'feed', id: feed.id })}
 									>
 										{feed.title}

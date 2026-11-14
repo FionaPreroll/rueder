@@ -250,7 +250,7 @@
 					<p id="password-mismatch" class="-mt-2 text-xs text-warn">{m.register.mismatch}</p>
 				{/if}
 				{#if needsAgreement && legal.terms}
-					<p class="flex items-start gap-2 text-sm">
+					<p class="flex items-start gap-2 text-sm pointer-coarse:items-center">
 						<input
 							id="agree"
 							type="checkbox"
@@ -258,7 +258,11 @@
 							required
 							bind:checked={agreed}
 						/>
-						<label for="agree">{m.legal.agree}</label>
+						<label
+							for="agree"
+							class="pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+							>{m.legal.agree}</label
+						>
 						<a
 							class="ml-auto shrink-0 text-link hover:underline"
 							href={legal.terms}
@@ -379,7 +383,9 @@
 		<nav class="fixed inset-x-0 bottom-0 flex justify-center gap-4 p-3 text-xs text-soft">
 			{#each [[legal.imprint, m.legal.imprint], [legal.privacy, m.legal.privacy], [legal.terms, m.legal.terms]] as [href, label] (label)}
 				{#if href}
-					<a class="hover:underline" {href} target="_blank" rel="noopener noreferrer">{label}</a>
+					<a class="reach hover:underline" {href} target="_blank" rel="noopener noreferrer"
+						>{label}</a
+					>
 				{/if}
 			{/each}
 		</nav>
