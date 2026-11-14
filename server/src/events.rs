@@ -9,17 +9,16 @@
 //!   publishes after every request that changed something and went well.
 //! - **Who gets them.** Every event names the accounts it is for, and a
 //!   connection passes on only what names its own.
-//! - **Nothing is lost on reconnecting.** Events are numbered. The server keeps
-//!   the last [`KEPT`], and a browser that comes back says the last number it
-//!   saw (`Last-Event-ID`) and gets what it missed. If that is no longer there,
-//!   it is told to load everything anew (`resync`).
+//! - **After a break.** Every connection begins with `hello`. A browser that
+//!   comes back after a break loads what it shows anew; the server keeps
+//!   nothing for it.
 //!
 //! Events are notices, not the data itself: they say what changed and carry
 //! the few numbers that save a request. One server holds them in memory; with
 //! more than one, PostgreSQL's `LISTEN/NOTIFY` would have to carry them across.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     convert::Infallible,
     sync::{Arc, Mutex},
     time::Duration,
@@ -34,7 +33,7 @@ use axum::{
         sse::{Event as SseEvent, KeepAlive, Sse},
     },
 };
-use futures_util::{Stream, stream};
+use futures_util::{Stream, StreamExt, stream};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -48,84 +47,23 @@ use crate::{
     sessions::{self, Session},
 };
 
-/// How many events are kept for those who reconnect.
-pub const KEPT: usize = 2000;
 /// How many connections one account may hold open: a few devices with a few
 /// tabs each.
 pub const STREAMS_PER_ACCOUNT: usize = 20;
 /// How many events may wait for a connection that reads slowly. One that falls
 /// further behind is told to load everything anew.
 const WAITING: usize = 256;
-/// After this long a connection is closed. The browser opens the next one by
-/// itself and gets what it missed; the server sees again whether the session
-/// still holds.
-const STREAM_LASTS: Duration = Duration::from_secs(30 * 60);
 /// How often a connection sees whether its session still holds. A session
 /// that ends through a request closes its connections at once (see
-/// [`Area::Session`]); one that runs out or is ended on the command line,
-/// also by disabling or removing its account there, closes them within this
-/// time.
+/// [`ServerEvent::Session`]); one that runs out or is ended on the command
+/// line, also by disabling or removing its account there, closes them within
+/// this time.
 pub const SESSION_CHECK: Duration = Duration::from_secs(60);
 /// A line that says nothing, so that proxies on the way keep the connection.
 const KEEP_ALIVE: Duration = Duration::from_secs(20);
 /// The header a tab names itself in, so it can tell its own changes from those
 /// of other tabs when they come back as events.
 const TAB: &str = "x-rueder-tab";
-
-/// What changed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Change {
-    /// A feed got new articles.
-    Articles {
-        feed_id: i32,
-        /// The number of the feed's newest article now.
-        last_seq: i32,
-        new: usize,
-    },
-    /// Articles of a feed were changed by their publisher and have a new version.
-    Updated { feed_id: i32, count: usize },
-    /// A feed cannot be fetched any more (`error` says why) or can again.
-    Feed { feed_id: i32, error: Option<String> },
-    /// What the account has read or starred changed.
-    Reading {
-        /// The feed's numbers after the change, if it was about one feed.
-        feed: Option<FeedUnread>,
-        /// The article, if it was about one.
-        seq: Option<i32>,
-        by: Option<String>,
-    },
-    /// Something else of the account's changed.
-    Area { area: Area, by: Option<String> },
-}
-
-/// The parts of what an account has, as far as events tell them apart.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Area {
-    /// Folders and subscriptions.
-    Tree,
-    Labels,
-    Settings,
-    /// Filter rules. They hide articles and mark them as read, so the unread
-    /// counts may have changed with them.
-    Rules,
-    /// A session of the account ended.
-    Session,
-    /// App passwords were made or revoked, or an app logged in with one for
-    /// the first time.
-    Apps,
-}
-
-impl Change {
-    /// The name of the event, which says what the browser has to do.
-    pub fn kind(&self) -> String {
-        Sent::from(self).parts().0
-    }
-
-    /// What the event carries.
-    pub fn data(&self) -> Value {
-        Sent::from(self).parts().1
-    }
-}
 
 /// An event of `GET /api/events` as it goes over the connection: `event` is
 /// its name there and `data` what it carries, as JSON.
@@ -135,7 +73,7 @@ impl Change {
 ///
 /// - `hello`: the connection is up, and what is loaded from now on misses
 ///   nothing.
-/// - `resync`: the server cannot say what the browser missed; load everything
+/// - `resync`: the connection fell behind and missed events; load everything
 ///   anew.
 /// - `articles`: a feed got new articles.
 /// - `updated`: articles of a feed were changed by their publisher and have a
@@ -154,16 +92,11 @@ impl Change {
 /// `by` is the name the tab that made the change gave itself in the header
 /// `X-Rueder-Tab`, if it did, so that a tab knows its own change when it
 /// comes back.
-#[derive(Debug, Serialize, TS, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, ToSchema)]
 #[serde(tag = "event", content = "data", rename_all = "lowercase")]
-#[ts(rename = "ServerEvent")]
-#[schema(as = ServerEvent)]
-enum Sent {
-    /// The connection is up, and what is loaded from now on misses nothing.
+pub enum ServerEvent {
     Hello {},
-    /// The server cannot say what the browser missed: load everything anew.
     Resync {},
-    /// A feed got new articles.
     Articles {
         feed_id: i32,
         /// The number of the feed's newest article now.
@@ -171,17 +104,14 @@ enum Sent {
         /// How many came.
         new: usize,
     },
-    /// Articles of a feed were changed by their publisher and have a new version.
     Updated {
         feed_id: i32,
         count: usize,
     },
-    /// A feed cannot be fetched any more (`error` says why) or can again.
     Feed {
         feed_id: i32,
         error: Option<String>,
     },
-    /// What the account has read or starred changed.
     Reading {
         /// The feed's numbers after the change, if it was about one feed.
         feed: Option<FeedUnread>,
@@ -189,7 +119,6 @@ enum Sent {
         seq: Option<i32>,
         by: Option<String>,
     },
-    /// Folders or subscriptions changed.
     Tree {
         by: Option<String>,
     },
@@ -199,91 +128,49 @@ enum Sent {
     Settings {
         by: Option<String>,
     },
-    /// Filter rules changed. They hide articles and mark them as read, so the
-    /// unread counts may have changed with them.
     Rules {
         by: Option<String>,
     },
-    /// A session of the account ended.
     Session {
         by: Option<String>,
     },
-    /// App passwords were made or revoked, or an app logged in with one for
-    /// the first time.
     Apps {
         by: Option<String>,
     },
 }
 
-impl From<&Change> for Sent {
-    fn from(change: &Change) -> Self {
-        match change.clone() {
-            Change::Articles {
-                feed_id,
-                last_seq,
-                new,
-            } => Self::Articles {
-                feed_id,
-                last_seq,
-                new,
-            },
-            Change::Updated { feed_id, count } => Self::Updated { feed_id, count },
-            Change::Feed { feed_id, error } => Self::Feed { feed_id, error },
-            Change::Reading { feed, seq, by } => Self::Reading { feed, seq, by },
-            Change::Area { area, by } => match area {
-                Area::Tree => Self::Tree { by },
-                Area::Labels => Self::Labels { by },
-                Area::Settings => Self::Settings { by },
-                Area::Rules => Self::Rules { by },
-                Area::Session => Self::Session { by },
-                Area::Apps => Self::Apps { by },
-            },
-        }
-    }
-}
-
-impl Sent {
-    /// The name and what it carries, as they are written to the connection.
-    fn parts(&self) -> (String, Value) {
+impl ServerEvent {
+    /// The event as it is written to the connection: its name and what it
+    /// carries.
+    fn sse(&self) -> SseEvent {
         let Ok(Value::Object(mut whole)) = serde_json::to_value(self) else {
-            return (String::new(), json!({}));
+            return SseEvent::default();
         };
         let kind = match whole.remove("event") {
             Some(Value::String(kind)) => kind,
             _ => String::new(),
         };
-        (kind, whole.remove("data").unwrap_or_else(|| json!({})))
+        let data = whole.remove("data").unwrap_or_else(|| json!({}));
+        SseEvent::default().event(kind).data(data.to_string())
     }
 }
 
 /// The types of the events, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
-    types.add::<Sent>();
+    types.add::<ServerEvent>();
 }
 
-/// An event as it is kept and passed on.
+/// An event on its way, with the accounts it is for.
 #[derive(Debug)]
-struct Event {
-    number: u64,
-    /// The accounts it is for.
+struct Notice {
     accounts: Vec<i32>,
-    change: Change,
-}
-
-struct Kept {
-    /// The number of the newest event, 0 before the first.
-    newest: u64,
-    events: VecDeque<Arc<Event>>,
-    /// How many connections each account holds.
-    streams: HashMap<i32, usize>,
+    event: ServerEvent,
 }
 
 struct Inner {
-    /// Tells this run of the server from the one before: numbers start anew
-    /// with every start, and an old one must not be taken for a new one.
-    run: String,
-    kept: Mutex<Kept>,
-    sender: broadcast::Sender<Arc<Event>>,
+    sender: broadcast::Sender<Arc<Notice>>,
+    /// How many connections each account holds.
+    streams: Mutex<HashMap<i32, usize>>,
     /// See [`SESSION_CHECK`].
     session_check: Duration,
 }
@@ -301,17 +188,6 @@ impl Default for Events {
     }
 }
 
-/// What a new connection starts with.
-struct Opened {
-    /// What it gets at once: what it missed, or the word that it has to load
-    /// everything anew, or just a greeting with the number events stand at.
-    first: VecDeque<SseEvent>,
-    /// The number of the last event it has seen.
-    seen: u64,
-    receiver: broadcast::Receiver<Arc<Event>>,
-    closing: Closing,
-}
-
 /// Gives the account its place back when the connection goes.
 struct Closing {
     events: Events,
@@ -320,12 +196,12 @@ struct Closing {
 
 impl Drop for Closing {
     fn drop(&mut self) {
-        if let Ok(mut kept) = self.events.inner.kept.lock()
-            && let Some(streams) = kept.streams.get_mut(&self.account_id)
+        if let Ok(mut streams) = self.events.inner.streams.lock()
+            && let Some(count) = streams.get_mut(&self.account_id)
         {
-            *streams = streams.saturating_sub(1);
-            if *streams == 0 {
-                kept.streams.remove(&self.account_id);
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                streams.remove(&self.account_id);
             }
         }
     }
@@ -339,51 +215,23 @@ impl Events {
     /// Events whose connections see this often whether their session still
     /// holds, in place of [`SESSION_CHECK`].
     pub fn checking_sessions_every(session_check: Duration) -> Self {
-        let mut run = [0_u8; 6];
-        // Without random numbers the time will do: it only has to differ from
-        // the run before.
-        if getrandom::fill(&mut run).is_err() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |since| since.as_nanos());
-            run.copy_from_slice(&now.to_le_bytes()[..6]);
-        }
         let (sender, _) = broadcast::channel(WAITING);
         Self {
             inner: Arc::new(Inner {
-                run: run.iter().map(|byte| format!("{byte:02x}")).collect(),
-                kept: Mutex::new(Kept {
-                    newest: 0,
-                    events: VecDeque::new(),
-                    streams: HashMap::new(),
-                }),
                 sender,
+                streams: Mutex::new(HashMap::new()),
                 session_check,
             }),
         }
     }
 
     /// Tells the accounts' open connections about a change.
-    pub fn publish(&self, accounts: Vec<i32>, change: Change) {
+    pub fn publish(&self, accounts: Vec<i32>, event: ServerEvent) {
         if accounts.is_empty() {
             return;
         }
-        let Ok(mut kept) = self.inner.kept.lock() else {
-            return;
-        };
-        kept.newest += 1;
-        let event = Arc::new(Event {
-            number: kept.newest,
-            accounts,
-            change,
-        });
-        kept.events.push_back(event.clone());
-        if kept.events.len() > KEPT {
-            kept.events.pop_front();
-        }
-        // Sent while the lock is held, so numbers arrive in order. Nobody
-        // listening is no error.
-        let _ = self.inner.sender.send(event);
+        // Nobody listening is no error.
+        let _ = self.inner.sender.send(Arc::new(Notice { accounts, event }));
     }
 
     /// Tells everybody who subscribes to the feed about a change of it.
@@ -391,7 +239,7 @@ impl Events {
         &self,
         db: &PgPool,
         feed_id: i32,
-        change: Change,
+        event: ServerEvent,
     ) -> anyhow::Result<()> {
         let readers = sqlx::query_scalar!(
             "SELECT account_id FROM subscriptions WHERE feed_id = $1",
@@ -399,83 +247,35 @@ impl Events {
         )
         .fetch_all(db)
         .await?;
-        self.publish(readers, change);
+        self.publish(readers, event);
         Ok(())
     }
 
-    /// The id an event goes out with: this run of the server and the number.
-    fn id(&self, number: u64) -> String {
-        format!("{}-{number}", self.inner.run)
-    }
-
-    fn sse(&self, number: u64, sent: &Sent) -> SseEvent {
-        let (kind, data) = sent.parts();
-        SseEvent::default()
-            .id(self.id(number))
-            .event(kind)
-            .data(data.to_string())
-    }
-
-    /// Opens a connection for an account. `last_seen` is the id of the last
-    /// event the browser got on its connection before, if it had one. `None`
-    /// if the account holds as many connections as it may.
-    fn open(&self, account_id: i32, last_seen: Option<&str>) -> Option<Opened> {
-        let mut kept = self.inner.kept.lock().ok()?;
-        let streams = kept.streams.entry(account_id).or_default();
-        if *streams >= STREAMS_PER_ACCOUNT {
+    /// Takes a place for a connection of the account, or `None` if it holds
+    /// as many as it may.
+    fn open(&self, account_id: i32) -> Option<Closing> {
+        let mut streams = self.inner.streams.lock().ok()?;
+        let count = streams.entry(account_id).or_default();
+        if *count >= STREAMS_PER_ACCOUNT {
             return None;
         }
-        *streams += 1;
-        let closing = Closing {
+        *count += 1;
+        Some(Closing {
             events: self.clone(),
             account_id,
-        };
-        // Listening starts under the lock: nothing is published between
-        // looking at what is kept and hearing what comes.
-        let receiver = self.inner.sender.subscribe();
-        let newest = kept.newest;
-        let seen = last_seen.and_then(|id| {
-            let (run, number) = id.rsplit_once('-')?;
-            let number: u64 = number.parse().ok()?;
-            // Everything after it must still be there.
-            let oldest = kept.events.front().map_or(newest + 1, |event| event.number);
-            (run == self.inner.run && number <= newest && number + 1 >= oldest).then_some(number)
-        });
-        let first = match (last_seen, seen) {
-            (None, _) => VecDeque::from([self.sse(newest, &Sent::Hello {})]),
-            (Some(_), None) => VecDeque::from([self.sse(newest, &Sent::Resync {})]),
-            (Some(_), Some(seen)) => kept
-                .events
-                .iter()
-                .filter(|event| event.number > seen && event.accounts.contains(&account_id))
-                .map(|event| self.sse(event.number, &Sent::from(&event.change)))
-                .collect(),
-        };
-        Some(Opened {
-            first,
-            seen: newest,
-            receiver,
-            closing,
         })
-    }
-
-    /// The number of the newest event.
-    fn newest(&self) -> u64 {
-        self.inner.kept.lock().map_or(0, |kept| kept.newest)
     }
 
     /// How many connections are open, of all accounts.
     pub fn all_streams(&self) -> usize {
-        let kept = self.inner.kept.lock();
-        kept.map_or(0, |kept| kept.streams.values().sum())
+        let streams = self.inner.streams.lock();
+        streams.map_or(0, |streams| streams.values().sum())
     }
 
     /// How many connections the account holds open.
     pub fn streams(&self, account_id: i32) -> usize {
-        let kept = self.inner.kept.lock();
-        kept.map_or(0, |kept| {
-            kept.streams.get(&account_id).copied().unwrap_or(0)
-        })
+        let streams = self.inner.streams.lock();
+        streams.map_or(0, |streams| streams.get(&account_id).copied().unwrap_or(0))
     }
 }
 
@@ -486,10 +286,7 @@ struct Serving {
     account_id: i32,
     /// The session's token, to see whether the session still holds.
     token: String,
-    first: VecDeque<SseEvent>,
-    seen: u64,
-    receiver: broadcast::Receiver<Arc<Event>>,
-    ends: Instant,
+    receiver: broadcast::Receiver<Arc<Notice>>,
     /// When it sees next whether its session still holds.
     check: Instant,
     _closing: Closing,
@@ -498,15 +295,9 @@ struct Serving {
 impl Serving {
     /// The next event for the browser, or `None` when the connection is over.
     async fn next(&mut self) -> Option<SseEvent> {
-        if let Some(event) = self.first.pop_front() {
-            return Some(event);
-        }
         loop {
-            let until = self.ends.min(self.check);
-            let received = tokio::time::timeout_at(until, self.receiver.recv()).await;
-            let event = match received {
-                // Time is up.
-                Err(_) if Instant::now() >= self.ends => return None,
+            let received = tokio::time::timeout_at(self.check, self.receiver.recv()).await;
+            let notice = match received {
                 // Time to see whether the session still holds.
                 Err(_) => {
                     if !self.session_holds().await {
@@ -516,30 +307,23 @@ impl Serving {
                 }
                 Ok(Err(broadcast::error::RecvError::Closed)) => return None,
                 // More came than this connection took: it cannot know what it
-                // missed.
+                // missed. It goes on with what comes from now on.
                 Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
-                    self.seen = self.events.newest();
-                    return Some(self.events.sse(self.seen, &Sent::Resync {}));
+                    self.receiver = self.receiver.resubscribe();
+                    return Some(ServerEvent::Resync {}.sse());
                 }
-                Ok(Ok(event)) => event,
+                Ok(Ok(notice)) => notice,
             };
-            if event.number <= self.seen || !event.accounts.contains(&self.account_id) {
+            if !notice.accounts.contains(&self.account_id) {
                 continue;
             }
-            self.seen = event.number;
             // A session of the account ended. If it was this connection's, the
             // connection ends with it.
-            let session_ended = matches!(
-                event.change,
-                Change::Area {
-                    area: Area::Session,
-                    ..
-                }
-            );
+            let session_ended = matches!(notice.event, ServerEvent::Session { .. });
             if session_ended && !self.session_holds().await {
                 return None;
             }
-            return Some(self.events.sse(event.number, &Sent::from(&event.change)));
+            return Some(notice.event.sse());
         }
     }
 
@@ -555,15 +339,14 @@ impl Serving {
 /// `GET /api/events`: the account's events as they happen.
 ///
 /// A stream of server-sent events, one for each change of the account,
-/// whichever tab, app or fetch made it. An event names what changed; the page
-/// then asks the API for it again. With `Last-Event-ID`, the events since that
-/// one come first, as far as the server still has them; otherwise an event says
-/// to load everything anew.
+/// whichever tab, app or fetch made it. It begins with `hello`. An event names
+/// what changed; the page then asks the API for it again. Events missed while
+/// the connection was away are not sent again: a browser that comes back
+/// loads what it shows anew.
 #[utoipa::path(
     get,
     path = "/events",
     tag = "Live updates",
-    params(("Last-Event-ID" = Option<String>, Header, description = "The last event the browser had, to go on from there.")),
     security(("session" = [])),
     responses(
         (status = OK, description = "The events, as `text/event-stream`, until the session ends.", content_type = "text/event-stream"),
@@ -576,30 +359,29 @@ pub async fn stream(
     session: Session,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let last_seen = headers.get("last-event-id").and_then(|id| id.to_str().ok());
-    let Some(opened) = state.events.open(session.account_id, last_seen) else {
+    let Some(closing) = state.events.open(session.account_id) else {
         return Err(AppError::Status(
             StatusCode::TOO_MANY_REQUESTS,
             "too many open connections for this account".into(),
         ));
     };
+    // Listening starts before the greeting: what the browser loads after it
+    // misses nothing.
     let serving = Serving {
         events: state.events.clone(),
         db: state.db.clone(),
         account_id: session.account_id,
         token: sessions::token(&headers).unwrap_or_default().to_owned(),
-        first: opened.first,
-        seen: opened.seen,
-        receiver: opened.receiver,
-        ends: Instant::now() + STREAM_LASTS,
+        receiver: state.events.inner.sender.subscribe(),
         check: Instant::now() + state.events.inner.session_check,
-        _closing: opened.closing,
+        _closing: closing,
     };
+    let hello = stream::once(async { Ok::<_, Infallible>(ServerEvent::Hello {}.sse()) });
     let events = stream::unfold(serving, |mut serving| async move {
         let event = serving.next().await?;
         Some((Ok::<_, Infallible>(event), serving))
     });
-    Ok(sse(events))
+    Ok(sse(hello.chain(events)))
 }
 
 fn sse(events: impl Stream<Item = Result<SseEvent, Infallible>> + Send + 'static) -> Response {
@@ -657,26 +439,29 @@ pub async fn announce(State(state): State<AppState>, request: Request, next: Nex
 /// Tells the account's open tabs what a request changed. `by` is the tab
 /// that asked, if it named itself.
 pub async fn publish(state: &AppState, account_id: i32, what: Changed, by: Option<String>) {
-    let areas: &[Area] = match what {
-        Changed::Everything => &[Area::Labels, Area::Settings, Area::Rules, Area::Tree],
-        Changed::Area(area) => {
-            let change = Change::Area { area, by };
-            state.events.publish(vec![account_id], change);
-            return;
-        }
-        Changed::Names => &[Area::Tree, Area::Labels],
-        Changed::Articles => &[Area::Labels],
-        Changed::Reading { .. } => &[],
-    };
-    for area in areas {
-        let by = by.clone();
-        let change = Change::Area { area: *area, by };
-        state.events.publish(vec![account_id], change);
-    }
+    let tell = |event| state.events.publish(vec![account_id], event);
     let (feed_id, seq) = match what {
+        Changed::Tree => return tell(ServerEvent::Tree { by }),
+        Changed::Labels => return tell(ServerEvent::Labels { by }),
+        Changed::Settings => return tell(ServerEvent::Settings { by }),
+        Changed::Rules => return tell(ServerEvent::Rules { by }),
+        Changed::Session => return tell(ServerEvent::Session { by }),
+        Changed::Apps => return tell(ServerEvent::Apps { by }),
+        Changed::Everything => {
+            tell(ServerEvent::Labels { by: by.clone() });
+            tell(ServerEvent::Settings { by: by.clone() });
+            tell(ServerEvent::Rules { by: by.clone() });
+            return tell(ServerEvent::Tree { by });
+        }
+        Changed::Names => {
+            tell(ServerEvent::Tree { by: by.clone() });
+            return tell(ServerEvent::Labels { by });
+        }
+        Changed::Articles => {
+            tell(ServerEvent::Labels { by: by.clone() });
+            (None, None)
+        }
         Changed::Reading { feed_id, seq } => (feed_id, seq),
-        Changed::Articles => (None, None),
-        _ => return,
     };
     let feed = match feed_id {
         Some(feed_id) => reading::unread_of(&state.db, account_id, feed_id)
@@ -685,15 +470,22 @@ pub async fn publish(state: &AppState, account_id: i32, what: Changed, by: Optio
             .flatten(),
         None => None,
     };
-    state
-        .events
-        .publish(vec![account_id], Change::Reading { feed, seq, by });
+    tell(ServerEvent::Reading { feed, seq, by });
 }
 
 /// What a request to an address of the API changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Changed {
-    Area(Area),
+    /// Folders and subscriptions.
+    Tree,
+    Labels,
+    Settings,
+    /// Filter rules, and with them maybe the unread counts.
+    Rules,
+    /// A session of the account ended, or what its sessions may changed.
+    Session,
+    /// App passwords.
+    Apps,
     /// Everything an account has: a move from another rueder brings folders,
     /// feeds, what was read, labels, rules and settings at once.
     Everything,
@@ -736,7 +528,7 @@ pub fn changed(path: &str) -> Option<Changed> {
         // as nobody is logged in to it.
         ["password", "forgot" | "reset"] => return None,
         // A new address waits for its link, or one goes: `me` says it.
-        ["email"] => Changed::Area(Area::Session),
+        ["email"] => Changed::Session,
         // Questions that are sent like changes: what a rule would do, and
         // which feeds a page has.
         ["rules", "preview"] | ["feeds", "find"] => return None,
@@ -745,7 +537,7 @@ pub fn changed(path: &str) -> Option<Changed> {
         // A session ended: by logging out, by ending it from another device,
         // with a new password, which ends them all, or with the account,
         // which ends them all for good.
-        ["logout"] | ["sessions", ..] | ["password"] | ["account"] => Changed::Area(Area::Session),
+        ["logout"] | ["sessions", ..] | ["password"] | ["account"] => Changed::Session,
         // A secret that waits for its code changes nothing yet; switching the
         // second factor on or off changes what the sessions may.
         ["second-factor", "setup"] => return None,
@@ -753,21 +545,21 @@ pub fn changed(path: &str) -> Option<Changed> {
         // nothing yet; a passkey that comes or goes changes what the
         // sessions may, as the second factor does.
         ["passkeys", "register" | "proof"] => return None,
-        ["passkeys", ..] => Changed::Area(Area::Session),
-        ["second-factor", ..] => Changed::Area(Area::Session),
+        ["passkeys", ..] => Changed::Session,
+        ["second-factor", ..] => Changed::Session,
         // Agreeing to the terms ends the question in the other tabs.
-        ["terms"] => Changed::Area(Area::Session),
-        ["app-passwords", ..] => Changed::Area(Area::Apps),
+        ["terms"] => Changed::Session,
+        ["app-passwords", ..] => Changed::Apps,
         // A report changes nothing a reader's tabs show.
         ["feeds", _, "report"] | ["feeds", _, "articles", _, "report"] => return None,
-        ["settings", ..] => Changed::Area(Area::Settings),
+        ["settings", ..] => Changed::Settings,
         // Whether the account sends reports of errors is one of its settings;
         // the reports themselves are nothing its tabs show.
-        ["reports", "consent"] => Changed::Area(Area::Settings),
+        ["reports", "consent"] => Changed::Settings,
         ["reports", ..] => return None,
-        ["rules", ..] => Changed::Area(Area::Rules),
+        ["rules", ..] => Changed::Rules,
         ["import"] => Changed::Everything,
-        ["labels", ..] | ["feeds", _, "articles", _, "labels", ..] => Changed::Area(Area::Labels),
+        ["labels", ..] | ["feeds", _, "articles", _, "labels", ..] => Changed::Labels,
         ["read"] | ["folders", _, "read"] => Changed::Reading {
             feed_id: None,
             seq: None,
@@ -780,7 +572,7 @@ pub fn changed(path: &str) -> Option<Changed> {
             feed_id: number(feed),
             seq: number(seq),
         },
-        _ => Changed::Area(Area::Tree),
+        _ => Changed::Tree,
     })
 }
 
@@ -801,7 +593,7 @@ fn changed_by_app(path: &str) -> Option<Changed> {
             seq: None,
         },
         ["rename-tag"] | ["disable-tag"] => Changed::Names,
-        ["subscription", "edit" | "quickadd"] => Changed::Area(Area::Tree),
+        ["subscription", "edit" | "quickadd"] => Changed::Tree,
         // Everything else only reads, however it is sent, or is answered
         // `[]` by the API without changing anything: an app asks for its
         // lists every few minutes, and the tabs need not load anything anew

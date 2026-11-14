@@ -2030,10 +2030,9 @@ export class ServerReader implements Reader {
 	// Live updates
 
 	/**
-	 * Opens the connection. The browser opens it again by itself after a break
-	 * and says the last event it got, so nothing is missed. One that the server
-	 * ended for good, refusing it, is opened anew after a while, longer each time,
-	 * and what came meanwhile is asked for anew.
+	 * Opens the connection. The browser opens it again by itself after a break,
+	 * and its `hello` has what came meanwhile asked for anew. One that the server
+	 * ended for good, refusing it, is opened anew after a while, longer each time.
 	 */
 	private connect() {
 		if (this.stopped) return;

@@ -38,7 +38,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::{
     AppError, AppState, accounts,
     email::{self, Mode},
-    events::{Area, Change},
+    events::ServerEvent,
     login::{Key, Sender},
     mail::{self, Language, Template},
     sessions,
@@ -265,13 +265,8 @@ async fn reset(
     tx.commit().await?;
 
     // Its open tabs find their session gone.
-    state.events.publish(
-        vec![link.account_id],
-        Change::Area {
-            area: Area::Session,
-            by: None,
-        },
-    );
+    let event = ServerEvent::Session { by: None };
+    state.events.publish(vec![link.account_id], event);
     if let Some(mailer) = state.mail.as_ref() {
         let site = mailer.site();
         let values = [("name", link.username.as_str()), ("site", site.as_str())];

@@ -1311,7 +1311,7 @@ export type RuleHits = {
  *
  * - `hello`: the connection is up, and what is loaded from now on misses
  *   nothing.
- * - `resync`: the server cannot say what the browser missed; load everything
+ * - `resync`: the connection fell behind and missed events; load everything
  *   anew.
  * - `articles`: a feed got new articles.
  * - `updated`: articles of a feed were changed by their publisher and have a

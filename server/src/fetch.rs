@@ -22,7 +22,7 @@ use tokio::{sync::Semaphore, task::JoinSet};
 
 use crate::{
     cleaning::Rules,
-    events::{Change, Events},
+    events::{Events, ServerEvent},
     feeds::{self, Stored},
     filters,
     http_client::{Agent, HttpClient, Request},
@@ -373,9 +373,9 @@ pub async fn fetch_due(
 /// What the readers of a feed hear about a fetch of it: new articles, new
 /// versions, and the feed starting or ceasing to fail. `was_failing` says how
 /// the feed stood before.
-pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<Change> {
+pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<ServerEvent> {
     let mut changes = Vec::new();
-    let works_again = || Change::Feed {
+    let works_again = || ServerEvent::Feed {
         feed_id,
         error: None,
     };
@@ -383,7 +383,7 @@ pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<Change>
         Outcome::Failed(error) => {
             // Said once, when it starts; the reason is at the feed after that.
             if !was_failing {
-                changes.push(Change::Feed {
+                changes.push(ServerEvent::Feed {
                     feed_id,
                     error: Some(error),
                 });
@@ -396,14 +396,14 @@ pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<Change>
                 && stored.new > 0
             {
                 let last_seq = first_new.saturating_add(stored.new as i32 - 1);
-                changes.push(Change::Articles {
+                changes.push(ServerEvent::Articles {
                     feed_id,
                     last_seq,
                     new: stored.new,
                 });
             }
             if stored.updated > 0 {
-                changes.push(Change::Updated {
+                changes.push(ServerEvent::Updated {
                     feed_id,
                     count: stored.updated,
                 });

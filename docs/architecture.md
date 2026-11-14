@@ -369,24 +369,24 @@ Ereignisse sind Hinweise, nicht die Daten selbst. Sie sagen, was sich geändert 
 | `settings` | Einstellungen oder die Zustimmung zu Fehlerberichten geändert | `by` | Einstellungen und Zustimmung neu laden. |
 | `rules` | Filterregel geändert | `by` | Regeln und Baum neu laden, denn Regeln blenden Artikel aus. |
 | `session` | Eine Sitzung des Kontos wurde beendet: Logout, Beenden von einem anderen Gerät aus, neues Passwort | `by` | Mit `GET /api/me` prüfen, ob die eigene noch gilt. |
-| `hello` | Verbindung steht | | Nichts; die ID ist der Stand, ab dem Ereignisse kommen. |
-| `resync` | Der Server kann nicht nachliefern | | Alles neu laden: Baum, Zahlen, sichtbare Liste. |
+| `hello` | Verbindung steht | | Beim ersten Mal nichts, nach einem Abbruch alles neu laden: Baum, Zahlen, sichtbare Liste. |
+| `resync` | Die Verbindung liest zu langsam und hat Ereignisse verpasst | | Alles neu laden, wie nach einem Abbruch. |
 
 So greift es ineinander:
 
 - **Wer was hört.** Jedes Ereignis nennt die Konten, für die es gilt, und eine Verbindung reicht nur weiter, was ihr eigenes nennt. Ereignisse des Abrufs gehen an alle, die den Feed abonnieren.
 - **Der eigene Tab.** Ein Tab kann sich in der Kopfzeile `X-Rueder-Tab` einen Namen geben (bis 64 Zeichen aus Buchstaben, Ziffern, `-` und `_`). Der Name kommt im Ereignis als `by` zurück; so erkennt der Tab seine eigene Änderung und lädt nichts doppelt.
-- **Nachliefern.** Ereignisse tragen fortlaufende Nummern, die ID ist die Kennung des Serverlaufs plus Nummer. Der Server hält die letzten 2.000. Nach einem Abbruch meldet sich der Browser von selbst mit `Last-Event-ID` und bekommt, was er verpasst hat, in der richtigen Reihenfolge. Ist das nicht mehr da oder stammt die ID aus einem früheren Lauf des Servers, bekommt er `resync`.
+- **Nach einem Abbruch.** Der Server hebt keine Ereignisse auf. Der Browser öffnet die Verbindung von selbst neu, bekommt `hello` und lädt alles neu, was er zeigt. Bis 2026-11-14 hielt der Server die letzten 2.000 Ereignisse und lieferte sie nach `Last-Event-ID` nach. Das entfiel auf Fionas Entscheidung: Neuladen genügt nach einem Abbruch, und weil nach dem Nachliefern kein `hello` kam, hielt die Seite die Verbindung danach für abgerissen.
 - **Reihenfolge beim Start.** Der Client öffnet erst die Verbindung und lädt dann Baum und Zahlen. Umgekehrt ginge verloren, was dazwischen geschieht.
 - **Grenzen.** Höchstens 20 Verbindungen je Konto, die nächste bekommt 429. Liest eine Verbindung zu langsam und stauen sich mehr als 256 Ereignisse, bekommt sie `resync`, statt den Server aufzuhalten. Alle 20 Sekunden hält eine leere Zeile die Verbindung bei Proxys offen.
-- **Sitzung.** Die Verbindung gibt es nur mit Sitzung. Nach 30 Minuten schließt der Server sie; der Browser öffnet die nächste von selbst, bekommt nachgeliefert, und der Server prüft die Sitzung dabei erneut. Endet eine Sitzung, durch Logout, von einem anderen Gerät aus oder durch ein neues Passwort, enden ihre Verbindungen sofort. Dazu sieht jede Verbindung jede Minute nach, ob ihre Sitzung noch gilt (`events::SESSION_CHECK`, seit dem 2026-11-12), so enden auch die einer Sitzung, die abläuft oder auf der Kommandozeile beendet wird.
+- **Sitzung.** Die Verbindung gibt es nur mit Sitzung, und sie bleibt offen, solange die Sitzung gilt. Endet eine Sitzung, durch Logout, von einem anderen Gerät aus oder durch ein neues Passwort, enden ihre Verbindungen sofort. Dazu sieht jede Verbindung jede Minute nach, ob ihre Sitzung noch gilt (`events::SESSION_CHECK`), so enden auch die einer Sitzung, die abläuft oder auf der Kommandozeile beendet wird.
 
 Abweichungen vom Entwurf:
 
 - Der Entwurf ließ offen, ob Ereignisse die Daten tragen. Sie tragen sie nicht: Beim Lesestand kommen die Nummern des Feeds mit, aber nicht die Ausnahmen, und der Baum wird neu geladen statt nachgeführt. Das hält Server und Client einfach, und ein Tab kann nie von einem verpassten Ereignis falsch werden.
 - `updated` nennt den Feed und die Zahl der geänderten Artikel, nicht die einzelnen Artikel.
 - Ereignisse des Abrufs entstehen nur in den Runden des Servers, nicht bei einem einzelnen Abruf von Hand.
-- Läuft rueder später in mehreren Prozessen, müssen `LISTEN/NOTIFY` von PostgreSQL die Ereignisse zwischen ihnen tragen. Heute hält ein Prozess sie im Speicher; nach einem Neustart bekommen alle Verbindungen `resync`.
+- Läuft rueder später in mehreren Prozessen, müssen `LISTEN/NOTIFY` von PostgreSQL die Ereignisse zwischen ihnen tragen. Heute hält ein Prozess sie im Speicher; nach einem Neustart öffnen alle Browser die Verbindung neu und laden alles neu.
 
 ## Login und Sitzungen
 

@@ -20,7 +20,7 @@ use http_body_util::BodyExt;
 use rueder::{
     AppState,
     cleaning::Rules,
-    events::{Area, Change, Changed, Events, KEPT, STREAMS_PER_ACCOUNT, changed},
+    events::{Changed, Events, STREAMS_PER_ACCOUNT, ServerEvent, changed},
     feeds::Stored,
     fetch::{self, Outcome},
     http_client::{Config, HttpClient},
@@ -34,16 +34,8 @@ use tower::ServiceExt;
 /// An event as a browser gets it.
 #[derive(Debug, Clone, PartialEq)]
 struct Sent {
-    id: String,
     kind: String,
     data: Value,
-}
-
-impl Sent {
-    /// The number in the id, which counts up.
-    fn number(&self) -> u64 {
-        self.id.rsplit_once('-').unwrap().1.parse().unwrap()
-    }
 }
 
 /// An open connection to `/api/events`.
@@ -73,7 +65,6 @@ impl Stream {
                 // Lines that only keep the connection open say nothing.
                 let Some(kind) = field("event") else { continue };
                 return Some(Sent {
-                    id: field("id").unwrap(),
                     kind,
                     data: serde_json::from_str(&field("data").unwrap()).unwrap(),
                 });
@@ -96,15 +87,11 @@ impl Stream {
     }
 }
 
-/// Opens a connection as the browser with this cookie, which saw `last` on
-/// its connection before.
-async fn open(state: &AppState, cookie: Option<&str>, last: Option<&str>) -> (StatusCode, Stream) {
+/// Opens a connection as the browser with this cookie.
+async fn open(state: &AppState, cookie: Option<&str>) -> (StatusCode, Stream) {
     let mut request = Request::get("/api/events");
     if let Some(cookie) = cookie {
         request = request.header(header::COOKIE, cookie);
-    }
-    if let Some(last) = last {
-        request = request.header("last-event-id", last);
     }
     let app = router(state.clone(), "missing".as_ref());
     let response = app
@@ -127,7 +114,7 @@ async fn open(state: &AppState, cookie: Option<&str>, last: Option<&str>) -> (St
 
 /// A connection that has been greeted and is waiting for events.
 async fn listening(state: &AppState, cookie: &str) -> Stream {
-    let (_, mut stream) = open(state, Some(cookie), None).await;
+    let (_, mut stream) = open(state, Some(cookie)).await;
     let hello = stream.next().await.expect("a greeting");
     assert_eq!((hello.kind.as_str(), &hello.data), ("hello", &json!({})));
     stream
@@ -163,39 +150,38 @@ async fn send(
 #[test]
 fn what_a_request_changes_is_told_by_its_address() {
     let reading = |feed_id, seq| Some(Changed::Reading { feed_id, seq });
-    let area = |area| Some(Changed::Area(area));
     for (path, what) in [
         ("/api/feeds/7/articles/3/state", reading(Some(7), Some(3))),
         ("/feeds/7/articles/3/state", reading(Some(7), Some(3))),
         ("/api/feeds/7/read", reading(Some(7), None)),
         ("/api/folders/2/read", reading(None, None)),
         ("/api/read", reading(None, None)),
-        ("/api/feeds/7/articles/3/labels/1", area(Area::Labels)),
-        ("/api/labels", area(Area::Labels)),
-        ("/api/labels/order", area(Area::Labels)),
-        ("/api/labels/4", area(Area::Labels)),
-        ("/api/settings", area(Area::Settings)),
-        ("/api/reports/consent", area(Area::Settings)),
-        ("/api/rules", area(Area::Rules)),
-        ("/api/rules/3", area(Area::Rules)),
-        ("/api/rules/order", area(Area::Rules)),
-        ("/api/logout", area(Area::Session)),
-        ("/api/sessions", area(Area::Session)),
-        ("/api/sessions/3", area(Area::Session)),
-        ("/api/password", area(Area::Session)),
-        ("/api/account", area(Area::Session)),
-        ("/api/second-factor", area(Area::Session)),
-        ("/api/second-factor/confirm", area(Area::Session)),
-        ("/api/terms", area(Area::Session)),
-        ("/api/app-passwords", area(Area::Apps)),
-        ("/api/app-passwords/4", area(Area::Apps)),
-        ("/api/tree/move", area(Area::Tree)),
-        ("/api/folders", area(Area::Tree)),
-        ("/api/folders/2", area(Area::Tree)),
-        ("/api/feeds/7", area(Area::Tree)),
-        ("/api/feeds/7/agent", area(Area::Tree)),
-        ("/api/feeds", area(Area::Tree)),
-        ("/api/opml", area(Area::Tree)),
+        ("/api/feeds/7/articles/3/labels/1", Some(Changed::Labels)),
+        ("/api/labels", Some(Changed::Labels)),
+        ("/api/labels/order", Some(Changed::Labels)),
+        ("/api/labels/4", Some(Changed::Labels)),
+        ("/api/settings", Some(Changed::Settings)),
+        ("/api/reports/consent", Some(Changed::Settings)),
+        ("/api/rules", Some(Changed::Rules)),
+        ("/api/rules/3", Some(Changed::Rules)),
+        ("/api/rules/order", Some(Changed::Rules)),
+        ("/api/logout", Some(Changed::Session)),
+        ("/api/sessions", Some(Changed::Session)),
+        ("/api/sessions/3", Some(Changed::Session)),
+        ("/api/password", Some(Changed::Session)),
+        ("/api/account", Some(Changed::Session)),
+        ("/api/second-factor", Some(Changed::Session)),
+        ("/api/second-factor/confirm", Some(Changed::Session)),
+        ("/api/terms", Some(Changed::Session)),
+        ("/api/app-passwords", Some(Changed::Apps)),
+        ("/api/app-passwords/4", Some(Changed::Apps)),
+        ("/api/tree/move", Some(Changed::Tree)),
+        ("/api/folders", Some(Changed::Tree)),
+        ("/api/folders/2", Some(Changed::Tree)),
+        ("/api/feeds/7", Some(Changed::Tree)),
+        ("/api/feeds/7/agent", Some(Changed::Tree)),
+        ("/api/feeds", Some(Changed::Tree)),
+        ("/api/opml", Some(Changed::Tree)),
         ("/api/import", Some(Changed::Everything)),
         // What apps of other makers change, under /greader.
         ("/greader/reader/api/0/edit-tag", Some(Changed::Articles)),
@@ -203,10 +189,13 @@ fn what_a_request_changes_is_told_by_its_address() {
             "/greader/reader/api/0/mark-all-as-read",
             reading(None, None),
         ),
-        ("/greader/reader/api/0/subscription/edit", area(Area::Tree)),
+        (
+            "/greader/reader/api/0/subscription/edit",
+            Some(Changed::Tree),
+        ),
         (
             "/greader/reader/api/0/subscription/quickadd",
-            area(Area::Tree),
+            Some(Changed::Tree),
         ),
         ("/greader/reader/api/0/rename-tag", Some(Changed::Names)),
         ("/greader/reader/api/0/disable-tag", Some(Changed::Names)),
@@ -224,7 +213,7 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/greader/accounts/ClientLogin", None),
         ("/greader/img/1/a/image/b", None),
         // What nobody has thought of yet makes browsers load the tree anew.
-        ("/api/something/new", area(Area::Tree)),
+        ("/api/something/new", Some(Changed::Tree)),
         // Questions that are sent like changes, and what only admins see.
         ("/api/rules/preview", None),
         ("/api/second-factor/setup", None),
@@ -245,12 +234,12 @@ fn what_a_request_changes_is_told_by_its_address() {
         // what the sessions may.
         ("/api/passkeys/register", None),
         ("/api/passkeys/proof", None),
-        ("/api/passkeys", area(Area::Session)),
-        ("/api/passkeys/4", area(Area::Session)),
+        ("/api/passkeys", Some(Changed::Session)),
+        ("/api/passkeys/4", Some(Changed::Session)),
         // An address: a new or a removed one shows in the account's tabs; the
         // link and asking for it again publish for themselves or change
         // nothing a tab shows.
-        ("/api/email", area(Area::Session)),
+        ("/api/email", Some(Changed::Session)),
         ("/api/email/confirm", None),
         ("/api/email/resend", None),
         // Asking for a new password changes nothing; setting it publishes for
@@ -323,7 +312,6 @@ async fn the_tabs_of_an_account_hear_of_a_change_and_nobody_else(db: PgPool) {
         (hers.kind.as_str(), &hers.data),
         ("settings", &json!({ "by": null }))
     );
-    assert!(hers.number() > heard.number());
     assert!(tab.is_quiet().await);
     assert!(phone.is_quiet().await);
 
@@ -480,14 +468,13 @@ async fn every_change_through_the_api_is_told(db: PgPool) {
 }
 
 #[sqlx::test]
-async fn a_browser_that_comes_back_gets_what_it_missed(db: PgPool) {
+async fn a_browser_that_comes_back_is_greeted_and_loads_anew(db: PgPool) {
     let ada = common::account(&db, "ada").await;
     let grace = common::account(&db, "grace").await;
     let state = AppState::new(db.clone());
     let cookie = common::session(&db, ada).await;
     let events = &state.events;
-    let tree = |by: &str| Change::Area {
-        area: Area::Tree,
+    let tree = |by: &str| ServerEvent::Tree {
         by: Some(by.to_owned()),
     };
 
@@ -504,78 +491,16 @@ async fn a_browser_that_comes_back_gets_what_it_missed(db: PgPool) {
         (one.data["by"].as_str(), two.data["by"].as_str()),
         (Some("one"), Some("two"))
     );
-    assert_eq!((one.number(), two.number()), (2, 4));
+    assert!(tab.is_quiet().await);
     drop(tab);
 
-    // The connection breaks, and more happens.
+    // The connection breaks, and more happens. Back, the browser is greeted,
+    // which tells the page to load what it shows anew, and hears what comes.
     events.publish(vec![ada], tree("three"));
-    events.publish(vec![grace], tree("not hers either"));
-    events.publish(
-        vec![ada],
-        Change::Articles {
-            feed_id: 9,
-            last_seq: 12,
-            new: 2,
-        },
-    );
-
-    // Back with the last id it saw: exactly what it missed, in order, and then
-    // what comes.
-    let (_, mut back) = open(&state, Some(&cookie), Some(&two.id)).await;
-    let three = back.next().await.unwrap();
-    assert_eq!(
-        (three.kind.as_str(), three.data["by"].as_str()),
-        ("tree", Some("three"))
-    );
-    let articles = back.next().await.unwrap();
-    assert_eq!(articles.kind, "articles");
-    assert_eq!(
-        articles.data,
-        json!({ "feed_id": 9, "last_seq": 12, "new": 2 })
-    );
-    assert_eq!((three.number(), articles.number()), (5, 7));
+    let mut back = listening(&state, &cookie).await;
     assert!(back.is_quiet().await);
     events.publish(vec![ada], tree("four"));
     assert_eq!(back.next().await.unwrap().data["by"], "four");
-
-    // Back having missed nothing: nothing is said twice.
-    let (_, mut current) = open(&state, Some(&cookie), Some(&articles.id)).await;
-    assert_eq!(current.next().await.unwrap().data["by"], "four");
-    let last = format!("{}-8", articles.id.rsplit_once('-').unwrap().0);
-    let (_, mut current) = open(&state, Some(&cookie), Some(&last)).await;
-    assert!(current.is_quiet().await);
-
-    // An id the server cannot go on from means: load everything anew. That is
-    // one from before the server started again, one from the future, and
-    // nonsense.
-    for unknown in [
-        "000000000000-3",
-        &format!("{}-999", last.rsplit_once('-').unwrap().0),
-        "7",
-        "",
-        "x-y",
-    ] {
-        let (_, mut lost) = open(&state, Some(&cookie), Some(unknown)).await;
-        let resync = lost.next().await.unwrap();
-        assert_eq!(
-            (resync.kind.as_str(), resync.number()),
-            ("resync", 8),
-            "{unknown}"
-        );
-        assert!(lost.is_quiet().await);
-    }
-
-    // And one so old that what followed it is no longer kept.
-    for n in 0..KEPT {
-        events.publish(vec![grace], tree(&n.to_string()));
-    }
-    let (_, mut old) = open(&state, Some(&cookie), Some(&articles.id)).await;
-    assert_eq!(old.next().await.unwrap().kind, "resync");
-    // The newest of the kept ones still does.
-    let newest = format!("{}-{}", last.rsplit_once('-').unwrap().0, 8 + KEPT - 1);
-    events.publish(vec![ada], tree("latest"));
-    let (_, mut recent) = open(&state, Some(&cookie), Some(&newest)).await;
-    assert_eq!(recent.next().await.unwrap().data["by"], "latest");
 }
 
 #[sqlx::test]
@@ -587,27 +512,15 @@ async fn a_connection_that_falls_behind_is_told_to_start_over(db: PgPool) {
     // Far more than waits for a connection that does not read.
     for n in 0..1000 {
         let by = Some(n.to_string());
-        state.events.publish(
-            vec![ada],
-            Change::Area {
-                area: Area::Labels,
-                by,
-            },
-        );
+        state.events.publish(vec![ada], ServerEvent::Labels { by });
     }
-    let told = tab.next().await.unwrap();
-    assert_eq!((told.kind.as_str(), told.number()), ("resync", 1000));
+    assert_eq!(tab.next().await.unwrap().kind, "resync");
     // After that it is up to date and hears what comes.
     assert!(tab.is_quiet().await);
-    state.events.publish(
-        vec![ada],
-        Change::Area {
-            area: Area::Tree,
-            by: None,
-        },
-    );
-    let next = tab.next().await.unwrap();
-    assert_eq!((next.kind.as_str(), next.number()), ("tree", 1001));
+    state
+        .events
+        .publish(vec![ada], ServerEvent::Tree { by: None });
+    assert_eq!(tab.next().await.unwrap().kind, "tree");
 }
 
 #[sqlx::test]
@@ -687,13 +600,9 @@ async fn logging_out_ends_the_connections_of_that_session(db: PgPool) {
     // The phone is still logged in. It hears that a session ended and stays.
     let heard = phone_tab.next().await.unwrap();
     assert_eq!(heard.kind, "session");
-    state.events.publish(
-        vec![ada],
-        Change::Area {
-            area: Area::Tree,
-            by: None,
-        },
-    );
+    state
+        .events
+        .publish(vec![ada], ServerEvent::Tree { by: None });
     assert_eq!(phone_tab.next().await.unwrap().kind, "tree");
     assert_eq!(state.events.streams(ada), 1);
 }
@@ -717,13 +626,9 @@ async fn a_session_that_ends_outside_a_request_closes_its_connections(db: PgPool
     assert!(laptop_tab.has_ended().await);
     // The other session's connection stays and hears what comes.
     tokio::time::sleep(Duration::from_millis(300)).await;
-    state.events.publish(
-        vec![ada],
-        Change::Area {
-            area: Area::Tree,
-            by: None,
-        },
-    );
+    state
+        .events
+        .publish(vec![ada], ServerEvent::Tree { by: None });
     assert_eq!(phone_tab.next().await.unwrap().kind, "tree");
     assert_eq!(state.events.streams(ada), 1);
 }
@@ -760,10 +665,7 @@ async fn deleting_an_account_ends_all_its_connections_at_once(db: PgPool) {
     assert!(laptop_tab.has_ended().await);
     assert!(phone_tab.has_ended().await);
     assert_eq!(state.events.streams(ada), 0);
-    assert_eq!(
-        open(&state, Some(&phone), None).await.0,
-        StatusCode::UNAUTHORIZED
-    );
+    assert_eq!(open(&state, Some(&phone)).await.0, StatusCode::UNAUTHORIZED);
     // Grace hears nothing of it and stays.
     assert!(grace_tab.is_quiet().await);
     assert_eq!(state.events.streams(grace), 1);
@@ -792,16 +694,13 @@ async fn a_disabled_account_gets_no_events(db: PgPool) {
     assert!(ada_tab.has_ended().await);
     // No new connection, not even with a session made after disabling.
     assert_eq!(
-        open(&state, Some(&laptop), None).await.0,
+        open(&state, Some(&laptop)).await.0,
         StatusCode::UNAUTHORIZED
     );
     let after = common::session(&db, ada).await;
-    assert_eq!(
-        open(&state, Some(&after), None).await.0,
-        StatusCode::UNAUTHORIZED
-    );
+    assert_eq!(open(&state, Some(&after)).await.0, StatusCode::UNAUTHORIZED);
     // New articles of the feed reach Grace only.
-    let change = Change::Articles {
+    let change = ServerEvent::Articles {
         feed_id: feed,
         last_seq: 4,
         new: 1,
@@ -824,11 +723,11 @@ fn a_fetch_tells_what_it_found() {
             first_new,
         })
     };
-    let works = Change::Feed {
+    let works = ServerEvent::Feed {
         feed_id: 4,
         error: None,
     };
-    let articles = |last_seq, new| Change::Articles {
+    let articles = |last_seq, new| ServerEvent::Articles {
         feed_id: 4,
         last_seq,
         new,
@@ -840,7 +739,7 @@ fn a_fetch_tells_what_it_found() {
         (
             false,
             stored(0, 2, None),
-            vec![Change::Updated {
+            vec![ServerEvent::Updated {
                 feed_id: 4,
                 count: 2,
             }],
@@ -850,7 +749,7 @@ fn a_fetch_tells_what_it_found() {
             stored(1, 1, Some(1)),
             vec![
                 articles(1, 1),
-                Change::Updated {
+                ServerEvent::Updated {
                     feed_id: 4,
                     count: 1,
                 },
@@ -860,7 +759,7 @@ fn a_fetch_tells_what_it_found() {
         (
             false,
             Outcome::Failed("gone".into()),
-            vec![Change::Feed {
+            vec![ServerEvent::Feed {
                 feed_id: 4,
                 error: Some("gone".into()),
             }],
@@ -1027,8 +926,11 @@ async fn the_readers_of_a_feed_hear_what_a_round_of_fetching_finds(db: PgPool) {
     assert!(second_reader.is_quiet().await);
 }
 
-#[test]
-fn events_say_what_they_are_about() {
+#[sqlx::test]
+async fn events_say_what_they_are_about(db: PgPool) {
+    let ada = common::account(&db, "ada").await;
+    let state = AppState::new(db.clone());
+    let mut tab = listening(&state, &common::session(&db, ada).await).await;
     let feed = FeedUnread {
         feed_id: 2,
         last_seq: 9,
@@ -1037,7 +939,7 @@ fn events_say_what_they_are_about() {
     };
     for (change, kind, data) in [
         (
-            Change::Articles {
+            ServerEvent::Articles {
                 feed_id: 2,
                 last_seq: 9,
                 new: 1,
@@ -1046,7 +948,7 @@ fn events_say_what_they_are_about() {
             json!({ "feed_id": 2, "last_seq": 9, "new": 1 }),
         ),
         (
-            Change::Updated {
+            ServerEvent::Updated {
                 feed_id: 2,
                 count: 3,
             },
@@ -1054,7 +956,7 @@ fn events_say_what_they_are_about() {
             json!({ "feed_id": 2, "count": 3 }),
         ),
         (
-            Change::Feed {
+            ServerEvent::Feed {
                 feed_id: 2,
                 error: Some("no answer".into()),
             },
@@ -1062,7 +964,7 @@ fn events_say_what_they_are_about() {
             json!({ "feed_id": 2, "error": "no answer" }),
         ),
         (
-            Change::Reading {
+            ServerEvent::Reading {
                 feed: Some(feed),
                 seq: Some(5),
                 by: None,
@@ -1071,7 +973,7 @@ fn events_say_what_they_are_about() {
             json!({ "feed": { "feed_id": 2, "last_seq": 9, "read_upto": 4, "unread": 3 }, "seq": 5, "by": null }),
         ),
         (
-            Change::Reading {
+            ServerEvent::Reading {
                 feed: None,
                 seq: None,
                 by: Some("t".into()),
@@ -1080,58 +982,35 @@ fn events_say_what_they_are_about() {
             json!({ "feed": null, "seq": null, "by": "t" }),
         ),
         (
-            Change::Area {
-                area: Area::Tree,
-                by: None,
-            },
+            ServerEvent::Tree { by: None },
             "tree",
             json!({ "by": null }),
         ),
         (
-            Change::Area {
-                area: Area::Labels,
-                by: None,
-            },
+            ServerEvent::Labels { by: None },
             "labels",
             json!({ "by": null }),
         ),
         (
-            Change::Area {
-                area: Area::Settings,
-                by: None,
-            },
+            ServerEvent::Settings { by: None },
             "settings",
             json!({ "by": null }),
         ),
         (
-            Change::Area {
-                area: Area::Rules,
-                by: None,
-            },
+            ServerEvent::Rules { by: None },
             "rules",
             json!({ "by": null }),
         ),
         (
-            Change::Area {
-                area: Area::Session,
-                by: None,
-            },
+            ServerEvent::Session { by: None },
             "session",
             json!({ "by": null }),
         ),
     ] {
-        assert_eq!((change.kind().as_str(), change.data()), (kind, data));
+        state.events.publish(vec![ada], change);
+        let sent = tab.next().await.unwrap();
+        assert_eq!((sent.kind.as_str(), sent.data), (kind, data));
     }
-    // Nobody to tell is nothing to keep.
-    let events = Events::new();
-    events.publish(
-        vec![],
-        Change::Area {
-            area: Area::Tree,
-            by: None,
-        },
-    );
-    assert_eq!(events.streams(1), 0);
 }
 
 #[sqlx::test]
@@ -1207,7 +1086,7 @@ async fn what_an_app_does_reaches_the_tabs(db: PgPool) {
     let (ada, _) = common::reader(&db, "ada", 2).await;
     let state = AppState::new(db.clone());
     let cookie = common::session(&db, ada).await;
-    let (_, mut tab) = open(&state, Some(&cookie), None).await;
+    let (_, mut tab) = open(&state, Some(&cookie)).await;
     assert_eq!(tab.next().await.unwrap().kind, "hello");
 
     let (_, made) = common::call(

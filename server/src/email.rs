@@ -36,7 +36,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState, accounts,
-    events::{Area, Change},
+    events::ServerEvent,
     login::{Key, Sender},
     mail::{self, Language, Template},
     passkeys, second_factor,
@@ -542,13 +542,8 @@ async fn confirm(
         }
     }
     // Its open tabs show the new address.
-    state.events.publish(
-        vec![link.account_id],
-        Change::Area {
-            area: Area::Session,
-            by: None,
-        },
-    );
+    let event = ServerEvent::Session { by: None };
+    state.events.publish(vec![link.account_id], event);
     Ok(Json(Confirmed {
         username: link.username,
         email: link.email,
