@@ -920,17 +920,19 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         }
     });
 
-    let mut state = AppState::new(db)
-        .with_images(images)
-        .with_rules(rules)
-        .with_events(events)
-        .with_monitor(monitor)
-        .with_client(client.clone());
+    let mut state = AppState {
+        images: Some(images),
+        rules: Some(rules),
+        events,
+        monitor,
+        client: Some(client.clone()),
+        ..AppState::new(db)
+    };
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.
     if let Some(config) = oidc::Config::from_env()? {
         tracing::info!("login through {} is on", config.issuer);
-        state = state.with_oidc(Arc::new(Oidc::new(config, client)?));
+        state.oidc = Some(Arc::new(Oidc::new(config, client)?));
     }
     // Behind a reverse proxy every connection comes from the proxy.
     // CLIENT_IP_HEADER names the header it puts the sender's address in, e.g.
@@ -941,23 +943,23 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         let name = name
             .parse()
             .context("CLIENT_IP_HEADER is not the name of a header")?;
-        state = state.with_client_ip_header(name);
+        state.client_ip_header = Some(name);
     }
     // APP_API=off lets no app of another maker log in (see `greader`).
     if env::var("APP_API").is_ok_and(|value| value == "off") {
         tracing::info!("apps of other makers cannot log in (APP_API=off)");
-        state = state.without_app_api();
+        state.app_api = false;
     }
     // CONTENT_REPORTS=on lets readers report feeds and articles to the admins.
     if env::var("CONTENT_REPORTS").is_ok_and(|value| value == "on") {
         tracing::info!("readers may report feeds and articles (CONTENT_REPORTS=on)");
-        state = state.with_content_reports();
+        state.content_reports = true;
     }
     // CLIENT_REPORTS=off takes no reports of errors from browsers, whoever
     // agreed to send them.
     if env::var("CLIENT_REPORTS").is_ok_and(|value| value == "off") {
         tracing::info!("taking no reports of errors from browsers (CLIENT_REPORTS=off)");
-        state = state.without_reports();
+        state.reports = false;
     }
     // ADMIN_SECOND_FACTOR=required lets admins be admins only in a session
     // that began with a second factor. Anything else is a mistake, not "off".
@@ -965,7 +967,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         Err(_) | Ok("" | "off") => {}
         Ok("required") => {
             tracing::info!("admins need a second factor (ADMIN_SECOND_FACTOR=required)");
-            state = state.with_admin_second_factor();
+            state.admin_second_factor = true;
         }
         Ok(other) => anyhow::bail!("ADMIN_SECOND_FACTOR must be required or off, not {other:?}"),
     }
@@ -986,7 +988,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
             "passkeys for {}, also in the Android apps {packages:?}",
             url.trim()
         );
-        state = state.with_passkeys(passkeys);
+        state.passkeys = Some(Arc::new(passkeys));
     }
     // SMTP_URL, MAIL_FROM and PUBLIC_URL: the relay mail goes through (see
     // `mail`). Where registration asks for addresses there has to be one:
@@ -994,7 +996,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     match mail::Mailer::from_env()? {
         Some(mailer) => {
             tracing::info!("mail goes through the relay in SMTP_URL");
-            state = state.with_mail(mailer);
+            state.mail = Some(Arc::new(mailer));
         }
         None => {
             let mode = rueder::email::mode(&mut *state.db.acquire().await?).await?;
@@ -1007,7 +1009,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     }
     // LEGAL_IMPRINT_URL, LEGAL_PRIVACY_URL, LEGAL_TERMS_URL and TERMS_VERSION:
     // the operator's legal texts, and the terms an account has to agree to.
-    state = state.with_legal(rueder::legal::Legal::from_env()?);
+    state.legal = Arc::new(rueder::legal::Legal::from_env()?);
     // METRICS_TOKEN: the metrics for Prometheus under /metrics, for whoever
     // sends this token as "Authorization: Bearer". Without it there are none;
     // one that is too short stops the start.
@@ -1015,7 +1017,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         rueder::metrics::Metrics::from_setting(env::var("METRICS_TOKEN").ok().as_deref())?
     {
         tracing::info!("metrics for Prometheus under /metrics (METRICS_TOKEN)");
-        state = state.with_metrics(metrics);
+        state.metrics = Some(Arc::new(metrics));
     }
     let app = router(state, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;

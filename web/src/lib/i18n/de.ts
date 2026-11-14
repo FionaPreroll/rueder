@@ -877,7 +877,7 @@ const de: Messages = {
 			dirty: (commit) => `${commit}, mit eigenen Änderungen`,
 			branch: 'Branch',
 			tag: 'Tag',
-			built: 'Gebaut',
+			committed: 'Commit vom',
 			where: 'Läuft',
 			container: 'in einem Container',
 			host: 'direkt auf der Maschine',

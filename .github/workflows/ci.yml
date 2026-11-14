@@ -422,6 +422,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      # When the commit was made, which the image has no git to ask.
+      - id: commit
+        run: echo "at=$(TZ=UTC git show --no-patch --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd HEAD)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       # The layers go to the cache of GitHub Actions, one scope per
       # architecture, so that an unchanged stage is not built again.
@@ -441,6 +444,7 @@ jobs:
           # image is built from it. The branch is still the pull request's.
           build-args: |
             RUEDER_COMMIT=${{ github.sha }}
+            RUEDER_COMMITTED_AT=${{ steps.commit.outputs.at }}
             RUEDER_BRANCH=${{ github.head_ref || github.ref_name }}
             RUEDER_DIRTY=false
             RUEDER_CI_RUN=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

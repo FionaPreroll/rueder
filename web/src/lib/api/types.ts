@@ -1495,9 +1495,9 @@ export type BuildInfo = {
 	 */
 	dirty: boolean,
 	/**
-	 * When it was built, as `2026-11-13T09:12:00Z`.
+	 * When that commit was made, in UTC, as `2026-11-13T09:12:00Z`.
 	 */
-	built_at: string,
+	committed_at: string,
 	/**
 	 * The machine it was built for, as `x86_64-unknown-linux-gnu`.
 	 */

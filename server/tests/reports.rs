@@ -9,7 +9,7 @@ use axum::http::{Method, StatusCode};
 use common::call;
 use rueder::{
     AppState, accounts,
-    rate::{Rate, Rates},
+    rate::{Limits, Rate, Rates},
     reports,
 };
 use serde_json::{Value, json};
@@ -125,8 +125,14 @@ async fn only_an_account_that_agreed_sends_reports(db: PgPool) {
 #[sqlx::test]
 async fn a_report_keeps_no_address_and_breaks_no_limit(db: PgPool) {
     let ada = common::account(&db, "ada").await;
-    let state = AppState::new(db.clone())
-        .with_rates(Rates::default().with_reports(Rate::new(3, Duration::from_secs(3600))));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            reports: Rate::new(3, Duration::from_secs(3600)),
+            ..Limits::default()
+        })
+        .into(),
+        ..AppState::new(db.clone())
+    };
     let cookie = common::session(&db, ada).await;
     put_consent(&state, &cookie, true).await;
 
@@ -189,7 +195,10 @@ async fn a_report_keeps_no_address_and_breaks_no_limit(db: PgPool) {
 #[sqlx::test]
 async fn a_server_can_take_no_reports_at_all(db: PgPool) {
     let ada = common::account(&db, "ada").await;
-    let state = AppState::new(db.clone()).without_reports();
+    let state = AppState {
+        reports: false,
+        ..AppState::new(db.clone())
+    };
     let cookie = common::session(&db, ada).await;
     assert_eq!(
         consent(&state, &cookie).await,

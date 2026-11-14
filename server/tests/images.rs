@@ -421,7 +421,10 @@ async fn an_image_is_fetched_once_and_served_as_an_image(db: PgPool) {
     ])
     .await;
     let images = proxy("served", true);
-    let state = AppState::new(db).with_images(images.clone());
+    let state = AppState {
+        images: Some(images.clone()),
+        ..AppState::new(db)
+    };
     let address = images
         .signer()
         .address(Size::Image, &format!("{at}/a.png"))
@@ -505,7 +508,10 @@ async fn an_address_the_server_did_not_make_is_not_answered(db: PgPool) {
     ])
     .await;
     let images = proxy("unsigned", true);
-    let state = AppState::new(db.clone()).with_images(images.clone());
+    let state = AppState {
+        images: Some(images.clone()),
+        ..AppState::new(db.clone())
+    };
     let signer = images.signer();
     let a = signer.address(Size::Image, &format!("{at}/a.png")).unwrap();
     let b = signer.address(Size::Image, &format!("{at}/b.png")).unwrap();
@@ -578,7 +584,10 @@ async fn what_is_no_image_or_too_large_or_out_of_reach_is_refused(db: PgPool) {
     .await;
     assert!(site.lock().unwrap().files["huge.png"].2.len() > 300_000);
     let images = proxy("refused", true);
-    let state = AppState::new(db.clone()).with_images(images.clone());
+    let state = AppState {
+        images: Some(images.clone()),
+        ..AppState::new(db.clone())
+    };
     let address = |name: &str| {
         images
             .signer()
@@ -619,7 +628,10 @@ async fn what_is_no_image_or_too_large_or_out_of_reach_is_refused(db: PgPool) {
     // An article can name an image inside the server's own network. The
     // address gets signed like any other, and the client refuses to go there.
     let strict = proxy("internal", false);
-    let state = AppState::new(db).with_images(strict.clone());
+    let state = AppState {
+        images: Some(strict.clone()),
+        ..AppState::new(db)
+    };
     let before = site.lock().unwrap().asked.len();
     for inside in [
         format!("{at}/huge.png"),
@@ -742,7 +754,10 @@ async fn a_delivered_text_has_its_images_from_the_proxy(db: PgPool) {
         assert!(tag.contains(" src=\"/img/"), "{tag}");
     }
     // And the address in the text is one the proxy answers.
-    let state = AppState::new(db).with_images(images.clone());
+    let state = AppState {
+        images: Some(images.clone()),
+        ..AppState::new(db)
+    };
     assert_eq!(get_path(state, &first).await.0, StatusCode::OK);
 
     // An image without an address the proxy can serve does not go out.
@@ -764,7 +779,10 @@ async fn only_logged_in_readers_get_images(db: PgPool) {
     )])
     .await;
     let images = proxy("logged-in", true);
-    let state = AppState::new(db.clone()).with_images(images.clone());
+    let state = AppState {
+        images: Some(images.clone()),
+        ..AppState::new(db.clone())
+    };
     let address = images
         .signer()
         .address(Size::Image, &format!("{at}/a.png"))

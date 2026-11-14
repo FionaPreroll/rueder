@@ -159,7 +159,10 @@ fn every_operation_is_described_in_full() {
 async fn every_operation_needs_the_login_it_says(db: PgPool) {
     // With the metrics on, which are not there without their token.
     let metrics = rueder::metrics::Metrics::new(&"t".repeat(rueder::metrics::MIN_TOKEN)).unwrap();
-    let state = AppState::new(db).with_metrics(metrics);
+    let state = AppState {
+        metrics: Some(metrics.into()),
+        ..AppState::new(db)
+    };
     let frontend = std::env::temp_dir().join(format!("rueder-openapi-{}", std::process::id()));
     std::fs::create_dir_all(&frontend).unwrap();
     std::fs::write(frontend.join("index.html"), "<!doctype html>").unwrap();

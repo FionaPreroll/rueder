@@ -15,7 +15,7 @@ use rueder::{
     AppState, http_client,
     http_client::HttpClient,
     images::{Config, ImageProxy},
-    rate::{Rate, Rates},
+    rate::{Limits, Rate, Rates},
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -177,7 +177,10 @@ async fn an_app_logs_in_with_an_app_password_only(db: PgPool) {
     );
 
     // APP_API=off: none of it is there.
-    let off = AppState::new(db.clone()).without_app_api();
+    let off = AppState {
+        app_api: false,
+        ..AppState::new(db.clone())
+    };
     let (status, _, _) = ask(&off, Method::GET, "/reader/api/0/user-info", Some(auth), "").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _, _) = ask(
@@ -743,8 +746,14 @@ async fn an_app_edits_subscriptions_folders_and_labels(db: PgPool) {
 #[sqlx::test]
 async fn changes_have_limits(db: PgPool) {
     let (ada, _) = common::reader(&db, "ada", 1).await;
-    let state = AppState::new(db.clone())
-        .with_rates(Rates::default().with_app_changes(Rate::new(2, Duration::from_secs(3600))));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            app_changes: Rate::new(2, Duration::from_secs(3600)),
+            ..Limits::default()
+        })
+        .into(),
+        ..AppState::new(db.clone())
+    };
     let token = logged_in(&state, ada, "ada").await;
 
     let too_many: Vec<String> = (1..=1001).map(|n| (n + (1u64 << 32)).to_string()).collect();
@@ -802,7 +811,10 @@ fn with_images(db: &PgPool) -> AppState {
     };
     let client = HttpClient::new(http_client::Config::default()).unwrap();
     let images = Arc::new(ImageProxy::open(config, client).unwrap());
-    AppState::new(db.clone()).with_images(images)
+    AppState {
+        images: Some(images),
+        ..AppState::new(db.clone())
+    }
 }
 
 #[sqlx::test]

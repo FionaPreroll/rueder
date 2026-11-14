@@ -16,7 +16,7 @@ use rueder::{
     AppState, accounts,
     email::Mode,
     mail::{Language, Mailer, Outbox, Sent, Template, render},
-    rate::{Rate, Rates},
+    rate::{Limits, Rate, Rates},
     registration,
 };
 use serde_json::{Value, json};
@@ -41,9 +41,17 @@ async fn server(db: &PgPool, mode: Mode) -> (AppState, Outbox) {
     // Room for the mails of a test; the tests of the limits set their own.
     let hour = Duration::from_secs(3600);
     let room = Rate::new(100, hour);
-    let mut state = AppState::new(db.clone())
-        .with_mail(mailer)
-        .with_rates(Rates::default().with_mails(room, room, room));
+    let mut state = AppState {
+        mail: Some(mailer.into()),
+        rates: Rates::new(Limits {
+            mails_per_account: room,
+            mails_per_address: room,
+            mails_per_day: room,
+            ..Limits::default()
+        })
+        .into(),
+        ..AppState::new(db.clone())
+    };
     state.client_ip_header = Some(HeaderName::from_static("x-forwarded-for"));
     (state, outbox)
 }
@@ -362,7 +370,10 @@ async fn a_link_runs_out_and_goes_with_the_address(db: PgPool) {
 #[sqlx::test]
 async fn asking_has_the_limits_of_the_login_and_does_not_lock_it(db: PgPool) {
     let (state, outbox) = server(&db, Mode::Optional).await;
-    let state = state.with_rates(Rates::default());
+    let state = AppState {
+        rates: Rates::default().into(),
+        ..state
+    };
     account(&db, "ada", Some("ada@example.org")).await;
     // Per name, known or not: ten in a quarter of an hour.
     for who in ["ada", "nobody"] {
@@ -400,11 +411,16 @@ async fn asking_has_the_limits_of_the_login_and_does_not_lock_it(db: PgPool) {
 async fn the_limits_on_mail_say_nothing(db: PgPool) {
     let hour = Duration::from_secs(3600);
     let (state, outbox) = server(&db, Mode::Optional).await;
-    let state = state.with_rates(Rates::default().with_mails(
-        Rate::new(1, hour),
-        Rate::new(9, hour),
-        Rate::new(9, hour),
-    ));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            mails_per_account: Rate::new(1, hour),
+            mails_per_address: Rate::new(9, hour),
+            mails_per_day: Rate::new(9, hour),
+            ..Limits::default()
+        })
+        .into(),
+        ..state
+    };
     account(&db, "ada", Some("ada@example.org")).await;
     let first = forgot(&state, "ada").await;
     assert_eq!(first, forgot(&state, "ada").await);

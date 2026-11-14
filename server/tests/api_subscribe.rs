@@ -23,7 +23,7 @@ use common::{call, raw};
 use rueder::{
     AppState,
     http_client::{Config, HttpClient},
-    rate::{REQUESTS, Rate, Rates},
+    rate::{Limits, Rate, Rates},
     subscribe, tree,
 };
 use serde_json::{Value, json};
@@ -87,7 +87,10 @@ fn state(db: &PgPool) -> AppState {
         allow: vec!["127.0.0.1".parse().unwrap()],
         ..Config::default()
     };
-    AppState::new(db.clone()).with_client(HttpClient::new(config).unwrap())
+    AppState {
+        client: Some(HttpClient::new(config).unwrap()),
+        ..AppState::new(db.clone())
+    }
 }
 
 async fn post(state: &AppState, path: &str, cookie: &str, body: Value) -> (StatusCode, Value) {
@@ -258,7 +261,10 @@ async fn the_search_does_not_reach_into_the_own_network(db: PgPool) {
     let ada = common::account(&db, "ada").await;
     let cookie = common::session(&db, ada).await;
     // A server as it runs: nothing inside is allowed.
-    let strict = AppState::new(db.clone()).with_client(HttpClient::new(Config::default()).unwrap());
+    let strict = AppState {
+        client: Some(HttpClient::new(Config::default()).unwrap()),
+        ..AppState::new(db.clone())
+    };
     for path in ["/api/feeds/find", "/api/feeds"] {
         for url in [
             format!("{site}/feed.xml"),
@@ -580,7 +586,14 @@ async fn an_account_can_have_the_server_look_at_only_so_many_addresses(db: PgPoo
     let ada = common::account(&db, "ada").await;
     let grace = common::account(&db, "grace").await;
     let hour = Duration::from_secs(3600);
-    let state = state(&db).with_rates(Rates::new(REQUESTS, Rate::new(2, hour)));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            lookups: Rate::new(2, hour),
+            ..Limits::default()
+        })
+        .into(),
+        ..state(&db)
+    };
     let (cookie, grace_cookie) = (
         common::session(&db, ada).await,
         common::session(&db, grace).await,
@@ -639,8 +652,14 @@ async fn an_opml_file_counts_its_new_feeds_against_the_limit(db: PgPool) {
     let ada = common::account(&db, "ada").await;
     let grace = common::account(&db, "grace").await;
     let hour = Duration::from_secs(3600);
-    let state =
-        AppState::new(db.clone()).with_rates(Rates::default().with_new_feeds(Rate::new(4, hour)));
+    let state = AppState {
+        rates: Rates::new(Limits {
+            new_feeds: Rate::new(4, hour),
+            ..Limits::default()
+        })
+        .into(),
+        ..AppState::new(db.clone())
+    };
     let (cookie, grace_cookie) = (
         common::session(&db, ada).await,
         common::session(&db, grace).await,
