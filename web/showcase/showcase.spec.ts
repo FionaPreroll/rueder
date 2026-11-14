@@ -19,16 +19,21 @@ test.beforeEach(async ({ page }) => {
 		if (file.startsWith(BUILD + sep) && existsSync(file)) await route.fulfill({ path: file });
 		else await route.fulfill({ status: 404 });
 	});
-	// Made-up articles arrive every few seconds; the clock stands still once
-	// the reader is open (`open`), so that none comes in the middle of a picture.
-	await page.clock.install();
+	// Made-up articles arrive every nine seconds (`DemoReader.startLive`); no
+	// interval of five seconds or more starts here, so that none comes in the
+	// middle of a picture. The page's clock and its frames run as they would:
+	// the list measures its rows in frames and draws only those in sight.
+	await page.addInitScript(() => {
+		const every = window.setInterval;
+		window.setInterval = ((handler: TimerHandler, timeout?: number, ...rest: unknown[]) =>
+			(timeout ?? 0) >= 5000 ? 0 : every(handler, timeout, ...rest)) as typeof window.setInterval;
+	});
 });
 
 /** Opens the reader at its start page, as it is for someone who comes the first time. */
 async function open(page: Page) {
 	await page.goto('/');
 	await expect(page.getByRole('searchbox')).toBeVisible();
-	await page.clock.pauseAt(Date.now() + 1000);
 }
 
 /** A button that can be seen: some come twice, for wide windows and for narrow ones. */
@@ -75,8 +80,8 @@ async function shoot(page: Page, file: string, part?: Locator) {
 				)
 		);
 	});
-	// What waits for a moment, such as a menu's transition, is done.
-	await page.clock.runFor(500);
+	// Transitions of menus and dialogs end.
+	await page.waitForTimeout(250);
 	const box = part && (await part.boundingBox());
 	const viewport = page.viewportSize();
 	const clip =
@@ -126,10 +131,16 @@ const pictures: Picture[] = [
 		phone: false,
 		async show(page) {
 			await showAll(page, 'list');
-			await articles(page)
+			const updated = articles(page)
 				.filter({ has: page.getByText(m.list.updated, { exact: true }) })
-				.first()
-				.click();
+				.first();
+			// The list draws only the rows near what is in sight, and which
+			// articles are near the top depends on the time of day.
+			for (let screen = 0; screen < 20 && (await updated.count()) === 0; screen++) {
+				await articles(page).last().scrollIntoViewIfNeeded();
+				await page.waitForTimeout(100);
+			}
+			await updated.click();
 			await button(page, m.list.compare).first().click();
 			const dialog = page.getByRole('dialog', { name: m.versions.title });
 			await expect(dialog).toBeVisible();

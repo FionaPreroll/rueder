@@ -124,8 +124,9 @@ most 80 characters to the line. The colors are checked by
 the top of the repository shows: what rueder does best, in the demo with its
 English made-up feeds, on a desktop and on a phone, light and dark. Each
 picture is a test of its own in `showcase/showcase.spec.ts`; the test serves the
-single-file build to the browser itself, so nothing else has to run, and stops
-the page's clock so that no made-up article arrives in the middle of a picture.
+single-file build to the browser itself, so nothing else has to run, and keeps
+the demo's interval of new made-up articles from starting, so that none
+arrives in the middle of a picture.
 The pictures land in `showcase/out/` as `<picture>-light.png` and
 `<picture>-dark.png`. The workflow Pages takes them for every pull request and
 publishes them with the site under `/rueder/screenshots/`, which is where the
