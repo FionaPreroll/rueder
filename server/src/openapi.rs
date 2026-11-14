@@ -15,7 +15,7 @@ use utoipa::{
     IntoResponses, Modify, OpenApi,
     openapi::{
         Components,
-        security::{ApiKey, ApiKeyValue, SecurityScheme},
+        security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme},
     },
 };
 
@@ -50,8 +50,9 @@ use crate::sessions::COOKIE;
 )]
 pub(crate) struct ApiDoc;
 
-/// The two ways an operation knows who asks, as `security(...)` names them:
-/// `session` for the page's API, `app_password` for the Google Reader API.
+/// The ways an operation knows who asks, as `security(...)` names them:
+/// `session` for the page's API, `app_password` for the Google Reader API,
+/// `metrics_token` for the metrics for Prometheus.
 struct Logins;
 
 impl Modify for Logins {
@@ -71,6 +72,17 @@ impl Modify for Logins {
                 "GoogleLogin auth=<token>, with the token that POST /greader/accounts/ClientLogin \
                  answers for an app password.",
             ))),
+        );
+        components.add_security_scheme(
+            "metrics_token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some(
+                        "The token the operator set in METRICS_TOKEN, for Prometheus.",
+                    ))
+                    .build(),
+            ),
         );
     }
 }

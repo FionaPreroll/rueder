@@ -141,6 +141,7 @@ async fn every_answer_has_its_headers(db: PgPool) {
         ("/api/tree", None, StatusCode::UNAUTHORIZED),
         ("/api/nope", None, StatusCode::NOT_FOUND),
         ("/img/x/thumb/y", None, StatusCode::UNAUTHORIZED),
+        ("/metrics", None, StatusCode::NOT_FOUND),
     ] {
         let (status, headers, _) = get(path, cookie).await;
         assert_eq!(status, expected, "{path}");
