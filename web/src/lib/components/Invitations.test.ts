@@ -41,7 +41,7 @@ describe('Invitations', () => {
 		await userEvent.type(screen.getByLabelText('For how many accounts'), '2');
 		await userEvent.click(makeLink());
 		const link = await screen.findByLabelText('The link, to pass on now');
-		expect(link).toHaveValue(`${location.origin}/?invite=${server.invites[0].token}`);
+		expect(link).toHaveValue(`${location.origin}/#invite=${server.invites[0].token}`);
 		expect(link).toHaveAttribute('readonly');
 		expect(await screen.findByText(/You can invite 1 more person\./)).toBeInTheDocument();
 		const row = screen.getByText('0 of 2 used').closest('li')!;
@@ -59,7 +59,7 @@ describe('Invitations', () => {
 		await user.click(await screen.findByRole('button', { name: 'Copy' }));
 		expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
 		expect(await navigator.clipboard.readText()).toBe(
-			`${location.origin}/?invite=${server.invites[0].token}`
+			`${location.origin}/#invite=${server.invites[0].token}`
 		);
 	});
 

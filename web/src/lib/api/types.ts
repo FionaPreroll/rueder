@@ -515,20 +515,11 @@ export type RemovePasskey = {
 };
 
 /**
- * The query of `GET /api/register`.
- */
-export type AskedInvite = {
-	/**
-	 * The token of an invitation to ask about.
-	 */
-	invite?: string,
-};
-
-/**
  * What the page for registering needs to know before anybody typed a name.
  *
- * `GET /api/register` answers with it, to anybody; with `?invite=<token>` it
- * also says whether that invitation can be used.
+ * `GET /api/register` answers with it, to anybody; with the token of an
+ * invitation in the header `X-Rueder-Invite` it also says whether that
+ * invitation can be used.
  */
 export type Registering = {
 	/**
@@ -645,7 +636,7 @@ export type NewInvite = {
 
 /**
  * A new invitation, with its token, which is never shown again. The link is
- * the page's address with `?invite=<token>`.
+ * the page's address with `#invite=<token>`.
  */
 export type MadeInvite = {
 	id: number,

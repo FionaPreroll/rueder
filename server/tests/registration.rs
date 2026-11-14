@@ -303,8 +303,7 @@ async fn a_link_that_ran_out_or_was_taken_back_gives_its_place_back(db: PgPool) 
     assert!((days - 2.0).abs() < 0.01, "{days}");
     registered(&state, "bob", Some(&link)).await;
     assert_eq!(left(&state, &ada).await, 0);
-    let asked = format!("/api/register?invite={link}");
-    let (_, answer) = call(&state, Method::GET, &asked, None, None).await;
+    let answer = common::registering(&state, &link).await;
     assert_eq!(
         answer,
         json!({ "open": false, "email": "off", "invite": true })
@@ -317,7 +316,7 @@ async fn a_link_that_ran_out_or_was_taken_back_gives_its_place_back(db: PgPool) 
         .await
         .unwrap();
     assert_eq!(refused(&state, "carol", Some(&link)).await, "invite");
-    let (_, answer) = call(&state, Method::GET, &asked, None, None).await;
+    let answer = common::registering(&state, &link).await;
     assert_eq!(
         answer,
         json!({ "open": false, "email": "off", "invite": false })
@@ -354,8 +353,7 @@ async fn readers_invitations_keep_to_the_limits(db: PgPool) {
     registered(&state, "carol", Some(&link)).await;
     assert_eq!(refused(&state, "dave", Some(&link)).await, "full");
     // The link itself is still good; there is only no room right now.
-    let asked = format!("/api/register?invite={link}");
-    let (_, answer) = call(&state, Method::GET, &asked, None, None).await;
+    let answer = common::registering(&state, &link).await;
     assert_eq!(answer["invite"], true);
     // A refusal uses nothing of the link.
     let uses: i32 = sqlx::query_scalar("SELECT uses FROM invites")

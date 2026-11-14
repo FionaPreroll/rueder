@@ -229,11 +229,14 @@ describe('registering', () => {
 
 	it('takes the invitation from the address the page was opened with', async () => {
 		const invite = invitation();
-		history.replaceState(null, '', '/?invite=a-token');
+		history.replaceState(null, '', '/#invite=a-token');
 		const session = new Session();
 		await session.check();
 		await vi.waitFor(() => expect(session.invitation).toEqual({ token: 'a-token', valid: true }));
 		expect(session.ways.registration).toBe(false);
+		// Asked about in a header, so that no address the server sees has the token.
+		const asked = server.requests.find((r) => r.method === 'GET' && r.path.startsWith('/register'));
+		expect(asked?.path).toBe('/register');
 
 		expect(await session.register('grace', 'a long password')).toBeNull();
 		const made = server.requests.find((r) => r.method === 'POST' && r.path === '/register');
@@ -244,7 +247,7 @@ describe('registering', () => {
 
 	it('says when the invitation cannot be used', async () => {
 		invitation().revoked = true;
-		history.replaceState(null, '', '/?invite=a-token');
+		history.replaceState(null, '', '/#invite=a-token');
 		const session = new Session();
 		await session.check();
 		await vi.waitFor(() => expect(session.invitation).toEqual({ token: 'a-token', valid: false }));
@@ -388,7 +391,7 @@ describe('Session with addresses', () => {
 		expect(await session.resend('grace', 'a long password')).toEqual({ kind: 'unsent' });
 
 		// The link, opened in this page, lets the account in and leaves the address.
-		history.replaceState(null, '', '/?confirm=link-2');
+		history.replaceState(null, '', '/#confirm=link-2');
 		await session.confirmFromAddress();
 		expect(session.confirmation).toEqual({
 			kind: 'confirmed',
@@ -397,7 +400,7 @@ describe('Session with addresses', () => {
 			activated: true
 		});
 		expect(session.awaiting).toBeNull();
-		expect(location.search).toBe('');
+		expect(location.hash).toBe('');
 		expect(await session.login('grace', 'a long password')).toBeNull();
 		expect(session.reader?.account?.email).toBe('grace@example.org');
 	});
@@ -407,17 +410,17 @@ describe('Session with addresses', () => {
 		await session.confirmFromAddress();
 		expect(session.confirmation).toBeNull();
 
-		history.replaceState(null, '', '/?confirm=unknown');
+		history.replaceState(null, '', '/#confirm=unknown');
 		await session.confirmFromAddress();
 		expect(session.confirmation).toEqual({ kind: 'gone' });
 
 		server.refuse('POST', /^\/email\/confirm$/, 409, 1, 'taken');
-		history.replaceState(null, '', '/?confirm=link-1');
+		history.replaceState(null, '', '/#confirm=link-1');
 		await session.confirmFromAddress();
 		expect(session.confirmation).toEqual({ kind: 'taken' });
 
 		server.down = true;
-		history.replaceState(null, '', '/?confirm=link-1');
+		history.replaceState(null, '', '/#confirm=link-1');
 		await session.confirmFromAddress();
 		expect(session.confirmation).toEqual({ kind: 'unreachable' });
 	});
@@ -468,11 +471,12 @@ describe('Forgot password', () => {
 		server.emailMode = 'optional';
 		server.emails.set('fiona', 'fiona@example.org');
 		server.resets.set('a-token', 'fiona');
-		history.replaceState(null, '', '/?reset=a-token');
+		history.replaceState(null, '', '/#reset=a-token');
 		const session = new Session();
 		session.takeResetLink();
 		expect(session.resetting).toBe('a-token');
-		expect(location.search).toBe('');
+		// Gone from the address, so that a reload does not take it again.
+		expect(location.hash).toBe('');
 		await session.check();
 		expect(session.state).toBe('in');
 
@@ -489,7 +493,7 @@ describe('Forgot password', () => {
 		expect(session.state).toBe('out');
 	});
 
-	it('says when the link is no good any more', async () => {
+	it('says when the link is no good any more, also one from before with the token in the query', async () => {
 		server.emailMode = 'optional';
 		history.replaceState(null, '', '/?reset=gone');
 		const session = new Session();

@@ -238,7 +238,7 @@ describe('registering', () => {
 				revoked: false
 			}
 		];
-		history.replaceState(null, '', '/?invite=a-token');
+		history.replaceState(null, '', '/#invite=a-token');
 	};
 	const fillNew = async (name: string, password: string, again = password) => {
 		await userEvent.type(screen.getByLabelText('Name'), name);
@@ -463,7 +463,7 @@ describe('forgot password', () => {
 	it('sets the new password from the link, and then asks to log in with it', async () => {
 		server.emailMode = 'optional';
 		server.resets.set('a-token', 'fiona');
-		history.replaceState(null, '', '/?reset=a-token');
+		history.replaceState(null, '', '/#reset=a-token');
 		const session = new Session();
 		session.takeResetLink();
 		await session.check();
@@ -486,7 +486,7 @@ describe('forgot password', () => {
 	it('says when the link is no good any more, and leaves', async () => {
 		server.emailMode = 'optional';
 		server.signedIn = null;
-		history.replaceState(null, '', '/?reset=old');
+		history.replaceState(null, '', '/#reset=old');
 		const session = new Session();
 		session.takeResetLink();
 		await session.check();

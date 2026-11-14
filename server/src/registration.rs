@@ -24,7 +24,7 @@
 
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use ts_rs::TS;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
@@ -55,7 +55,6 @@ const MAX_TOKEN: usize = 100;
 /// The types this module sends and reads, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
     types
-        .add::<AskedInvite>()
         .add::<Registering>()
         .add::<NewRegistration>()
         .add::<Awaiting>()
@@ -422,8 +421,9 @@ pub async fn make(db: &PgPool, applicant: &Applicant<'_>) -> anyhow::Result<Outc
 
 /// What the page for registering needs to know before anybody typed a name.
 ///
-/// `GET /api/register` answers with it, to anybody; with `?invite=<token>` it
-/// also says whether that invitation can be used.
+/// `GET /api/register` answers with it, to anybody; with the token of an
+/// invitation in the header `X-Rueder-Invite` it also says whether that
+/// invitation can be used.
 #[derive(Serialize, TS, ToSchema)]
 struct Registering {
     /// Anybody can register, and there is room.
@@ -437,14 +437,9 @@ struct Registering {
     invite: Option<bool>,
 }
 
-/// The query of `GET /api/register`.
-#[derive(Deserialize, TS, ToSchema, IntoParams)]
-#[ts(optional_fields)]
-#[into_params(parameter_in = Query)]
-struct AskedInvite {
-    /// The token of an invitation to ask about.
-    invite: Option<String>,
-}
+/// The header of `GET /api/register` that names an invitation to ask about:
+/// a header and not the address, which proxies write into their logs.
+pub const INVITE_HEADER: &str = "x-rueder-invite";
 
 /// Whether anybody can register now, and whether an invitation link is good,
 /// for the page that offers it; for anybody, with or without a session.
@@ -452,18 +447,23 @@ struct AskedInvite {
     get,
     path = "/register",
     tag = "Registration",
-    params(AskedInvite),
+    params(("X-Rueder-Invite" = Option<String>, Header, description = "The token of an invitation to ask about, from the `#invite=` of its link.")),
     responses((status = OK, body = Registering)),
 )]
 async fn registering(
     State(state): State<AppState>,
-    Query(asked): Query<AskedInvite>,
+    headers: HeaderMap,
 ) -> Result<Json<Registering>, AppError> {
     let mut conn = state.db.acquire().await?;
     let open = way_in(&mut conn, None, false).await?.is_ok();
+    let asked = headers
+        .get(INVITE_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|token| !token.is_empty());
     // Whether the link itself is good. Whether there is room for the account
     // it would make is said when somebody tries, as that can change by then.
-    let invite = match asked.invite.as_deref() {
+    let invite = match asked {
         Some(token) => Some(usable(&mut conn, token, false).await?.is_some()),
         None => None,
     };
@@ -717,7 +717,7 @@ struct NewInvite {
 }
 
 /// A new invitation, with its token, which is never shown again. The link is
-/// the page's address with `?invite=<token>`.
+/// the page's address with `#invite=<token>`.
 #[derive(Serialize, TS, ToSchema)]
 struct MadeInvite {
     id: i32,

@@ -14,7 +14,7 @@
 //! so that whoever asks for somebody else's name does not lock their login.
 //! The limits on mail count silently on top.
 //!
-//! The link is `/?reset=<token>` on `PUBLIC_URL`: 32 random bytes, of which
+//! The link is `/#reset=<token>` on `PUBLIC_URL`: 32 random bytes, of which
 //! only the SHA-256 is stored, good for [`LINK_MINUTES`] and once, and only
 //! while the account still has the address it went to. Of an account only the
 //! newest counts. `POST /api/password/reset` sets the new password, which ends
@@ -142,7 +142,7 @@ async fn send_link(state: &AppState, who: &str) -> anyhow::Result<()> {
     };
     if state
         .rates
-        .mail(account.id, &account.email, Instant::now())
+        .reset_mail(account.id, &account.email, Instant::now())
         .is_err()
     {
         tracing::info!("a link to set a new password waits for the limits on mail");
