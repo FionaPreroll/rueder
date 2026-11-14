@@ -4,7 +4,7 @@ The new server of rueder: one Rust program (axum, tokio, sqlx) next to PostgreSQ
 It replaced the old Go backend. Plan, architecture and work packages are in
 [docs/](../docs/implementation.md) (German).
 
-## State: foundation, data, fetching, cleaning, images, login, the API, its hardening and the search
+## State
 
 What is here:
 
@@ -70,6 +70,11 @@ What is here:
   logged in with app passwords that readers make under Settings, Apps
   (`/api/app-passwords`), never with the account's password. `APP_API=off`
   switches it off.
+- A second factor (`src/second_factor.rs`): a code from an authenticator app
+  (TOTP) with ten recovery codes, set up under Account settings, Security
+  (`/api/second-factor`). With `ADMIN_SECOND_FACTOR=required` admins are
+  admins only after logging in with one; `rueder account second-factor-off`
+  turns it off for an account that lost it.
 - Passkeys (`src/passkeys.rs`): with `PUBLIC_URL` set to the address browsers
   reach rueder at, readers add passkeys under Account settings, Security
   (`/api/passkeys`) and log in with them without name or password
@@ -87,17 +92,30 @@ What is here:
   `/api/email/confirm`); with `required` a new account logs in only after
   that. Mail goes by SMTP to the relay in `SMTP_URL`, from `MAIL_FROM`, with
   links to `PUBLIC_URL`; its texts are in `templates/mail/`.
+- The operator's legal texts (`src/legal.rs`): with `LEGAL_IMPRINT_URL`,
+  `LEGAL_PRIVACY_URL` and `LEGAL_TERMS_URL` the page links to them, and with
+  `TERMS_VERSION` every account agrees to that version of the terms
+  (`PUT /api/terms`).
 - Reports and blocked feeds (`src/moderation.rs`): with `CONTENT_REPORTS=on`
   readers report a feed or an article with a reason and a note, at most 20 a
   day; the status page lists the reported feeds with their address, never who
   reported. `rueder feed block <address>` stops fetching the feed, hides its
   articles from everybody, refuses new subscriptions and removes its images
   from the cache; `rueder feed unblock <address>` lifts it.
+- The status for admins (`src/monitor.rs`, `src/status.rs`, `src/history.rs`):
+  `GET /api/status`, kept across restarts for as long as
+  `rueder retention set --status-days` says (below), and the same numbers for
+  Prometheus under `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).
+- Keeping old articles, or not (`src/retention.rs`): `rueder retention set`
+  lets articles, their texts, versions and feeds nobody reads go after a
+  time; by default everything stays. Starred and labelled articles
+  stay.
 - Live updates (`src/events.rs`): `GET /api/events` tells an account's open
   tabs what changed, as server-sent events.
 - The API's types for the frontend (`src/typescript.rs`): every type that is
   sent or read as JSON is written to `../web/src/lib/api/types.ts`, and a test
-  fails when that file is out of date.
+  fails when that file is out of date. The description of every route
+  (OpenAPI, `src/openapi.rs`) is written to `openapi.json` the same way.
 - Hardening (`src/hardening.rs`, `src/rate.rs`): every answer carries a
   Content-Security-Policy and the other security headers, a request that
   changes something is refused when a page of another site sent it, each
@@ -116,8 +134,9 @@ What is here:
   (`fuzz/`), whose corpus runs as an ordinary test, and a soak test of the
   whole program under the load of readers and fetching (`tests/soak.rs`).
 
-This is step 1 of the plan and all of step 2, the security review (2.12)
-included; its findings are in `docs/architecture.md`.
+This is the server's part of steps 1 to 3 of the plan, the merging import of
+step 4 (4.3) and most of step 5; the findings of the security review (2.12)
+are in `docs/architecture.md`.
 
 ## Commands
 
@@ -131,7 +150,7 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo sqlx prepare -- --all-targets  # after changing a query: renew the cache in .sqlx/
 cargo audit && cargo deny check      # after changing dependencies: advisories, licenses, sources
-UPDATE_API_TYPES=1 cargo test --test api_types   # after changing a type of the API: write the frontend's types anew
+UPDATE_API_TYPES=1 cargo test --test api_types   # after changing a type or a handler of the API: write types.ts and openapi.json anew
 ```
 
 Queries are checked against the schema when compiling. Without a database the
@@ -140,14 +159,20 @@ with `cargo install sqlx-cli`. `cargo audit` and `cargo deny` come with
 `cargo install cargo-audit cargo-deny`; what they allow is in `deny.toml`, and an
 advisory that does not apply is listed with its reason in `.cargo/audit.toml`.
 
-A type that goes over the API as JSON derives `TS` next to `Serialize` or
-`Deserialize`, and its module lists it in its function `types`. In TypeScript
+A type that goes over the API as JSON derives `TS` and `ToSchema` next to
+`Serialize` or `Deserialize`, and its module lists it in its function `types`.
+`ToSchema` gets the name and the special types `ts-rs` gets
+(`#[schema(as = …)]` next to `#[ts(rename = …)]`, `#[schema(value_type = …)]`
+next to `#[ts(type = …)]`). In TypeScript
 all types share one room: where the Rust name says little outside its module,
 `#[ts(rename = "...")]` gives the type a name of its own there. The comment
 on a type goes into the file with it and names the endpoint the type is for.
 
 Settings come from the environment or `.env`: `DATABASE_URL`, `LISTEN_ADDR`
-(default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`).
+(default `127.0.0.1:3000`) and `STATIC_DIR` (default `../web/build`). The
+settings for running it (images, fetching, login, mail, legal texts, metrics
+and the rest) are listed in
+[deploy/README.md](../deploy/README.md#settings).
 
 ## Accounts and login
 

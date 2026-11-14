@@ -165,7 +165,7 @@ it asks for the address of your rueder at its first start.
 | [`deploy/`](deploy/README.md), `Dockerfile` | The container image, the compose file with PostgreSQL, and how to install it. |
 | [`pages/`](pages/README.md) | The site on GitHub Pages: an overview, the demo and the documentation, put together from what the other parts build. |
 | [`docs/`](docs/implementation.md) | Plan, architecture and state of the work, in German. |
-| `.github/` | CI, the site on GitHub Pages, CodeQL, gitleaks and Dependabot. |
+| `.github/` | CI, the site on GitHub Pages, CodeQL, gitleaks, fuzzing, the soak test, screenshots for design reviews, and Dependabot. |
 
 ## Developing
 
@@ -186,7 +186,7 @@ push:
 How the system is built and why, what is done and what is still open is written
 down in German:
 
-- [Plan](docs/plan.md): goals, requirements, decisions and the four steps
+- [Plan](docs/plan.md): goals, requirements, decisions and the five steps
 - [Architecture](docs/architecture.md): how the system is built, data model,
   security
 - [Implementation](docs/implementation.md): where the work stands, conventions,

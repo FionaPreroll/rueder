@@ -13,8 +13,8 @@ OPML file; admins open the status of the server from the account menu. What chan
 elsewhere, a fetch of the server or another tab, comes in as it happens over the
 server's live updates. It installs as an app (PWA): its service worker keeps the
 app's own files, never the reader's data, and offers to reload when the server has
-a new version. What comes with later work packages is in
-[docs/implementation.md](../docs/implementation.md#schritt-3-frontend).
+a new version. The work packages, done and open, are in
+[docs/implementation.md](../docs/implementation.md#arbeitspakete).
 
 - `src/lib/reader.ts` is the seam: what the page needs from whatever holds the feeds
   and articles. Components get their data from a `Reader` and nowhere else.
