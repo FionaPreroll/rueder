@@ -360,6 +360,7 @@ Warum so:
 
 - **Ereignisse tragen nicht die Daten.** Beim Lesestand kommen die Nummern des Feeds mit, die eine Anfrage sparen, aber nicht die Ausnahmen, und der Baum wird neu geladen statt nachgeführt. Das hält Server und Client einfach, und ein Tab kann nie von einem verpassten Ereignis falsch werden.
 - **Ein Prozess hält sie im Speicher.** Liefe rueder in mehreren Prozessen, müsste `LISTEN/NOTIFY` von PostgreSQL sie zwischen ihnen tragen. Nach einem Neustart öffnen alle Browser die Verbindung neu und laden alles neu.
+- **Gemessen am 2026-11-15:** Weil jede Verbindung jedes Ereignis sieht und selbst nachsieht, ob es ihr gilt, wachsen die Kosten mit Verbindungen mal Ereignissen. Ab einigen tausend Verbindungen ist das die erste Grenze eines Servers ([Viele Konten](implementation.md#viele-konten-vom-2026-11-14-und-2026-11-15)); Paket 5.31 verteilt die Ereignisse deshalb je Konto.
 
 ## Login und Sitzungen
 

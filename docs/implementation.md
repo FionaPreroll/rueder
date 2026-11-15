@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.4 (Probelauf), 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz) und E13 (inaktive Konten) |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) und für 100.000 Konten auf einer Maschine 5.31 bis 5.36 |
 
 Was es gibt:
 
@@ -365,6 +365,26 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.27 Ein Knopf schließt den offenen Artikel.** Siehe [Frontend](architecture.md#frontend).
 - [x] **5.28 Captcha bei der Registrierung.** Siehe [Captcha](architecture.md#captcha).
 - [x] **5.29 Drossel für Registrierungen.** Siehe [Registrierung und Einladungen](architecture.md#registrierung-und-einladungen).
+- [x] **5.30 Lastmessung für viele Konten.** `rueder bench readers` und die Lasttests in `web/load/`, siehe [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) und `server/README.md` unter „Measuring“.
+- [ ] **5.31 Live-Updates je Konto verteilen (A6).** Heute geht jedes Ereignis an jede offene Verbindung, die dann selbst prüft, ob es ihr gilt; die Kosten wachsen mit Verbindungen mal Ereignissen, und ab 5.000 Verbindungen bei 800 Änderungen je Sekunde ist die Maschine voll, mit Tausenden `resync`. Künftig hält der Server je Konto seine Verbindungen, ein Ereignis geht nur an die seines Kontos, ein neuer Artikel nur an die seiner Leser, und den Puffer für Wiederverbindungen gibt es je Konto statt 2.000 Ereignisse für den ganzen Server. Fertig, wenn:
+  - `load/live.js` mit 10.000 Verbindungen und 800 Änderungen je Sekunde weniger als einen Kern braucht und kein `resync` sieht;
+  - ein Modelltest mit Zufallsdaten zeigt, dass jede Verbindung genau die Ereignisse ihres Kontos bekommt, in ihrer Reihenfolge;
+  - eine Verbindung, die nach einer Minute wiederkommt, ihre verpassten Ereignisse bekommt statt `resync`.
+- [ ] **5.32 Abruf je Host über Runden hinweg (A6).** Heute holt eine Runde die Feeds eines Hosts nacheinander und wartet auf den letzten, so dass ein Host mit vielen langsamen Feeds (etwa YouTube) die ganze Runde aufhält; nach 600 Sekunden kann eine zweite Runde denselben Feed nehmen. Künftig hat jeder Host eine Warteschlange über die Runden hinweg, `FETCH_PER_HOST` erlaubt mehr als einen Abruf je Host zugleich (Standard 1), das Vorrecht auf einen Feed wird verlängert, solange er ansteht, und Namen merkt sich der Server für ihre TTL, ohne die Prüfung der Adressen zu ändern. Fertig, wenn:
+  - in `rueder bench fetch` ein Host mit 2.000 Feeds, die je eine halbe Sekunde brauchen, die übrigen nicht aufhält;
+  - ein Test zeigt, dass nie mehr Abrufe je Host laufen, als eingestellt, und kein Feed doppelt geholt wird;
+  - der DNS-Cache einen Test hat, dass eine gesperrte Adresse auch aus dem Cache gesperrt bleibt.
+- [ ] **5.33 Größen einstellbar.** Die Verbindungen zur Datenbank (heute fest 10, die gemessene Grenze des Lesens), die schweren Anfragen zugleich (3) und die Mails je Tag (1.000) kommen aus der Umgebung, mit den heutigen Werten als Standard (A16). `deploy/README.md` bekommt eine Tabelle für 10.000 und 100.000 Konten: Maschine, Einstellungen von PostgreSQL, Takt des Abrufs, Aufbewahrung. Fertig, wenn:
+  - Tests die Grenzen der Einstellungen prüfen;
+  - `load/reading.js` mit 10 und mit 20 Verbindungen unter [Messung](#messung) steht.
+- [ ] **5.34 Grenzen im Speicher für viele Schlüssel.** Ist eine Grenze voll (10.000 Schlüssel), durchsucht heute jeder neue Schlüssel die ganze Tabelle unter einer Sperre. Künftig verdrängt sie ohne zu suchen, und die Obergrenzen passen zu 100.000 Konten; ebenso die Login-Grenzen und die benutzten Aufgaben des Captchas. Fertig, wenn:
+  - ein Test zeigt, dass die Grenzen beim Verdrängen halten;
+  - eine Messung zeigt, dass eine Anfrage bei 100.000 Schlüsseln nicht mehr kostet als bei 100.
+- [ ] **5.35 Platz und Datenbank für große Instanzen.** Wie viel Platz ein Konto und ein Feed im Jahr brauchen, mit der Aufbewahrung aus 5.3 und ohne, und was davon in den Arbeitsspeicher gehört: Mit kaltem Cache und 128 MB `shared_buffers` war das Lesen tausendfach langsamer. Dazu Autovacuum und Füllgrad für die Tabellen, die jedes Lesen ändert (`subscriptions`, `article_states`), wenn die Messung es rechtfertigt. Fertig, wenn:
+  - Zuwachs und Zeiten unter [Messung](#messung) stehen und `deploy/README.md` sie nennt.
+- [ ] **5.36 Bilder vor einem Cache.** Prüfen, ob die Adressen des Bild-Proxys je Konto signiert sind; wo nicht, sagen die Antworten, dass ein Cache vor rueder (ein Reverse-Proxy oder ein CDN unter derselben Domain) sie halten darf, mit einem Beispiel in `deploy/README.md`. Fertig, wenn:
+  - ein Test die Header prüft;
+  - der Bild-Proxy unter Last gemessen ist.
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -377,11 +397,22 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **Ein Knopf schließt den offenen Artikel (5.27):** Er steht am Ende der Zeile unter dem Text, wo der Leser nach dem Lesen ist, nicht oben am Titel, und zeigt das Kreuz und „Schließen“. Im Magazin steht er zusätzlich zum Kreuz oben am Blatt, damit jeder offene Artikel gleich endet.
 - **Drossel für Registrierungen (5.29):** Je Netz 5 Versuche auf einmal und dann einer alle 12 Minuten statt der vorgeschlagenen 3 und einer alle 20 Minuten, weil ein vergebener Name ebenso zählt und sich viele Leser im Mobilfunk eine IPv4-Adresse teilen. Der Topf des ganzen Servers zählt Versuche mit einer gültigen Lösung auch dann, wenn sie danach aus anderem Grund abgewiesen werden.
 - **Captcha (5.28):** Die Höchstzahl ist 100.000 und eine Aufgabe gilt fünf Minuten; im Speicher stehen höchstens 100.000 benutzte. Die Seite rechnet in einem Strang, ohne Worker, und der Knopf sagt derweil „Dieser Browser wird geprüft …“. Zählt eine Lösung nicht, etwa nach einem Neustart des Servers mitten im Rechnen, bittet die Seite, es noch einmal zu versuchen, statt selbst eine neue Aufgabe zu holen. Das Wort der Ablehnung ist `captcha`, wie der Schalter.
+- **Lastmessung (5.30):** Die Lasttests sind Node ohne Pakete in `web/load/`, neben den Werkzeugen der Tests im Browser, statt ein zweites Programm in Rust. `rueder bench readers` schreibt die Tokens der Sitzungen in eine Datei, damit ein Lasttest nicht für jeden Leser ein Passwort hashen lässt, und lehnt jede Datenbank mit einem Konto ab, das keine erfundenen Daten gemacht haben.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später
 
 Von Fiona notiert, noch keinem Schritt zugeordnet:
+
+- **Mehrere Prozesse (horizontal).** Von Fiona am 2026-11-15 zurückgestellt: Erst trägt eine Maschine 100.000 Konten (5.30 bis 5.36). Laufen später mehrere Prozesse desselben Programms hinter einem Load Balancer, braucht es:
+  1. Ereignisse zwischen den Prozessen über `LISTEN/NOTIFY` von PostgreSQL, aufbauend auf 5.31; hinüber geht nur die Nummer von Konto oder Feed, weil eine Nachricht höchstens 8 KB hat.
+  2. Die Login-Grenzen, die Zeremonien der Passkeys, die Aufgaben des Captchas und die Drossel der Registrierung gemeinsam in PostgreSQL; im Speicher jedes Prozesses vervielfachten sie die erlaubten Versuche.
+  3. Die stündlichen Aufgaben (Aufbewahrung, Aufräumen) nur in einem Prozess, über eine Sperre in PostgreSQL (Advisory Lock).
+  4. Einen Prozess nur für den Abruf und `FETCH=off` auf den übrigen; die Feeds teilt `FOR UPDATE SKIP LOCKED` schon heute.
+  5. Einen gemeinsamen Cache der Bilder oder ein CDN, mit demselben `IMAGE_PROXY_KEY` auf allen.
+  6. PgBouncer für die Verbindungen zur Datenbank, mit einer eigenen direkten Verbindung für `LISTEN`.
+  7. Metriken und Statusseite je Prozess, zusammengeführt in Prometheus.
+  8. Für die Ausfallsicherheit eine PostgreSQL in Bereitschaft und Backups mit Wiederherstellung auf einen Zeitpunkt.
 
 - **Ein Fuzz-Target für die Datei eines Kontos** (`transfer.rs`), die jedes Konto über `POST /api/import` hochladen kann. Das Parsen macht serde; das Target prüfte vor allem die eigenen Grenzen und Abgleiche.
 - **Offline lesen.** Pro Gerät die neuesten, etwa 200 ungelesenen Artikel mit Texten und Bildern im Browser halten. Zurückgestellt, weil es mit der Regel bricht, dass im Browser nichts liegt, was einem Konto gehört (siehe [Frontend](architecture.md#frontend)), und weil der Reader dann die Zahlen ohne Server schätzen müsste. Offline lesen geht heute mit den Apps über die Google-Reader-API.
@@ -649,6 +680,36 @@ Wie lange die Seite für das [Captcha](architecture.md#captcha) rechnet, gemesse
 Auf einem echten Telefon ist es nicht gemessen. Bündel von 1.000 Hashes auf einmal waren nicht schneller als einer nach dem anderen.
 
 Eigener Code dagegen, gemessen am 2026-11-15 auf demselben Container mit `openssl speed -bytes 64 sha256` auf einem Kern: rund 4,4 Millionen Hashes je Sekunde, also im Mittel etwa 11 ms je Aufgabe und 23 ms für alle 100.001 Zahlen; Python mit `hashlib` schafft rund 2 Millionen je Sekunde. Eigener Code ist damit etwa zwanzigmal so schnell wie die Seite, je Kern.
+
+### Viele Konten vom 2026-11-14 und 2026-11-15
+
+Für die Frage, was rueder für 10.000 und 100.000 registrierte Konten braucht, und als Ausgangslage für die Pakete 5.31 bis 5.36. Am 2026-11-14 mit Skripten im Scratchpad gemessen, am 2026-11-15 mit `rueder bench readers` und `web/load/` aus Paket 5.30 wiederholt; die Tabellen sind die vom 2026-11-15, die Werte vom Vortag lagen gleich.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher, virtuelle Platte. PostgreSQL 16.15 mit `shared_buffers = 2GB`, sonst Standardwerte, Release-Build. Server, Datenbank und Lastgenerator (Node 22) auf derselben Maschine; der Lastgenerator braucht davon rund einen Kern.
+- **Lesen:** `rueder bench generate --accounts 10 --feeds 20000 --articles 3000000`, dazu `rueder bench readers --count 100000`: 100.000 Leser mit 4.915.319 Abos, im Schnitt 49, höchstens 470, der beliebteste Feed mit 27.279 Lesern. Die Datenbank hat 8,8 GB. Ein Besuch ist, was die Seite tut: Baum, erste Seite der ungelesenen Artikel aller Feeds, drei davon öffnen und als gelesen markieren, eine Seite eines Feeds, zusammen 9 Anfragen. Gemessen nach `VACUUM ANALYZE` und 90 Sekunden zum Aufwärmen, je 30 Sekunden.
+- **Live-Updates:** eine leere Datenbank mit `rueder bench readers --count N --shared …`, alle lesen denselben Feed aus `load/feed.js`. Jeder Leser hält eine Verbindung zu `/api/events`. Dann ein neuer Artikel in diesem Feed, dann je 20 Sekunden lang Änderungen von 50 Lesern (ein Artikel gelesen und wieder ungelesen), jede ein Ereignis nur für ihren Leser.
+
+Lesen mit 100.000 Lesern:
+
+| Zugleich | Anfragen je s | Besuche je s | Server | PostgreSQL | Baum p99 | Ungelesen p99 | Artikel p99 | Markieren p99 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 1.452 | 161 | 0,9 Kerne | 1,8 Kerne | 13 ms | 19 ms | 9 ms | 13 ms |
+| 32 | 1.635 | 182 | 1,0 | 1,9 | 39 ms | 41 ms | 30 ms | 35 ms |
+| 64 | 1.645 | 183 | 1,0 | 1,9 | 81 ms | 75 ms | 57 ms | 58 ms |
+
+Live-Updates:
+
+| Verbindungen | Speicher je Verbindung | Neuer Artikel bei allen | 50 Änderungen je s | 200 je s | 800 je s |
+|---:|---:|---:|---|---|---|
+| 2.000 | 24,5 KB | in 44 ms | 0,8 Kerne | 2,3 Kerne | 763 je s geschafft, p50 1,0 s |
+| 5.000 | 23,3 KB | in 71 ms | 1,8 Kerne | 2,6 Kerne | 512 je s, p50 6,0 s, 2.083 `resync` |
+| 10.000 | 22,8 KB | in 141 ms | 2,7 Kerne | 2,7 Kerne | 313 je s, p50 15,6 s, 4.659 `resync` |
+
+- **Lesen ist nicht die Grenze.** Die Anfragen enden bei rund 1.650 je Sekunde, weil der Pool 10 Verbindungen zur Datenbank hat und eine Anfrage dort rund 5 ms braucht; die Kerne sind dann zwischen Server, PostgreSQL und Lastgenerator aufgeteilt. Bei 100.000 Konten mit 20 bis 30 % täglich aktiven und einer Spitze von 15 bis 35 Besuchen je Sekunde ist das ein Zehntel davon. Am Vortag mit im Schnitt 43 Abos ohne lange Ausreißer waren es 2.050 je Sekunde.
+- **Live-Updates sind die Grenze.** Jedes Ereignis geht an jede offene Verbindung, und jede sieht selbst in der Liste der Konten nach, ob es ihr gilt (`events.rs`). Mit 10 Verbindungen kosteten 800 Änderungen je Sekunde am Vortag 0,3 Kerne; mit 10.000 kosten schon 50 je Sekunde 2,7. Kommt eine Verbindung nicht nach, fällt sie aus dem Puffer und bekommt `resync`, und die Seite lädt alles neu. Bei 100.000 Konten wären 3.000 bis 5.000 Verbindungen und um 150 Ereignisse je Sekunde zu erwarten, mehr als diese Maschine schafft. Paket 5.31.
+- **Ein großes Konto.** Eines der Konten des Generators mit 12.012 Abos brauchte für den Baum 0,34 s (3,6 MB JSON) und für eine Liste über alle Feeds rund 0,3 s; ein Konto darf aber höchstens 2.000 Abos haben. Die Leser des beliebtesten Feeds zu finden, wie es jeder Abruf mit Neuem tut, kostete bei 26.246 Lesern 67 ms.
+- **Kalter Cache.** Nach dem Löschen und Neuanlegen von fünf Millionen Abos, mit `shared_buffers = 128MB`, brauchte eine Seite der ungelesenen Artikel im Median 37 s und die Maschine rechnete fast nichts: Alles kam von der Platte. Was gelesen wird, muss in den Arbeitsspeicher passen. Paket 5.35.
+- **Nicht gemessen:** Apps über die Google-Reader-API, der Bild-Proxy unter Last, Abrufe gegen echte, langsame Websites und die Suche mit Hunderten Millionen Artikeln.
 
 ## Wissen über das Altsystem
 
