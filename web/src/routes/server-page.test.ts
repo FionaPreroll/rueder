@@ -132,15 +132,18 @@ describe('the page with a server', () => {
 		server.breakStreams();
 		expect(await screen.findByRole('button', { name: /^Reconnecting/ })).toBeInTheDocument();
 		await userEvent.click(within(sidebar()).getByRole('button', { name: /^Tech/ }));
-		const retry = await screen.findByRole('button', {
-			name: /^The server has not answered since .+\. Try again now$/
+		const sign = await screen.findByRole('button', {
+			name: /^The server has not answered since .+\.$/
 		});
 		// The sign says it, not a notice for each load that fails.
 		expect(screen.queryByRole('alert')).toBeNull();
 
+		// A tap says what it is, as a phone shows no title, and offers to try again.
+		await userEvent.click(sign);
+		expect(screen.getByRole('menu')).toHaveTextContent(/^The server has not answered since/);
 		// Asked to, it tries again at once.
 		const opened = server.streams.length;
-		await userEvent.click(retry);
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Try again now' }));
 		expect(server.streams).toHaveLength(opened);
 		expect(server.streams[0].after).toBe(server.requests.length);
 
@@ -161,7 +164,7 @@ describe('the page with a server', () => {
 		await userEvent.click(third);
 		expect(
 			await screen.findByRole('button', {
-				name: /^The server has not answered since .+\. 1 change is waiting\. Try again now$/
+				name: /^The server has not answered since .+\. 1 change is waiting\.$/
 			})
 		).toBeInTheDocument();
 		expect(unreadInTitle()).toBe(3);
