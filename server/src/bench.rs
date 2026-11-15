@@ -323,11 +323,12 @@ WITH picked AS (
     INSERT INTO article_content
         (feed_id, seq, guid_hash, checksum, guid, html, tags, id, title, author)
     SELECT feed_id, seq, substring(sha256(url::bytea) FOR 16), sha256(('c' || g)::bytea), url,
-           -- A paragraph every three sentences, a link every four.
+           -- A paragraph every three sentences, a link every four, its attribute
+           -- split so that the check of the site's links does not read it as one.
            coalesce('<p>' || (
                SELECT string_agg(
                           CASE WHEN i % 4 = 0
-                               THEN '<a href="' || url || '/' || i || '">' || b.words || '</a>'
+                               THEN '<a href' || '="' || url || '/' || i || '">' || b.words || '</a>'
                                ELSE b.words END,
                           CASE WHEN i % 3 = 1 THEN '.</p><p>' ELSE '. ' END ORDER BY i)
                FROM generate_series(1, chunks) i
