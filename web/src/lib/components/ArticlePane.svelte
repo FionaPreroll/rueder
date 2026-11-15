@@ -64,7 +64,7 @@
 >
 	{#if article}
 		<div class="mx-auto max-w-3xl" data-pane-article={article.id}>
-			<ArticleBody {reader} {article} {now} {onversions} />
+			<ArticleBody {reader} {article} {now} {onversions} closable />
 		</div>
 	{:else}
 		<p class="p-10 text-center text-soft">{m.list.pick}</p>

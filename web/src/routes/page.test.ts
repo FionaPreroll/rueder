@@ -333,6 +333,10 @@ describe('the keyboard', () => {
 		expect(other).toHaveAttribute('aria-current', 'true');
 		await press('{Escape}');
 		expect(pane()).toHaveTextContent('Pick an article to read it here.');
+		// So does the button under its text.
+		await press('j');
+		await userEvent.click(within(pane()).getByRole('button', { name: 'Close' }));
+		expect(pane()).toHaveTextContent('Pick an article to read it here.');
 
 		// The toolbar switches back to the list.
 		await userEvent.click(screen.getByRole('button', { name: 'List view' }));

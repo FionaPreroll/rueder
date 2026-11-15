@@ -141,16 +141,30 @@
 
 	// In the list, an article that opens or closes starts in sight. Without this,
 	// closing a long article, or opening the next one, which closes it, leaves the
-	// view far below the row that was clicked, as the text above it is gone.
+	// view far below the row that was clicked, as the text above it is gone. In
+	// the unread items a read article goes as it closes, and the one that took its
+	// place starts in sight instead.
 	let lastOpen: string | null = null;
+	/** Where the open article is in the list, or the one that was open last. */
+	let openAt = -1;
+	$effect(() => {
+		const id = reader.open;
+		if (id) openAt = ids.indexOf(id);
+	});
 	$effect(() => {
 		const opened = reader.open;
 		const id = opened ?? lastOpen;
+		const at = openAt;
 		lastOpen = opened;
 		if (!id || expanded || pane || magazine) return;
 		untrack(async () => {
 			await tick();
-			const row = rowOf(id);
+			let row = rowOf(id);
+			if (!row && opened === null && at !== -1 && ids.length > 0) {
+				const next = ids[Math.min(at, ids.length - 1)];
+				await reach(next);
+				row = rowOf(next);
+			}
 			if (!row || !scroller) return;
 			if (row.getBoundingClientRect().top < scroller.getBoundingClientRect().top) {
 				row.scrollIntoView({ block: 'start' });
@@ -380,7 +394,7 @@
 							<ArticleRow {reader} {article} {now} {showFeed} stacked={pane} />
 							{#if !pane && reader.open === article.id}
 								<div class="border-t border-l-3 border-line border-l-accent-line bg-paper">
-									<ArticleBody {reader} {article} {now} {onversions} />
+									<ArticleBody {reader} {article} {now} {onversions} closable />
 								</div>
 							{/if}
 						</li>

@@ -1,6 +1,9 @@
 <script lang="ts">
 	// An open article: title to the original, where it is from, the text, and the row
-	// of actions under it. Used inside the list view and as a card of the expanded view.
+	// of actions under it. Used inside the list view, in the pane beside the list,
+	// over the magazine and as a card of the expanded view. Where it was opened, and
+	// so can be closed, the row ends with a button that closes it (`closable`): read
+	// to its end, the reader need not go back up to its line for that.
 	import type { Reader } from '#lib/reader.ts';
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -17,12 +20,14 @@
 		reader,
 		article,
 		now,
-		onversions
+		onversions,
+		closable = false
 	}: {
 		reader: Reader;
 		article: Article;
 		now: number;
 		onversions: (article: Article) => void;
+		closable?: boolean;
 	} = $props();
 
 	const read = $derived(reader.isRead(article));
@@ -55,6 +60,11 @@
 	}
 
 	const focus = (field: HTMLInputElement) => field.focus();
+
+	// As Escape does. In the unread items a read article goes from the list with it.
+	function close() {
+		if (reader.open === article.id) reader.open = null;
+	}
 
 	// A list comes without the texts; the text is fetched when the article is shown.
 	$effect(() => {
@@ -267,6 +277,16 @@
 					{m.list.reportArticle}
 				</button>
 			</Menu>
+		{/if}
+		{#if closable}
+			<button
+				type="button"
+				class="inline-flex cursor-pointer items-center gap-1 hover:text-ink"
+				onclick={close}
+			>
+				<Icon name="close" />
+				{m.common.close}
+			</button>
 		{/if}
 	</footer>
 	{#if reporting}
