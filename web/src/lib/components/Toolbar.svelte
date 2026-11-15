@@ -1,8 +1,10 @@
 <script lang="ts">
 	// The row of buttons over the list, in Google Reader's order: refresh, what to
 	// show, mark all as read, the views, previous and next. On a phone, what to
-	// show, the views and marking as read are one menu with words, between the
-	// icons for refresh and for previous and next.
+	// show and the views are one menu with words, between the icons for refresh
+	// and for previous and next; marking as read has a button of its own at the
+	// end of the title's line, with the check it has on a wide screen, and opens
+	// a menu, so that a slip of the thumb marks nothing.
 	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { settings, views } from '#lib/settings.svelte.ts';
@@ -73,8 +75,31 @@
 <div
 	class="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 border-b border-line px-3 py-2 sm:gap-x-2"
 >
-	<!-- On a phone the title has a line of its own, so the buttons below stay where they are whatever its length. -->
-	<h1 class="min-w-0 truncate text-lg font-semibold max-sm:w-full sm:mr-auto">{title}</h1>
+	<!-- On a phone the title has a line of its own, so the buttons below stay where they are
+		whatever its length, and at its end the button to mark as read, where it is seen. -->
+	<div class="flex min-w-0 items-center gap-2 max-sm:w-full sm:mr-auto">
+		<h1 class="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h1>
+		<div class="sm:hidden">
+			<Menu label={m.toolbar.markMenu} title={m.toolbar.markAllRead} align="right">
+				{#snippet button()}
+					<Icon name="check" />
+				{/snippet}
+				{@render heading(m.toolbar.markAllRead)}
+				{#if reader.can.markOlder}
+					{@render markOptions()}
+				{:else}
+					<button
+						type="button"
+						role="menuitem"
+						class="menu-item"
+						onclick={() => reader.markAllRead()}
+					>
+						{m.toolbar.markEverything}
+					</button>
+				{/if}
+			</Menu>
+		</div>
+	</div>
 
 	<button
 		type="button"
@@ -142,20 +167,6 @@
 					() => (settings.view = view)
 				)}
 			{/each}
-			<hr class="my-1 border-line" />
-			{@render heading(m.toolbar.markAllRead)}
-			{#if reader.can.markOlder}
-				{@render markOptions()}
-			{:else}
-				<button
-					type="button"
-					role="menuitem"
-					class="menu-item"
-					onclick={() => reader.markAllRead()}
-				>
-					{m.toolbar.markEverything}
-				</button>
-			{/if}
 		</Menu>
 	</div>
 	<div class="flex max-sm:hidden" role="group" aria-label={m.settings.view}>

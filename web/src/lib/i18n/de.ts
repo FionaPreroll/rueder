@@ -78,7 +78,9 @@ const de: Messages = {
 		oldestFirst: 'Älteste zuerst',
 		markAllRead: 'Alle als gelesen markieren',
 		markOptions: 'Weitere Arten, als gelesen zu markieren',
-		phoneMenu: (shown) => `Ansicht und als gelesen markieren, gezeigt: ${shown}`,
+		phoneMenu: (shown) => `Ansicht, gezeigt: ${shown}`,
+		/** The button of a phone that opens the ways to mark as read. */
+		markMenu: 'Als gelesen markieren …',
 		markEverything: 'Alle Artikel',
 		markOlderDay: 'Artikel, die älter als ein Tag sind',
 		markOlderWeek: 'Artikel, die älter als eine Woche sind',
