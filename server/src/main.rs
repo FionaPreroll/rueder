@@ -222,6 +222,11 @@ enum RegistrationCommand {
         /// MAIL_FROM and PUBLIC_URL.
         #[arg(long, value_name = "off|optional|required")]
         email: Option<email::Mode>,
+        /// Whether registration without an invitation asks for a solved
+        /// captcha, a moment of computing for the browser. On unless turned
+        /// off.
+        #[arg(long)]
+        captcha: Option<bool>,
     },
 }
 
@@ -553,6 +558,7 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
         invite_days,
         admin_invite_accounts,
         email,
+        captcha,
     } = command
     {
         if let Some(mode) = email {
@@ -562,6 +568,7 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
             settings.email = mode;
         }
         settings.open = open.unwrap_or(settings.open);
+        settings.captcha = captcha.unwrap_or(settings.captcha);
         if let Some(Limit(limit)) = max_accounts {
             settings.max_accounts = limit;
         }
@@ -579,6 +586,12 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
     let limit = |limit: Option<i32>| limit.map_or("no limit".to_owned(), |n| n.to_string());
     let open = if settings.open { "open" } else { "closed" };
     println!("Registration without an invitation: {open}");
+    let captcha = if settings.captcha {
+        "asked for"
+    } else {
+        "not asked for"
+    };
+    println!("A captcha, without an invitation: {captcha}");
     println!(
         "Accounts, without those admins invited: {} of {}",
         counts.general,

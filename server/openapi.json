@@ -3258,7 +3258,7 @@
         "tags": [
           "Registration"
         ],
-        "summary": "Whether anybody can register now, and whether an invitation link is good, for the page that offers it; for anybody, with or without a session.",
+        "summary": "Whether anybody can register now, whether an invitation link is good, and the captcha to solve where open registration asks for one, for the page that offers it; for anybody, with or without a session.",
         "operationId": "registering",
         "parameters": [
           {
@@ -3328,7 +3328,7 @@
             "description": "A name, password or address that is not allowed."
           },
           "403": {
-            "description": "Registration is closed, the invitation is not good (any more), the server or the day is full, or the terms were not agreed to (`terms`)."
+            "description": "Registration is closed, the invitation is not good (any more), the server or the day is full, the terms were not agreed to (`terms`), or no captcha came that counts (`captcha`)."
           },
           "409": {
             "description": "The name is taken."
@@ -5861,6 +5861,73 @@
           }
         }
       },
+      "CaptchaChallenge": {
+        "type": "object",
+        "description": "A challenge for the page to solve before it registers, in\n`GET /api/register`.",
+        "required": [
+          "salt",
+          "challenge",
+          "max",
+          "expires",
+          "signature"
+        ],
+        "properties": {
+          "salt": {
+            "type": "string",
+            "description": "Random, in hex."
+          },
+          "challenge": {
+            "type": "string",
+            "description": "The SHA-256 of the salt followed by the hidden number in decimal, in hex."
+          },
+          "max": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The highest number it can be.",
+            "minimum": 0
+          },
+          "expires": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Until when it is good, in seconds since 1970."
+          },
+          "signature": {
+            "type": "string",
+            "description": "The server's signature of the challenge and its expiry."
+          }
+        }
+      },
+      "CaptchaSolution": {
+        "type": "object",
+        "description": "A solved challenge, which `POST /api/register` reads: the challenge as it\ncame, and the number that was hidden in it.",
+        "required": [
+          "salt",
+          "challenge",
+          "expires",
+          "signature",
+          "number"
+        ],
+        "properties": {
+          "salt": {
+            "type": "string"
+          },
+          "challenge": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "Changed": {
         "type": "string",
         "description": "What was different about an article when it last got a new version. A feed\nthat only rewrites a headline says nothing in the text, and the reader would\nlook for a change in vain.",
@@ -7552,7 +7619,7 @@
       },
       "NewRegistration": {
         "type": "object",
-        "description": "What `POST /api/register` reads. It answers with `Me` and sets the\nsession's cookie, as a login does.\n\nA refusal is 403 with one word: `terms` (the terms of use the server names\nwere not agreed to), `closed` (no invitation, and registration is not open),\n`invite` (the invitation cannot be used), `full` (no room for another\naccount) or `today` (enough accounts for one day). A name or a\npassword that cannot be one is 400 with the reason, a name that is taken\n409.",
+        "description": "What `POST /api/register` reads. It answers with `Me` and sets the\nsession's cookie, as a login does.\n\nA refusal is 403 with one word: `terms` (the terms of use the server names\nwere not agreed to), `closed` (no invitation, and registration is not open),\n`invite` (the invitation cannot be used), `full` (no room for another\naccount), `today` (enough accounts for one day) or `captcha` (no captcha\ncame that counts, where open registration asks for one). A name or a\npassword that cannot be one is 400 with the reason, a name that is taken\n409.",
         "required": [
           "username",
           "password"
@@ -7591,6 +7658,17 @@
               "null"
             ],
             "description": "The language of the page, `en` or `de`: the account's mail is\nwritten in it."
+          },
+          "captcha": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CaptchaSolution",
+                "description": "The solved captcha of `GET /api/register`, where it named one."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -7906,6 +7984,17 @@
               "null"
             ],
             "description": "Whether the invitation that was asked about is good: known, not taken\nback, not run out, not used up. Left out if none was asked about."
+          },
+          "captcha": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CaptchaChallenge",
+                "description": "The captcha to solve before registering without an invitation, while\nregistration is open and asks for one. Each is good for a few minutes\nand once, so the page asks for it when it sends."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

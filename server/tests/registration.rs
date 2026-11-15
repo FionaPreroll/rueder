@@ -6,7 +6,7 @@ mod common;
 use axum::http::{Method, StatusCode, header};
 use common::{call, raw};
 use rueder::{
-    AppState, accounts, email, mail,
+    AppState, accounts, captcha, email, mail,
     registration::{self, Outcome, Refused, Settings},
 };
 use serde_json::{Value, json};
@@ -21,15 +21,32 @@ async fn set(db: &PgPool, change: impl FnOnce(&mut Settings)) {
     registration::set_settings(db, &settings).await.unwrap();
 }
 
-/// Tries to register through the API; the status and what the answer says.
-async fn register(state: &AppState, name: &str, invite: Option<&str>) -> (StatusCode, String) {
-    let mut body = json!({ "username": name, "password": PASSWORD });
-    if let Some(invite) = invite {
-        body["invite"] = json!(invite);
-    }
+/// Sends a registration as it is; the status and what the answer says.
+async fn post(state: &AppState, body: Value) -> (StatusCode, String) {
     let body = ("application/json", body.to_string().into_bytes());
     let (status, _, answer) = raw(state, Method::POST, "/api/register", None, Some(body)).await;
     (status, String::from_utf8(answer).unwrap())
+}
+
+/// The registration with the captcha solved, where the server names one, as
+/// the page sends it.
+async fn solved(state: &AppState, mut body: Value) -> Value {
+    let (_, asked) = call(state, Method::GET, "/api/register", None, None).await;
+    if asked.get("captcha").is_some() {
+        body["captcha"] = common::solve(&asked["captcha"]);
+    }
+    body
+}
+
+/// Tries to register through the API, as the page does; the status and what
+/// the answer says.
+async fn register(state: &AppState, name: &str, invite: Option<&str>) -> (StatusCode, String) {
+    let mut body = json!({ "username": name, "password": PASSWORD });
+    match invite {
+        Some(invite) => body["invite"] = json!(invite),
+        None => body = solved(state, body).await,
+    }
+    post(state, body).await
 }
 
 async fn refused(state: &AppState, name: &str, invite: Option<&str>) -> String {
@@ -98,6 +115,7 @@ async fn nothing_is_open_until_the_operator_says_so(db: PgPool) {
             invite_days: 7,
             admin_invite_accounts: None,
             email: email::Mode::Off,
+            captcha: true,
         }
     );
     let (_, ways) = call(&state, Method::GET, "/api/login/ways", None, None).await;
@@ -131,7 +149,8 @@ async fn open_registration_makes_an_account_and_logs_it_in(db: PgPool) {
     let (_, ways) = call(&state, Method::GET, "/api/login/ways", None, None).await;
     assert_eq!(ways["registration"], true);
 
-    let body = json!({ "username": "  Ada ", "password": PASSWORD }).to_string();
+    let body = json!({ "username": "  Ada ", "password": PASSWORD });
+    let body = solved(&state, body).await.to_string();
     let body = ("application/json", body.into_bytes());
     let (status, headers, answer) =
         raw(&state, Method::POST, "/api/register", None, Some(body)).await;
@@ -159,11 +178,10 @@ async fn open_registration_makes_an_account_and_logs_it_in(db: PgPool) {
     // one is said to be so.
     assert_eq!(register(&state, "ADA", None).await.0, StatusCode::CONFLICT);
     assert_eq!(register(&state, " ", None).await.0, StatusCode::BAD_REQUEST);
-    let short = json!({ "username": "grace", "password": "short" }).to_string();
-    let short = ("application/json", short.into_bytes());
-    let (status, _, why) = raw(&state, Method::POST, "/api/register", None, Some(short)).await;
+    let short = json!({ "username": "grace", "password": "short" });
+    let (status, why) = post(&state, solved(&state, short).await).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(String::from_utf8(why).unwrap().contains("shorter than 8"));
+    assert!(why.contains("shorter than 8"));
     // What is no registration at all is refused before anything is looked at.
     let nothing = ("application/json", b"{}".to_vec());
     let (status, _, _) = raw(&state, Method::POST, "/api/register", None, Some(nothing)).await;
@@ -171,6 +189,58 @@ async fn open_registration_makes_an_account_and_logs_it_in(db: PgPool) {
 
     set(&db, |settings| settings.open = false).await;
     assert_eq!(refused(&state, "grace", None).await, "closed");
+}
+
+#[sqlx::test]
+async fn open_registration_asks_for_a_captcha_unless_it_is_turned_off(db: PgPool) {
+    let state = AppState::new(db.clone());
+    let root = admin(&db, "root").await;
+    set(&db, |settings| settings.open = true).await;
+    let (_, asked) = call(&state, Method::GET, "/api/register", None, None).await;
+    let challenge = &asked["captcha"];
+    assert_eq!(challenge["max"], captcha::MAX_NUMBER);
+    let ada = json!({ "username": "ada", "password": PASSWORD });
+
+    // Without one, or with a wrong one, nobody gets in.
+    let refused = (StatusCode::FORBIDDEN, "captcha".to_owned());
+    assert_eq!(post(&state, ada.clone()).await, refused);
+    let mut wrong = ada.clone();
+    wrong["captcha"] = common::solve(challenge);
+    let number = wrong["captcha"]["number"].as_u64().unwrap();
+    wrong["captcha"]["number"] = json!((number + 1) % u64::from(captcha::MAX_NUMBER + 1));
+    assert_eq!(post(&state, wrong).await, refused);
+    // The right one counts once.
+    let mut right = ada.clone();
+    right["captcha"] = common::solve(challenge);
+    assert_eq!(post(&state, right.clone()).await.0, StatusCode::CREATED);
+    right["username"] = json!("grace");
+    assert_eq!(post(&state, right).await, refused);
+
+    // An invitation needs none, and asking about one names none.
+    let link = invite(&state, &root, None).await.unwrap();
+    assert!(
+        common::registering(&state, &link)
+            .await
+            .get("captcha")
+            .is_none()
+    );
+    registered(&state, "grace", Some(&link)).await;
+
+    // Turned off, nothing is asked.
+    set(&db, |settings| settings.captcha = false).await;
+    let (_, asked) = call(&state, Method::GET, "/api/register", None, None).await;
+    assert_eq!(asked, json!({ "open": true, "email": "off" }));
+    let linus = json!({ "username": "linus", "password": PASSWORD });
+    assert_eq!(post(&state, linus).await.0, StatusCode::CREATED);
+
+    // Where there is no room, there is nothing to solve.
+    set(&db, |settings| {
+        settings.captcha = true;
+        settings.max_accounts = Some(1);
+    })
+    .await;
+    let (_, asked) = call(&state, Method::GET, "/api/register", None, None).await;
+    assert_eq!(asked, json!({ "open": false, "email": "off" }));
 }
 
 #[sqlx::test]
@@ -490,6 +560,7 @@ async fn many_at_once_get_no_more_places_than_there_are(db: PgPool) {
                 token,
                 email: None,
                 language: mail::Language::En,
+                solved: true,
             };
             registration::make(&db, &applicant).await.unwrap()
         }));

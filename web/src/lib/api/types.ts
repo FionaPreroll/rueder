@@ -535,6 +535,39 @@ export type Registering = {
 	 * back, not run out, not used up. Left out if none was asked about.
 	 */
 	invite?: boolean,
+	/**
+	 * The captcha to solve before registering without an invitation, while
+	 * registration is open and asks for one. Each is good for a few minutes
+	 * and once, so the page asks for it when it sends.
+	 */
+	captcha?: CaptchaChallenge,
+};
+
+/**
+ * A challenge for the page to solve before it registers, in
+ * `GET /api/register`.
+ */
+export type CaptchaChallenge = {
+	/**
+	 * Random, in hex.
+	 */
+	salt: string,
+	/**
+	 * The SHA-256 of the salt followed by the hidden number in decimal, in hex.
+	 */
+	challenge: string,
+	/**
+	 * The highest number it can be.
+	 */
+	max: number,
+	/**
+	 * Until when it is good, in seconds since 1970.
+	 */
+	expires: number,
+	/**
+	 * The server's signature of the challenge and its expiry.
+	 */
+	signature: string,
 };
 
 /**
@@ -544,7 +577,8 @@ export type Registering = {
  * A refusal is 403 with one word: `terms` (the terms of use the server names
  * were not agreed to), `closed` (no invitation, and registration is not open),
  * `invite` (the invitation cannot be used), `full` (no room for another
- * account) or `today` (enough accounts for one day). A name or a
+ * account), `today` (enough accounts for one day) or `captcha` (no captcha
+ * came that counts, where open registration asks for one). A name or a
  * password that cannot be one is 400 with the reason, a name that is taken
  * 409.
  */
@@ -569,6 +603,22 @@ export type NewRegistration = {
 	 * written in it.
 	 */
 	language?: string,
+	/**
+	 * The solved captcha of `GET /api/register`, where it named one.
+	 */
+	captcha?: CaptchaSolution,
+};
+
+/**
+ * A solved challenge, which `POST /api/register` reads: the challenge as it
+ * came, and the number that was hidden in it.
+ */
+export type CaptchaSolution = {
+	salt: string,
+	challenge: string,
+	expires: number,
+	signature: string,
+	number: number,
 };
 
 /**

@@ -37,6 +37,7 @@ pub mod app_passwords;
 pub mod articles;
 pub mod asset_links;
 pub mod bench;
+pub mod captcha;
 pub mod cleaning;
 pub mod email;
 pub mod events;
@@ -154,6 +155,9 @@ pub struct AppState {
     /// The metrics for Prometheus under `/metrics`, for whoever knows the
     /// token in `METRICS_TOKEN`; none without it.
     pub metrics: Option<Arc<metrics::Metrics>>,
+    /// The key of the captcha of open registration and the solutions that
+    /// were used.
+    pub captcha: Arc<captcha::Captcha>,
 }
 
 impl AppState {
@@ -180,6 +184,7 @@ impl AppState {
             passkeys: None,
             mail: None,
             metrics: None,
+            captcha: Arc::default(),
         }
     }
 }

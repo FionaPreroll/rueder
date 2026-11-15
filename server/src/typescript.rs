@@ -18,8 +18,9 @@ use std::any::TypeId;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use crate::{
-    api, app_passwords, email, events, filters, labels, legal, login, moderation, oidc, passkeys,
-    profile, recovery, registration, reports, second_factor, status, subscribe, transfer, tree,
+    api, app_passwords, captcha, email, events, filters, labels, legal, login, moderation, oidc,
+    passkeys, profile, recovery, registration, reports, second_factor, status, subscribe, transfer,
+    tree,
 };
 
 /// Where the committed file lies, seen from the crate.
@@ -133,6 +134,7 @@ pub fn generate() -> anyhow::Result<String> {
     app_passwords::types(&mut types);
     passkeys::types(&mut types);
     registration::types(&mut types);
+    captcha::types(&mut types);
     email::types(&mut types);
     recovery::types(&mut types);
     oidc::types(&mut types);

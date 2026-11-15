@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.4 (Probelauf), 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), 5.28 (Captcha bei der Registrierung, geplant) und E13 (inaktive Konten) |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz) und E13 (inaktive Konten) |
 
 Was es gibt:
 
@@ -145,6 +145,7 @@ cargo run -- account list               # Konten auflisten; in der Oberfläche l
 cargo run -- registration show          # ob sich jemand registrieren kann, die Grenzen und wie viele Konten es gibt
 cargo run -- registration set --open true --max-accounts 50 --per-day 5   # offene Registrierung mit Grenzen; none hebt eine Grenze auf
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20   # Einladungen je User, Gültigkeit der Links, Kontingent der Admins
+cargo run -- registration set --captcha false   # die offene Registrierung ohne Captcha; true schaltet es wieder an
 cargo run -- retention show             # wie lange die Zahlen der Statusseite bleiben
 cargo run -- account invites <name> 10  # eigenes Einladungs-Kontingent für ein Konto; default nimmt wieder den Wert für alle
 cargo run -- retention show             # wie lange was bleibt, und was die Aufbewahrung betreut
@@ -362,25 +363,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.25 Metriken für Prometheus (A13).** Siehe [Metriken für Prometheus](architecture.md#metriken-für-prometheus).
 - [x] **5.26 Bilder in der README.** Siehe [Seite auf GitHub Pages](architecture.md#seite-auf-github-pages).
 - [x] **5.27 Ein Knopf schließt den offenen Artikel.** Siehe [Frontend](architecture.md#frontend).
-- [ ] **5.28 Captcha bei der Registrierung (A16, auf Fionas Wunsch vom 2026-11-15).** Wer sich ohne Einladung registriert, löst vorher eine Rechenaufgabe, die der Browser selbst rechnet, damit ein Skript nicht in Masse Konten anlegt. Es gibt nichts anzuklicken und nichts zu erkennen; nach „Registrieren“ wartet die Seite einen Moment länger.
-
-  Entschieden von Fiona am 2026-11-15: eine eigene Rechenaufgabe (Proof of Work) nach dem Schema von ALTCHA, das die längste Wartezeit begrenzt, weil der Browser dann weiter nur mit rueder spricht ([Überblick](architecture.md#überblick)), nichts an Dritte geht und die Datenschutzerklärung nichts Neues nennen muss. Verworfen sind Cloudflare Turnstile und hCaptcha: Sie erkennen Bots besser, aber der Browser lädt dafür Skript und Rahmen vom Anbieter, die Content-Security-Policy müsste das auf allen Seiten von rueder erlauben, weil rueder eine einzige Seite ist, und der Anbieter sieht Adresse und Browser jedes Users, der sich registriert. Verworfen sind auch mCaptcha, weil es ein eigener Dienst neben rueder wäre, und Widget und Bibliothek von ALTCHA: Das Widget bringt eigene Texte und Stile mit, an `web/src/lib/i18n/`, der CSP und den Farben vorbei, und die Prüfung auf dem Server ist mit `sha2` und `hmac`, die schon da sind, in wenigen Zeilen geschrieben.
-
-  Was es bringt und was nicht: Die Aufgabe kostet jede Registrierung Rechenzeit. Das hält ein Skript auf, das tausende Konten anlegen will, nicht eines, das jeden Tag die wenigen Plätze von `--per-day` füllt; ein Browser ohne Kopf löst sie wie jeder andere. Gegen gezielten Missbrauch bleiben die Grenzen je Tag und insgesamt, die bestätigte Adresse und das Sperren von Konten. Im Kern gilt das auch für Turnstile und hCaptcha: Für beide gibt es bezahlte Dienste, bei denen Menschen sie lösen.
-
-  - **Wann.** Nur die offene Registrierung fragt. Mit einer Einladung nicht, denn ihr Link ist schon der Nachweis; ein falscher bringt niemanden an der Aufgabe vorbei, weil `way_in` ihn ablehnt, bevor der Name angesehen wird. Der Betreiber schaltet die Aufgabe mit `rueder registration set --captcha false` ab und mit `true` wieder an; wie die übrigen Einstellungen der Registrierung steht das in der Datenbank und gilt sofort. Sie ist an als Standard, anders als A16 es sonst vorsieht, weil rueder als öffentliche Instanz von Haus aus sicher sein soll (entschieden von Fiona am 2026-11-15). Login, Passwort vergessen und die Mails bekommen keine Aufgabe; sie haben ihre eigenen Grenzen.
-  - **Die Aufgabe.** `GET /api/register` nennt sie, solange die offene Registrierung Platz hat, wie bei ALTCHA: ein zufälliges Salt mit seiner Ablaufzeit, eine Höchstzahl, den SHA-256 aus dem Salt und einer geheimen Zahl bis zu ihr und eine HMAC-Signatur über alles, mit einem Schlüssel, den der Server beim Start würfelt. Nichts davon steht in der Datenbank.
-  - **Die Lösung.** Der Browser probiert mit `crypto.subtle` die Zahlen von 0 an, bis der Hash passt, und schickt Aufgabe und Zahl mit `POST /api/register`. Über die Höchstzahl hinaus sucht er nie, also ist auch die längste Wartezeit bekannt.
-  - **Die Prüfung** kommt gleich nach der Zustimmung zu den Nutzungsbedingungen, vor allem anderen, und kostet einen HMAC und einen SHA-256: Wer nicht rechnet, erfährt keine Namen und lässt keine Passwörter hashen. Fehlt die Lösung, stimmt sie nicht, ist sie abgelaufen oder schon benutzt, antwortet der Server 403 `work`. Benutzte Aufgaben merkt er sich im Speicher, bis sie ablaufen, damit eine gelöste nicht für viele Konten gilt; nach einem Neustart gilt ohnehin keine alte mehr, weil der Schlüssel neu ist. Die Seite holt die Aufgabe beim Absenden, so dass das nur nach einem Neustart des Servers mitten im Rechnen vorkommt; sie bittet dann, es noch einmal zu versuchen.
-  - **Wie schwer.** Die Höchstzahl und die Ablaufzeit stehen als Konstanten in `registration.rs`. Die Höchstzahl ist so gewählt, dass ein Telefon höchstens etwa zwei Sekunden rechnet, im Mittel die Hälfte; gemessen wird auf einem Telefon und einem Laptop, notiert unter [Messung](#messung).
-  - **Die Seite.** Während der Browser rechnet, sagt es der Knopf, mit einem Text in `web/src/lib/i18n/`, Englisch und Deutsch. Die Aufgabe verlangt vom User nichts, was WCAG 2.2 (3.3.8) als Test des Denkens zählt, und geht in der Android-App wie im Browser, weil die App die Seite des Servers lädt.
-
-  Fertig, wenn:
-  - Tests des Servers zeigen: ohne Lösung, mit einer falschen, mit einer abgelaufenen und mit einer schon benutzten 403 `work`, mit der richtigen 201; mit einer Einladung und mit `--captcha false` geht es ohne Lösung; bei geschlossener oder voller Registrierung und mit `--captcha false` nennt `GET /api/register` keine Aufgabe;
-  - der Rechner der Seite und die Prüfung des Servers dieselben festen Beispiele annehmen, je ein Test;
-  - `web/e2e/registration.spec.ts` über die Seite mit Aufgabe registriert;
-  - `types.ts` und `openapi.json` neu geschrieben sind;
-  - [architecture.md](architecture.md#registrierung-und-einladungen) die Aufgabe beschreibt statt „Es gibt kein CAPTCHA“ und [plan.md](plan.md#entscheidungen) Fionas Wahl nennt.
+- [x] **5.28 Captcha bei der Registrierung.** Siehe [Captcha](architecture.md#captcha).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -391,6 +374,7 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **E-Mail am Konto (5.4):** Mit `optional` fragt die Seite nach dem Login nicht. Mit `required` fragt sie bestehende Konten in einem Fenster, das nur der Link oder das Abmelden schließt, sperrt aber nicht die API oder Apps. Ein Konto, das mit `required` registriert und nie bestätigt wird, geht nach 7 Tagen. Ob eine Adresse schon einem anderen Konto gehört, sagt erst der Link. Mails sind nur Text und gehen sofort, ohne Warteschlange: Nimmt das Relais eine nicht, antwortet der Server 503.
 - **Passwort vergessen (5.5):** Gesucht und verschickt wird nach der Antwort, so dass auch die Zeit nichts verrät. Ein Link gilt nur, solange das Konto die Adresse hat, an die er ging. Wer Passwort und zweiten Faktor zugleich verliert, braucht den Betreiber (`rueder account second-factor-off`).
 - **Ein Knopf schließt den offenen Artikel (5.27):** Er steht am Ende der Zeile unter dem Text, wo der Leser nach dem Lesen ist, nicht oben am Titel, und zeigt das Kreuz und „Schließen“. Im Magazin steht er zusätzlich zum Kreuz oben am Blatt, damit jeder offene Artikel gleich endet.
+- **Captcha (5.28):** Die Höchstzahl ist 100.000 und eine Aufgabe gilt fünf Minuten; im Speicher stehen höchstens 100.000 benutzte. Die Seite rechnet in einem Strang, ohne Worker, und der Knopf sagt derweil „Dieser Browser wird geprüft …“. Zählt eine Lösung nicht, etwa nach einem Neustart des Servers mitten im Rechnen, bittet die Seite, es noch einmal zu versuchen, statt selbst eine neue Aufgabe zu holen. Das Wort der Ablehnung ist `captcha`, wie der Schalter.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später
@@ -650,6 +634,17 @@ Touch-Ziele und Zeilenlänge, gemessen vom Rundgang der Screenshots (`pnpm scree
 | Labels im Browser | `frontend/src/rueder/stores/labels.ts` |
 | Login mit loginsrv und JWT | `backend/cmd/authbackend`, `backend/pkg/fibertools/`, `config/rueder.example.env` |
 | Betrieb des alten rueder | `docker-compose.yaml`, `config/` |
+
+### Captcha vom 2026-11-15
+
+Wie lange die Seite für das [Captcha](architecture.md#captcha) rechnet, gemessen mit der Schleife aus `web/src/lib/captcha.ts` in Chromium (Playwright, ohne Fenster) auf dem Cloud-Container mit 4 Kernen, über alle 100.001 Zahlen bis `captcha::MAX_NUMBER`, also die längste Wartezeit; im Mittel ist es die Hälfte.
+
+| Browser | Längste Wartezeit |
+|---|---|
+| Ungebremst | 0,5 s |
+| CPU viermal gebremst, als Ersatz für ein Telefon | 2,1 bis 2,3 s |
+
+Auf einem echten Telefon ist es nicht gemessen. Bündel von 1.000 Hashes auf einmal waren nicht schneller als einer nach dem anderen.
 
 ## Wissen über das Altsystem
 

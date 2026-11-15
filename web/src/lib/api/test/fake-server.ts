@@ -15,7 +15,7 @@ import type {
 	ApiVersion
 } from '#lib/api/client.ts';
 import type { EventStream } from '#lib/api/client.ts';
-import type { ServerEvent } from '#lib/api/types.ts';
+import type { CaptchaChallenge, ServerEvent } from '#lib/api/types.ts';
 import { demoStatus } from '#lib/demo/status.ts';
 import { compile, ruleMatches } from '#lib/filters.ts';
 
@@ -162,6 +162,8 @@ export class FakeServer {
 	oidc = false;
 	/** Whether anybody can register, and why nobody can right now: no room, or enough for today. */
 	registrationOpen = false;
+	/** The captcha open registration asks for, and the number hidden in it. */
+	captcha: { challenge: CaptchaChallenge; number: number } | null = null;
 	/** The operator's legal texts, and the version of the terms an account agrees to. */
 	legal: {
 		imprint: string | null;
@@ -489,7 +491,10 @@ export class FakeServer {
 			const token = headers.get('X-Rueder-Invite');
 			const open = this.registrationOpen && !this.noRoom;
 			const email = this.emailMode;
-			return json(token === null ? { open, email } : { open, email, invite: !!this.usable(token) });
+			if (token !== null) return json({ open, email, invite: !!this.usable(token) });
+			return json(
+				open && this.captcha ? { open, email, captcha: this.captcha.challenge } : { open, email }
+			);
 		}
 		if (method === 'POST' && path === '/email/confirm') {
 			const link = this.links.get(String(data.token));
@@ -521,6 +526,8 @@ export class FakeServer {
 			if (typeof data.invite === 'string' && !invite) return refused(403, 'invite');
 			if (!invite && !this.registrationOpen) return refused(403, 'closed');
 			if (this.noRoom) return refused(403, this.noRoom);
+			const solved = (data.captcha as { number?: unknown } | undefined)?.number;
+			if (!invite && this.captcha && solved !== this.captcha.number) return refused(403, 'captcha');
 			const name = String(data.username).trim();
 			if (!name) return refused(400, 'the name is empty');
 			if (String(data.password).length < 8) {

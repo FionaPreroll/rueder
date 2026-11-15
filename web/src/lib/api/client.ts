@@ -11,6 +11,7 @@ import type {
 	AccountImported,
 	AppPasswords as AppPasswordsJson,
 	Awaiting,
+	CaptchaSolution,
 	ConfirmEmail,
 	Confirmed,
 	EmailProof,
@@ -331,7 +332,8 @@ export const api = {
 		invite?: string,
 		acceptedTerms?: string,
 		email?: string,
-		language?: string
+		language?: string,
+		captcha?: CaptchaSolution
 	) =>
 		call<ApiAccount | Awaiting>('POST', '/register', {
 			username,
@@ -339,7 +341,8 @@ export const api = {
 			...(invite ? { invite } : {}),
 			...(acceptedTerms ? { accepted_terms: acceptedTerms } : {}),
 			...(email ? { email } : {}),
-			...(language ? { language } : {})
+			...(language ? { language } : {}),
+			...(captcha ? { captcha } : {})
 		} satisfies NewRegistration),
 
 	/** The account's address and the one that waits for its link. */
