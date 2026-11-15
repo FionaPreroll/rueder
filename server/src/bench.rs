@@ -10,6 +10,7 @@
 //! That is what the size of the search index and the time of a search depend on.
 
 pub mod fetching;
+pub mod readers;
 
 use std::{
     fmt,

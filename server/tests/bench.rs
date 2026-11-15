@@ -130,3 +130,69 @@ async fn nothing_to_measure_in_an_empty_database(db: PgPool) {
     };
     assert!(bench::generate(&db, none).await.is_err());
 }
+
+/// Many readers for the load tests: subscriptions by popularity that differ
+/// from reader to reader, a session each, and never in a real database.
+#[sqlx::test]
+async fn readers_come_with_subscriptions_and_sessions(db: PgPool) {
+    let size = Size {
+        accounts: 2,
+        feeds: 200,
+        articles: 4000,
+    };
+    bench::generate(&db, size).await.unwrap();
+    let tokens = std::env::temp_dir().join(format!("rueder-tokens-{}", std::process::id()));
+    let shared = "http://127.0.0.1:1/shared.xml";
+    let added = bench::readers::add(&db, 300, &tokens, Some(shared))
+        .await
+        .unwrap();
+    assert_eq!(added.readers, 300);
+    // Everyone reads the shared feed, and some more than the ten at least.
+    assert_eq!(added.top_feed_readers, 300);
+    assert!(added.mean > 20.0 && added.mean < 80.0, "{added}");
+    assert!(added.most > added.mean as i64 + 20, "{added}");
+    let fewest: i64 = sqlx::query_scalar(
+        "SELECT min(c) FROM (SELECT count(*) AS c FROM subscriptions s
+         JOIN accounts a ON a.id = s.account_id WHERE a.username LIKE 'reader-%'
+         GROUP BY s.account_id) x",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(fewest >= 5, "{fewest}");
+    // The first feeds are the popular ones.
+    let (first, last): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE feed_id = (SELECT min(id) FROM feeds)),
+                count(*) FILTER (WHERE feed_id = (SELECT max(id) FROM feeds WHERE feed_url LIKE 'https://feed-%'))
+         FROM subscriptions s JOIN accounts a ON a.id = s.account_id WHERE a.username LIKE 'reader-%'",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(first > 3 * last.max(1), "{first} {last}");
+
+    // Every token in the file opens its reader's session, and no other.
+    let text = std::fs::read_to_string(&tokens).unwrap();
+    let lines: Vec<(i32, String)> = text
+        .lines()
+        .map(|line| {
+            let (id, token) = line.split_once(' ').unwrap();
+            (id.parse().unwrap(), token.to_owned())
+        })
+        .collect();
+    assert_eq!(lines.len(), 300);
+    for (id, token) in lines.iter().step_by(37) {
+        let session = rueder::sessions::find(&db, token).await.unwrap().unwrap();
+        assert_eq!(session.account_id, *id);
+    }
+
+    // More can come; a real account keeps them all out.
+    let more = bench::readers::add(&db, 10, &tokens, None).await.unwrap();
+    assert_eq!(more.readers, 10);
+    rueder::accounts::create(&db, "fiona", Some("correct horse battery"), false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(bench::readers::add(&db, 10, &tokens, None).await.is_err());
+    std::fs::remove_file(&tokens).unwrap();
+}

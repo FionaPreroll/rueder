@@ -335,6 +335,44 @@ out of 127.0.0.0/8 (one fetch runs per name), on `--port` (39871), and fetches
 them round after round, every feed due again before each round. It wants a
 database of its own, where nobody reads other feeds.
 
+### Many readers
+
+`bench readers` adds made-up readers to such a database, or to an empty one:
+each subscribes to some feeds by popularity, 10 and then 40 more on average,
+and gets a session whose token goes to a file. The load tests in
+`../web/load/` (Node, without packages, Linux only) read the tokens and play
+the readers against a running server, which they need started with
+`CLIENT_IP_HEADER=x-forwarded-for`, as every reader comes from an address of
+its own:
+
+```sh
+cargo run --release -- bench readers --count 100000 --tokens /tmp/tokens
+CLIENT_IP_HEADER=x-forwarded-for FETCH=off LISTEN_ADDR=127.0.0.1:3290 \
+  cargo run --release -- serve &
+cd ../web && RUEDER_PID=$! TOKENS=/tmp/tokens node load/reading.js 8,32,64 30
+```
+
+`load/reading.js` lets workers visit random readers as the page would (the
+tree, the first page of unread articles, three of them opened and marked read,
+a page of one feed) and prints requests a second and the times by kind.
+
+The live updates want a database of their own, with readers who all read one
+feed that `load/feed.js` serves:
+
+```sh
+cargo run --release -- bench readers --count 10000 --tokens /tmp/tokens \
+  --shared http://127.0.0.1:3299/feed.xml
+(cd ../web && node load/feed.js &)
+CLIENT_IP_HEADER=x-forwarded-for FETCH_ALLOW_NETS=127.0.0.0/8 FETCH_EVERY=5 \
+  LISTEN_ADDR=127.0.0.1:3290 cargo run --release -- serve &
+cd ../web && RUEDER_PID=$! TOKENS=/tmp/tokens node load/live.js 50,200,800
+```
+
+`load/live.js` opens a stream of `/api/events` for every reader, lets the
+shared feed publish and says how fast that reaches all of them, then lets fifty
+readers change something at each rate and says what it costs. It makes the
+shared feed due in the database, so it needs `DATABASE_URL` too.
+
 Results and how they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).
 

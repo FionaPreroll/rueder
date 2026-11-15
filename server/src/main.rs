@@ -307,6 +307,20 @@ enum BenchCommand {
         #[arg(long, default_value_t = 10_000_000)]
         articles: i64,
     },
+    /// Add many made-up readers to a database of made-up data, with
+    /// subscriptions by popularity and a session each, for the load tests in
+    /// web/load/. The sessions' tokens go to a file.
+    Readers {
+        #[arg(long, default_value_t = 10_000)]
+        count: i32,
+        /// Where the tokens go, one `account_id token` a line.
+        #[arg(long, value_name = "FILE")]
+        tokens: std::path::PathBuf,
+        /// A feed every new reader subscribes to as well, for the load test
+        /// of the live updates.
+        #[arg(long, value_name = "URL")]
+        shared: Option<String>,
+    },
     /// Time the queries and print a table.
     Measure {
         /// How often each query runs.
@@ -420,6 +434,15 @@ async fn main() -> anyhow::Result<()> {
                 pace: fetch::Pace::from_env()?,
             };
             println!("{}", bench::fetching::run(&db, options).await?);
+            Ok(())
+        }
+        Command::Bench(BenchCommand::Readers {
+            count,
+            tokens,
+            shared,
+        }) => {
+            let added = bench::readers::add(&db, count, &tokens, shared.as_deref()).await?;
+            println!("{added}");
             Ok(())
         }
         Command::Bench(BenchCommand::Measure { runs }) => {
