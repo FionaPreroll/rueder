@@ -457,8 +457,10 @@ jobs:
       - run: RUEDER_COMMIT="$(git rev-parse HEAD)" deploy/smoke-test.sh
         env:
           RUEDER_IMAGE: rueder:ci
-      # The archive holds one image, the one the smoke test started: its
-      # configuration has the digest Docker knows that image by.
+      # The archive holds one image, the one the smoke test started. Docker
+      # knows that image by a digest of it: with its own image store by that
+      # of the configuration, with the store of containerd (Docker 29 on
+      # ubuntu-26.04) by that of the manifest, which names the configuration.
       - name: Check the archive
         env:
           ARCHIVE: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
@@ -467,8 +469,8 @@ jobs:
           manifest=$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')
           config=$(tar -xOf "$ARCHIVE" "blobs/sha256/${manifest#sha256:}" | jq -r '.config.digest')
           tested=$(docker image inspect rueder:ci --format '{{.Id}}')
-          echo "archive: $config, tested: $tested"
-          [ "$config" = "$tested" ]
+          echo "archive: manifest $manifest, configuration $config; tested: $tested"
+          [ "$tested" = "$manifest" ] || [ "$tested" = "$config" ]
       # What publish does with the archive, tried against a registry on this
       # runner, so that a change to it shows up before it reaches main. Only
       # the amd64 runner has skopeo; publish runs there too.

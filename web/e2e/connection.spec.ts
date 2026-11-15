@@ -14,8 +14,12 @@ test('says when the server cannot be reached, and catches up once it can', async
 	await expect(node(page, 'Harbour Herald')).toContainText('(12)');
 
 	await context.setOffline(true);
-	const sign = page.getByRole('button', { name: /^No network since .+\. Try again now$/ });
+	const sign = page.getByRole('button', { name: /^No network since .+\.$/ });
 	await expect(sign).toBeVisible();
+	// A click says what it is, and offers to try again.
+	await sign.click();
+	await expect(page.getByRole('menu')).toContainText(/^No network since/);
+	await expect(page.getByRole('menuitem', { name: 'Try again now' })).toBeVisible();
 	// What fails to load meanwhile is not a notice of its own: the sign says it.
 	await node(page, 'Harbour Herald').click();
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Harbour Herald');
