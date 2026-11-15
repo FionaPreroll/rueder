@@ -895,8 +895,7 @@ const en = {
 			memory: 'Memory',
 			accounts: 'Accounts',
 			feeds: 'Feeds',
-			feedsValue: (subscribed: number, all: number) =>
-				`${n(subscribed)} subscribed, ${n(all)} in all`,
+			feedsValue: (fetched: number, all: number) => `${n(fetched)} fetched, ${n(all)} in all`,
 			articles: 'Articles',
 			articlesValue: (count: number) => `about ${n(count)}`,
 			live: 'Open tabs'

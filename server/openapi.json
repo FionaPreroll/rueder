@@ -8753,7 +8753,7 @@
           "subscribed_feeds": {
             "type": "integer",
             "format": "int64",
-            "description": "Feeds somebody subscribes to, which are the ones fetched."
+            "description": "Feeds that are fetched: not blocked, and read by an account that is not\ndisabled."
           },
           "articles": {
             "type": "integer",

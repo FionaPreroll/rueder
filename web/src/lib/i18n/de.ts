@@ -895,7 +895,7 @@ const de: Messages = {
 			memory: 'Speicher',
 			accounts: 'Konten',
 			feeds: 'Feeds',
-			feedsValue: (subscribed, all) => `${n(subscribed)} abonniert, ${n(all)} insgesamt`,
+			feedsValue: (fetched, all) => `${n(fetched)} abgerufen, ${n(all)} insgesamt`,
 			articles: 'Artikel',
 			articlesValue: (count) => `etwa ${n(count)}`,
 			live: 'Offene Tabs'

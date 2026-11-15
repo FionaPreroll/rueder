@@ -128,10 +128,11 @@ enum AccountCommand {
     /// of errors, invitations and identities at the OpenID Connect provider.
     /// Feeds stay for their other subscribers. This cannot be undone.
     Remove { name: String },
-    /// Disable an account that is misused: it cannot log in, and its sessions
-    /// end. What it has stays, for `account enable`.
+    /// Disable an account that is misused or no longer used: it cannot log
+    /// in, its sessions end, and the feeds no other enabled account reads are
+    /// not fetched. What it has stays, for `account enable`.
     Disable { name: String },
-    /// Let a disabled account log in again.
+    /// Let a disabled account log in again, and fetch its feeds again.
     Enable { name: String },
     /// Write what an account has made of rueder (settings, folders, feeds,
     /// what was read, stars, labels and rules) as JSON to the standard output,
@@ -538,19 +539,24 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
             );
         }
         AccountCommand::Disable { name } => {
-            if !accounts::set_disabled(db, &name, true).await? {
-                anyhow::bail!("there is no account {}", name.trim());
-            }
+            let alone = accounts::set_disabled(db, &name, true)
+                .await?
+                .with_context(|| format!("there is no account {}", name.trim()))?;
             println!(
-                "Account {} is disabled. Its sessions are over.",
+                "Account {} is disabled. Its sessions are over, and the {alone} feeds \
+                 nobody else reads are not fetched any more.",
                 name.trim()
             );
         }
         AccountCommand::Enable { name } => {
-            if !accounts::set_disabled(db, &name, false).await? {
-                anyhow::bail!("there is no account {}", name.trim());
-            }
-            println!("Account {} can log in again.", name.trim());
+            let alone = accounts::set_disabled(db, &name, false)
+                .await?
+                .with_context(|| format!("there is no account {}", name.trim()))?;
+            println!(
+                "Account {} can log in again, and the {alone} feeds nobody else reads \
+                 are fetched.",
+                name.trim()
+            );
         }
         AccountCommand::List => {
             for account in accounts::list(db).await? {

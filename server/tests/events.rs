@@ -690,6 +690,7 @@ async fn a_disabled_account_gets_no_events(db: PgPool) {
         rueder::accounts::set_disabled(&db, "ada", true)
             .await
             .unwrap()
+            .is_some()
     );
     assert!(ada_tab.has_ended().await);
     // No new connection, not even with a session made after disabling.

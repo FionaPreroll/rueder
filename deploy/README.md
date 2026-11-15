@@ -278,7 +278,7 @@ docker compose exec rueder rueder admin add fiona          # sees the server sta
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
 docker compose exec rueder rueder account second-factor-off fiona   # lost the app and the recovery codes
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
-docker compose exec rueder rueder account disable mallory  # no login, sessions end; `enable` undoes it
+docker compose exec rueder rueder account disable mallory  # no login, sessions end, feeds only it reads rest; `enable` undoes it
 docker compose exec rueder rueder account remove mallory   # deletes the account and all that is its own
 docker compose exec rueder rueder feed block https://spam.example/feed.xml   # not fetched, hidden for all, its images gone; `unblock` undoes it
 docker compose exec rueder rueder reclean                  # after the cleaning's rules changed
@@ -431,12 +431,16 @@ docker compose exec -T db pg_dump -U rueder --format=custom rueder > before-impo
 export LEGACY_DATABASE_URL="postgres://rueder:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@db:5432/rueder_old"
 docker compose run --rm -e LEGACY_DATABASE_URL rueder import-legacy --dry-run
 docker compose run --rm -e LEGACY_DATABASE_URL rueder import-legacy --account oldname=newname
+docker compose run --rm rueder account disable gone   # an old account nobody uses any more
 docker compose start rueder
 ```
 
-The dry run says which feeds and accounts would be merged and which added. If
-the import stops halfway, run it again. The way back is `before-import.dump`,
-put in as under [Backup](#backup). Afterwards `rueder_old` can go:
+The dry run says which feeds and accounts would be merged and which added. An
+old account that nobody uses any more is best disabled before the server
+starts: the feeds no other enabled account reads are then never fetched, and
+`account enable` brings them back. If the import stops halfway, run it again.
+The way back is `before-import.dump`, put in as under [Backup](#backup).
+Afterwards `rueder_old` can go:
 `docker compose exec db dropdb -U rueder rueder_old`.
 
 The import reads the old database at any address it can reach, so a backup

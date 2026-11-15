@@ -1666,7 +1666,8 @@ export type StatusCounts = {
 	accounts: number,
 	feeds: number,
 	/**
-	 * Feeds somebody subscribes to, which are the ones fetched.
+	 * Feeds that are fetched: not blocked, and read by an account that is not
+	 * disabled.
 	 */
 	subscribed_feeds: number,
 	/**

@@ -280,7 +280,9 @@ async fn failed(db: &PgPool, feed_id: i32, message: String) -> anyhow::Result<Ou
 /// Fetches the feeds that are due and have somebody reading them, and returns
 /// how many that were: at most a round's worth of the pace, so many at a time
 /// as it says, and never two from the same host at once. Each fetch and the
-/// round count for the status page.
+/// round count for the status page. A disabled account reads nothing, so a
+/// feed only such accounts subscribe to rests until one of them is enabled or
+/// somebody else subscribes.
 pub async fn fetch_due(
     db: &PgPool,
     client: &HttpClient,
@@ -297,7 +299,8 @@ pub async fn fetch_due(
          WHERE id IN (
              SELECT f.id FROM feeds f
              WHERE f.next_fetch_at <= now() AND f.blocked_at IS NULL
-               AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)
+               AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id
+                           WHERE s.feed_id = f.id AND a.disabled_at IS NULL)
              ORDER BY f.next_fetch_at
              LIMIT $1
              FOR UPDATE SKIP LOCKED

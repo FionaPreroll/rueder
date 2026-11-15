@@ -354,9 +354,11 @@ pub async fn remove(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
     Ok(gone.rows_affected() > 0)
 }
 
-/// Disables an account, which ends its sessions, or enables it again. False if
-/// there is no account of that name.
-pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Result<bool> {
+/// Disables an account, which ends its sessions, or enables it again. Returns
+/// how many of its feeds no other enabled account reads: those are not fetched
+/// while it is disabled (see `fetch::fetch_due`). None if there is no account
+/// of that name.
+pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Result<Option<i64>> {
     let mut tx = db.begin().await?;
     // Disabled again keeps the time it was first disabled.
     let account_id = sqlx::query_scalar!(
@@ -369,7 +371,7 @@ pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Re
     .fetch_optional(&mut *tx)
     .await?;
     let Some(account_id) = account_id else {
-        return Ok(false);
+        return Ok(None);
     };
     // Disabling ends its sessions. While it is disabled none of them counts,
     // so enabling ends any that came about in the meantime, too: it starts
@@ -385,8 +387,18 @@ pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Re
     )
     .execute(&mut *tx)
     .await?;
+    let alone = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "alone!" FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+           WHERE s.account_id = $1 AND f.blocked_at IS NULL
+             AND NOT EXISTS (SELECT 1 FROM subscriptions o JOIN accounts a ON a.id = o.account_id
+                             WHERE o.feed_id = s.feed_id AND o.account_id <> $1
+                               AND a.disabled_at IS NULL)"#,
+        account_id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
     tx.commit().await?;
-    Ok(true)
+    Ok(Some(alone))
 }
 
 /// Whether the account is disabled. An account that is not there is not.

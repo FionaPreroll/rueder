@@ -253,7 +253,7 @@ Im Code: `server/src/search.rs`. `GET /api/search` sucht in den Artikeln der eig
 
 ## Abruf
 
-Im Code: `server/src/fetch.rs` ruft ab, `server/src/feeds.rs` liest und speichert. Ein Planer im Server ruft jeden Feed mit mindestens einem Abonnenten in seinem Intervall ab:
+Im Code: `server/src/fetch.rs` ruft ab, `server/src/feeds.rs` liest und speichert. Ein Planer im Server ruft jeden Feed in seinem Intervall ab, den mindestens ein Konto abonniert, das nicht gesperrt ist:
 
 1. Fällige Feeds kommen aus der Datenbank (`next_fetch_at`, `FOR UPDATE SKIP LOCKED`), begrenzt viele zugleich, je Host nur einer.
 2. Der [gehärtete HTTP-Client](#gehärteter-http-client) holt den Feed, bedingt mit ETag und Last-Modified. „Nicht geändert“ beendet den Abruf.
@@ -480,7 +480,8 @@ Im Code: `server/src/accounts.rs`, `server/src/profile.rs`, `web/src/lib/compone
 
 - **Löschen** heißt `DELETE FROM accounts`: Alles, was einem Konto gehört, hängt mit `ON DELETE CASCADE` an ihm. Feeds und Artikel gehören niemandem und bleiben für ihre anderen Abonnenten; einen Feed ohne Leser räumt die [Aufbewahrung](#aufbewahrung) weg. Eingeladene Konten bleiben. Ein Test sucht alle Spalten `account_id` des Schemas und verlangt, dass danach nichts übrig ist, so dass eine neue Tabelle ohne Cascade auffällt.
 - **Selbst löschen** (`DELETE /api/account`) braucht den Nachweis; ein Konto ohne Passwort tippt seinen Namen. Auf der Kommandozeile tut `rueder account remove` dasselbe.
-- **Sperren** bei Missbrauch mit `rueder account disable`, aufheben mit `enable` (`accounts.disabled_at`). Es beendet die Sitzungen, und `sessions::find` nimmt keine Sitzung eines gesperrten Kontos an; ein entsperrtes beginnt ausgeloggt. Alles andere bleibt. Nach dem richtigen Passwort, auch über OpenID Connect, sagt der Login 403 `disabled`; wer das Passwort nicht kennt, bekommt die Antwort jedes falschen, so dass niemand sonst erfährt, wer gesperrt ist.
+- **Sperren** bei Missbrauch oder wenn ein Konto nicht mehr genutzt wird, mit `rueder account disable`, aufheben mit `enable` (`accounts.disabled_at`). Es beendet die Sitzungen, und `sessions::find` nimmt keine Sitzung eines gesperrten Kontos an; ein entsperrtes beginnt ausgeloggt. Alles andere bleibt.
+- **Feeds gesperrter Konten ruhen.** Ein gesperrtes Konto liest nichts, also ruft der [Abruf](#abruf) einen Feed nur ab, solange ihn ein Konto abonniert, das nicht gesperrt ist. Das rechnet jede Runde aus den Abos aus, nichts wird dafür gespeichert: Entsperren oder ein neues Abo eines anderen bringt den Feed mit der nächsten Runde zurück, weil er dann überfällig ist. Artikel und Lesestand bleiben, und für die [Aufbewahrung](#aufbewahrung) ist ein ruhender Feed nicht verwaist, er hat ja Abonnenten. `disable` und `enable` sagen, wie viele Feeds niemand sonst liest; die Statusseite zählt nur Feeds, die abgerufen werden, damit ruhende nicht als überfällig erscheinen. Nach dem richtigen Passwort, auch über OpenID Connect, sagt der Login 403 `disabled`; wer das Passwort nicht kennt, bekommt die Antwort jedes falschen, so dass niemand sonst erfährt, wer gesperrt ist.
 - **Live.** `["account"]` zählt in `events::changed` als beendete Sitzung, so dass alle Verbindungen des Kontos nach dem Löschen über die API sofort enden. Was die Kommandozeile tut, erfährt der laufende Server nicht; seine Verbindungen enden, wenn sie nach `events::SESSION_CHECK` nachsehen.
 
 ### Rechtliches
@@ -790,7 +791,7 @@ Im Code: `server/src/monitor.rs`, `server/src/status.rs`, `web/src/lib/component
 
 Zeiten stehen in Eimern, die um eine Drittel-Oktave wachsen; Median und 95. Perzentil liegen deshalb bis zu einem Viertel über dem wahren Wert, was ein Zufallstest hält.
 
-**Was aus PostgreSQL kommt:** Konten, Feeds, die geschätzte Zahl der Artikel (`reltuples`, weil ein `count(*)` zu teuer wäre), Größen, Verbindungen, Lesezugriffe aus dem Speicher, Deadlocks, die längste laufende Abfrage, der Pool, überfällige und nie abgerufene Feeds und die fehlschlagenden Feeds, gezählt nach dem Grund ihres Fehlers.
+**Was aus PostgreSQL kommt:** Konten, Feeds, die geschätzte Zahl der Artikel (`reltuples`, weil ein `count(*)` zu teuer wäre), Größen, Verbindungen, Lesezugriffe aus dem Speicher, Deadlocks, die längste laufende Abfrage, der Pool, überfällige und nie abgerufene Feeds und die fehlschlagenden Feeds, gezählt nach dem Grund ihres Fehlers. Feeds zählen dabei nur, wenn sie abgerufen werden: nicht gesperrt und von einem Konto gelesen, das nicht gesperrt ist.
 
 **Gründe statt Feeds.** Adresse, Titel und Abonnenten eines Feeds nennt der Status nie, damit kein Endpunkt fremde Feeds listet. Der Grund wird aus dem gespeicherten Fehlertext gelesen, und ein Test bindet das an die Texte des HTTP-Clients und des Abrufs. Ausnahmen sind die Texte des Logs, die der Betreiber ohnehin liest, und die gemeldeten Feeds (E12, siehe [Meldungen und gesperrte Feeds](#meldungen-und-gesperrte-feeds)).
 

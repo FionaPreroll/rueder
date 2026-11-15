@@ -150,7 +150,8 @@ enum Hint {
 struct Counts {
     accounts: i64,
     feeds: i64,
-    /// Feeds somebody subscribes to, which are the ones fetched.
+    /// Feeds that are fetched: not blocked, and read by an account that is not
+    /// disabled.
     subscribed_feeds: i64,
     /// About how many articles: what PostgreSQL estimates.
     articles: i64,
@@ -584,6 +585,7 @@ pub(crate) struct DatabaseNumbers {
     pub deadlocks: i64,
 }
 
+/// How the feeds stand that are fetched, as `subscribed` counts them.
 pub(crate) struct Fetching {
     /// Feeds not fetched yet at all.
     pub waiting: i64,
@@ -598,7 +600,9 @@ pub(crate) async fn from_database(db: &PgPool) -> anyhow::Result<FromDatabase> {
     let counts = sqlx::query!(
         r#"SELECT (SELECT count(*) FROM accounts) AS "accounts!",
                   (SELECT count(*) FROM feeds) AS "feeds!",
-                  (SELECT count(DISTINCT feed_id) FROM subscriptions) AS "subscribed!""#
+                  (SELECT count(*) FROM feeds f WHERE f.blocked_at IS NULL
+                     AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id
+                                 WHERE s.feed_id = f.id AND a.disabled_at IS NULL)) AS "subscribed!""#
     )
     .fetch_one(db)
     .await?;
@@ -633,7 +637,9 @@ pub(crate) async fn from_database(db: &PgPool) -> anyhow::Result<FromDatabase> {
                   extract(epoch FROM now() - min(f.next_fetch_at)
                       FILTER (WHERE f.next_fetch_at < now()))::float8 AS behind
            FROM feeds f
-           WHERE EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)"#,
+           WHERE f.blocked_at IS NULL
+             AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id
+                         WHERE s.feed_id = f.id AND a.disabled_at IS NULL)"#,
         OVERDUE_S,
     )
     .fetch_one(db)
@@ -641,8 +647,9 @@ pub(crate) async fn from_database(db: &PgPool) -> anyhow::Result<FromDatabase> {
     let messages = sqlx::query!(
         r#"SELECT f.error_message AS "message!", count(*) AS "feeds!"
            FROM feeds f
-           WHERE f.error_message IS NOT NULL
-             AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id)
+           WHERE f.error_message IS NOT NULL AND f.blocked_at IS NULL
+             AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id
+                         WHERE s.feed_id = f.id AND a.disabled_at IS NULL)
            GROUP BY f.error_message"#
     )
     .fetch_all(db)

@@ -63,8 +63,9 @@ What is here:
   `DELETE /api/account` deletes the reader's own account after their password,
   and `rueder account remove <name>` any account; everything that is the
   account's own goes with it, the feeds stay for their other readers.
-  `rueder account disable <name>` keeps a misused account from logging in and
-  ends its sessions; `enable` undoes it.
+  `rueder account disable <name>` keeps a misused or abandoned account from
+  logging in and ends its sessions; the feeds no other enabled account reads
+  are not fetched while it is disabled. `enable` undoes it.
 - Apps of other makers (`src/greader/`, `src/app_passwords.rs`): the Google
   Reader API under `/greader`, for apps such as NetNewsWire and Read You,
   logged in with app passwords that readers make under Settings, Apps
@@ -196,7 +197,7 @@ below):
 cargo run -- account add ada            # asks for the password; --admin for an admin
 cargo run -- account password ada       # a new password, which ends ada's sessions
 cargo run -- account list
-cargo run -- account disable ada        # ada cannot log in, her sessions end; `enable` lets her again
+cargo run -- account disable ada        # ada cannot log in, her sessions end, her feeds rest; `enable` undoes it
 cargo run -- account remove ada         # deletes ada and all that is hers, for good; feeds stay
 cargo run -- registration show          # who may make an account, the limits, how many there are
 cargo run -- registration set --open true --max-accounts 50 --per-day 5
