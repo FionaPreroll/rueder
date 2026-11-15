@@ -386,6 +386,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [ ] **5.36 Bilder vor einem Cache.** Prüfen, ob die Adressen des Bild-Proxys je Konto signiert sind; wo nicht, sagen die Antworten, dass ein Cache vor rueder (ein Reverse-Proxy oder ein CDN unter derselben Domain) sie halten darf, mit einem Beispiel in `deploy/README.md`. Fertig, wenn:
   - ein Test die Header prüft;
   - der Bild-Proxy unter Last gemessen ist.
+- [x] **5.37 Messen in der Form des alten Bestands.** Siehe [Suche vom 2026-11-15](#suche-vom-2026-11-15).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -719,6 +720,8 @@ Paket 4.4: die alte Datenbank, wie die alte Produktion sie hinterlassen hat, in 
 - **Maschine:** virtuelle Maschine (libvirt/KVM) mit 4 Kernen (Intel Xeon E3-1225 v3, 3,2 GHz), 10 GB Arbeitsspeicher und NVMe-SSD. rueder und PostgreSQL 16 aus `deploy/compose.yaml`, die alte Datenbank daneben in einem eigenen Container mit PostgreSQL 13 auf ihrem alten Volume ([deploy/README.md](../deploy/README.md#bringing-over-the-old-rueder)). Während `bench measure` lief der Server und rief Feeds ab.
 - **Alt:** 143 Feeds mit 707.040 Artikeln und 4 User.
 - **Neu davor:** 2 Konten mit eigenen Feeds, zwei davon mit der Adresse eines alten Feeds.
+- **Texte**, an jedem zehnten Artikel: Ein Zehntel hat keinen Text, der Median hat 130 Zeichen HTML (107 ohne Tags), 90 % haben bis 1.223, 99 % bis 8.099, im Mittel sind es 654, der längste hat 135.707. Ein Titel hat im Median 67 Zeichen.
+- **Konten danach:** Ihre Feeds haben 72 %, 23 %, 1,7 % und 0,08 % aller Artikel.
 
 | Lauf | Dauer |
 |---|---|
@@ -765,9 +768,39 @@ Danach hat die Datenbank 710.030 Artikel in 167 Feeds und 1,9 GB:
 
 - **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 8 ms, schneller als an den erfundenen Daten, deren Konten mehr Abos haben. Der langsamste von 6.000 Läufen brauchte 72 ms. Als gelesen markieren ist langsamer als an den erfundenen Daten, aber weit unter dem Ziel; warum, ist nicht untersucht.
 - **Speichern:** Der Index der Suche kostet beim Abruf rund 0,7 ms je Artikel, halb so viel wie an den erfundenen Daten.
-- **Die Wörter der Suchen sind erfunden.** `bench measure` setzt sie aus seinen Silben zusammen; in den echten Texten finden drei der sieben Arten keinen Artikel, die anderen zwischen 71 und 9.061. Die Zeilen sagen deshalb, was eine Suche kostet, nicht, wie sich echte Suchen verteilen.
-- **Die Suche nach einem Wort braucht bis zu fünfmal so lange wie an den erfundenen Daten**, im Median 140 bis 220 ms; zwei Wörter und die Suche tief in der Liste sind etwa gleich schnell. Das 99. Perzentil bleibt unter 0,4 s, die längste Suche brauchte 0,5 s. Auch ein Wort, das kein Artikel hat, kostet 140 bis 220 ms. Vermutlich ist es der erste Blick auf die neuesten 500 Artikel (`search::PROBE`), der die Wörter jedes Textes ausrechnet: Das kostet mit der Länge des Textes, und die echten Texte sind länger als die 544 Zeichen der erfundenen. `to_tsvector('simple', …)` brauchte im Cloud-Container für 500 Texte von 576 Zeichen 15 ms, von 2,9 KB 70 ms und von 8,6 KB 227 ms. Wie lang die echten Texte sind, ist nicht gemessen.
+- **Die Wörter der Suchen waren erfunden.** `bench measure` setzte sie hier noch aus den Silben der erfundenen Daten zusammen (seit Paket 5.37 nimmt es sie aus dem Bestand); in den echten Texten finden drei der sieben Arten keinen Artikel, die anderen zwischen 71 und 9.061. Keine der Zeilen ist deshalb eine Suche nach einem häufigen Wort.
+- **Die Suche nach einem Wort braucht bis zu fünfmal so lange wie an den erfundenen Daten**, im Median 140 bis 220 ms; zwei Wörter und die Suche tief in der Liste sind etwa gleich schnell. Das 99. Perzentil bleibt unter 0,4 s, die längste Suche brauchte 0,5 s. Auch ein Wort, das kein Artikel hat, kostet 140 bis 220 ms. An der Länge der Texte liegt es nicht: An erfundenen Daten mit denselben Längen und in der Form dieses Bestands ist die Suche drei- bis viermal so schnell ([Suche vom 2026-11-15](#suche-vom-2026-11-15)). Woran es liegt, ist offen.
 - **Nicht gemessen:** nach einem Neustart mit kaltem Cache. Die Datenbank passt mit 1,9 GB ganz in den Arbeitsspeicher; die langsameren Zugriffe auf alte Artikel nach einem Neustart, die bei 21 GB erfundenen Daten auffielen ([Suche vom 2026-11-11](#suche-vom-2026-11-11)), sind bei dieser Größe nicht zu erwarten.
+
+### Suche vom 2026-11-15
+
+Paket 5.37: erfundene Daten in der Form des alten Bestands aus dem [Probelauf](#probelauf-vom-2026-11-15), um die langsame Suche dort nachzustellen. Ergebnis: Hier braucht die Suche im Median 33 bis 87 ms, seltene Wörter ein Drittel bis ein Viertel der Zeit an den echten Daten. Nachgestellt ist die Langsamkeit damit nicht.
+
+- **Maschine:** Cloud-Container mit 4 virtuellen Kernen (Intel Xeon, 2,3 GHz), 15 GB Arbeitsspeicher, PostgreSQL 16 mit Standardwerten (`shared_buffers = 128MB`), Release-Build. Server und Datenbank auf derselben Maschine.
+- **Daten:** `rueder bench generate --accounts 4 --feeds 170 --articles 710000`, 1,6 GB. Die Texte haben die Längen des alten Bestands (unten), mit einem Absatz alle drei Sätze und einem Link alle vier. Ein Konto hat alle Feeds, zwei haben sechs von zehn, das vierte nur die sieben kleinsten mit 0,7 % der Artikel, als Leser mit wenigen Feeds neben Lesern mit vielen.
+- **Messung:** `rueder bench measure`, je 500 Läufe, mit warmem Cache. Die Wörter nimmt es aus einer Stichprobe des Bestands selbst, nach dem Anteil der Artikel, in denen sie stehen (`bench::Texts`), damit eine Art von Suche an erfundenen und echten Daten dasselbe heißt. Dazu kommt eine Suche nach einem häufigen Wort für das Konto mit den wenigsten Artikeln.
+
+Länge der Texte in Zeichen HTML, an jedem zehnten Artikel:
+
+| | Ohne Text | Median | 90 % | 95 % | 99 % | Mittel | Längster |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Alter Bestand | ein Zehntel | 130 | 1.223 | 2.128 | 8.099 | 654 | 135.707 |
+| Erfunden | ein Zehntel | 137 | 1.228 | 2.176 | 8.188 | 654 | 14.013 |
+
+| Suche | Median | p95 | p99 | Max | Artikel mit dem ersten Wort |
+|---|---:|---:|---:|---:|---:|
+| Ein sehr häufiges Wort | 33 ms | 53 ms | 64 ms | 72 ms | 175.692 |
+| Ein häufiges Wort | 66 ms | 109 ms | 119 ms | 148 ms | 44.637 |
+| Ein selteneres Wort | 53 ms | 114 ms | 125 ms | 131 ms | 87 |
+| Ein seltenes Wort | 46 ms | 103 ms | 120 ms | 138 ms | 52 |
+| Zwei Wörter | 87 ms | 134 ms | 159 ms | 186 ms | 34 |
+| Ein häufiges Wort, tief | 60 ms | 91 ms | 120 ms | 148 ms | 64.284 |
+| Ein selteneres Wort, nur ungelesen | 56 ms | 82 ms | 99 ms | 127 ms | 98 |
+| Ein häufiges Wort, Konto mit den wenigsten Artikeln | 79 ms | 111 ms | 130 ms | 147 ms | 58.342 |
+
+- **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 10 ms, wie im Probelauf.
+- **Die Suche ist hier schneller als an den echten Daten.** Im Probelauf brauchten Suchen nach seltenen oder fehlenden Wörtern im Median 140 bis 220 ms, hier brauchen seltene Wörter 46 bis 56 ms. Die Länge der Texte ist dieselbe, und auch das Konto mit wenigen Artikeln erklärt den Abstand nicht. Für ein solches Konto die neuesten Artikel Feed für Feed zu holen, statt rückwärts durch alle zu gehen, änderte die Zeiten nicht und wurde deshalb nicht gebaut.
+- **Offen:** `bench measure` an den echten Daten, jetzt mit Wörtern aus dem Bestand und der Suche für das kleinste Konto. Bleibt der Abstand, liegt es an der Maschine, am Abruf, der dort nebenher lief, oder an etwas in den echten Texten, das die erfundenen nicht haben.
 
 ## Wissen über das Altsystem
 

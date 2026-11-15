@@ -7,7 +7,9 @@
 //! feeds over ten years, readers in every state from "all read" to "never
 //! opened". Titles and texts are made of words of realistic length, drawn the
 //! way words of a language are: a few very often, most of them rarely (Zipf).
-//! That is what the size of the search index and the time of a search depend on.
+//! Texts are as long as those of a real installation, with paragraphs and
+//! links. That is what the size of the search index and the time of a search
+//! depend on.
 
 pub mod fetching;
 pub mod readers;
@@ -42,7 +44,7 @@ const SPAN_SECONDS: i64 = 10 * 365 * 24 * 60 * 60;
 /// How many different words the made-up texts have. The word of rank n comes
 /// with a chance of about 1/n: the most common in nearly every article, the
 /// rarest in a handful of 10 million.
-pub const VOCABULARY: i32 = 1_000_000;
+const VOCABULARY: i32 = 1_000_000;
 /// Words are made of these, the most common of one, the rarest of four.
 const SYLLABLES: [&str; 32] = [
     "en", "er", "de", "ka", "ma", "ri", "lo", "sa", "ni", "te", "ba", "mo", "li", "ra", "ve", "to",
@@ -54,19 +56,6 @@ const SYLLABLES: [&str; 32] = [
 const SENTENCE: i32 = 9;
 /// At most this many different sentences are made.
 const SENTENCES: i64 = 4_000_000;
-
-/// The made-up word of rank `n`, from 1 (the most common) up to below
-/// [`VOCABULARY`]; the same as the database makes in [`SENTENCES_SQL`].
-pub fn word(n: i32) -> String {
-    let syllable = |shift: u32| SYLLABLES[(n as usize >> shift) % 32];
-    let mut word = String::from(syllable(0));
-    for (shift, from) in [(5, 32), (10, 1024), (15, 32768)] {
-        if n >= from {
-            word.push_str(syllable(shift));
-        }
-    }
-    word
-}
 
 /// Fills an empty database.
 pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
@@ -254,7 +243,8 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
 }
 
 /// $1 sentences of $2 words each out of a vocabulary of $3 words, made of the
-/// syllables $4, the same way as [`word`].
+/// syllables $4: the word of rank n is the syllable n % 32, followed by one
+/// more for every further power of 32 that n reaches.
 const SENTENCES_SQL: &str = r"
 INSERT INTO bench_sentences (k, words)
 SELECT k, (
@@ -279,7 +269,7 @@ FROM generate_series(0, $1 - 1) k
 /// articles, $5 the seconds between two arrivals, $6 the number of sentences.
 ///
 /// A twentieth of the articles has a second version, a hundredth a third.
-const ARTICLES: &str = r"
+const ARTICLES: &str = r#"
 WITH picked AS (
     SELECT g, s.feed_id, row_number() OVER (PARTITION BY s.feed_id ORDER BY g) AS n
     FROM generate_series($1::bigint, $2::bigint) g
@@ -288,16 +278,22 @@ WITH picked AS (
     SELECT p.g, p.feed_id, (f.last_seq + p.n)::integer AS seq,
            now() - (($4 - p.g) * $5::float8) * interval '1 second' AS at,
            encode(sha512(('t' || p.g)::bytea), 'hex') AS noise,
-           hashint8(p.g + 1) & 1023 AS r
+           hashint8(p.g + 1) & 1023 AS r,
+           hashint8(p.g + 4) & 1023 AS h
     FROM picked p JOIN feeds f ON f.id = p.feed_id
 ), sized AS MATERIALIZED (
     SELECT p.*,
            'https://feed-' || p.feed_id || '.example/posts/' || left(p.noise, 40) AS url,
-           -- Sentences of text: mostly short notes, some long reads.
-           CASE WHEN p.r < 600 THEN 2 + p.r % 5
-                WHEN p.r < 950 THEN 6 + p.r % 10
-                WHEN p.r < 1015 THEN 16 + p.r % 32
-                ELSE 60 + p.r % 100 END AS chunks,
+           -- Sentences of text, as many as the texts of the old rueder had
+           -- characters (docs/implementation.md, Probelauf vom 2026-11-15): a
+           -- tenth has none, half one or two, a tenth fifteen and more, a
+           -- hundredth a hundred and more.
+           CASE WHEN p.r < 110 THEN 0
+                WHEN p.r < 614 THEN 1 + p.h % 2
+                WHEN p.r < 921 THEN 3 + p.h % 12
+                WHEN p.r < 973 THEN 15 + p.h % 11
+                WHEN p.r < 1013 THEN 26 + p.h % 68
+                ELSE 94 + p.h % 64 END AS chunks,
            (SELECT b.words FROM bench_sentences b
             WHERE b.k = (hashint8(p.g + 5) & 2147483647) % $6) AS title,
            'author-' || (hashint8(p.g + 3) & 31) AS author
@@ -327,22 +323,28 @@ WITH picked AS (
     INSERT INTO article_content
         (feed_id, seq, guid_hash, checksum, guid, html, tags, id, title, author)
     SELECT feed_id, seq, substring(sha256(url::bytea) FOR 16), sha256(('c' || g)::bytea), url,
-           '<p>' || (SELECT string_agg(b.words, '. ' ORDER BY i)
-                     FROM generate_series(1, chunks) i
-                     JOIN bench_sentences b ON b.k = (hashint8(g * 256 + i) & 2147483647) % $6)
-                 || '.</p>',
+           -- A paragraph every three sentences, a link every four.
+           coalesce('<p>' || (
+               SELECT string_agg(
+                          CASE WHEN i % 4 = 0
+                               THEN '<a href="' || url || '/' || i || '">' || b.words || '</a>'
+                               ELSE b.words END,
+                          CASE WHEN i % 3 = 1 THEN '.</p><p>' ELSE '. ' END ORDER BY i)
+               FROM generate_series(1, chunks) i
+               JOIN bench_sentences b ON b.k = (hashint8(g * 1024 + i) & 2147483647) % $6)
+             || '.</p>', ''),
            ARRAY['tag-' || (r & 15), 'tag-' || (r & 7)], g, title, author
     FROM sized ORDER BY g
 )
 INSERT INTO article_versions (feed_id, seq, version, fetched_at, checksum, raw)
 SELECT s.feed_id, s.seq, v.version, s.at + v.later, sha256(('c' || s.g || v.version)::bytea),
        (SELECT string_agg(sha256((s.g || ':' || v.version || ':' || i)::bytea), ''::bytea)
-        FROM generate_series(1, s.chunks) i)
+        FROM generate_series(1, greatest(s.chunks, 1)) i)
 FROM sized s
 JOIN (VALUES (1, interval '10 minutes', 1), (2, interval '2 days', 20), (3, interval '40 days', 100))
      AS v (version, later, every) ON s.g % v.every = 0
 ORDER BY s.g
-";
+"#;
 
 /// Per account three folders, each with two folders inside, one of them with
 /// another two levels: four levels in all.
@@ -364,24 +366,29 @@ INSERT INTO folders (account_id, parent_id, title, position)
 SELECT t.account_id, t.id, t.title || '.1', 1 FROM third t
 ";
 
-/// The first account subscribes to every feed, the others to six in ten. Feeds
-/// are spread over the folders and the top level.
+/// The first account subscribes to every feed, the others to six in ten. With
+/// three accounts or more, the last one reads only the seven smallest feeds,
+/// whose articles lie far apart among all the others, like a reader with a few
+/// feeds next to readers with many. Feeds are spread over the folders and the
+/// top level.
 const SUBSCRIPTIONS: &str = r"
 WITH numbered AS (
     SELECT f.account_id, f.id, row_number() OVER (PARTITION BY f.account_id ORDER BY f.id) AS n,
            count(*) OVER (PARTITION BY f.account_id) AS of
     FROM folders f
-), first AS (
-    SELECT min(id) AS id FROM accounts
+), ends AS (
+    SELECT min(id) AS first, max(id) AS last, (SELECT max(id) FROM feeds) AS feeds FROM accounts
 )
 INSERT INTO subscriptions (account_id, feed_id, folder_id, position)
 SELECT a.id, f.id, n.id, f.id
 FROM accounts a
 CROSS JOIN feeds f
-CROSS JOIN first
+CROSS JOIN ends e
 LEFT JOIN numbered n ON n.account_id = a.id
     AND n.n = 1 + (hashint4(a.id * 7919 + f.id) & 2147483647) % (n.of + 2)
-WHERE a.id = first.id OR (hashint4(a.id * 104729 + f.id) & 2147483647) % 10 < 6
+WHERE CASE WHEN a.id = e.first THEN true
+           WHEN a.id = e.last AND e.last > e.first + 1 THEN f.id > e.feeds - 7
+           ELSE (hashint4(a.id * 104729 + f.id) & 2147483647) % 10 < 6 END
 ";
 
 /// What the accounts have read. Six subscriptions in ten are nearly read up,
@@ -477,6 +484,10 @@ pub struct Report {
     pub articles: i64,
     pub largest_feed: i32,
     pub states: i64,
+    /// How many articles were sampled for the texts, and the characters of
+    /// their HTML: median, 95th percentile, longest.
+    pub sampled: i64,
+    pub length: (i32, i32, i32),
     /// Table or index, and its size in bytes.
     pub sizes: Vec<(String, i64)>,
     pub timings: Vec<Timing>,
@@ -488,8 +499,14 @@ impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "{} accounts, {} feeds, {} articles (largest feed {}), {} article states\n",
+            "{} accounts, {} feeds, {} articles (largest feed {}), {} article states",
             self.accounts, self.feeds, self.articles, self.largest_feed, self.states
+        )?;
+        let (median, p95, longest) = self.length;
+        writeln!(
+            f,
+            "Texts of {} sampled articles: median {median} characters, 95 % within {p95}, longest {longest}\n",
+            self.sampled
         )?;
         writeln!(f, "| Query | Runs | Median | p95 | p99 | Max |")?;
         writeln!(f, "|---|---:|---:|---:|---:|---:|")?;
@@ -522,6 +539,108 @@ impl fmt::Display for Report {
         }
         Ok(())
     }
+}
+
+/// Articles looked at to tell what the texts of a database are like.
+const SAMPLE: i64 = 2000;
+/// Words of the sample that are counted in the whole database to find rare
+/// ones.
+const RARE_CANDIDATES: usize = 300;
+
+/// What the texts of a database are like, from a sample of its articles spread
+/// over the order of arrival: how long they are, and words to search for of
+/// four kinds of frequency. Taken from the database itself, so that a kind of
+/// search means the same on made-up and on real data.
+struct Texts {
+    sampled: i64,
+    length: (i32, i32, i32),
+    /// Words in a fifth of the articles or more.
+    very_common: Vec<String>,
+    /// In 2 to 20 % of them.
+    common: Vec<String>,
+    /// In 1 to 10 of 10,000.
+    rarer: Vec<String>,
+    /// In fewer.
+    rare: Vec<String>,
+}
+
+impl Texts {
+    async fn sample(db: &PgPool) -> anyhow::Result<Self> {
+        let (total, first, last): (i64, i64, i64) = sqlx::query_as(
+            "SELECT count(*), coalesce(min(id), 0), coalesce(max(id), 0) FROM article_content",
+        )
+        .fetch_one(db)
+        .await?;
+        let step = (last - first) / SAMPLE + 1;
+        let (sampled, median, p95, longest): (i64, Option<i32>, Option<i32>, Option<i32>) =
+            sqlx::query_as(
+                "SELECT count(*), percentile_disc(0.5) WITHIN GROUP (ORDER BY length(c.html)),
+                        percentile_disc(0.95) WITHIN GROUP (ORDER BY length(c.html)),
+                        max(length(c.html))
+                 FROM generate_series($1::bigint, $2::bigint, $3::bigint) g
+                 JOIN article_content c ON c.id = g",
+            )
+            .bind(first)
+            .bind(last)
+            .bind(step)
+            .fetch_one(db)
+            .await?;
+        if sampled == 0 {
+            bail!("nothing to measure: no article texts");
+        }
+        // Words of letters only, as people search for them, in a random order
+        // that is the same every time, with how many sampled articles have them.
+        let words: Vec<(String, i32)> = sqlx::query_as(
+            "SELECT word, ndoc FROM ts_stat($1) WHERE word ~ '^[[:alpha:]]{2,}$' ORDER BY md5(word)",
+        )
+        .bind(format!(
+            "SELECT article_search_doc(c.title, c.author, c.tags, c.html)
+             FROM generate_series({first}, {last}, {step}) g JOIN article_content c ON c.id = g"
+        ))
+        .fetch_all(db)
+        .await?;
+        let share = |n: i32| f64::from(n) / sampled as f64;
+        let of = |from: f64, to: f64| -> Vec<String> {
+            words
+                .iter()
+                .filter(|(_, n)| (from..to).contains(&share(*n)))
+                .map(|(word, _)| word.clone())
+                .collect()
+        };
+        // A word in one sampled article may be in a few hundred of all or in
+        // just that one, which only the index can tell.
+        let (rare_below, rarer_below) = ((total / 10_000).max(2), (total / 1000).max(4));
+        let (mut rarer, mut rare) = (Vec::new(), Vec::new());
+        for (word, _) in words.iter().filter(|(_, n)| *n == 1).take(RARE_CANDIDATES) {
+            match articles_with(db, word).await? {
+                n if n < rare_below => rare.push(word.clone()),
+                n if n < rarer_below => rarer.push(word.clone()),
+                _ => {}
+            }
+        }
+        Ok(Self {
+            sampled,
+            length: (median.unwrap_or(0), p95.unwrap_or(0), longest.unwrap_or(0)),
+            very_common: of(0.2, f64::INFINITY),
+            common: of(0.02, 0.2),
+            rarer,
+            rare,
+        })
+    }
+}
+
+/// How many articles a search for these words finds.
+async fn articles_with(db: &PgPool, words: &str) -> anyhow::Result<i64> {
+    let Some(query) = search::query(db, words).await? else {
+        return Ok(0);
+    };
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM article_content
+         WHERE article_search_doc(title, author, tags, html) @@ $1::text::tsquery",
+    )
+    .bind(query)
+    .fetch_one(db)
+    .await?)
 }
 
 /// Numbers that repeat from run to run.
@@ -586,6 +705,17 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         .max_by_key(|&&id| feeds_of(id).len())
         .context("no account")?;
     let all_feeds = feeds_of(widest);
+    // The account whose feeds have the fewest articles: its own lie far apart
+    // among those of the others.
+    let narrowest = *accounts
+        .iter()
+        .min_by_key(|&&id| {
+            subs.iter()
+                .filter(|s| s.account_id == id)
+                .map(|s| i64::from(s.last_seq))
+                .sum::<i64>()
+        })
+        .context("no account")?;
     let largest = *subs
         .iter()
         .filter(|s| s.account_id == widest)
@@ -683,94 +813,89 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         .await?
     });
     // Searches, each kind with words of its own frequency, for a random
-    // account in all its feeds. Rank n has a chance of about 1/n per word.
+    // account in all its feeds. A kind the database has no word of is left out.
+    let sample = Texts::sample(db).await?;
     let mut gave_up = 0;
     let mut searched = Vec::new();
+    let pick = |random: &mut Random, kinds: &[&Vec<String>]| {
+        kinds
+            .iter()
+            .map(|words| random.pick_ref(words).as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     macro_rules! search {
-        ($name:literal, $words:expr, $before:expr, $unread:expr) => {{
-            searched.push(($name, $words, 0));
-            time!($name, {
-                let account_id = random.pick(&accounts);
-                let words: String = $words;
-                let page = search::Page {
-                    before: $before,
-                    limit: 50,
-                    unread_only: $unread,
-                };
-                match search::search(db, account_id, &feeds_of(account_id), &words, page).await? {
-                    search::Outcome::Found(hits) => hits.articles.len(),
-                    search::Outcome::TooSlow => {
-                        gave_up += 1;
-                        0
+        ($name:literal, $kinds:expr, $before:expr, $unread:expr) => {
+            search!($name, $kinds, $before, $unread, random.pick(&accounts))
+        };
+        ($name:literal, $kinds:expr, $before:expr, $unread:expr, $account:expr) => {{
+            let kinds: &[&Vec<String>] = &$kinds;
+            if kinds.iter().any(|words| words.is_empty()) {
+                tracing::warn!("no word to search for: {}", $name);
+            } else {
+                searched.push(($name, pick(&mut random, kinds), 0));
+                time!($name, {
+                    let account_id = $account;
+                    let words = pick(&mut random, kinds);
+                    let page = search::Page {
+                        before: $before,
+                        limit: 50,
+                        unread_only: $unread,
+                    };
+                    match search::search(db, account_id, &feeds_of(account_id), &words, page)
+                        .await?
+                    {
+                        search::Outcome::Found(hits) => hits.articles.len(),
+                        search::Outcome::TooSlow => {
+                            gave_up += 1;
+                            0
+                        }
+                        search::Outcome::Unusable(why) => bail!("searching for {words}: {why}"),
                     }
-                    search::Outcome::Unusable(why) => bail!("searching for {words}: {why}"),
-                }
-            });
+                });
+            }
         }};
     }
-    let rank = |random: &mut Random, from: i32, to: i32| {
-        word(from + random.below(i64::from(to.min(VOCABULARY) - from)) as i32)
-    };
     search!(
         "Search, a very common word",
-        rank(&mut random, 1, 10),
+        [&sample.very_common],
         None,
         false
     );
-    search!(
-        "Search, a common word",
-        rank(&mut random, 100, 1000),
-        None,
-        false
-    );
-    search!(
-        "Search, a rarer word",
-        rank(&mut random, 10_000, 100_000),
-        None,
-        false
-    );
-    search!(
-        "Search, a rare word",
-        rank(&mut random, 300_000, VOCABULARY),
-        None,
-        false
-    );
+    search!("Search, a common word", [&sample.common], None, false);
+    search!("Search, a rarer word", [&sample.rarer], None, false);
+    search!("Search, a rare word", [&sample.rare], None, false);
     search!(
         "Search, two words",
-        format!(
-            "{} {}",
-            rank(&mut random, 100, 1000),
-            rank(&mut random, 10_000, 100_000)
-        ),
+        [&sample.common, &sample.rarer],
         None,
         false
     );
     search!(
         "Search, a common word, deep inside",
-        rank(&mut random, 100, 1000),
+        [&sample.common],
         Some(1 + random.below(max_id)),
         false
     );
     search!(
         "Search, a rarer word, unread only",
-        rank(&mut random, 10_000, 100_000),
+        [&sample.rarer],
         None,
         true
+    );
+    search!(
+        "Search, a common word, the account with the fewest articles",
+        [&sample.common],
+        None,
+        false,
+        narrowest
     );
     if gave_up > 0 {
         tracing::warn!("{gave_up} searches took longer than {:?}", search::TIMEOUT);
     }
     // How many articles have a word of each kind: the first one searched for.
     for (_, words, articles) in &mut searched {
-        if let Some(query) = search::query(db, words).await? {
-            *articles = sqlx::query_scalar(
-                "SELECT count(*) FROM article_content
-                 WHERE article_search_doc(title, author, tags, html) @@ $1::text::tsquery",
-            )
-            .bind(query)
-            .fetch_one(db)
-            .await?;
-        }
+        *articles = articles_with(db, words).await?;
     }
 
     // Fetching: a feed brings 20 new articles, with texts like those stored.
@@ -895,6 +1020,8 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         articles: count("articles").await?,
         largest_feed: largest.last_seq,
         states: count("article_states").await?,
+        sampled: sample.sampled,
+        length: sample.length,
         sizes,
         timings,
         searched,
