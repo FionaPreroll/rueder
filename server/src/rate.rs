@@ -25,6 +25,11 @@
 //!   for, have a share of the day of their own ([`RESET_MAILS_PER_DAY`]), so
 //!   that asking for many does not use up the mail of everybody else.
 //!
+//! - registrations ([`REGISTRATIONS_PER_NETWORK`], [`OPEN_REGISTRATIONS`]):
+//!   per network, before anything else is looked at, and those without an
+//!   invitation for the whole server, so that a few networks cannot keep the
+//!   server hashing passwords nor make many accounts in a short while.
+//!
 //! Wrong passwords have their own, much smaller limit in [`crate::login`].
 //! Who is over a limit gets 429 with `Retry-After`.
 
@@ -90,6 +95,17 @@ pub const MAILS_PER_DAY: Rate = Rate::new(1000, Duration::from_millis(86_400));
 /// more a day. Anybody can ask for one for any name, so these have a share of
 /// their own, and the rest of the day's mail stays for confirmations.
 pub const RESET_MAILS_PER_DAY: Rate = Rate::new(300, Duration::from_millis(288_000));
+/// How many registrations one network may try: 5 at once, and 5 more an hour.
+/// A network is an IPv4 /24 or an IPv6 /48, as for wrong passwords, so that
+/// many addresses of one network count once; a few tries leave room for a
+/// name that is taken and for readers behind one address. It counts before
+/// anything is looked at, the captcha included.
+pub const REGISTRATIONS_PER_NETWORK: Rate = Rate::new(5, Duration::from_secs(12 * 60));
+/// How many registrations without an invitation the whole server takes: 20
+/// at once, and one more a minute. Only those with a captcha that counts are
+/// counted, or all where the operator turned it off; and since each network
+/// counts first, it takes many networks to use this up for everybody.
+pub const OPEN_REGISTRATIONS: Rate = Rate::new(20, Duration::from_secs(60));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
 /// How many costly requests run at once on the whole server: fewer than the
@@ -225,6 +241,8 @@ pub struct Limits {
     pub mails_per_address: Rate,
     pub mails_per_day: Rate,
     pub reset_mails_per_day: Rate,
+    pub registrations_per_network: Rate,
+    pub open_registrations: Rate,
 }
 
 impl Default for Limits {
@@ -241,6 +259,8 @@ impl Default for Limits {
             mails_per_address: MAILS_PER_ADDRESS,
             mails_per_day: MAILS_PER_DAY,
             reset_mails_per_day: RESET_MAILS_PER_DAY,
+            registrations_per_network: REGISTRATIONS_PER_NETWORK,
+            open_registrations: OPEN_REGISTRATIONS,
         }
     }
 }
@@ -258,6 +278,8 @@ pub struct Rates {
     mails_per_address: Limiter<String>,
     mails_per_day: Limiter<()>,
     reset_mails_per_day: Limiter<()>,
+    registrations_per_network: Limiter<IpAddr>,
+    open_registrations: Limiter<()>,
     heavy: Heavy,
 }
 
@@ -275,6 +297,8 @@ impl Rates {
             mails_per_address: Limiter::new(limits.mails_per_address),
             mails_per_day: Limiter::new(limits.mails_per_day),
             reset_mails_per_day: Limiter::new(limits.reset_mails_per_day),
+            registrations_per_network: Limiter::new(limits.registrations_per_network),
+            open_registrations: Limiter::new(limits.open_registrations),
             heavy: Heavy {
                 running: Semaphore::new(HEAVY_AT_ONCE),
                 accounts: Mutex::default(),
@@ -370,6 +394,22 @@ impl Rates {
             .and_then(|()| share.map_or(Ok(()), |share| share.take(&(), now)))
             .and_then(|()| self.mails_per_day.take(&(), now))
             .map_err(|wait| AppError::TooMany(wait, message))
+    }
+
+    /// Counts a try to register from the sender's network.
+    pub fn registration(&self, ip: IpAddr, now: Instant) -> Result<(), AppError> {
+        self.registrations_per_network
+            .take(&login::wide(ip), now)
+            .map_err(|wait| {
+                AppError::TooMany(wait, "too many registrations from here, try again later")
+            })
+    }
+
+    /// Counts a registration without an invitation against the whole server.
+    pub fn open_registration(&self, now: Instant) -> Result<(), AppError> {
+        self.open_registrations
+            .take(&(), now)
+            .map_err(|wait| AppError::TooMany(wait, "too many registrations, try again later"))
     }
 
     /// Counts a report of an error the account's browser sends.

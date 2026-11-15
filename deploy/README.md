@@ -309,15 +309,20 @@ docker compose exec rueder rueder account invites fiona 10   # a quota of fiona'
 docker compose exec rueder rueder registration set --admin-invite-accounts 20
 ```
 
-`none` lifts a limit (`--max-accounts none`), `registration show` says what is
-set and how many accounts there are. Readers make their links in the account
+`none` lifts a limit (`--max-accounts none`), but not the one per day while
+registration is open. `registration show` says what is set and how many
+accounts there are. Readers make their links in the account
 settings, in the menu of their account, under "Invitations".
 
 Registration without an invitation first has the browser compute for a
 moment: a captcha that asks nothing of the reader and no service but rueder.
-`registration set --captcha false` turns it off. It makes many accounts
-costly, not a few, so if you open registration to everybody, set `--per-day`
-too.
+`registration set --captcha false` turns it off. It only stops scripts that do
+not solve it: code of one's own solves one in milliseconds. What limits how
+many accounts anybody can make is `--per-day`, which open registration needs,
+`--max-accounts`, and on a public instance best `--email required` too, so
+that every account needs a mailbox of its own. Registrations are also
+throttled per network and, without an invitation, for the whole server, and
+they never make logins wait.
 
 With `SMTP_URL`, `MAIL_FROM` and `PUBLIC_URL` set (see [Settings](#settings)),
 accounts can have an email address, which a link mailed to it confirms:

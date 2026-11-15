@@ -15,8 +15,16 @@ test.afterAll(() => {
 	);
 });
 
-/** Somebody who is not logged in, in a browser of their own. */
-const stranger = async (browser: Browser) => (await browser.newContext()).newPage();
+let strangers = 0;
+
+/**
+ * Somebody who is not logged in, in a browser of their own and from a network
+ * of their own, as registrations count per network.
+ */
+const stranger = async (browser: Browser) => {
+	const network = { 'X-Forwarded-For': `2001:db8:${++strangers}::1` };
+	return (await browser.newContext({ extraHTTPHeaders: network })).newPage();
+};
 
 /** Makes a link in the settings and returns it. */
 async function makeLink(page: Page) {
@@ -92,6 +100,8 @@ test('a reader invites as many as the operator gave them', async ({ page, browse
 });
 
 test('anybody registers once the operator opens it, up to the day’s limit', async ({ browser }) => {
+	// Open registration needs a limit per day.
+	expect(() => rueder('registration', 'set', '--open', 'true')).toThrow(/limit per day/);
 	// One account today already came by a reader's invitation.
 	rueder('registration', 'set', '--open', 'true', '--per-day', '2');
 	const first = await stranger(browser);

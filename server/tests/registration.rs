@@ -3,16 +3,67 @@
 
 mod common;
 
-use axum::http::{Method, StatusCode, header};
+use std::{sync::Arc, time::Duration};
+
+use axum::{
+    body::Body,
+    http::{HeaderName, Method, Request, StatusCode, header},
+};
 use common::{call, raw};
+use http_body_util::BodyExt;
 use rueder::{
     AppState, accounts, captcha, email, mail,
+    rate::{self, Limits, Rate, Rates},
     registration::{self, Outcome, Refused, Settings},
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use tower::ServiceExt;
 
 const PASSWORD: &str = "correct horse battery";
+
+/// A server whose limits on registering are out of the way: the tests that
+/// look at them make one with the limits rueder comes with.
+fn state(db: &PgPool) -> AppState {
+    let many = Rate::new(1000, Duration::from_secs(1));
+    let limits = Limits {
+        registrations_per_network: many,
+        open_registrations: many,
+        ..Limits::default()
+    };
+    AppState {
+        rates: Arc::new(Rates::new(limits)),
+        ..AppState::new(db.clone())
+    }
+}
+
+/// A server that tells senders apart by `X-Forwarded-For`, with these limits.
+fn behind_proxy(db: &PgPool, limits: Limits) -> AppState {
+    AppState {
+        rates: Arc::new(Rates::new(limits)),
+        client_ip_header: Some(HeaderName::from_static("x-forwarded-for")),
+        ..AppState::new(db.clone())
+    }
+}
+
+/// Sends a registration from this address; the status, how long to wait if
+/// it is told to, and what the answer says.
+async fn post_from(state: &AppState, ip: &str, body: &Value) -> (StatusCode, Option<u64>, String) {
+    let request = Request::post("/api/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-forwarded-for", ip)
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let app = rueder::router(state.clone(), "missing".as_ref());
+    let response = app.oneshot(request).await.unwrap();
+    let status = response.status();
+    let wait = response
+        .headers()
+        .get(header::RETRY_AFTER)
+        .map(|wait| wait.to_str().unwrap().parse().unwrap());
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, wait, String::from_utf8(bytes.to_vec()).unwrap())
+}
 
 /// Changes what the operator set, as `rueder registration set` does.
 async fn set(db: &PgPool, change: impl FnOnce(&mut Settings)) {
@@ -104,7 +155,7 @@ async fn reader(db: &PgPool, name: &str) -> String {
 
 #[sqlx::test]
 async fn nothing_is_open_until_the_operator_says_so(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     assert_eq!(
         registration::settings(&db).await.unwrap(),
         Settings {
@@ -144,7 +195,7 @@ async fn nothing_is_open_until_the_operator_says_so(db: PgPool) {
 
 #[sqlx::test]
 async fn open_registration_makes_an_account_and_logs_it_in(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     set(&db, |settings| settings.open = true).await;
     let (_, ways) = call(&state, Method::GET, "/api/login/ways", None, None).await;
     assert_eq!(ways["registration"], true);
@@ -193,7 +244,7 @@ async fn open_registration_makes_an_account_and_logs_it_in(db: PgPool) {
 
 #[sqlx::test]
 async fn open_registration_asks_for_a_captcha_unless_it_is_turned_off(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let root = admin(&db, "root").await;
     set(&db, |settings| settings.open = true).await;
     let (_, asked) = call(&state, Method::GET, "/api/register", None, None).await;
@@ -245,7 +296,7 @@ async fn open_registration_asks_for_a_captcha_unless_it_is_turned_off(db: PgPool
 
 #[sqlx::test]
 async fn there_are_only_so_many_accounts_and_so_many_a_day(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     // Two accounts the operator made count for the total, not for the day.
     common::account(&db, "one").await;
     common::account(&db, "two").await;
@@ -281,7 +332,7 @@ async fn there_are_only_so_many_accounts_and_so_many_a_day(db: PgPool) {
 
 #[sqlx::test]
 async fn a_reader_invites_as_many_as_their_quota_says(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let ada = reader(&db, "ada").await;
     set(&db, |settings| settings.invites_per_account = 3).await;
     assert_eq!(left(&state, &ada).await, 3);
@@ -354,7 +405,7 @@ async fn a_reader_invites_as_many_as_their_quota_says(db: PgPool) {
 
 #[sqlx::test]
 async fn a_link_that_ran_out_or_was_taken_back_gives_its_place_back(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let ada = reader(&db, "ada").await;
     set(&db, |settings| {
         settings.invites_per_account = 3;
@@ -407,7 +458,7 @@ async fn a_link_that_ran_out_or_was_taken_back_gives_its_place_back(db: PgPool) 
 
 #[sqlx::test]
 async fn readers_invitations_keep_to_the_limits(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let ada = reader(&db, "ada").await;
     set(&db, |settings| {
         settings.invites_per_account = 10;
@@ -443,7 +494,7 @@ async fn readers_invitations_keep_to_the_limits(db: PgPool) {
 
 #[sqlx::test]
 async fn an_admin_always_invites_into_a_pool_of_its_own(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let root = admin(&db, "root").await;
     // The general pool is full and nobody has a quota.
     set(&db, |settings| {
@@ -489,7 +540,7 @@ async fn an_admin_always_invites_into_a_pool_of_its_own(db: PgPool) {
 
 #[sqlx::test]
 async fn invitations_are_their_makers_alone(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let ada = reader(&db, "ada").await;
     let grace = reader(&db, "grace").await;
     set(&db, |settings| settings.invites_per_account = 2).await;
@@ -538,7 +589,7 @@ async fn invitations_are_their_makers_alone(db: PgPool) {
 
 #[sqlx::test]
 async fn many_at_once_get_no_more_places_than_there_are(db: PgPool) {
-    let state = AppState::new(db.clone());
+    let state = state(&db);
     let root = admin(&db, "root").await;
     set(&db, |settings| {
         settings.open = true;
@@ -583,4 +634,80 @@ async fn many_at_once_get_no_more_places_than_there_are(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(uses, 2);
+}
+
+#[sqlx::test]
+async fn a_network_tries_to_register_only_so_often(db: PgPool) {
+    let state = behind_proxy(&db, Limits::default());
+    set(&db, |settings| {
+        settings.open = true;
+        settings.per_day = Some(100);
+    })
+    .await;
+    let bare = json!({ "username": "script", "password": PASSWORD });
+    // Every try counts for its network, refused or not, and many addresses of
+    // one /24 count as one.
+    let burst = rate::REGISTRATIONS_PER_NETWORK.burst;
+    for n in 0..burst {
+        let (status, _, word) = post_from(&state, &format!("192.0.2.{n}"), &bare).await;
+        assert_eq!((status, word.as_str()), (StatusCode::FORBIDDEN, "captcha"));
+    }
+    let right = solved(&state, json!({ "username": "ada", "password": PASSWORD })).await;
+    let (status, wait, _) = post_from(&state, "192.0.2.200", &right).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(wait.is_some_and(|wait| wait > 0));
+    // Refused before it was looked at, the captcha was not used up: from
+    // another network it counts.
+    let (status, _, answer) = post_from(&state, "198.51.100.7", &right).await;
+    assert_eq!(status, StatusCode::CREATED, "{answer}");
+    // An IPv6 network is a /48.
+    for n in 0..burst {
+        let (status, _, _) = post_from(&state, &format!("2001:db8:1:{n}::1"), &bare).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+    let (status, _, _) = post_from(&state, "2001:db8:1:ffff::2", &bare).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    let (status, _, _) = post_from(&state, "2001:db8:2::1", &bare).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test]
+async fn the_server_takes_only_so_many_registrations_without_an_invitation(db: PgPool) {
+    let limits = Limits {
+        open_registrations: Rate::new(2, Duration::from_secs(3600)),
+        ..Limits::default()
+    };
+    let state = behind_proxy(&db, limits);
+    set(&db, |settings| {
+        settings.open = true;
+        settings.per_day = Some(100);
+    })
+    .await;
+    // Whoever sends no captcha that counts uses up nothing of everybody's.
+    for n in 0..5 {
+        let body = json!({ "username": format!("script{n}"), "password": PASSWORD });
+        let (status, _, word) = post_from(&state, &format!("192.0.{n}.1"), &body).await;
+        assert_eq!((status, word.as_str()), (StatusCode::FORBIDDEN, "captcha"));
+    }
+    for (n, name) in ["ada", "grace"].into_iter().enumerate() {
+        let body = solved(&state, json!({ "username": name, "password": PASSWORD })).await;
+        let (status, _, answer) = post_from(&state, &format!("198.51.{n}.1"), &body).await;
+        assert_eq!(status, StatusCode::CREATED, "{answer}");
+    }
+    let late = solved(&state, json!({ "username": "linus", "password": PASSWORD })).await;
+    let (status, wait, _) = post_from(&state, "203.0.113.1", &late).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(wait.is_some_and(|wait| wait > 0));
+    // An invitation does not count against it.
+    let cookie = admin(&db, "admin").await;
+    let token = invite(&state, &cookie, None).await.unwrap();
+    let body = json!({ "username": "invited", "password": PASSWORD, "invite": token });
+    let (status, _, answer) = post_from(&state, "203.0.113.2", &body).await;
+    assert_eq!(status, StatusCode::CREATED, "{answer}");
+    // Nor without the captcha, where the operator turned it off, does each
+    // try from another network get past it.
+    set(&db, |settings| settings.captcha = false).await;
+    let body = json!({ "username": "margaret", "password": PASSWORD });
+    let (status, _, _) = post_from(&state, "203.0.113.3", &body).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 }

@@ -91,6 +91,10 @@ What is here:
   it, the page counts up to that number, and `POST /api/register` takes it
   once. Invitations need none, and `rueder registration set --captcha false`
   turns it off.
+- Registration is throttled per network and, without an invitation, for the
+  whole server (`src/rate.rs`), and hashes passwords in a place of its own, so
+  that logins never wait for it. Open registration needs a limit per day
+  (`--per-day`).
 - An account's email address (`src/email.rs`, `src/mail.rs`): with
   `rueder registration set --email optional|required` registration asks for an
   address, and a link mailed to it confirms it (`/api/email`,

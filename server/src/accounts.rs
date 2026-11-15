@@ -30,6 +30,9 @@ pub const MAX_PASSWORD: usize = 1024;
 /// Hashing takes 19 MiB and a few dozen milliseconds each time, on purpose.
 /// No more than this many run at once, whoever asks.
 static HASHING: Semaphore = Semaphore::const_new(4);
+/// Registrations hash in a place of their own, one at a time, so that however
+/// many come, logins never wait for them.
+static REGISTERING: Semaphore = Semaphore::const_new(1);
 
 /// A hash nobody knows the password of. A login for a name that does not exist,
 /// or has no password, is checked against it, so it takes as long as any other
@@ -97,8 +100,17 @@ pub fn check_password(password: &str) -> Result<(), Invalid> {
 
 /// The Argon2id hash of a password, as the text that goes into the database.
 pub async fn hash(password: &str) -> anyhow::Result<String> {
+    hash_in(&HASHING, password).await
+}
+
+/// The hash of a new account's password, in the place registrations have.
+pub async fn hash_for_registration(password: &str) -> anyhow::Result<String> {
+    hash_in(&REGISTERING, password).await
+}
+
+async fn hash_in(places: &Semaphore, password: &str) -> anyhow::Result<String> {
     let password = password.to_owned();
-    let _permit = HASHING.acquire().await?;
+    let _permit = places.acquire().await?;
     tokio::task::spawn_blocking(move || {
         Argon2::default()
             .hash_password(password.as_bytes())
@@ -386,4 +398,29 @@ pub async fn is_disabled(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
     .fetch_optional(db)
     .await?;
     Ok(disabled.unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    const PASSWORD: &str = "correct horse battery";
+
+    #[tokio::test]
+    async fn registrations_and_logins_hash_in_places_of_their_own() {
+        // However many registrations come, a login hashes.
+        let registering = REGISTERING.acquire().await.unwrap();
+        assert!(hash(PASSWORD).await.is_ok());
+        // A second registration waits for the first.
+        let waiting =
+            tokio::time::timeout(Duration::from_millis(200), hash_for_registration(PASSWORD));
+        assert!(waiting.await.is_err());
+        drop(registering);
+        // However many logins hash, a registration does too.
+        let logins = HASHING.acquire_many(4).await.unwrap();
+        assert!(hash_for_registration(PASSWORD).await.is_ok());
+        drop(logins);
+    }
 }

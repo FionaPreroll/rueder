@@ -3334,7 +3334,7 @@
             "description": "The name is taken."
           },
           "429": {
-            "description": "Too many registrations from this sender; see `Retry-After`."
+            "description": "Too many registrations from the sender's network, or without an invitation on the whole server; see `Retry-After`."
           },
           "503": {
             "description": "The link could not be mailed; no account was made."
