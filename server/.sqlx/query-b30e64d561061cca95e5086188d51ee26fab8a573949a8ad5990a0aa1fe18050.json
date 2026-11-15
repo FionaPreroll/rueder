@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE registration\n         SET open = $1, max_accounts = $2, per_day = $3, invites_per_account = $4,\n             invite_days = $5, admin_invite_accounts = $6, email = $7, captcha = $8",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b30e64d561061cca95e5086188d51ee26fab8a573949a8ad5990a0aa1fe18050"
+}

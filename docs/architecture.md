@@ -425,13 +425,24 @@ Von Fiona entschieden, im Code: `server/src/registration.rs`. Bis der Betreiber 
 - **Tokens hinter dem `#`.** Links aus Mails und Einladungen tragen ihr Token dort, wo der Browser es für sich behält, damit es in keinem Log eines Servers oder Proxys steht; Links mit `?` nimmt die Seite auch. Ob eine Einladung gilt, fragt sie mit dem Token im Header `X-Rueder-Invite`. Ein Tab, in dem rueder schon offen ist, nimmt einen solchen Link ebenso (`hashchange`), denn der Browser lädt dafür nichts.
 - **Die Einstellungen** liegen in der Datenbank und gelten sofort: `rueder registration set` und `show`, für ein Konto `rueder account invites`.
 - **Gleichzeitige Registrierungen** laufen nacheinander, in einer Transaktion, die die Zeile der Einstellungen sperrt, so dass nie mehr Konten entstehen, als der Betreiber erlaubt.
-- **Ablehnungen** sind 403 mit einem Wort, das die Seite übersetzt (`closed`, `invite`, `full`, `today`). Ob Platz ist, wird geprüft, bevor der Name angesehen und das Passwort gehasht wird: Wer nicht hineinkann, erfährt keine vergebenen Namen und lässt keine Hashes rechnen.
+- **Ablehnungen** sind 403 mit einem Wort, das die Seite übersetzt (`closed`, `invite`, `full`, `today`, `captcha`). Ob Platz ist, wird geprüft, bevor der Name angesehen und das Passwort gehasht wird: Wer nicht hineinkann, erfährt keine vergebenen Namen und lässt keine Hashes rechnen.
 
 Was offen ist:
 
-- Es gibt kein CAPTCHA. Gegen massenhaftes Registrieren stehen die Grenzen je Tag und insgesamt, das Rate-Limit je Adresse und, wo eingeschaltet, die [Adresse](#e-mail-am-konto). Wer die Registrierung öffnet, sollte `--per-day` setzen.
+- Gegen massenhaftes Registrieren stehen das [Captcha](#captcha), die Grenzen je Tag und insgesamt, das Rate-Limit je Adresse und, wo eingeschaltet, die [Adresse](#e-mail-am-konto). Wer die Registrierung öffnet, sollte `--per-day` setzen.
 - Die offene Registrierung verrät, solange Platz ist, welche Namen vergeben sind (409). Das liegt in der Sache.
 - Wer wen eingeladen hat, steht in `accounts.invite_id`, aber in keiner Ansicht.
+
+### Captcha
+
+Von Fiona entschieden, im Code: `server/src/captcha.rs`, im Frontend `web/src/lib/captcha.ts`. Eine Rechenaufgabe (Proof of Work) nach dem Schema von ALTCHA, ohne dessen Widget und Bibliothek, so dass der Browser weiter nur mit rueder spricht.
+
+- **Wann.** Nur die offene Registrierung fragt; eine Einladung ist Nachweis genug. Die Aufgabe ist an als Standard und lässt sich mit `rueder registration set --captcha false` abschalten (in der Datenbank, gilt sofort), anders als A16 es sonst vorsieht, damit eine öffentliche Instanz von Haus aus geschützt ist.
+- **Die Aufgabe** nennt `GET /api/register`, solange die offene Registrierung Platz hat: ein zufälliges Salt, die Höchstzahl (`captcha::MAX_NUMBER`), den SHA-256 aus dem Salt und einer geheimen Zahl bis zu ihr, die Ablaufzeit (`captcha::VALID_SECONDS`) und den HMAC über Hash und Ablaufzeit, mit einem Schlüssel, den der Server beim Start würfelt. Nichts davon steht in der Datenbank.
+- **Die Lösung.** Die Seite holt die Aufgabe beim Absenden, zählt mit `crypto.subtle` von 0 an, bis der Hash passt, und schickt sie mit der Zahl in `POST /api/register`; der Knopf sagt derweil, dass der Browser geprüft wird. Über die Höchstzahl sucht sie nie hinaus, also ist auch die längste Wartezeit bekannt ([Messung](implementation.md#captcha-vom-2026-11-15)).
+- **Die Prüfung** kostet einen HMAC und einen SHA-256. Geprüft und verbraucht wird die Lösung gleich nach der Zustimmung zu den Nutzungsbedingungen; abgewiesen wird ohne sie, nachdem feststeht, dass Platz ist, so dass `closed`, `full` und `today` sagen, was ist, und bevor Name und Passwort angesehen werden. Fehlt die Lösung, stimmt sie nicht, ist sie abgelaufen oder benutzt, antwortet der Server 403 `captcha`.
+- **Einmal.** Benutzte Aufgaben hält der Server im Speicher, bis sie ablaufen, und nur bis zu einer festen Zahl, damit niemand mit ihnen den Speicher füllt. Nach einem Neustart gilt keine alte, weil der Schlüssel neu ist.
+- **Was es nicht kann.** Es erkennt keine Menschen: Was die Seite ausführt, löst die Aufgabe auch, ein Browser ohne Kopf wie jeder andere, und eigener Code rechnet viel schneller als die Seite. Es macht viele Konten teuer, nicht ein paar. Gegen gezielten Missbrauch bleiben die Grenzen je Tag und insgesamt, die bestätigte Adresse und das Sperren von Konten.
 
 ### E-Mail am Konto
 

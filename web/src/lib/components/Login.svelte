@@ -94,6 +94,8 @@
 				return m.register.unsent;
 			case 'tooMany':
 				return m.register.tooMany(refusal.minutes);
+			case 'captcha':
+				return m.register.captcha;
 			case 'unreachable':
 				return m.login.unreachable;
 		}
@@ -554,7 +556,7 @@
 					</p>
 				{/if}
 				<button type="submit" class="primary h-9 w-full" disabled={busy || !ready}>
-					{m.register.submit}
+					{session.solving ? m.register.solving : m.register.submit}
 				</button>
 			</form>
 			<p class="mt-4 text-sm">

@@ -311,8 +311,13 @@ docker compose exec rueder rueder registration set --admin-invite-accounts 20
 
 `none` lifts a limit (`--max-accounts none`), `registration show` says what is
 set and how many accounts there are. Readers make their links in the account
-settings, in the menu of their account, under "Invitations". There is no
-CAPTCHA: if you open registration to everybody, set `--per-day`.
+settings, in the menu of their account, under "Invitations".
+
+Registration without an invitation first has the browser compute for a
+moment: a captcha that asks nothing of the reader and no service but rueder.
+`registration set --captcha false` turns it off. It makes many accounts
+costly, not a few, so if you open registration to everybody, set `--per-day`
+too.
 
 With `SMTP_URL`, `MAIL_FROM` and `PUBLIC_URL` set (see [Settings](#settings)),
 accounts can have an email address, which a link mailed to it confirms:

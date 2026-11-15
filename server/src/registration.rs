@@ -21,6 +21,10 @@
 //! Where the operator wants addresses (`--email optional|required`, see
 //! [`crate::email`]), registration asks for one and mails the link that
 //! confirms it. With `required` the new account logs in only after that.
+//!
+//! Open registration asks for a solved [`crate::captcha`] too, unless the
+//! operator turns it off (`--captcha false`); an invitation needs none, as
+//! its link is proof enough.
 
 use axum::{
     Json,
@@ -37,7 +41,7 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    AppError, AppState, accounts,
+    AppError, AppState, accounts, captcha,
     email::{self, Mode},
     legal,
     login::Me,
@@ -88,6 +92,8 @@ pub struct Settings {
     pub admin_invite_accounts: Option<i32>,
     /// Whether registration asks for an address, and whether it must be one.
     pub email: Mode,
+    /// Whether open registration asks for a solved captcha.
+    pub captcha: bool,
 }
 
 pub async fn settings(db: &PgPool) -> anyhow::Result<Settings> {
@@ -101,7 +107,7 @@ async fn read_settings(conn: &mut PgConnection, lock: bool) -> anyhow::Result<Se
         sqlx::query_as!(
             Settings,
             r#"SELECT open, max_accounts, per_day, invites_per_account, invite_days,
-                      admin_invite_accounts, email AS "email: Mode"
+                      admin_invite_accounts, email AS "email: Mode", captcha
                FROM registration FOR UPDATE"#
         )
         .fetch_one(conn)
@@ -110,7 +116,7 @@ async fn read_settings(conn: &mut PgConnection, lock: bool) -> anyhow::Result<Se
         sqlx::query_as!(
             Settings,
             r#"SELECT open, max_accounts, per_day, invites_per_account, invite_days,
-                      admin_invite_accounts, email AS "email: Mode"
+                      admin_invite_accounts, email AS "email: Mode", captcha
                FROM registration"#
         )
         .fetch_one(conn)
@@ -124,7 +130,7 @@ pub async fn set_settings(db: &PgPool, settings: &Settings) -> anyhow::Result<()
     sqlx::query!(
         "UPDATE registration
          SET open = $1, max_accounts = $2, per_day = $3, invites_per_account = $4,
-             invite_days = $5, admin_invite_accounts = $6, email = $7",
+             invite_days = $5, admin_invite_accounts = $6, email = $7, captcha = $8",
         settings.open,
         settings.max_accounts,
         settings.per_day,
@@ -132,6 +138,7 @@ pub async fn set_settings(db: &PgPool, settings: &Settings) -> anyhow::Result<()
         settings.invite_days,
         settings.admin_invite_accounts,
         settings.email as Mode,
+        settings.captcha,
     )
     .execute(&mut *tx)
     .await?;
@@ -195,6 +202,9 @@ pub enum Refused {
     Full,
     /// Enough accounts were made in the last 24 hours.
     Today,
+    /// Open registration asks for a solved captcha, and none came, or a wrong
+    /// one, an expired one or one used before.
+    Captcha,
 }
 
 impl Refused {
@@ -205,6 +215,7 @@ impl Refused {
             Self::Invite => "invite",
             Self::Full => "full",
             Self::Today => "today",
+            Self::Captcha => "captcha",
         }
     }
 }
@@ -332,6 +343,9 @@ pub struct Applicant<'a> {
     pub email: Option<&'a str>,
     /// The language of the page, which the account's mail is written in.
     pub language: Language,
+    /// Whether a solved captcha came with it, which open registration may ask
+    /// for.
+    pub solved: bool,
 }
 
 /// Makes an account for somebody who registers, with an invitation or, where
@@ -349,6 +363,10 @@ pub async fn make(db: &PgPool, applicant: &Applicant<'_>) -> anyhow::Result<Outc
     let mut conn = db.acquire().await?;
     if let Err(refused) = way_in(&mut conn, token, false).await? {
         return Ok(Outcome::Refused(refused));
+    }
+    // Only open registration asks for the captcha: an invitation is proof enough.
+    if token.is_none() && !applicant.solved && read_settings(&mut conn, false).await?.captcha {
+        return Ok(Outcome::Refused(Refused::Captcha));
     }
     let mode = email::mode(&mut conn).await?;
     drop(conn);
@@ -435,14 +453,21 @@ struct Registering {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     invite: Option<bool>,
+    /// The captcha to solve before registering without an invitation, while
+    /// registration is open and asks for one. Each is good for a few minutes
+    /// and once, so the page asks for it when it sends.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    captcha: Option<captcha::Challenge>,
 }
 
 /// The header of `GET /api/register` that names an invitation to ask about:
 /// a header and not the address, which proxies write into their logs.
 pub const INVITE_HEADER: &str = "x-rueder-invite";
 
-/// Whether anybody can register now, and whether an invitation link is good,
-/// for the page that offers it; for anybody, with or without a session.
+/// Whether anybody can register now, whether an invitation link is good, and
+/// the captcha to solve where open registration asks for one, for the page
+/// that offers it; for anybody, with or without a session.
 #[utoipa::path(
     get,
     path = "/register",
@@ -468,10 +493,20 @@ async fn registering(
         None => None,
     };
     let email = email::mode(&mut conn).await?;
+    let captcha = if open && asked.is_none() && read_settings(&mut conn, false).await?.captcha {
+        Some(
+            state
+                .captcha
+                .challenge(OffsetDateTime::now_utc().unix_timestamp())?,
+        )
+    } else {
+        None
+    };
     Ok(Json(Registering {
         open,
         email,
         invite,
+        captcha,
     }))
 }
 
@@ -488,7 +523,8 @@ pub(crate) async fn is_open(db: &PgPool) -> anyhow::Result<bool> {
 /// A refusal is 403 with one word: `terms` (the terms of use the server names
 /// were not agreed to), `closed` (no invitation, and registration is not open),
 /// `invite` (the invitation cannot be used), `full` (no room for another
-/// account) or `today` (enough accounts for one day). A name or a
+/// account), `today` (enough accounts for one day) or `captcha` (no captcha
+/// came that counts, where open registration asks for one). A name or a
 /// password that cannot be one is 400 with the reason, a name that is taken
 /// 409.
 #[derive(Deserialize, TS, ToSchema)]
@@ -513,6 +549,10 @@ struct NewRegistration {
     #[serde(default)]
     #[ts(optional)]
     language: Option<String>,
+    /// The solved captcha of `GET /api/register`, where it named one.
+    #[serde(default)]
+    #[ts(optional)]
+    captcha: Option<captcha::Solution>,
 }
 
 /// Makes an account: through open registration, or with an invitation; the new
@@ -522,7 +562,7 @@ struct NewRegistration {
     path = "/register",
     tag = "Registration",
     request_body = NewRegistration,
-    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = ACCEPTED, description = "Made, where every account needs a confirmed address: it logs in once the link mailed to it is opened.", body = Awaiting), (status = BAD_REQUEST, description = "A name, password or address that is not allowed."), (status = SERVICE_UNAVAILABLE, description = "The link could not be mailed; no account was made."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, or the terms were not agreed to (`terms`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from this sender; see `Retry-After`.")),
+    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = ACCEPTED, description = "Made, where every account needs a confirmed address: it logs in once the link mailed to it is opened.", body = Awaiting), (status = BAD_REQUEST, description = "A name, password or address that is not allowed."), (status = SERVICE_UNAVAILABLE, description = "The link could not be mailed; no account was made."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, the terms were not agreed to (`terms`), or no captcha came that counts (`captcha`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from this sender; see `Retry-After`.")),
 )]
 async fn register(
     State(state): State<AppState>,
@@ -536,12 +576,19 @@ async fn register(
     }
     let token = new.invite.as_deref().filter(|token| !token.is_empty());
     let language = email::language(new.language.as_deref());
+    // Checked, and used up, before anything is looked up: it costs one hash.
+    let solved = new.captcha.as_ref().is_some_and(|solution| {
+        state
+            .captcha
+            .check(solution, OffsetDateTime::now_utc().unix_timestamp())
+    });
     let applicant = Applicant {
         name: &new.username,
         password: &new.password,
         token,
         email: new.email.as_deref(),
         language,
+        solved,
     };
     let name = new.username.trim();
     let (id, address) = match make(&state.db, &applicant).await? {

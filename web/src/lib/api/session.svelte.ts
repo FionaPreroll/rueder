@@ -10,6 +10,7 @@ import { ServerAccount } from './account.svelte.ts';
 import { ServerReader } from './reader.svelte.ts';
 import { passkeysWork, usePasskey } from '#lib/webauthn.ts';
 import { forgetView } from '#lib/view.ts';
+import { solve } from '#lib/captcha.ts';
 
 /** Why a login did not work. */
 export type LoginFailure =
@@ -51,6 +52,8 @@ export type RegisterFailure =
 	| { kind: 'unsent' }
 	/** Too many registrations or mails; wait so many minutes. */
 	| { kind: 'tooMany'; minutes: number }
+	/** The captcha did not count, as after the server started anew. */
+	| { kind: 'captcha' }
 	| { kind: 'unreachable' };
 
 /** How sending the link again went. */
@@ -160,6 +163,8 @@ export class Session {
 	emailMode = $state<EmailMode>('off');
 	/** An account made here a moment ago that waits for the link mailed to it. */
 	awaiting = $state.raw<Awaiting | null>(null);
+	/** Whether the browser solves the captcha of open registration right now. */
+	solving = $state(false);
 	/** What the link the page was opened with did, until the reader closes the note. */
 	confirmation = $state.raw<Confirmation | null>(null);
 	/** The token of the link to set a new password the page was opened with, until it is used. */
@@ -366,13 +371,26 @@ export class Session {
 		try {
 			const terms = agreed ? (this.ways.legal.terms_version ?? undefined) : undefined;
 			const address = this.emailMode === 'off' ? undefined : email.trim() || undefined;
+			// An invitation needs no captcha. Each is good once and for minutes, so
+			// it is asked for now.
+			const captcha = this.invitation ? null : (await this.api.registering()).captcha;
+			let solved;
+			if (captcha) {
+				this.solving = true;
+				try {
+					solved = (await solve(captcha)) ?? undefined;
+				} finally {
+					this.solving = false;
+				}
+			}
 			const made = await this.api.register(
 				name,
 				password,
 				this.invitation?.token,
 				terms,
 				address,
-				language()
+				language(),
+				solved
 			);
 			this.invitation = null;
 			// Where every account needs its address, the account waits for its link.
@@ -382,9 +400,9 @@ export class Session {
 		} catch (error) {
 			if (!(error instanceof ApiError)) throw error;
 			const word = error.message.trim();
-			if (error.status === 403 && ['closed', 'invite', 'full', 'today', 'terms'].includes(word)) {
-				return { kind: word as 'closed' | 'invite' | 'full' | 'today' | 'terms' };
-			}
+			const words = ['closed', 'invite', 'full', 'today', 'terms', 'captcha'] as const;
+			const refusal = words.find((refusal) => refusal === word);
+			if (error.status === 403 && refusal) return { kind: refusal };
 			if (error.status === 409) return { kind: 'taken' };
 			if (error.status === 400 && word === 'that is no address mail can go to') {
 				return { kind: 'email' };

@@ -211,3 +211,24 @@ pub async fn registering(state: &rueder::AppState, invite: &str) -> serde_json::
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null)
 }
+
+/// Solves the captcha `GET /api/register` names as the page does, by counting
+/// up to the number hidden in it; what `POST /api/register` takes as `captcha`.
+pub fn solve(challenge: &serde_json::Value) -> serde_json::Value {
+    use sha2::{Digest, Sha256};
+
+    let salt = challenge["salt"].as_str().unwrap();
+    let wanted = challenge["challenge"].as_str().unwrap();
+    let number = (0..=challenge["max"].as_u64().unwrap())
+        .find(|number| {
+            let hash = Sha256::digest(format!("{salt}{number}"));
+            hash.iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+                == wanted
+        })
+        .unwrap();
+    let mut solution = challenge.clone();
+    solution["number"] = number.into();
+    solution
+}

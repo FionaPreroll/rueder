@@ -86,6 +86,11 @@ What is here:
   server names it at `/.well-known/assetlinks.json` and takes its answers,
   which name the app's key as their origin; `PASSKEY_ANDROID_APPS` says which
   apps, by default the one released on GitHub.
+- A captcha for open registration (`src/captcha.rs`): a proof of work after
+  ALTCHA's scheme. `GET /api/register` names a hash with a number hidden in
+  it, the page counts up to that number, and `POST /api/register` takes it
+  once. Invitations need none, and `rueder registration set --captcha false`
+  turns it off.
 - An account's email address (`src/email.rs`, `src/mail.rs`): with
   `rueder registration set --email optional|required` registration asks for an
   address, and a link mailed to it confirms it (`/api/email`,
@@ -193,6 +198,7 @@ cargo run -- registration show          # who may make an account, the limits, h
 cargo run -- registration set --open true --max-accounts 50 --per-day 5
 cargo run -- registration set --invites 3 --invite-days 14 --admin-invite-accounts 20
 cargo run -- registration set --email optional   # or required; needs SMTP_URL, MAIL_FROM, PUBLIC_URL
+cargo run -- registration set --captcha false    # open registration without the captcha; on by default
 cargo run -- account invites ada 10     # ada's own quota of invitations; `default` for everybody's
 cargo run -- retention show             # how long what is kept; everything, until it is set
 cargo run -- retention set --articles 24 --remove text --versions 12 --orphans 90

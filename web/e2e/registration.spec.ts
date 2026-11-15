@@ -96,6 +96,11 @@ test('anybody registers once the operator opens it, up to the day’s limit', as
 	rueder('registration', 'set', '--open', 'true', '--per-day', '2');
 	const first = await stranger(browser);
 	await first.goto('/');
+	// Without the captcha the page solves, nobody gets in.
+	const bare = await first.request.post('/api/register', {
+		data: { username: 'script', password: PASSWORD }
+	});
+	expect([bare.status(), await bare.text()]).toEqual([403, 'captcha']);
 	await first.getByRole('button', { name: 'Make an account' }).click();
 	await fillIn(first, 'walk-in');
 	await expect(first.getByRole('button', { name: 'Logged in as walk-in' })).toBeVisible();

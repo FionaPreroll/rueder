@@ -32,6 +32,8 @@ const SITE: &str = "https://reader.example";
 async fn set_mode(db: &PgPool, mode: Mode) {
     let mut settings = registration::settings(db).await.unwrap();
     settings.open = true;
+    // The captcha has its tests in registration.rs.
+    settings.captcha = false;
     settings.email = mode;
     registration::set_settings(db, &settings).await.unwrap();
 }

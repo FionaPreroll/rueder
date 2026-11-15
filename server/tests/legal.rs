@@ -133,6 +133,8 @@ async fn the_login_page_gets_the_links_and_nothing_without_them(db: PgPool) {
 async fn registering_takes_the_agreement_to_the_terms(db: PgPool) {
     let mut settings = registration::settings(&db).await.unwrap();
     settings.open = true;
+    // The captcha has its tests in registration.rs.
+    settings.captcha = false;
     registration::set_settings(&db, &settings).await.unwrap();
     let state = AppState {
         legal: terms("2026-11").into(),

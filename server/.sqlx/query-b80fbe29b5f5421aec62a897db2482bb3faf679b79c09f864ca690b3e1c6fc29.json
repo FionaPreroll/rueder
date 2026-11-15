@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT open, max_accounts, per_day, invites_per_account, invite_days,\n                      admin_invite_accounts, email AS \"email: Mode\"\n               FROM registration",
+  "query": "SELECT open, max_accounts, per_day, invites_per_account, invite_days,\n                      admin_invite_accounts, email AS \"email: Mode\", captcha\n               FROM registration FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -79,6 +79,17 @@
             "name": "email"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "captcha",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "registration",
+            "name": "captcha"
+          }
+        }
       }
     ],
     "parameters": {
@@ -91,8 +102,9 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "c8b7dccf1ef86f05b362216b33d9f335a05fd05e7b9f83ecf61a9724fe3357b5"
+  "hash": "b80fbe29b5f5421aec62a897db2482bb3faf679b79c09f864ca690b3e1c6fc29"
 }

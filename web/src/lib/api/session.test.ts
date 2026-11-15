@@ -226,6 +226,32 @@ describe('registering', () => {
 		});
 	});
 
+	it('solves the captcha the server asks for', async () => {
+		server.registrationOpen = true;
+		// The example of `src/lib/captcha.test.ts`, with 4242 hidden in it.
+		const challenge = {
+			salt: '0123456789abcdef01234567',
+			challenge: 'db254f5032fc9fed67d5407565e4b275e98ee8d74751fd5829f0e7b9158a2517',
+			max: 10_000,
+			expires: 1_800_000_300,
+			signature: 'signed'
+		};
+		server.captcha = { challenge, number: 4242 };
+		const session = new Session();
+		await session.check();
+		await vi.waitFor(() => expect(session.ways.registration).toBe(true));
+
+		expect(await session.register('grace', 'a long password')).toBeNull();
+		expect(session.solving).toBe(false);
+		const sent = server.requests.find((r) => r.method === 'POST' && r.path === '/register');
+		expect(sent?.body).toMatchObject({ captcha: { signature: 'signed', number: 4242 } });
+
+		// One the server does not take any more is said to be so.
+		server.signedIn = null;
+		server.captcha.number = 1;
+		expect(await session.register('linus', 'a long password')).toEqual({ kind: 'captcha' });
+	});
+
 	it('takes the invitation from the address the page was opened with', async () => {
 		const invite = invitation();
 		history.replaceState(null, '', '/#invite=a-token');
