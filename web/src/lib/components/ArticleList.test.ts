@@ -59,6 +59,17 @@ describe('the list view', () => {
 		expect(within(row(article.id)).queryByRole('link')).toBeNull();
 	});
 
+	it('closes an open article with the button under its text', async () => {
+		const { reader, row } = setup();
+		const article = reader.list[0];
+		await userEvent.click(within(row(article.id)).getByRole('button', { expanded: false }));
+		await userEvent.click(within(row(article.id)).getByRole('button', { name: 'Close' }));
+		expect(reader.open).toBeNull();
+		expect(reader.cursor).toBe(article.id);
+		expect(within(row(article.id)).queryByRole('link')).toBeNull();
+		expect(within(row(article.id)).queryByRole('button', { name: 'Close' })).toBeNull();
+	});
+
 	it('keeps an article unread, stars it, and opens the original safely', async () => {
 		const { reader, row } = setup();
 		const article = reader.list.find((entry) => !reader.isRead(entry))!;
@@ -245,6 +256,42 @@ describe('the stacked rows beside the article', () => {
 	});
 });
 
+describe('the unread items', () => {
+	it('lose the last one, read, once the button under it closes it', async () => {
+		const { reader, row } = setup({ kind: 'unread' });
+		const article = reader.step(1)!;
+		// All the others are read, and gone; the open one stays while it is open.
+		reader.markAllRead();
+		await vi.waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
+		await userEvent.click(within(row(article.id)).getByRole('button', { name: 'Close' }));
+		expect(screen.queryAllByRole('listitem')).toEqual([]);
+		expect(screen.getByText('Nothing unread here.')).toBeInTheDocument();
+	});
+
+	it('bring the one that took the place of a closed article into view', async () => {
+		const { reader, row } = setup({ kind: 'unread' });
+		const [first, second] = reader.visible;
+		// After reading a long article, the row under it is above the view once it is closed.
+		vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+			this: HTMLElement
+		) {
+			return { top: this.dataset.article === second.id ? -800 : 0 } as DOMRect;
+		});
+		const scrolled: (string | undefined)[] = [];
+		vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (
+			this: HTMLElement
+		) {
+			scrolled.push(this.dataset.article);
+		});
+		await userEvent.click(within(row(first.id)).getByRole('button', { expanded: false }));
+		await userEvent.click(within(row(first.id)).getByRole('button', { name: 'Close' }));
+		await new Promise((done) => setTimeout(done, 0));
+		expect(row(first.id)).toBeNull();
+		expect(scrolled).toEqual([second.id]);
+		vi.restoreAllMocks();
+	});
+});
+
 describe('the expanded view', () => {
 	it('shows every article in full, and a click picks one', async () => {
 		settings.view = 'expanded';
@@ -257,6 +304,8 @@ describe('the expanded view', () => {
 		expect(reader.cursor).toBe(second.id);
 		expect(reader.isRead(second)).toBe(true);
 		expect(row(second.id)).toHaveClass('border-accent-line');
+		// Every article is shown in full here, so there is nothing to close.
+		expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
 	});
 
 	it('brings a row that opens or closes above the view back into it', async () => {

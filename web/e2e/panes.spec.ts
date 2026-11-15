@@ -48,9 +48,16 @@ test('keeps where the open article was scrolled to over a reload', async ({ page
 	await subscribe(page, 'long-panes', 'Long Story');
 	await open(page);
 
-	// Deep into the article, which is longer than the pane.
-	await reading(page).evaluate((element) => element.scrollTo({ top: 1500 }));
-	const top = await reading(page).evaluate((element) => element.scrollTop);
+	// Deep into the article, which is longer than the pane. The page notes where
+	// the pane is when the scroll event comes, with the next frame; a reload
+	// before that frame would find nothing noted, so the test waits for it.
+	const top = await reading(page).evaluate(
+		(element) =>
+			new Promise<number>((noted) => {
+				element.addEventListener('scroll', () => noted(element.scrollTop), { once: true });
+				element.scrollTo({ top: 1500 });
+			})
+	);
 	expect(top).toBeGreaterThan(1000);
 
 	await page.reload();
