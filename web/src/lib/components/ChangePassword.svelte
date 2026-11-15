@@ -6,10 +6,11 @@
 	// name as well. The server ends every other session of the account and gives
 	// this browser a new one, so the page stays as it is.
 	import { m } from '#lib/i18n/index.ts';
-	import type { PasskeyProof as Proof, PasswordRefusal, Reader } from '#lib/reader.ts';
+	import type { AccountSettings, PasskeyProof as Proof, PasswordRefusal } from '#lib/account.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import PasskeyProof from './PasskeyProof.svelte';
 
-	let { reader }: { reader: Reader } = $props();
+	let { reader, accountSettings }: { reader: Reader; accountSettings: AccountSettings } = $props();
 
 	/** As short as the server lets a password be (`accounts::MIN_PASSWORD`). */
 	const MIN = 8;
@@ -62,7 +63,12 @@
 		try {
 			// An account without one so far sends nothing for it.
 			const typed = asksCode ? code : undefined;
-			refusal = await reader.changePassword(wasFirst ? '' : current, fresh, typed, passkey);
+			refusal = await accountSettings.changePassword(
+				wasFirst ? '' : current,
+				fresh,
+				typed,
+				passkey
+			);
 			if (refusal?.problem === 'code') {
 				asksCode = true;
 			} else if (refusal) {
@@ -149,5 +155,5 @@
 	<button type="submit" class="primary" disabled={!ready}>
 		{first ? texts.submitFirst : texts.submit}
 	</button>
-	<PasskeyProof {reader} disabled={!chosen} onproof={(proof) => change(proof)} />
+	<PasskeyProof {accountSettings} disabled={!chosen} onproof={(proof) => change(proof)} />
 </form>

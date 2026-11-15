@@ -5808,7 +5808,7 @@
           "branch",
           "tag",
           "dirty",
-          "built_at",
+          "committed_at",
           "target",
           "profile",
           "opt_level",
@@ -5836,9 +5836,9 @@
             "type": "boolean",
             "description": "Something was changed and not committed when this was built."
           },
-          "built_at": {
+          "committed_at": {
             "type": "string",
-            "description": "When it was built, as `2026-11-13T09:12:00Z`."
+            "description": "When that commit was made, in UTC, as `2026-11-13T09:12:00Z`."
           },
           "target": {
             "type": "string",

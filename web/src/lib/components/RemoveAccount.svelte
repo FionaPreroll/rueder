@@ -3,11 +3,12 @@
 	// password, or the name of an account without one, to show it is meant. Where
 	// the account has a second factor, the server asks for its code as well. A
 	// passkey of the account stands for all of that.
-	import type { PasskeyProof as Proof, Reader, RemoveRefusal } from '#lib/reader.ts';
+	import type { AccountSettings, PasskeyProof as Proof, RemoveRefusal } from '#lib/account.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import PasskeyProof from './PasskeyProof.svelte';
 
-	let { reader }: { reader: Reader } = $props();
+	let { reader, accountSettings }: { reader: Reader; accountSettings: AccountSettings } = $props();
 
 	const name = $derived(reader.account?.name ?? '');
 	const byName = $derived(reader.account?.password === false);
@@ -38,7 +39,7 @@
 		refusal = null;
 		try {
 			// Gone, the page is logged out and this is no longer there.
-			refusal = await reader.removeAccount('', undefined, passkey);
+			refusal = await accountSettings.removeAccount('', undefined, passkey);
 		} finally {
 			busy = false;
 		}
@@ -51,7 +52,7 @@
 		refusal = null;
 		try {
 			// Gone, the page is logged out and this is no longer there.
-			refusal = await reader.removeAccount(proof, asksCode ? code : undefined);
+			refusal = await accountSettings.removeAccount(proof, asksCode ? code : undefined);
 			if (refusal?.problem === 'code') asksCode = true;
 			else proof = '';
 			code = '';
@@ -107,5 +108,5 @@
 	<button type="submit" class="danger" disabled={busy || !proof || (asksCode && !code.trim())}>
 		{m.removeAccount.submit}
 	</button>
-	<PasskeyProof {reader} disabled={busy} onproof={withPasskey} />
+	<PasskeyProof {accountSettings} disabled={busy} onproof={withPasskey} />
 </form>

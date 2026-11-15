@@ -204,10 +204,10 @@ describe('the notes above the list', () => {
 		expect(screen.queryByRole('button', { name: 'Search all feeds' })).toBeNull();
 	});
 
-	it('says why a feed fails and what to do about it', () => {
+	it('says why a feed fails and that it may have moved', () => {
 		setup({ kind: 'feed', id: 'feed-wort' });
 		expect(screen.getByText('The last fetch failed: 404 Not Found')).toBeInTheDocument();
-		expect(screen.getByText(/subscribe to the new address/)).toBeInTheDocument();
+		expect(screen.getByText(/the feed may have moved/)).toBeInTheDocument();
 	});
 
 	it('says that the filters hid the articles, which rule hid each, and leads to the rules', async () => {

@@ -103,7 +103,7 @@ const en = {
 			`${n(count)}${more ? '+' : ''} ${plural(count, { one: 'article', other: 'articles' })} with “${words}”`,
 		searchAll: 'Search all feeds',
 		feedFailing:
-			'rueder tries again with the next round of fetching. If it keeps failing, the site may have moved its feed: subscribe to the new address and unsubscribe from this one.',
+			'rueder tries again with the next round. If it keeps failing, the feed may have moved.',
 		hiddenNote: 'Your filter rules hid these articles. Open one to see which rule it was.',
 		toRules: 'Filter rules',
 		emptyFeed: 'This feed has no articles yet.',
@@ -252,9 +252,9 @@ const en = {
 		invalid: (reason: string) => `That cannot be an account. The server says: ${reason}`,
 		email: 'Email address',
 		emailOptional: 'Email address (optional)',
-		emailNote: 'You get a link to confirm it. Nobody else sees it.',
+		emailNote: 'You get a link to confirm it.',
 		emailRequiredNote:
-			'You get a link to confirm it; the account can log in once you have opened it. Nobody else sees the address.',
+			'You get a link to confirm it; the account can log in once you have opened it.',
 		emailInvalid: 'Enter an email address mail can go to.',
 		unsent: 'The link could not be mailed, so no account was made. Try again later.',
 		tooMany: (minutes: number) =>
@@ -267,7 +267,7 @@ const en = {
 	forgot: {
 		title: 'Forgot your password?',
 		intro:
-			'Give the name of your account or its email address. Where the account has a confirmed address, a link goes to it that sets a new password.',
+			'Give your name or email address. A link to set a new password goes to the confirmed address.',
 		field: 'Name or email address',
 		submit: 'Send the link',
 		asked: (minutes: number) =>
@@ -279,13 +279,12 @@ const en = {
 
 	reset: {
 		title: 'Set a new password',
-		intro:
-			'Every browser and device of the account is logged out. Where the account has a second factor, logging in still asks for it.',
+		intro: 'Every browser and device of the account is logged out.',
 		fresh: 'New password',
 		again: 'New password again',
 		submit: 'Set the password',
 		mismatch: 'The two do not match.',
-		gone: 'This link cannot be used any more: it was used, a newer one was sent, or it is more than half an hour old. Ask for a new one.',
+		gone: 'This link no longer works. Ask for a new one.',
 		invalid: (reason: string) => `The server did not take that password. It says: ${reason}`,
 		done: 'The password is set. Log in with it.',
 		cancel: 'Cancel'
@@ -293,8 +292,7 @@ const en = {
 
 	email: {
 		title: 'Email address',
-		intro:
-			'rueder mails you only about your account: links to confirm an address, and a note when it changes. Nobody else sees it.',
+		intro: 'rueder mails you only about your account.',
 		current: 'Your address',
 		none: 'The account has no address.',
 		pending: (address: string, hours: number) =>
@@ -405,9 +403,9 @@ const en = {
 			/** For an account that logs in through single sign-on and has none yet. */
 			titleFirst: 'Set a password',
 			intro:
-				'A new password logs out every other browser and device and revokes the app passwords of other apps; this one stays logged in.',
+				'A new password logs out every other browser and device and revokes all app passwords.',
 			introFirst:
-				'This account logs in through single sign-on and has no password of its own. With one it can log in with its name as well.',
+				'With a password, this account can log in with its name too, not only through single sign-on.',
 			current: 'Current password',
 			fresh: 'New password',
 			again: 'New password again',
@@ -440,7 +438,7 @@ const en = {
 			keys: 'Keyboard'
 		},
 		accountNote:
-			'The password, the second factor, apps, invitations and the account itself are under Account settings, in the menu of your account.',
+			'Password, second factor, apps and invitations are under Account settings, in the menu of your account.',
 		theme: 'Theme',
 		themes: { system: 'Like the system', light: 'Light', dark: 'Dark' },
 		accent: 'Accent color',
@@ -472,7 +470,7 @@ const en = {
 		noteDemo: 'Changes apply at once and stay in this browser.',
 		apps: {
 			intro:
-				'Feed reader apps of other makers can read and change what you read here, through the Google Reader API. Each app gets an app password of its own, which you can revoke at any time; your own password stays yours.',
+				'Other feed reader apps can use your account through the Google Reader API. Each gets an app password of its own, which you can revoke at any time.',
 			none: 'No app is set up yet.',
 			made: (when: string) => `set up ${when}`,
 			used: (when: string) => `last used ${when}`,
@@ -546,7 +544,7 @@ const en = {
 		secondFactor: {
 			title: 'Second factor',
 			intro:
-				'With a second factor, logging in takes more than the password: a code from an authenticator app on your phone, or a passkey. A password that got out is not enough then.',
+				'With a second factor, logging in also takes a code from an authenticator app, or a passkey.',
 			app: 'Authenticator app',
 			on: 'On.',
 			left: (count: number) =>
@@ -570,7 +568,7 @@ const en = {
 			cancel: 'Cancel',
 			codesTitle: 'Your recovery codes',
 			codesIntro:
-				'Each of them logs you in once when you do not have your phone. Keep them somewhere safe: they are shown only now.',
+				'Each logs you in once without your phone. Keep them safe: they are shown only now.',
 			copyCodes: 'Copy the codes',
 			codesDone: 'I have kept them',
 			switchOff: 'Switch off',
@@ -591,8 +589,8 @@ const en = {
 		passkeys: {
 			title: 'Passkeys',
 			intro:
-				'A passkey logs you in without name and password: your device asks for its PIN, fingerprint or face. It counts as a second factor, works only on this rueder and cannot be caught by a fake page.',
-			once: 'Once you have a passkey, your password alone no longer opens your account: it takes a passkey, a code of your authenticator app or a recovery code as well.',
+				'A passkey logs you in without name and password, with the PIN, fingerprint or face your device asks for. It counts as a second factor.',
+			once: 'With a passkey, your password alone no longer opens your account.',
 			none: 'No passkey yet.',
 			made: (when: string) => `added ${when}`,
 			used: (when: string) => `last used ${when}`,
@@ -613,7 +611,7 @@ const en = {
 			confirmWith: 'Confirm with a passkey',
 			codesTitle: 'Your recovery codes',
 			codesIntro:
-				'Your first passkey turned the second factor on. Each of these codes logs you in once without it, if you lose your device. Keep them somewhere safe: they are shown only now.',
+				'Your first passkey turned the second factor on. Each code logs you in once if you lose your device. Keep them safe: they are shown only now.',
 			copyCodes: 'Copy the codes',
 			copied: 'Copied',
 			codesDone: 'I have kept them',
@@ -635,16 +633,14 @@ const en = {
 		},
 		reports: {
 			send: 'Send reports of errors in this browser to this server',
-			intro:
-				'When something on the page goes wrong, its admins learn of it and can fix it. Reports go to this server and nowhere else.',
+			intro: 'When something on the page goes wrong, the admins of this server learn of it.',
 			what: 'A report holds:',
 			holds: [
 				'the message of the error, without addresses and without numbers that name something',
 				'where in rueder’s own files it happened',
 				'the version of rueder and your browser with its major version'
 			],
-			never:
-				'Never what you read, your feeds, labels or rules. Admins see how many accounts an error hits, not which. Reports go after 30 days.',
+			never: 'Never what you read, your feeds, labels or rules. Reports go after 30 days.',
 			off: 'Switching this off deletes the reports you sent.'
 		}
 	},
@@ -795,12 +791,10 @@ const en = {
 	},
 
 	move: {
-		intro:
-			'Take your account to another rueder, or bring it here from one: settings, folders and feeds, what you have read, stars, labels and filter rules, all in one file.',
+		intro: 'Take your account to another rueder, or bring it here from one, in one file.',
 		howItWorks:
-			'An import adds to what is here and takes nothing away. Feeds are found by their address and articles by their id in the feed, as the numbers differ from one rueder to the next. Your settings become those of the file.',
-		notInIt:
-			'Not in the file: your password, your sessions, the consent to reports of errors and the texts of articles. So an article this rueder does not know cannot be brought in.',
+			'An import adds to what is here and takes nothing away. Your settings become those of the file.',
+		notInIt: 'Not in the file: your password, your sessions and the texts of articles.',
 		export: 'Export the account',
 		import: 'Import an account file',
 		importing: 'Importing …',
@@ -817,7 +811,7 @@ const en = {
 			`${n(count)} ${plural(count, { one: 'entry', other: 'entries' })} of the file could not be taken.`,
 		settings: 'Your settings are those of the file now.',
 		later:
-			'Feeds this rueder did not have bring their articles with the next round of fetching. What you had read before stays read.',
+			'New feeds bring their articles with the next round of fetching. What you had read stays read.',
 		busy: (seconds: number | null) =>
 			seconds
 				? `Too many imports. Try again in ${n(Math.ceil(seconds / 60))} ${plural(Math.ceil(seconds / 60), { one: 'minute', other: 'minutes' })}.`
@@ -879,7 +873,7 @@ const en = {
 			dirty: (commit: string) => `${commit}, with changes of its own`,
 			branch: 'Branch',
 			tag: 'Tag',
-			built: 'Built',
+			committed: 'Committed',
 			where: 'Runs',
 			container: 'in a container',
 			host: 'on the machine itself',

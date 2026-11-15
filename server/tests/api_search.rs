@@ -34,7 +34,10 @@ fn with_images(db: &PgPool) -> AppState {
     };
     let client = HttpClient::new(http_client::Config::default()).unwrap();
     let images = Arc::new(ImageProxy::open(config, client).unwrap());
-    AppState::new(db.clone()).with_images(images)
+    AppState {
+        images: Some(images),
+        ..AppState::new(db.clone())
+    }
 }
 
 #[sqlx::test]

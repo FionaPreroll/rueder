@@ -1,10 +1,12 @@
 // Who is logged in. The session itself is a cookie only the browser and the
 // server know; this asks the server whose it is, logs in and out, and holds the
-// reader of the account that is logged in.
+// reader of the account that is logged in, with the account's own settings.
 
 import { api as theApi, ApiError, type Api, type ApiAccount, type ApiLoginWays } from './client.ts';
 import type { EmailMode, LegalLinks } from '#lib/reader.ts';
 import { language } from '#lib/i18n/locale.svelte.ts';
+import type { AppPasswordKeeper } from '#lib/account.ts';
+import { ServerAccount } from './account.svelte.ts';
 import { ServerReader } from './reader.svelte.ts';
 import { passkeysWork, usePasskey } from '#lib/webauthn.ts';
 import { forgetView } from '#lib/view.ts';
@@ -146,6 +148,8 @@ export class Session {
 	state = $state<'checking' | 'unreachable' | 'out' | 'in'>('checking');
 	/** The reader of the account that is logged in. */
 	reader = $state.raw<ServerReader | null>(null);
+	/** Its own settings: password, address, second factor, passkeys, apps, invitations. */
+	accountSettings = $state.raw<ServerAccount | null>(null);
 	/** The ways to log in besides name and password. */
 	ways = $state.raw<ApiLoginWays>(NO_WAYS);
 	/** The invitation the page was opened with, once the server said whether it can be used. */
@@ -181,6 +185,11 @@ export class Session {
 	}
 
 	private enter(account: ApiAccount) {
+		const ends = {
+			signOut: () => void this.signOut(),
+			expired: () => this.leave(),
+			removed: () => this.removed()
+		};
 		this.reader = new ServerReader(
 			{
 				name: account.username,
@@ -195,13 +204,10 @@ export class Session {
 				email: account.email,
 				emailPending: account.email_pending
 			},
-			{
-				signOut: () => void this.signOut(),
-				expired: () => this.leave(),
-				removed: () => this.removed()
-			},
+			ends,
 			this.api
 		);
+		this.accountSettings = new ServerAccount(this.reader, ends, this.api);
 		this.farewell = false;
 		this.awaiting = null;
 		this.reader.legal = legalLinks(this.ways);
@@ -217,8 +223,14 @@ export class Session {
 		this.leave();
 	}
 
+	/** App passwords, where the server lets apps of other makers in. */
+	get apps(): AppPasswordKeeper | null {
+		return this.reader?.account.appApi === true ? this.accountSettings : null;
+	}
+
 	private leave() {
 		this.reader = null;
+		this.accountSettings = null;
 		this.state = 'out';
 		void this.askWays();
 	}

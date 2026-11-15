@@ -1,9 +1,9 @@
-//! What this build is: which commit it came from, when and how it was built,
-//! and where it runs. `build.rs` puts the facts into the program when it is
+//! What this build is: which commit it came from and when that was made, how
+//! it was built, and where it runs. `build.rs` puts the facts into the program when it is
 //! built; what is not known is empty, as in a build from a source archive
 //! without a git directory.
 //!
-//! None of it is a secret: a commit, a branch, a tag and a build date say what
+//! None of it is a secret: a commit, its date, a branch and a tag say what
 //! an admin needs to tell one rueder from another, and the status page shows
 //! them to admins alone.
 
@@ -38,8 +38,8 @@ pub struct Build {
     pub tag: &'static str,
     /// Something was changed and not committed when this was built.
     pub dirty: bool,
-    /// When it was built, as `2026-11-13T09:12:00Z`.
-    pub built_at: &'static str,
+    /// When that commit was made, in UTC, as `2026-11-13T09:12:00Z`.
+    pub committed_at: &'static str,
     /// The machine it was built for, as `x86_64-unknown-linux-gnu`.
     pub target: &'static str,
     /// `release` or `debug`, and how hard the compiler tried (`3`, `z`, `0`).
@@ -60,7 +60,7 @@ pub fn build() -> Build {
         branch: env!("RUEDER_BRANCH"),
         tag: env!("RUEDER_TAG"),
         dirty: matches!(env!("RUEDER_DIRTY"), "true"),
-        built_at: env!("RUEDER_BUILT_AT"),
+        committed_at: env!("RUEDER_COMMITTED_AT"),
         target: env!("RUEDER_TARGET"),
         profile: env!("RUEDER_PROFILE"),
         opt_level: env!("RUEDER_OPT_LEVEL"),
@@ -91,7 +91,9 @@ mod tests {
         // The tests are a debug build, whatever else is unknown here.
         assert_eq!(build.profile, "debug");
         assert!(build.target.contains('-'), "{}", build.target);
-        assert!(build.built_at.ends_with('Z'), "{}", build.built_at);
+        if !build.commit.is_empty() {
+            assert!(build.committed_at.ends_with('Z'), "{}", build.committed_at);
+        }
         assert!(LINE.starts_with(VERSION), "{LINE}");
     }
 }

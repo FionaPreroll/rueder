@@ -7,21 +7,24 @@
 	import { formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type {
+		AccountSettings,
 		PasskeyList,
 		PasskeyProof as Proof,
 		PasskeyRefusal,
-		Reader,
 		SecondFactorState
-	} from '#lib/reader.ts';
+	} from '#lib/account.ts';
+	import type { Reader } from '#lib/reader.ts';
 	import PasskeyProof from './PasskeyProof.svelte';
 
 	let {
 		reader,
+		accountSettings,
 		busy: holding = $bindable(false),
 		version = 0,
 		onchange
 	}: {
 		reader: Reader;
+		accountSettings: AccountSettings;
 		busy?: boolean;
 		/** Counts up when something else changed the second factor. */
 		version?: number;
@@ -55,7 +58,10 @@
 	});
 
 	async function load() {
-		[keys, factor] = await Promise.all([reader.passkeys(), reader.secondFactor()]);
+		[keys, factor] = await Promise.all([
+			accountSettings.passkeys(),
+			accountSettings.secondFactor()
+		]);
 	}
 	$effect(() => {
 		void version;
@@ -78,7 +84,7 @@
 
 	function add(passkey?: Proof) {
 		return run(async () => {
-			const answer = await reader.addPasskey(name, password, code, passkey);
+			const answer = await accountSettings.addPasskey(name, password, code, passkey);
 			if (typeof answer === 'string') return answer;
 			adding = false;
 			name = texts.defaultName;
@@ -92,7 +98,7 @@
 
 	function remove(id: number, passkey?: Proof) {
 		return run(async () => {
-			const answer = await reader.removePasskey(id, password, code, passkey);
+			const answer = await accountSettings.removePasskey(id, password, code, passkey);
 			if (answer) return answer;
 			removing = null;
 			await load();
@@ -221,7 +227,7 @@
 								{@render proof(texts.confirmRemove)}
 							</form>
 							<PasskeyProof
-								{reader}
+								{accountSettings}
 								{has}
 								disabled={working}
 								onproof={(passkey) => remove(key.id, passkey)}
@@ -240,7 +246,7 @@
 				</label>
 				{@render proof(texts.create)}
 			</form>
-			<PasskeyProof {reader} {has} disabled={working || !name.trim()} onproof={add} />
+			<PasskeyProof {accountSettings} {has} disabled={working || !name.trim()} onproof={add} />
 		{:else if keys.list.length >= keys.max}
 			<p class="text-soft">{texts.full(keys.max)}</p>
 		{:else if removing === null}

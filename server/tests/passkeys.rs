@@ -178,7 +178,10 @@ impl Device {
 }
 
 fn with_passkeys(db: &PgPool) -> AppState {
-    AppState::new(db.clone()).with_passkeys(Passkeys::new(SITE).unwrap())
+    AppState {
+        passkeys: Some(Passkeys::new(SITE).unwrap().into()),
+        ..AppState::new(db.clone())
+    }
 }
 
 async fn ada(db: &PgPool) -> i32 {
@@ -888,7 +891,10 @@ async fn admins_log_in_with_a_passkey_as_with_a_second_factor(db: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    let state = with_passkeys(&db).with_admin_second_factor();
+    let state = AppState {
+        admin_second_factor: true,
+        ..with_passkeys(&db)
+    };
     let cookie = common::session(&db, admin).await;
     let (_, me) = call(&state, Method::GET, "/api/me", Some(&cookie), None).await;
     assert_eq!(me["is_admin"], false);
@@ -1053,7 +1059,10 @@ fn app_setting(key: &[u8; 32]) -> String {
 
 fn with_app(db: &PgPool, setting: Option<&str>) -> AppState {
     let apps = AndroidApp::from_setting(setting).unwrap();
-    AppState::new(db.clone()).with_passkeys(Passkeys::for_apps(SITE, apps).unwrap())
+    AppState {
+        passkeys: Some(Passkeys::for_apps(SITE, apps).unwrap().into()),
+        ..AppState::new(db.clone())
+    }
 }
 
 #[sqlx::test]

@@ -26,7 +26,10 @@ use tower::ServiceExt;
 const TOKEN: &str = "metrics-0123456789-abcdefghijklmnopq";
 
 fn with_metrics(db: PgPool) -> AppState {
-    AppState::new(db).with_metrics(Metrics::new(TOKEN).unwrap())
+    AppState {
+        metrics: Some(Metrics::new(TOKEN).unwrap().into()),
+        ..AppState::new(db)
+    }
 }
 
 /// Asks for the metrics with this `Authorization` and this cookie.

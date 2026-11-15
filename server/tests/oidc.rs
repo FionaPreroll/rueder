@@ -108,7 +108,14 @@ async fn setup(db: &PgPool) -> (AppState, Shared, String) {
         allow_http: true,
     };
     let oidc = Arc::new(Oidc::new(config, client).unwrap());
-    (AppState::new(db.clone()).with_oidc(oidc), provider, issuer)
+    (
+        AppState {
+            oidc: Some(oidc),
+            ..AppState::new(db.clone())
+        },
+        provider,
+        issuer,
+    )
 }
 
 async fn send(state: &AppState, path: &str, cookies: &[&str]) -> (StatusCode, HeaderMap, String) {
@@ -813,7 +820,10 @@ async fn the_provider_has_to_be_the_one_that_was_set(db: PgPool) {
         allow_http: true,
     };
     let oidc = Arc::new(Oidc::new(config.clone(), client.clone()).unwrap());
-    let state = AppState::new(db.clone()).with_oidc(oidc);
+    let state = AppState {
+        oidc: Some(oidc),
+        ..AppState::new(db.clone())
+    };
     let (_, headers, _) = send(&state, "/api/oidc/start", &[]).await;
     assert_eq!(location(&headers), "/?oidc=failed");
 

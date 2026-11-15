@@ -144,7 +144,7 @@ describe('Login', () => {
 		server.signedIn = 'fiona';
 		const session = new Session();
 		await session.check();
-		await session.reader!.removeAccount('correct horse');
+		await session.accountSettings!.removeAccount('correct horse');
 		render(Login, { session });
 		expect(screen.getByRole('status')).toHaveTextContent('Your account is deleted');
 	});
@@ -493,7 +493,7 @@ describe('forgot password', () => {
 		render(Login, { session });
 		await userEvent.type(screen.getByLabelText('New password'), 'a brand new one');
 		await userEvent.type(screen.getByLabelText('New password again'), 'a brand new one{Enter}');
-		expect(await screen.findByRole('alert')).toHaveTextContent(/cannot be used any more/);
+		expect(await screen.findByRole('alert')).toHaveTextContent(/no longer works/);
 		expect(screen.getByRole('heading', { name: 'Log in to rueder' })).toBeInTheDocument();
 	});
 

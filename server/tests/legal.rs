@@ -96,7 +96,10 @@ async fn the_login_page_gets_the_links_and_nothing_without_them(db: PgPool) {
         json!({ "imprint": null, "privacy": null, "terms": null, "terms_version": null })
     );
 
-    let state = AppState::new(db.clone()).with_legal(terms("2026-11"));
+    let state = AppState {
+        legal: terms("2026-11").into(),
+        ..AppState::new(db.clone())
+    };
     let (status, ways) = call(&state, Method::GET, "/api/login/ways", None, None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
@@ -131,7 +134,10 @@ async fn registering_takes_the_agreement_to_the_terms(db: PgPool) {
     let mut settings = registration::settings(&db).await.unwrap();
     settings.open = true;
     registration::set_settings(&db, &settings).await.unwrap();
-    let state = AppState::new(db.clone()).with_legal(terms("2026-11"));
+    let state = AppState {
+        legal: terms("2026-11").into(),
+        ..AppState::new(db.clone())
+    };
     let register = |accepted: Option<&str>| {
         let mut body = json!({ "username": "grace", "password": PASSWORD });
         if let Some(accepted) = accepted {
@@ -178,7 +184,10 @@ async fn a_new_version_is_asked_for_at_the_next_visit(db: PgPool) {
         common::session(&db, ada).await,
         common::session(&db, grace).await,
     );
-    let first = AppState::new(db.clone()).with_legal(terms("2026-11"));
+    let first = AppState {
+        legal: terms("2026-11").into(),
+        ..AppState::new(db.clone())
+    };
     let me = |state: &AppState, cookie: &str| {
         let (state, cookie) = (state.clone(), cookie.to_owned());
         async move {
@@ -221,7 +230,10 @@ async fn a_new_version_is_asked_for_at_the_next_visit(db: PgPool) {
     );
 
     // The operator names a new version: the next visit asks again.
-    let second = AppState::new(db.clone()).with_legal(terms("2027-01"));
+    let second = AppState {
+        legal: terms("2027-01").into(),
+        ..AppState::new(db.clone())
+    };
     assert_eq!(me(&second, &ada_cookie).await["terms_to_accept"], "2027-01");
 
     // Nobody agrees without a session.

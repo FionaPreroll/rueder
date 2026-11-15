@@ -129,17 +129,16 @@ describe('Session', () => {
 	it('deletes the account with its password and says so at the login', async () => {
 		const session = new Session();
 		await session.check();
-		const reader = session.reader!;
-		expect(reader.can.remove).toBe(true);
-		expect(await reader.removeAccount('wrong')).toEqual({ problem: 'wrong' });
+		const account = session.accountSettings!;
+		expect(await account.removeAccount('wrong')).toEqual({ problem: 'wrong' });
 		expect(session.state).toBe('in');
 		server.refuse('DELETE', /^\/account$/, 429, 1, 'too many', { 'Retry-After': '90' });
-		expect(await reader.removeAccount('correct horse')).toEqual({ problem: 'busy', minutes: 2 });
+		expect(await account.removeAccount('correct horse')).toEqual({ problem: 'busy', minutes: 2 });
 		server.refuse('DELETE', /^\/account$/, 500);
-		expect(await reader.removeAccount('correct horse')).toEqual({ problem: 'unreachable' });
+		expect(await account.removeAccount('correct horse')).toEqual({ problem: 'unreachable' });
 
 		expect(session.farewell).toBe(false);
-		expect(await reader.removeAccount('correct horse')).toBeNull();
+		expect(await account.removeAccount('correct horse')).toBeNull();
 		expect(server.requests.findLast((request) => request.method === 'DELETE')).toMatchObject({
 			path: '/account',
 			body: { password: 'correct horse' }
@@ -159,10 +158,10 @@ describe('Session', () => {
 		server.accounts.delete('fiona');
 		const session = new Session();
 		await session.check();
-		const reader = session.reader!;
-		expect(reader.account?.password).toBe(false);
-		expect(await reader.removeAccount('grace')).toEqual({ problem: 'wrong' });
-		expect(await reader.removeAccount('Fiona')).toBeNull();
+		expect(session.reader?.account?.password).toBe(false);
+		const account = session.accountSettings!;
+		expect(await account.removeAccount('grace')).toEqual({ problem: 'wrong' });
+		expect(await account.removeAccount('Fiona')).toBeNull();
 		const asked = server.requests.findLast((request) => request.method === 'DELETE');
 		expect(asked?.body).toEqual({ name: 'Fiona' });
 		expect(session.state).toBe('out');

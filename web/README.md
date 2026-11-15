@@ -17,7 +17,10 @@ a new version. The work packages, done and open, are in
 [docs/implementation.md](../docs/implementation.md#arbeitspakete).
 
 - `src/lib/reader.ts` is the seam: what the page needs from whatever holds the feeds
-  and articles. Components get their data from a `Reader` and nowhere else.
+  and articles. Components get their data from a `Reader` and nowhere else. What
+  the account sets about itself is `AccountSettings` in `src/lib/account.ts`, which
+  only the server has (`src/lib/api/account.svelte.ts`); the demo has app passwords
+  and nothing else of it.
 - `src/lib/api/` fills it from the server: `client.ts` has a function per endpoint,
   `reader.svelte.ts` is the reader, `session.svelte.ts` knows who is logged in. A
   change shows at once and is sent in the background; one the server refuses is
