@@ -580,6 +580,11 @@ async fn registering(db: &PgPool, command: RegistrationCommand) -> anyhow::Resul
         if let Some(Limit(limit)) = admin_invite_accounts {
             settings.admin_invite_accounts = limit;
         }
+        // The captcha costs scripts little: only a limit per day holds how many
+        // accounts anybody can make.
+        if settings.open && settings.per_day.is_none() {
+            anyhow::bail!("open registration needs a limit per day: add --per-day <number>");
+        }
         registration::set_settings(db, &settings).await?;
     }
     let counts = registration::counts(&mut *db.acquire().await?).await?;
@@ -813,6 +818,15 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
     let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
     let static_dir =
         PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../web/build".into()));
+
+    // The command line asks for a limit per day when it opens registration;
+    // one opened before it did is said here until it has one.
+    let registering = registration::settings(&db).await?;
+    if registering.open && registering.per_day.is_none() {
+        tracing::warn!(
+            "registration is open without a limit per day: set one with `rueder registration set --per-day <number>`"
+        );
+    }
 
     // New versions of articles need the partition of their month.
     articles::ensure_current_partitions(&db).await?;

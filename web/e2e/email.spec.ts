@@ -8,13 +8,13 @@ import { PASSWORD, accountSettings, linkIn, mailsTo, rueder, sidebar } from './h
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(() => {
-	rueder('registration', 'set', '--open', 'true', '--email', 'required');
+	rueder('registration', 'set', '--open', 'true', '--per-day', '10', '--email', 'required');
 });
 
 // The specs after this one see a rueder without addresses again, and the
 // account made here does not count against their limits for the day.
 test.afterAll(() => {
-	rueder('registration', 'set', '--open', 'false', '--email', 'off');
+	rueder('registration', 'set', '--open', 'false', '--per-day', 'none', '--email', 'off');
 	rueder('account', 'remove', 'newcomer');
 });
 

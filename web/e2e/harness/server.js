@@ -51,7 +51,9 @@ const env = {
 	IMAGE_CACHE_DIR: mkdtempSync(join(tmpdir(), 'rueder-e2e-images-')),
 	// Never the settings of a rueder that is being worked on.
 	OIDC_ISSUER: '',
-	CLIENT_IP_HEADER: '',
+	// Registrations count per network: the specs that register come from
+	// networks of their own (registration.spec.ts).
+	CLIENT_IP_HEADER: 'X-Forwarded-For',
 	// Readers may report feeds and articles (reporting.spec.ts).
 	CONTENT_REPORTS: 'on',
 	// Passkeys, for the address the browser reaches the server at

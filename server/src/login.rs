@@ -66,10 +66,7 @@ impl Key {
     /// The wider network around a sender: who has a whole IPv6 /48 or many
     /// addresses of one IPv4 /24 counts there once more.
     pub fn network(ip: IpAddr) -> Self {
-        Self::Network(match ip.to_canonical() {
-            IpAddr::V6(v6) => IpAddr::V6(Ipv6Addr::from(u128::from(v6) & !(u128::MAX >> 48))),
-            IpAddr::V4(v4) => IpAddr::V4(Ipv4Addr::from(u32::from(v4) & 0xffff_ff00)),
-        })
+        Self::Network(wide(ip))
     }
 
     /// What a try from this sender for this name counts for.
@@ -83,6 +80,14 @@ impl Key {
             Self::Address(_) => PER_ADDRESS,
             Self::Network(_) => PER_NETWORK,
         }
+    }
+}
+
+/// The wider network around a sender: its IPv4 /24 or its IPv6 /48.
+pub fn wide(ip: IpAddr) -> IpAddr {
+    match ip.to_canonical() {
+        IpAddr::V6(v6) => IpAddr::V6(Ipv6Addr::from(u128::from(v6) & !(u128::MAX >> 48))),
+        IpAddr::V4(v4) => IpAddr::V4(Ipv4Addr::from(u32::from(v4) & 0xffff_ff00)),
     }
 }
 

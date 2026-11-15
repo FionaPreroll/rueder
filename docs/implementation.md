@@ -364,6 +364,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.26 Bilder in der README.** Siehe [Seite auf GitHub Pages](architecture.md#seite-auf-github-pages).
 - [x] **5.27 Ein Knopf schließt den offenen Artikel.** Siehe [Frontend](architecture.md#frontend).
 - [x] **5.28 Captcha bei der Registrierung.** Siehe [Captcha](architecture.md#captcha).
+- [x] **5.29 Drossel für Registrierungen.** Siehe [Registrierung und Einladungen](architecture.md#registrierung-und-einladungen).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -374,6 +375,7 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **E-Mail am Konto (5.4):** Mit `optional` fragt die Seite nach dem Login nicht. Mit `required` fragt sie bestehende Konten in einem Fenster, das nur der Link oder das Abmelden schließt, sperrt aber nicht die API oder Apps. Ein Konto, das mit `required` registriert und nie bestätigt wird, geht nach 7 Tagen. Ob eine Adresse schon einem anderen Konto gehört, sagt erst der Link. Mails sind nur Text und gehen sofort, ohne Warteschlange: Nimmt das Relais eine nicht, antwortet der Server 503.
 - **Passwort vergessen (5.5):** Gesucht und verschickt wird nach der Antwort, so dass auch die Zeit nichts verrät. Ein Link gilt nur, solange das Konto die Adresse hat, an die er ging. Wer Passwort und zweiten Faktor zugleich verliert, braucht den Betreiber (`rueder account second-factor-off`).
 - **Ein Knopf schließt den offenen Artikel (5.27):** Er steht am Ende der Zeile unter dem Text, wo der Leser nach dem Lesen ist, nicht oben am Titel, und zeigt das Kreuz und „Schließen“. Im Magazin steht er zusätzlich zum Kreuz oben am Blatt, damit jeder offene Artikel gleich endet.
+- **Drossel für Registrierungen (5.29):** Je Netz 5 Versuche auf einmal und dann einer alle 12 Minuten statt der vorgeschlagenen 3 und einer alle 20 Minuten, weil ein vergebener Name ebenso zählt und sich viele Leser im Mobilfunk eine IPv4-Adresse teilen. Der Topf des ganzen Servers zählt Versuche mit einer gültigen Lösung auch dann, wenn sie danach aus anderem Grund abgewiesen werden.
 - **Captcha (5.28):** Die Höchstzahl ist 100.000 und eine Aufgabe gilt fünf Minuten; im Speicher stehen höchstens 100.000 benutzte. Die Seite rechnet in einem Strang, ohne Worker, und der Knopf sagt derweil „Dieser Browser wird geprüft …“. Zählt eine Lösung nicht, etwa nach einem Neustart des Servers mitten im Rechnen, bittet die Seite, es noch einmal zu versuchen, statt selbst eine neue Aufgabe zu holen. Das Wort der Ablehnung ist `captcha`, wie der Schalter.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
@@ -645,6 +647,8 @@ Wie lange die Seite für das [Captcha](architecture.md#captcha) rechnet, gemesse
 | CPU viermal gebremst, als Ersatz für ein Telefon | 2,1 bis 2,3 s |
 
 Auf einem echten Telefon ist es nicht gemessen. Bündel von 1.000 Hashes auf einmal waren nicht schneller als einer nach dem anderen.
+
+Eigener Code dagegen, gemessen am 2026-11-15 auf demselben Container mit `openssl speed -bytes 64 sha256` auf einem Kern: rund 4,4 Millionen Hashes je Sekunde, also im Mittel etwa 11 ms je Aufgabe und 23 ms für alle 100.001 Zahlen; Python mit `hashlib` schafft rund 2 Millionen je Sekunde. Eigener Code ist damit etwa zwanzigmal so schnell wie die Seite, je Kern.
 
 ## Wissen über das Altsystem
 

@@ -26,6 +26,8 @@
 //! operator turns it off (`--captcha false`); an invitation needs none, as
 //! its link is proof enough.
 
+use std::time::Instant;
+
 use axum::{
     Json,
     extract::{Path, State},
@@ -44,7 +46,7 @@ use crate::{
     AppError, AppState, accounts, captcha,
     email::{self, Mode},
     legal,
-    login::Me,
+    login::{Me, Sender},
     mail::{self, Language},
     sessions::{self, Session},
 };
@@ -395,7 +397,7 @@ pub async fn make(db: &PgPool, applicant: &Applicant<'_>) -> anyhow::Result<Outc
     if accounts::id_of(db, name).await?.is_some() {
         return Ok(Outcome::Invalid(accounts::Invalid::NameTaken));
     }
-    let hash = accounts::hash(password).await?;
+    let hash = accounts::hash_for_registration(password).await?;
 
     // One registration at a time: counting and adding belong together.
     let mut tx = db.begin().await?;
@@ -562,10 +564,11 @@ struct NewRegistration {
     path = "/register",
     tag = "Registration",
     request_body = NewRegistration,
-    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = ACCEPTED, description = "Made, where every account needs a confirmed address: it logs in once the link mailed to it is opened.", body = Awaiting), (status = BAD_REQUEST, description = "A name, password or address that is not allowed."), (status = SERVICE_UNAVAILABLE, description = "The link could not be mailed; no account was made."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, the terms were not agreed to (`terms`), or no captcha came that counts (`captcha`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from this sender; see `Retry-After`.")),
+    responses((status = CREATED, description = "Made and logged in; the answer sets the cookie `__Host-rueder`.", body = crate::login::Me), (status = ACCEPTED, description = "Made, where every account needs a confirmed address: it logs in once the link mailed to it is opened.", body = Awaiting), (status = BAD_REQUEST, description = "A name, password or address that is not allowed."), (status = SERVICE_UNAVAILABLE, description = "The link could not be mailed; no account was made."), (status = FORBIDDEN, description = "Registration is closed, the invitation is not good (any more), the server or the day is full, the terms were not agreed to (`terms`), or no captcha came that counts (`captcha`)."), (status = CONFLICT, description = "The name is taken."), (status = TOO_MANY_REQUESTS, description = "Too many registrations from the sender's network, or without an invitation on the whole server; see `Retry-After`.")),
 )]
 async fn register(
     State(state): State<AppState>,
+    Sender(ip): Sender,
     headers: HeaderMap,
     Json(new): Json<NewRegistration>,
 ) -> Result<Response, AppError> {
@@ -574,6 +577,11 @@ async fn register(
     if terms.is_some() && new.accepted_terms.as_deref() != terms {
         return Err(AppError::Status(StatusCode::FORBIDDEN, "terms".into()));
     }
+    // Then the sender's network, before anything is looked at: one that
+    // tries too often neither fills the list of used captchas nor uses up
+    // what the whole server takes.
+    let now = Instant::now();
+    state.rates.registration(ip, now)?;
     let token = new.invite.as_deref().filter(|token| !token.is_empty());
     let language = email::language(new.language.as_deref());
     // Checked, and used up, before anything is looked up: it costs one hash.
@@ -582,6 +590,12 @@ async fn register(
             .captcha
             .check(solution, OffsetDateTime::now_utc().unix_timestamp())
     });
+    // Without an invitation it counts for the whole server too, once it has a
+    // captcha that counts or the server asks for none: whoever sends none or a
+    // wrong one uses up nothing of everybody's.
+    if token.is_none() && (solved || !settings(&state.db).await?.captcha) {
+        state.rates.open_registration(now)?;
+    }
     let applicant = Applicant {
         name: &new.username,
         password: &new.password,
