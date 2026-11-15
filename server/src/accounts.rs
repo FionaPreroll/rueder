@@ -406,21 +406,20 @@ mod tests {
 
     use super::*;
 
-    const PASSWORD: &str = "correct horse battery";
-
     #[tokio::test]
     async fn registrations_and_logins_hash_in_places_of_their_own() {
+        let password = uuid::Uuid::new_v4().to_string();
         // However many registrations come, a login hashes.
         let registering = REGISTERING.acquire().await.unwrap();
-        assert!(hash(PASSWORD).await.is_ok());
+        assert!(hash(&password).await.is_ok());
         // A second registration waits for the first.
         let waiting =
-            tokio::time::timeout(Duration::from_millis(200), hash_for_registration(PASSWORD));
+            tokio::time::timeout(Duration::from_millis(200), hash_for_registration(&password));
         assert!(waiting.await.is_err());
         drop(registering);
         // However many logins hash, a registration does too.
         let logins = HASHING.acquire_many(4).await.unwrap();
-        assert!(hash_for_registration(PASSWORD).await.is_ok());
+        assert!(hash_for_registration(&password).await.is_ok());
         drop(logins);
     }
 }
