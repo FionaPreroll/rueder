@@ -132,7 +132,7 @@ Jeder Schritt endet mit etwas, das sich prüfen lässt. Der neue Code entsteht i
 
    Ergebnis: rueder ist täglich benutzbar.
 
-4. **Umstieg** (in Betrieb, alter Code entfernt; Probelauf, Import und Übernahme aus dem Browser offen). Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach. Das alte System ist schon abgebaut (siehe [Entscheidungen](#entscheidungen)).
+4. **Umstieg** (in Betrieb, alter Code entfernt, Probelauf gemacht; Import und Übernahme aus dem Browser offen). Der neue rueder geht ohne alte Daten in Betrieb. Danach werden die alten Daten einmalig aus dem Backup importiert und mit den neuen Konten und Feeds zusammengeführt, erst zur Probe auf einer Kopie, dann in der Produktion. Lesestand und Labels kommen aus dem Browser nach. Das alte System ist schon abgebaut (siehe [Entscheidungen](#entscheidungen)).
 
    Ergebnis: Die Produktion läuft auf dem neuen rueder mit den alten Daten, der alte Code ist entfernt.
 
@@ -146,7 +146,7 @@ Security-Reviews laufen gegen die Tabelle in [architecture.md](architecture.md#s
 
 Liste, Artikel und Ungelesen-Zahlen brauchen an der Datenbank jeweils unter 50 ms. Gemessen wird an erzeugten Daten in der Größe der Produktion (10 User, 300 Feeds, 10 Millionen Artikel) und noch einmal mit zehnfacher Artikelzahl, um zu sehen, ob die Zeiten von der Gesamtgröße unabhängig bleiben. Verfehlt eine Abfrage das Ziel, wird das Schema in Schritt 1 angepasst, bevor darauf gebaut wird. Methode und Ergebnisse: [implementation.md](implementation.md#messung).
 
-Ergebnis vom 2026-11-10: Das Ziel ist erreicht. Mit 10 Millionen Artikeln brauchen die Abfragen höchstens 11 ms im Median und 18 ms im 99. Perzentil, direkt nach einem Neustart höchstens 34 ms. Dafür wurde die Listenabfrage umgebaut, das Schema blieb. Abweichung vom Plan: 100 Millionen Artikel passten nicht auf die Platte der Messmaschine. Verglichen wurde stattdessen mit 1 Million Artikeln, mit gleichen Zeiten; die Messung mit mehr Daten folgt beim Probelauf auf einer Kopie der Produktion.
+Ergebnis vom 2026-11-10: Das Ziel ist erreicht. Mit 10 Millionen Artikeln brauchen die Abfragen höchstens 11 ms im Median und 18 ms im 99. Perzentil, direkt nach einem Neustart höchstens 34 ms. Dafür wurde die Listenabfrage umgebaut, das Schema blieb. Abweichung vom Plan: 100 Millionen Artikel passten nicht auf die Platte der Messmaschine. Verglichen wurde stattdessen mit 1 Million Artikeln, mit gleichen Zeiten. Die alte Produktion hat mit 707.040 Artikeln weniger als die erfundenen Daten, und an ihr blieben die Abfragen beim Probelauf noch schneller ([implementation.md](implementation.md#probelauf-vom-2026-11-15)).
 
 ## Nach dem Umstieg
 

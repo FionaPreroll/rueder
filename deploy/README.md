@@ -439,6 +439,29 @@ the import stops halfway, run it again. The way back is `before-import.dump`,
 put in as under [Backup](#backup). Afterwards `rueder_old` can go:
 `docker compose exec db dropdb -U rueder rueder_old`.
 
+The import reads the old database at any address it can reach, so a backup
+need not go into rueder's PostgreSQL. If the old rueder's volume is still
+there, the old database can instead run next to rueder in a container of its
+own, with the version that wrote it (PostgreSQL 13, `postgres:13.6-alpine` in
+the old compose file), on rueder's network. PostgreSQL writes to its volume
+when it starts, so it runs on a copy, and nothing of the old rueder may still
+use the volume. `docker volume ls` shows its name, after the folder the old
+compose file ran in:
+
+```sh
+docker volume create rueder3_db_copy
+docker run --rm -v rueder3_db:/from:ro -v rueder3_db_copy:/to postgres:13.6-alpine cp -a /from/. /to/
+docker run -d --name rueder3-db --network rueder_default \
+  -v rueder3_db_copy:/var/lib/postgresql/data postgres:13.6-alpine
+docker exec rueder3-db psql -U postgres -c '\du' -c '\l'   # its users and databases
+export LEGACY_DATABASE_URL="postgres://postgres:postgres@rueder3-db:5432/rueder_production"
+```
+
+User, password and database are the ones the old compose file set. Then stop
+rueder, take the backup and run the import as above. Afterwards the old
+database can go: `docker rm -f rueder3-db` and
+`docker volume rm rueder3_db_copy`.
+
 ## What the container may do
 
 - It holds the program, the frontend and the C library, with no shell and no
