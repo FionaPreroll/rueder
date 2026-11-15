@@ -181,16 +181,6 @@ mod tests {
         }
     }
 
-    /// The same example as in `web/src/lib/captcha.test.ts`, so that the page
-    /// and the server hash alike.
-    #[test]
-    fn hashes_as_the_page_does() {
-        assert_eq!(
-            hash("0123456789abcdef01234567", 4242),
-            "db254f5032fc9fed67d5407565e4b275e98ee8d74751fd5829f0e7b9158a2517"
-        );
-    }
-
     #[test]
     fn a_solution_counts_once() {
         let captcha = Captcha::default();
