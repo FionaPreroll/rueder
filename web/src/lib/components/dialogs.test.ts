@@ -386,7 +386,7 @@ describe('StatusDialog', () => {
 		for (const title of ['Server', 'Database', 'Fetching feeds', 'Feed search', 'Image proxy']) {
 			expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
 		}
-		expect(screen.getByText('31 subscribed, 34 in all')).toBeInTheDocument();
+		expect(screen.getByText('31 fetched, 34 in all')).toBeInTheDocument();
 		expect(screen.getByText('4 open, 3 idle, at most 10')).toBeInTheDocument();
 		expect(screen.getByText('The site answers 403')).toBeInTheDocument();
 		expect(screen.getByText('3 feeds')).toBeInTheDocument();

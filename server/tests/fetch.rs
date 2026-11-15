@@ -18,6 +18,7 @@ use axum::{
     routing::get,
 };
 use rueder::{
+    accounts,
     cleaning::Rules,
     events::Events,
     feeds::Stored,
@@ -391,6 +392,70 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         0
     );
     assert_eq!(site.lock().unwrap().requests, 2);
+}
+
+#[sqlx::test]
+async fn a_feed_only_disabled_accounts_read_rests_until_somebody_reads_it(db: PgPool) {
+    let (url, site) = site(&[("a", "First", "one")]).await;
+    let alone = feed_at(&db, "ada", &url).await;
+    let shared = feed_at(&db, "grace", &url).await;
+    let ada: i32 = sqlx::query_scalar("SELECT id FROM accounts WHERE username = 'ada'")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    common::subscribe(&db, ada, shared).await;
+    // A blocked feed is not fetched anyway, so it does not count.
+    let blocked = common::feed(&db, "blocked").await;
+    common::subscribe(&db, ada, blocked).await;
+    sqlx::query("UPDATE feeds SET blocked_at = now() WHERE id = $1")
+        .bind(blocked)
+        .execute(&db)
+        .await
+        .unwrap();
+    let (client, rules, events) = (client(), rules(), Events::new());
+    let monitor = Arc::new(Monitor::default());
+    let pace = fetch::Pace::default();
+    let round = || fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace);
+
+    // Disabled, ada reads nothing: only the feed grace reads too is fetched.
+    assert_eq!(
+        accounts::set_disabled(&db, "ada", true).await.unwrap(),
+        Some(1)
+    );
+    assert_eq!(round().await.unwrap(), 1);
+    assert_eq!(row(&db, shared).await.get::<i32, _>("last_seq"), 1);
+    assert_eq!(row(&db, alone).await.get::<i32, _>("last_seq"), 0);
+    assert_eq!(round().await.unwrap(), 0);
+
+    // Enabled again, the feed comes back with the next round.
+    assert_eq!(
+        accounts::set_disabled(&db, "ada", false).await.unwrap(),
+        Some(1)
+    );
+    assert_eq!(round().await.unwrap(), 1);
+    assert_eq!(row(&db, alone).await.get::<i32, _>("last_seq"), 1);
+
+    // So it does when somebody else subscribes.
+    sqlx::query("UPDATE feeds SET next_fetch_at = now() WHERE id = $1")
+        .bind(alone)
+        .execute(&db)
+        .await
+        .unwrap();
+    accounts::set_disabled(&db, "ada", true).await.unwrap();
+    assert_eq!(round().await.unwrap(), 0);
+    let linus = common::account(&db, "linus").await;
+    common::subscribe(&db, linus, alone).await;
+    assert_eq!(round().await.unwrap(), 1);
+    // And then ada is not alone with any feed.
+    assert_eq!(
+        accounts::set_disabled(&db, "ada", true).await.unwrap(),
+        Some(0)
+    );
+    assert_eq!(site.lock().unwrap().requests, 3);
+    assert_eq!(
+        accounts::set_disabled(&db, "nobody", true).await.unwrap(),
+        None
+    );
 }
 
 #[sqlx::test]

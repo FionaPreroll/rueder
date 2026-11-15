@@ -220,3 +220,35 @@ async fn the_status_says_how_fast_feeds_are_fetched_and_how_far_behind(db: PgPoo
     let (_, body) = status(&state, Some(&admin)).await;
     assert_eq!(body["fetcher"]["behind_s"], 0.0);
 }
+
+#[sqlx::test]
+async fn feeds_that_are_not_fetched_are_neither_behind_nor_failing(db: PgPool) {
+    let root = common::account(&db, "root").await;
+    accounts::set_admin(&db, "root", true).await.unwrap();
+    common::reader(&db, "grace", 0).await;
+    // Only a disabled account reads one, and another is blocked.
+    common::reader(&db, "ada", 0).await;
+    accounts::set_disabled(&db, "ada", true).await.unwrap();
+    let (_, blocked) = common::reader(&db, "linus", 0).await;
+    sqlx::query("UPDATE feeds SET blocked_at = now() WHERE id = $1")
+        .bind(blocked)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE feeds SET next_fetch_at = now() - interval '20 minutes', fetched_at = now(),
+                          error_message = 'the site answers with 404 Not Found'",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    let state = AppState::new(db.clone());
+    let admin = common::session(&db, root).await;
+
+    let (answer, body) = status(&state, Some(&admin)).await;
+    assert_eq!(answer, StatusCode::OK);
+    assert_eq!(body["counts"]["feeds"], 3);
+    assert_eq!(body["counts"]["subscribed_feeds"], 1);
+    assert_eq!(body["fetcher"]["overdue"], 1);
+    assert_eq!(body["fetcher"]["failing"][0]["feeds"], 1);
+}

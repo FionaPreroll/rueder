@@ -333,6 +333,7 @@ Es gibt keinen Parallelbetrieb: Die alte Produktion ist abgeschaltet, ihre Daten
 - [ ] **4.5 Einmaliger Import in der Produktion.** Server anhalten, Backup, Import, Start. Weg zurück festhalten (das Backup von davor).
 - [ ] **4.6 Lesestand und Labels aus dem Browser.** Das neue Frontend liest nach dem Import die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte und der Browser den Speicher noch hat. Weil der Import nach der Inbetriebnahme kommt, bietet das Frontend die Übernahme an, sobald das Konto importierte Daten hat, nicht beim ersten Login. Wer die Aufbewahrung (5.3) einschaltet, tut es erst danach.
 - [x] **4.7 Abbau.** `backend/`, `frontend/` und `config/` sind entfernt; was 4.4 bis 4.6 vom alten Code brauchen, steht im Commit `0b36a96`.
+- [x] **4.8 Feeds gesperrter Konten ruhen (A18).** Für alte, importierte Konten, die niemand mehr nutzt. Siehe [Konto löschen und sperren](architecture.md#konto-löschen-und-sperren).
 
 ### Schritt 5: Öffentliche Instanz
 
