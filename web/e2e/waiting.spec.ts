@@ -17,10 +17,16 @@ test('what is read and starred without a network arrives once it is back', async
 	context,
 	browser
 }) => {
+	// A new account gets the settings of this browser once they rest a moment.
+	// They would wait as well, so they go out before the network does.
+	const settingsSaved = page.waitForResponse(
+		(response) => response.url().endsWith('/api/settings') && response.request().method() === 'PUT'
+	);
 	await logIn(page, 'waiter');
 	await subscribe(page, 'harbour-waiter', 'Harbour Herald');
 	await node(page, 'Harbour Herald').click();
 	await expect(articles(page)).toHaveCount(12);
+	await settingsSaved;
 
 	await context.setOffline(true);
 	await expect(page.getByRole('button', { name: /^No network since/ })).toBeVisible();
