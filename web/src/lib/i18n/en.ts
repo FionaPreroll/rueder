@@ -81,7 +81,9 @@ const en = {
 		oldestFirst: 'Oldest first',
 		markAllRead: 'Mark all as read',
 		markOptions: 'More ways to mark as read',
-		phoneMenu: (shown: string) => `View and mark as read, showing: ${shown}`,
+		phoneMenu: (shown: string) => `View, showing: ${shown}`,
+		/** The button of a phone that opens the ways to mark as read. */
+		markMenu: 'Mark as read …',
 		markEverything: 'All items',
 		markOlderDay: 'Items older than a day',
 		markOlderWeek: 'Items older than a week',

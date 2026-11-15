@@ -123,19 +123,36 @@ describe('the toolbar', () => {
 		expect(within(sidebar).getByRole('button', { name: /^All items$/ })).toBeInTheDocument();
 	});
 
-	it('puts what to show, the views and marking as read in one menu with words on a phone', async () => {
+	it('puts what to show and the views in one menu with words on a phone', async () => {
 		render(Page);
 		await press('ga');
 		const toolbar = screen.getByRole('main');
 		await userEvent.click(
-			within(toolbar).getByRole('button', { name: 'View and mark as read, showing: All items' })
+			within(toolbar).getByRole('button', { name: 'View, showing: All items' })
 		);
 		await userEvent.click(screen.getByRole('menuitemradio', { name: 'Magazine' }));
 		expect(settings.view).toBe('magazine');
-		await userEvent.click(within(toolbar).getByRole('button', { name: /^View and mark as read/ }));
+		await userEvent.click(within(toolbar).getByRole('button', { name: /^View, showing/ }));
 		expect(screen.getByRole('menuitemradio', { name: 'Unread only' })).toBeInTheDocument();
-		expect(screen.getByRole('menuitem', { name: 'Items older than a day' })).toBeInTheDocument();
+		// Marking as read is not hidden in there.
+		expect(screen.queryByRole('menuitem', { name: 'Items older than a day' })).toBeNull();
 		settings.view = defaults.view;
+	});
+
+	it('marks as read from a button of its own on a phone, after a choice in its menu', async () => {
+		render(Page);
+		await press('ga');
+		const toolbar = screen.getByRole('main');
+		const unread = unreadInTitle();
+		const mark = within(toolbar).getByRole('button', { name: 'Mark as read …' });
+		await userEvent.click(mark);
+		// One tap only opens the menu: nothing is marked yet.
+		expect(unreadInTitle()).toBe(unread);
+		const menu = screen.getByRole('menu');
+		expect(menu).toHaveTextContent('Mark all as read');
+		expect(within(menu).getByRole('menuitem', { name: 'Items older than a week' })).toBeVisible();
+		await userEvent.click(within(menu).getByRole('menuitem', { name: 'All items' }));
+		expect(document.title).toBe('rueder');
 	});
 
 	it('shows unread only, the oldest first, in either view', async () => {
