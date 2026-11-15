@@ -1753,7 +1753,12 @@ export class ServerReader implements Reader {
 		}
 	}
 
-	/** Sends changed settings once they rest a moment; nothing before the account's are loaded. */
+	/**
+	 * Sends changed settings once they rest a moment; nothing before the
+	 * account's are loaded. Like what is read, they wait while the server does
+	 * not answer: they count as saved from here on, so nothing would send them
+	 * again.
+	 */
 	saveSettings(settings: Settings) {
 		if (this.savedSettings === null) return;
 		// What each device keeps for itself does not go to the account.
@@ -1767,7 +1772,8 @@ export class ServerReader implements Reader {
 				this.write(
 					'settings',
 					() => this.api.saveSettings(shared),
-					() => {}
+					() => {},
+					true
 				);
 			},
 			SAVE_SETTINGS_AFTER

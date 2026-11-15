@@ -2516,6 +2516,26 @@ describe('changes without a connection', () => {
 		}
 	});
 
+	it('keep changed settings, and send them once the server answers again', async () => {
+		const reader = await onTech();
+		goAway();
+		try {
+			settings.theme = 'dark';
+			reader.saveSettings({ ...settings });
+			await new Promise((resolve) => setTimeout(resolve, 550));
+			await settle();
+			expect(reader.unsentChanges).toBe(1);
+			expect(reader.notice).toBeNull();
+			expect(server.settings).not.toMatchObject({ theme: 'dark' });
+
+			await comeBack();
+			expect(reader.unsentChanges).toBe(0);
+			expect(server.settings).toMatchObject({ theme: 'dark' });
+		} finally {
+			Object.assign(settings, defaults);
+		}
+	});
+
 	it('take back a change that cannot wait, as before', async () => {
 		const reader = await onTech();
 		goAway();
