@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'\n         WHERE id IN (\n             SELECT f.id FROM feeds f\n             WHERE f.next_fetch_at <= now() AND f.blocked_at IS NULL\n               AND NOT coalesce(lower(substring(f.feed_url FROM '^[^:]*://(?:[^/?#]*@)?([^/?#:]*)')), '') = ANY($3)\n               AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id\n                           WHERE s.feed_id = f.id AND a.disabled_at IS NULL)\n             ORDER BY f.next_fetch_at\n             LIMIT $1\n             FOR UPDATE SKIP LOCKED\n         )\n         RETURNING id, feed_url, error_message IS NOT NULL AS \"failing!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "feed_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "feed_url"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "failing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "681bad4bf47abd9d0350e5a5f18ac4295aece57dfce6763b94c530ed126c83bf"
+}

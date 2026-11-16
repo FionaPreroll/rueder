@@ -6,7 +6,8 @@
 //! - Names are looked up here, every address a name has is checked against
 //!   [`address::internal`], and the connection goes to exactly the addresses that
 //!   were checked. A name cannot pass the check with one address and be
-//!   connected to at another.
+//!   connected to at another. An answer of the resolver is taken again for a
+//!   minute ([`Remembering`]), and checked again each time.
 //! - Redirects are followed here, one at a time, and each target is checked like
 //!   the first address.
 //! - Limits for the time of the whole fetch, the number of redirects and the size
@@ -17,13 +18,14 @@
 pub mod address;
 
 use std::{
+    collections::HashMap,
     error::Error as StdError,
     fmt,
     future::Future,
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::Arc,
-    time::Duration,
+    sync::{Arc, Mutex, PoisonError},
+    time::{Duration, Instant},
 };
 
 use anyhow::Context;
@@ -144,6 +146,58 @@ impl Lookup for SystemLookup {
         Box::pin(async move {
             let addrs = tokio::net::lookup_host((host, 0)).await?;
             Ok(addrs.map(|addr| addr.ip()).collect())
+        })
+    }
+}
+
+/// How long an answer of the resolver is taken again without asking it.
+pub const REMEMBERED: Duration = Duration::from_secs(60);
+/// How many names are remembered at most; with more, those that ran out go,
+/// and if that is not enough, all.
+const MAX_NAMES: usize = 10_000;
+
+/// Takes the answers of a resolver again for [`REMEMBERED`], so that the many
+/// feeds of one host do not each ask it. Only answers are kept, not failures.
+/// What is kept is checked like any answer before it is connected to, so an
+/// address that is not allowed stays refused.
+pub struct Remembering {
+    lookup: Arc<dyn Lookup>,
+    known: Mutex<HashMap<String, (Instant, Vec<IpAddr>)>>,
+}
+
+impl Remembering {
+    pub fn new(lookup: Arc<dyn Lookup>) -> Self {
+        Self {
+            lookup,
+            known: Mutex::default(),
+        }
+    }
+}
+
+impl Lookup for Remembering {
+    fn lookup<'a>(&'a self, host: &'a str) -> Looking<'a> {
+        Box::pin(async move {
+            let known = |now: Instant| {
+                let known = self.known.lock().unwrap_or_else(PoisonError::into_inner);
+                known
+                    .get(host)
+                    .filter(|(at, _)| now.duration_since(*at) < REMEMBERED)
+                    .map(|(_, addrs)| addrs.clone())
+            };
+            if let Some(addrs) = known(Instant::now()) {
+                return Ok(addrs);
+            }
+            let addrs = self.lookup.lookup(host).await?;
+            let now = Instant::now();
+            let mut known = self.known.lock().unwrap_or_else(PoisonError::into_inner);
+            if known.len() >= MAX_NAMES {
+                known.retain(|_, (at, _)| now.duration_since(*at) < REMEMBERED);
+                if known.len() >= MAX_NAMES {
+                    known.clear();
+                }
+            }
+            known.insert(host.to_owned(), (now, addrs.clone()));
+            Ok(addrs)
         })
     }
 }
@@ -287,9 +341,11 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    /// A client that looks names up with the operating system's resolver.
+    /// A client that looks names up with the operating system's resolver,
+    /// taking its answers again for a while ([`Remembering`]).
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        Self::with_lookup(config, Arc::new(SystemLookup))
+        let lookup = Remembering::new(Arc::new(SystemLookup));
+        Self::with_lookup(config, Arc::new(lookup))
     }
 
     /// A client that looks names up with `lookup`.
