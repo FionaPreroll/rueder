@@ -337,6 +337,9 @@ enum BenchCommand {
         /// Under how many names the source answers; one fetch runs per name.
         #[arg(long, default_value_t = 250)]
         hosts: u32,
+        /// Feeds of one more name, which answers half a second late.
+        #[arg(long, default_value_t = 0)]
+        slow: u32,
         #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..=3600))]
         seconds: u64,
         #[arg(long, default_value_t = 39_871)]
@@ -424,12 +427,14 @@ async fn main() -> anyhow::Result<()> {
         Command::Bench(BenchCommand::Fetch {
             feeds,
             hosts,
+            slow,
             seconds,
             port,
         }) => {
             let options = bench::fetching::Options {
                 feeds,
                 hosts,
+                slow,
                 seconds,
                 port,
                 pace: fetch::Pace::from_env()?,

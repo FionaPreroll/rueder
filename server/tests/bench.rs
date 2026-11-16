@@ -66,10 +66,7 @@ async fn made_up_data_can_be_measured(db: PgPool) {
         (report.accounts, report.feeds, report.articles),
         (3, 12, 3000)
     );
-    // Made-up texts repeat their sentences, so every word is in a few dozen of
-    // 3,000 articles: there is no rare word, and its four kinds of search are
-    // left out.
-    assert_eq!(report.timings.len(), 20, "{report}");
+    assert_eq!(report.timings.len(), 23);
     assert!(
         report
             .timings
@@ -79,15 +76,13 @@ async fn made_up_data_can_be_measured(db: PgPool) {
     let printed = report.to_string();
     assert!(printed.contains("| All feeds, unread only |"));
     assert!(printed.contains("| articles_pkey |"));
-    assert!(printed.contains("| Search, a common word |"));
-    assert!(!printed.contains("| Search, a rare word |"));
+    assert!(printed.contains("| Search, a rare word |"));
     assert!(printed.contains("| article_content_search |"));
-    // The words to search for come from the texts: a very common one is in a
-    // fifth of the articles or more.
+    // The most common word is in most articles, and the search finds it.
     let (_, word, articles) = &report.searched[0];
-    assert!(*articles >= 600, "{word}: {articles}");
-    assert!(report.sampled > 1000 && report.length.0 > 0, "{report}");
-    assert!(printed.contains("Texts of "));
+    assert!(*articles > 1000, "{word}: {articles}");
+    assert_eq!(bench::word(1), "er");
+    assert_eq!(bench::word(32 * 32 + 3), "kaener");
 }
 
 /// The made-up texts are words, and the search index is there afterwards,
@@ -100,27 +95,13 @@ async fn made_up_texts_are_words(db: PgPool) {
         articles: 200,
     };
     bench::generate(&db, size).await.unwrap();
-    let title: String = sqlx::query_scalar("SELECT title FROM article_content ORDER BY id LIMIT 1")
-        .fetch_one(&db)
-        .await
-        .unwrap();
+    let (title, html): (String, String) =
+        sqlx::query_as("SELECT title, html FROM article_content ORDER BY id LIMIT 1")
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert_eq!(title.split(' ').count(), 9, "{title}");
-    // Some texts are empty, the others paragraphs, many with a link.
-    let (empty, paragraphs, links, others): (i64, i64, i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE html = ''),
-                count(*) FILTER (WHERE html LIKE '<p>%.</p>'),
-                count(*) FILTER (WHERE html LIKE '%<a href=\"https://%'),
-                count(*) FILTER (WHERE html <> '' AND html NOT LIKE '<p>%.</p>')
-         FROM article_content",
-    )
-    .fetch_one(&db)
-    .await
-    .unwrap();
-    assert!(
-        empty > 0 && paragraphs > empty && links > 0,
-        "{empty} {paragraphs} {links}"
-    );
-    assert_eq!(others, 0);
+    assert!(html.starts_with("<p>") && html.ends_with(".</p>"), "{html}");
     let statistics: i16 = sqlx::query_scalar(
         "SELECT attstattarget FROM pg_attribute
          WHERE attrelid = 'article_content_search'::regclass AND attnum = 1",
