@@ -854,29 +854,3 @@ async fn an_article_under_a_new_id_is_not_new_again(db: PgPool) {
     assert_eq!(versions.len(), 1);
     assert!(versions[0].original.content.contains("news.example/a1"));
 }
-
-#[sqlx::test]
-async fn only_the_newest_articles_are_compared_by_title_and_date(db: PgPool) {
-    let within = usize::try_from(feeds::SAME_WITHIN).unwrap();
-    let (_, feed) = common::reader(&db, "ada", within + 1).await;
-    let again = |n: usize| {
-        let mut article = common::article(n);
-        article.guid = format!("new-id-{n}");
-        article
-    };
-    let mut tx = db.begin().await.unwrap();
-    // Article 2 is the oldest of the newest ones, article 1 is beyond them.
-    let stored = feeds::store(&mut tx, feed, &[again(1), again(2)])
-        .await
-        .unwrap();
-    tx.commit().await.unwrap();
-    assert_eq!(stored.new, 1);
-    let guid: String = sqlx::query_scalar(
-        "SELECT guid FROM article_content WHERE feed_id = $1 ORDER BY seq DESC LIMIT 1",
-    )
-    .bind(feed)
-    .fetch_one(&db)
-    .await
-    .unwrap();
-    assert_eq!(guid, "new-id-1");
-}

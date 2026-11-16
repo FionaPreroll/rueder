@@ -844,22 +844,22 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
     });
     // Fetches whose entries all come under ids the feed does not know, as
     // Google News sends them, compared by title and date with the feed's
-    // newest articles.
+    // articles.
     let mut fetches = Vec::new();
     for _ in 0..20 {
         let sub = random.pick(&subs);
-        fetches.push((sub.feed_id, sub.last_seq, renamed(db, sub.feed_id).await?));
+        fetches.push((sub.feed_id, renamed(db, sub.feed_id).await?));
     }
     let largest_fetch = renamed(db, largest.feed_id).await?;
     let largest_fetch: Vec<_> = largest_fetch.iter().collect();
     let mut conn = db.acquire().await?;
     time!("Fetch, 100 new ids by title and date", {
-        let (feed_id, last_seq, entries) = random.pick_ref(&fetches);
+        let (feed_id, entries) = random.pick_ref(&fetches);
         let entries: Vec<_> = entries.iter().collect();
-        feeds::same_as_recent(&mut conn, *feed_id, *last_seq, &entries).await?
+        feeds::same_in_feed(&mut conn, *feed_id, &entries).await?
     });
     time!("Fetch, 100 new ids by title and date, largest feed", {
-        feeds::same_as_recent(&mut conn, largest.feed_id, largest.last_seq, &largest_fetch).await?
+        feeds::same_in_feed(&mut conn, largest.feed_id, &largest_fetch).await?
     });
     drop(conn);
     // Searches, each kind with words of its own frequency, for a random

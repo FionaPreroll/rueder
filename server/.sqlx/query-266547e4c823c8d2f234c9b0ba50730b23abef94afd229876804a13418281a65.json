@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT title, published_at FROM articles\n         WHERE feed_id = $1 AND seq > $2 AND published_at = ANY($3)",
+  "query": "SELECT title, published_at FROM articles\n         WHERE feed_id = $1 AND published_at = ANY($2) AND title = ANY($3)",
   "describe": {
     "columns": [
       {
@@ -29,8 +29,8 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Int4",
-        "TimestamptzArray"
+        "TimestamptzArray",
+        "TextArray"
       ]
     },
     "nullable": [
@@ -38,5 +38,5 @@
       false
     ]
   },
-  "hash": "320ce059d7b09443840d022f220010ee95ea5797f094df7ee56fdd531ddfb015"
+  "hash": "266547e4c823c8d2f234c9b0ba50730b23abef94afd229876804a13418281a65"
 }

@@ -5,7 +5,7 @@
 //! Atom 1.0):
 //! with the id it has in its feed, the text as it came (kept as the version) and
 //! the text cleaned for reading (see [`crate::cleaning`]). [`store`] then sorts
-//! out what the feed already has: unknown ids are new articles, unless a new
+//! out what the feed already has: unknown ids are new articles, unless an
 //! article of the feed has the same title and date; known ones that read
 //! differently get a new version, the rest is left alone.
 
@@ -313,13 +313,10 @@ pub async fn store(
     feed_id: i32,
     articles: &[NewArticle],
 ) -> anyhow::Result<Stored> {
-    let last_seq = sqlx::query_scalar!(
-        "SELECT last_seq FROM feeds WHERE id = $1 FOR UPDATE",
-        feed_id
-    )
-    .fetch_optional(&mut *conn)
-    .await?
-    .with_context(|| format!("no feed {feed_id}"))?;
+    sqlx::query_scalar!("SELECT id FROM feeds WHERE id = $1 FOR UPDATE", feed_id)
+        .fetch_optional(&mut *conn)
+        .await?
+        .with_context(|| format!("no feed {feed_id}"))?;
 
     let hashes: Vec<Vec<u8>> = articles
         .iter()
@@ -354,7 +351,7 @@ pub async fn store(
         .filter(|(_, hash)| !known.contains_key(*hash) && !gone.contains(*hash))
         .map(|(article, _)| article)
         .collect();
-    let mut seen_as = same_as_recent(conn, feed_id, last_seq, &unknown).await?;
+    let mut seen_as = same_in_feed(conn, feed_id, &unknown).await?;
 
     let mut stored = Stored::default();
     let mut new = Vec::new();
@@ -412,11 +409,6 @@ pub async fn store(
     Ok(stored)
 }
 
-/// How far back [`store`] looks for an article that comes under a new id: the
-/// newest this many of its feed. Copies in the feeds of Google News came at
-/// most 448 articles apart (`docs/implementation.md`, Messung).
-pub const SAME_WITHIN: i32 = 1000;
-
 /// What tells an article apart where its id does not: its title and its date.
 /// Google News gives an article a new id with every fetch. Two articles of one
 /// feed with the same title at the same second are one, but only where the
@@ -431,33 +423,33 @@ fn same_as(article: &NewArticle) -> Option<(String, i128)> {
     })
 }
 
-/// Title and date, as [`same_as`] gives them, of those of the newest
-/// [`SAME_WITHIN`] articles of the feed that have the date of one of these.
-/// Reads them by the feed's numbers, which the newest articles have in the
-/// cache; see `docs/implementation.md`, Messung.
-pub async fn same_as_recent(
+/// Title and date, as [`same_as`] gives them, of the feed's articles that have
+/// the date of one of these.
+pub async fn same_in_feed(
     conn: &mut PgConnection,
     feed_id: i32,
-    last_seq: i32,
     articles: &[&NewArticle],
 ) -> anyhow::Result<HashSet<(String, i128)>> {
-    let dates: Vec<_> = articles
+    let (titles, dates): (Vec<_>, Vec<_>) = articles
         .iter()
-        .filter_map(|article| same_as(article).map(|_| article.published_at))
-        .collect();
+        .filter(|article| same_as(article).is_some())
+        .map(|article| (article.original.title.clone(), article.published_at))
+        .unzip();
     if dates.is_empty() {
         return Ok(HashSet::new());
     }
-    let recent = sqlx::query!(
+    // A pair of a title and a date of two different entries comes along as
+    // well, and is never asked for.
+    let dated = sqlx::query!(
         "SELECT title, published_at FROM articles
-         WHERE feed_id = $1 AND seq > $2 AND published_at = ANY($3)",
+         WHERE feed_id = $1 AND published_at = ANY($2) AND title = ANY($3)",
         feed_id,
-        last_seq - SAME_WITHIN,
         &dates,
+        &titles,
     )
     .fetch_all(&mut *conn)
     .await?;
-    Ok(recent
+    Ok(dated
         .into_iter()
         .map(|row| (row.title, row.published_at.unix_timestamp_nanos()))
         .collect())

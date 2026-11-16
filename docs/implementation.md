@@ -857,6 +857,25 @@ Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder 
 - **Migration:** 235 s für 710.000 erfundene Artikel, rund 200 s an den echten Daten. So lange startet der Server beim Update nicht. Die Datenbank wuchs an den echten Daten zwischendurch um 1,2 GB, weil PostgreSQL die Tabelle neu schreibt, bevor die alte Kopie wegfällt.
 - **Listen, Artikel und Speichern** werden nicht langsamer. An den echten Daten brauchen 20 neue Artikel im Median 16,8 statt 18,0 ms; davon fällt mehr auf den Teil ohne den Index (6,9 statt 4,2 ms), weil die Wörter jetzt in der Tabelle bestimmt werden und nicht mehr im Index.
 
+### Duplikate vom 2026-11-16
+
+Paket 5.42: wie rueder einen Artikel erkennt, dem der Feed bei jedem Abruf eine neue Kennung gibt, und was das kostet. Ergebnis: Mit einem Index auf Feed und Datum kostet das Nachschlagen 0,3 ms je Abruf, auch mit kaltem Cache rund 1 ms; ohne Index las jeder Abruf rund 1.000 Seiten der Tabelle. Entschieden von Fiona am 2026-11-16.
+
+- **Echte Daten:** ein Feed eines Themas von Google News in der Produktion, mit lesenden Abfragen von Fiona: 27.143 Artikel, 3.921 mit einem Titel, den es im Feed schon gab, 2.892 davon mit gleichem Datum. Der Feed wird alle 30 Minuten abgerufen. Seit November kamen drei Artikel je 18-mal, einer je Abruf, mit jedes Mal neuer GUID. Diese Kennungen enthalten seit 2024 nicht mehr die Adresse des Artikels. Die von 2021 und 2022 enthielten sie noch, und an ihnen ist zu sehen, dass derselbe Titel an verschiedenen Tagen verschiedene Artikel sind, etwa die Termine einer Veranstaltung. Kopien mit gleichem Titel und Datum lagen höchstens 448 Artikel auseinander, bis auf einen Ausreißer mit 15.093. Auch der alte rueder hatte solche Kopien, 100 bis 230 im Monat, obwohl er sich als Chrome ausgab.
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher, virtuelle Platte, PostgreSQL 16.15 mit `shared_buffers = 2GB`, Release-Build.
+- **Daten:** `rueder bench generate --articles 2000000`: 10 Konten, 300 Feeds, 2.000.000 Artikel, der größte Feed mit 318.563.
+- **Messung:** `rueder bench measure`, je 500-mal ein Abruf mit 100 Einträgen unter unbekannten Kennungen, die Hälfte mit Titel und Datum eines der neuesten Artikel des Feeds, einmal für einen zufälligen Feed und einmal für den größten. Mit kaltem Cache `EXPLAIN (ANALYZE, BUFFERS)` derselben Abfrage für vier Feeds, nach einem Neustart von PostgreSQL mit geleertem Cache des Betriebssystems.
+
+| Weg | Warm, ein Feed: Median, p99 | Warm, größter Feed | Kalt | Seiten von der Platte, kalt |
+|---|---:|---:|---:|---:|
+| Index auf Feed und Datum (gebaut) | 0,35 ms, 0,65 ms | 0,31 ms | rund 1 ms | 2 bis 3 |
+| Ohne Index, die neuesten 1.000 über die Nummern | 1,7 ms, 4,0 ms | 0,9 ms | 25 ms bis 1 s | 470 bis 950 |
+| Ohne Index, der ganze Feed | 4,9 ms, 440 ms | 414 ms | – | – |
+
+- **Ohne Index liegt jeder Artikel auf einer eigenen Seite.** Die Artikel aller Feeds treffen gemischt ein. Von den 1.000 neuesten Artikeln eines kleinen Feeds liegt deshalb fast jeder auf einer eigenen Seite, zusammen rund 8 MB, beim größten Feed sind es rund 340 Seiten. Bei vielen Feeds passen diese Seiten nicht mehr in den Cache. Der Index fragt nur nach den Daten der Einträge, die neuesten liegen beieinander.
+- **Schreiben.** 20 neue Artikel zu speichern brauchte mit dem Index 20,7 ms im Median und 84,7 ms im 95. Perzentil, ohne ihn 25,5 und 83,5 ms; der Unterschied geht in der Streuung unter, die der Index der Suche macht. Ohne den Index der Suche waren es 5,7 und 6,0 ms.
+- **Platz und Migration.** Der Index braucht 61 MB für 2 Millionen Artikel, rund 30 Byte je Artikel, und entstand in 1,1 Sekunden.
+
 ## Wissen über das Altsystem
 
 Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.
