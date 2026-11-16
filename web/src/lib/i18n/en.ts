@@ -105,7 +105,7 @@ const en = {
 			`${n(count)}${more ? '+' : ''} ${plural(count, { one: 'article', other: 'articles' })} with “${words}”`,
 		searchAll: 'Search all feeds',
 		feedFailing:
-			'rueder tries again with the next round. If it keeps failing, the feed may have moved.',
+			'rueder tries again later, and waits longer after each failure or as long as the site asks. If it keeps failing, the feed may have moved.',
 		hiddenNote: 'Your filter rules hid these articles. Open one to see which rule it was.',
 		toRules: 'Filter rules',
 		emptyFeed: 'This feed has no articles yet.',

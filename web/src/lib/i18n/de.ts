@@ -101,7 +101,7 @@ const de: Messages = {
 		found: (count, more, words) => `${n(count)}${more ? '+' : ''} Artikel mit „${words}“`,
 		searchAll: 'In allen Feeds suchen',
 		feedFailing:
-			'rueder versucht es mit der nächsten Runde wieder. Scheitert es weiter, ist der Feed vielleicht umgezogen.',
+			'rueder versucht es später wieder und wartet nach jedem Fehlschlag länger, oder so lange, wie die Seite bittet. Scheitert es weiter, ist der Feed vielleicht umgezogen.',
 		hiddenNote:
 			'Deine Filterregeln haben diese Artikel ausgeblendet. Öffne einen, um zu sehen, welche Regel es war.',
 		toRules: 'Filterregeln',

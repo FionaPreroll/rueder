@@ -36,6 +36,8 @@ fn rules() -> Arc<Rules> {
 struct Site {
     body: String,
     status: StatusCode,
+    /// What the site says in `Retry-After`, if anything.
+    retry_after: Option<&'static str>,
     requests: usize,
     /// Requests that said which copy the caller has.
     conditional: usize,
@@ -62,7 +64,12 @@ async fn feed_xml(State(site): State<Shared>, headers: HeaderMap) -> Response {
             return StatusCode::NOT_MODIFIED.into_response();
         }
     }
-    (site.status, [(header::ETAG, etag)], site.body.clone()).into_response()
+    let mut response = (site.status, [(header::ETAG, etag)], site.body.clone()).into_response();
+    if let Some(after) = site.retry_after {
+        let after = header::HeaderValue::from_static(after);
+        response.headers_mut().insert(header::RETRY_AFTER, after);
+    }
+    response
 }
 
 fn rss(entries: &[(&str, &str, &str)]) -> String {
@@ -85,6 +92,7 @@ async fn site(entries: &[(&str, &str, &str)]) -> (String, Shared) {
     let site = Arc::new(Mutex::new(Site {
         body: rss(entries),
         status: StatusCode::OK,
+        retry_after: None,
         requests: 0,
         conditional: 0,
         agents: Vec::new(),
@@ -286,6 +294,58 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
     let state = row(&db, feed).await;
     assert_eq!(state.get::<Option<String>, _>("error_message"), None);
     assert_eq!(state.get::<i32, _>("fetch_interval_s"), 3600);
+}
+
+#[sqlx::test]
+async fn a_site_that_is_asked_too_often_is_asked_less_often_for_a_while(db: PgPool) {
+    let (url, site) = site(&[("a", "First", "one")]).await;
+    let feed = feed_at(&db, "ada", &url).await;
+    let client = client();
+
+    // The site says to come back in three hours, later than twice the interval.
+    {
+        let mut site = site.lock().unwrap();
+        site.status = StatusCode::TOO_MANY_REQUESTS;
+        site.retry_after = Some("10800");
+    }
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome,
+        Outcome::Failed("the site answers with 429 Too Many Requests".to_owned())
+    );
+    let state = row(&db, feed).await;
+    assert_eq!(state.get::<i32, _>("fetch_interval_s"), 7200);
+    assert!(state.get::<f64, _>("wait") > 10700.0);
+
+    // It works again, and the feed keeps the longer interval for a while
+    // instead of asking as often as the site found too often.
+    {
+        let mut site = site.lock().unwrap();
+        site.status = StatusCode::OK;
+        site.retry_after = None;
+    }
+    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
+    assert!(matches!(outcome, Outcome::Fetched(_)), "{outcome:?}");
+    let state = row(&db, feed).await;
+    assert_eq!(state.get::<Option<String>, _>("error_message"), None);
+    assert_eq!(state.get::<i32, _>("fetch_interval_s"), 7200);
+
+    // After that time the next success shortens it again.
+    sqlx::query("UPDATE feeds SET limited_at = limited_at - $2 WHERE id = $1")
+        .bind(feed)
+        .bind(fetch::LIMITED_FOR)
+        .execute(&db)
+        .await
+        .unwrap();
+    site.lock().unwrap().body = rss(&[("a", "First", "one"), ("b", "Second", "two")]);
+    fetch::fetch_feed(&db, &client, &rules(), feed)
+        .await
+        .unwrap();
+    assert_eq!(row(&db, feed).await.get::<i32, _>("fetch_interval_s"), 3600);
 }
 
 #[sqlx::test]
