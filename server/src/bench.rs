@@ -21,10 +21,11 @@ use std::{
 
 use anyhow::{Context, bail};
 use sqlx::PgPool;
+use time::OffsetDateTime;
 
 use crate::{
     articles::{self, NewArticle, Original, Page},
-    reading, search,
+    feeds, reading, search,
 };
 
 /// How much to make up.
@@ -532,6 +533,45 @@ impl fmt::Display for Report {
     }
 }
 
+/// 100 entries of a fetch of a feed, all under ids it does not know: half with
+/// the title and date of one of its newest articles, half new.
+async fn renamed(db: &PgPool, feed_id: i32) -> anyhow::Result<Vec<NewArticle>> {
+    let newest: Vec<(String, OffsetDateTime)> = sqlx::query_as(
+        "SELECT title, published_at FROM articles WHERE feed_id = $1 ORDER BY seq DESC LIMIT 50",
+    )
+    .bind(feed_id)
+    .fetch_all(db)
+    .await?;
+    let fetched_at = OffsetDateTime::now_utc();
+    let made_up = (1..=50).map(|n| {
+        let at = fetched_at - time::Duration::hours(n);
+        (format!("Made up {n}"), at)
+    });
+    Ok(newest
+        .into_iter()
+        .chain(made_up)
+        .enumerate()
+        .map(|(n, (title, published_at))| NewArticle {
+            guid: format!("renamed-{n}"),
+            published_at,
+            fetched_at,
+            original: Original {
+                title,
+                content: String::new(),
+                authors: Vec::new(),
+                tags: Vec::new(),
+                url: None,
+            },
+            teaser: String::new(),
+            thumbnail_url: None,
+            html: String::new(),
+            enclosures: serde_json::Value::Null,
+            image_url: None,
+            image_title: None,
+        })
+        .collect())
+}
+
 /// Articles looked at to tell what the texts of a database are like.
 const SAMPLE: i64 = 2000;
 /// Words of the sample that are counted in the whole database to find rare
@@ -802,6 +842,26 @@ pub async fn measure(db: &PgPool, runs: usize) -> anyhow::Result<Report> {
         .fetch_all(db)
         .await?
     });
+    // Fetches whose entries all come under ids the feed does not know, as
+    // Google News sends them, compared by title and date with the feed's
+    // newest articles.
+    let mut fetches = Vec::new();
+    for _ in 0..20 {
+        let sub = random.pick(&subs);
+        fetches.push((sub.feed_id, sub.last_seq, renamed(db, sub.feed_id).await?));
+    }
+    let largest_fetch = renamed(db, largest.feed_id).await?;
+    let largest_fetch: Vec<_> = largest_fetch.iter().collect();
+    let mut conn = db.acquire().await?;
+    time!("Fetch, 100 new ids by title and date", {
+        let (feed_id, last_seq, entries) = random.pick_ref(&fetches);
+        let entries: Vec<_> = entries.iter().collect();
+        feeds::same_as_recent(&mut conn, *feed_id, *last_seq, &entries).await?
+    });
+    time!("Fetch, 100 new ids by title and date, largest feed", {
+        feeds::same_as_recent(&mut conn, largest.feed_id, largest.last_seq, &largest_fetch).await?
+    });
+    drop(conn);
     // Searches, each kind with words of its own frequency, for a random
     // account in all its feeds. A kind the database has no word of is left out.
     let sample = Texts::sample(db).await?;

@@ -788,3 +788,95 @@ fn an_author_with_an_address_keeps_only_the_name() {
         assert_eq!(authors, &expected, "{written}");
     }
 }
+
+/// Like `rss`, with a date for each entry as (id, title, date); an empty date
+/// leaves it out. The text names the id, as the links in Google's texts do.
+fn dated(entries: &[(&str, &str, &str)]) -> Vec<u8> {
+    let items: String = entries
+        .iter()
+        .map(|(id, title, date)| {
+            let date = if date.is_empty() {
+                String::new()
+            } else {
+                format!("<pubDate>{date}</pubDate>")
+            };
+            format!(
+                "<item><guid>{id}</guid><title>{title}</title>{date}\
+                 <link>https://news.example/{id}</link>\
+                 <description><![CDATA[<a href=\"https://news.example/{id}\">{title}</a>]]></description></item>"
+            )
+        })
+        .collect();
+    format!(
+        "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>News</title>\
+         <link>https://news.example/</link>{items}</channel></rss>"
+    )
+    .into_bytes()
+}
+
+#[sqlx::test]
+async fn an_article_under_a_new_id_is_not_new_again(db: PgPool) {
+    let (account, feed) = common::reader(&db, "ada", 0).await;
+    let store = async |entries: &[(&str, &str, &str)]| {
+        let parsed = parse(&dated(entries));
+        let mut tx = db.begin().await.unwrap();
+        let stored = feeds::store(&mut tx, feed, &parsed.articles).await.unwrap();
+        tx.commit().await.unwrap();
+        stored.new
+    };
+    let sunday = "Sun, 08 Nov 2026 19:15:00 +0000";
+    let monday = "Mon, 09 Nov 2026 19:15:00 +0000";
+    assert_eq!(store(&[("a1", "Dackel", monday)]).await, 1);
+    // Google News: the same article under a new id on every fetch, and in one
+    // fetch even twice.
+    assert_eq!(store(&[("a2", "Dackel", monday)]).await, 0);
+    assert_eq!(
+        store(&[("a3", "Dackel", monday), ("a4", "Dackel", monday)]).await,
+        0
+    );
+    assert_eq!(
+        store(&[("b1", "Baustellen", monday), ("b2", "Baustellen", monday)]).await,
+        1
+    );
+    // The same title on another day is another article, as the same event is
+    // on every day it takes place.
+    assert_eq!(store(&[("a5", "Dackel", sunday)]).await, 1);
+    // Without a date only the id tells them apart, and without a title too.
+    assert_eq!(store(&[("c1", "Ohne Datum", "")]).await, 1);
+    assert_eq!(
+        store(&[("c2", "Ohne Datum", ""), ("c3", "Ohne Datum", "")]).await,
+        2
+    );
+    assert_eq!(store(&[("d1", "", monday), ("d2", "", monday)]).await, 2);
+
+    // The copies left the first one as it was: no new version.
+    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    assert_eq!(versions.len(), 1);
+    assert!(versions[0].original.content.contains("news.example/a1"));
+}
+
+#[sqlx::test]
+async fn only_the_newest_articles_are_compared_by_title_and_date(db: PgPool) {
+    let within = usize::try_from(feeds::SAME_WITHIN).unwrap();
+    let (_, feed) = common::reader(&db, "ada", within + 1).await;
+    let again = |n: usize| {
+        let mut article = common::article(n);
+        article.guid = format!("new-id-{n}");
+        article
+    };
+    let mut tx = db.begin().await.unwrap();
+    // Article 2 is the oldest of the newest ones, article 1 is beyond them.
+    let stored = feeds::store(&mut tx, feed, &[again(1), again(2)])
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(stored.new, 1);
+    let guid: String = sqlx::query_scalar(
+        "SELECT guid FROM article_content WHERE feed_id = $1 ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(feed)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(guid, "new-id-1");
+}

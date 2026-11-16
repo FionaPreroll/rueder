@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) und für 100.000 Konten auf einer Maschine 5.33 bis 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.33 bis 5.36, für den Support 5.40 (Feed-Infos) und 5.41 (User-Agent nur für Admins) |
 
 Was es gibt:
 
@@ -383,6 +383,12 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.37 Messen in der Form des alten Bestands.** Siehe [Suche vom 2026-11-15](#suche-vom-2026-11-15).
 - [x] **5.38 Gespeicherte Wörter für die Suche.** Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
 - [x] **5.39 Fortschritt langer Läufe.** Migrationen, `import-legacy` und `reclean` sagen im Log regelmäßig, wie weit sie sind (`server/src/progress.rs`).
+- [ ] **5.40 Feed-Infos.** Im Menü eines Feeds öffnet „Feed-Infos …“ einen Dialog mit Nummer, Feed-Adresse, Website, User-Agent, letztem Abruf, letztem Fehler und nächstem Abruf, dazu „Kopieren“ für eine Nachricht an den Support. Jeder Abonnent sieht das für seine eigenen Feeds (`GET /api/feeds/{id}/info`), auch in der Demo; über andere Konten steht darin nichts. Für den Betreiber zeigt `rueder feed show <Nummer oder Adresse>` dasselbe und die Zahl der Abonnenten, ohne Namen, auch für Feeds, die er nicht liest. Fertig, wenn:
+  - ein Test zeigt, dass ein Konto, das den Feed nicht liest, nichts davon sieht;
+  - der Dialog in beiden Readern und in beiden Sprachen da ist.
+- [ ] **5.41 User-Agent je Feed nur für Admins.** Siehe [Detailfragen](plan.md#detailfragen). Den Schalter im Dialog aus 5.40 und `PUT /api/feeds/{id}/agent` haben nur Admins, `rueder feed agent <Nummer oder Adresse> browser|rueder` schaltet auch Feeds um, die der Betreiber nicht liest. Der Import eines Kontos übernimmt den User-Agent eines neuen Feeds aus der Datei nur, wenn ein Admin importiert. Fertig, wenn:
+  - ein Test zeigt, dass ein Abonnent ohne Admin-Recht nichts umstellt, auch nicht über den Import.
+- [x] **5.42 Duplikate unter neuer Kennung.** Siehe [Abruf](architecture.md#abruf) und [Duplikate vom 2026-11-16](#duplikate-vom-2026-11-16).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -396,6 +402,7 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **Drossel für Registrierungen (5.29):** Je Netz 5 Versuche auf einmal und dann einer alle 12 Minuten statt der vorgeschlagenen 3 und einer alle 20 Minuten, weil ein vergebener Name ebenso zählt und sich viele Leser im Mobilfunk eine IPv4-Adresse teilen. Der Topf des ganzen Servers zählt Versuche mit einer gültigen Lösung auch dann, wenn sie danach aus anderem Grund abgewiesen werden.
 - **Captcha (5.28):** Die Höchstzahl ist 100.000 und eine Aufgabe gilt fünf Minuten; im Speicher stehen höchstens 100.000 benutzte. Die Seite rechnet in einem Strang, ohne Worker, und der Knopf sagt derweil „Dieser Browser wird geprüft …“. Zählt eine Lösung nicht, etwa nach einem Neustart des Servers mitten im Rechnen, bittet die Seite, es noch einmal zu versuchen, statt selbst eine neue Aufgabe zu holen. Das Wort der Ablehnung ist `captcha`, wie der Schalter.
 - **Lastmessung (5.30):** Die Lasttests sind Node ohne Pakete in `web/load/`, neben den Werkzeugen der Tests im Browser, statt ein zweites Programm in Rust. `rueder bench readers` schreibt die Tokens der Sitzungen in eine Datei, damit ein Lasttest nicht für jeden Leser ein Passwort hashen lässt, und lehnt jede Datenbank mit einem Konto ab, das keine erfundenen Daten gemacht haben.
+- **Duplikate (5.42):** Ein Eintrag ohne Titel wird nur an seiner Kennung erkannt, auch mit Datum.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später

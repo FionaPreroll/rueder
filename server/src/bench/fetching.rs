@@ -30,6 +30,7 @@ use axum::{
     routing::get,
 };
 use sqlx::PgPool;
+use time::{OffsetDateTime, format_description::well_known::Rfc2822, macros::datetime};
 use tokio::{net::TcpListener, task::JoinSet};
 
 use crate::{
@@ -83,6 +84,9 @@ fn slow_url(options: &Options, n: u32) -> String {
     format!("http://{SLOW_HOST}:{}/feed/{}", options.port, MAX_FEEDS + n)
 }
 
+/// The date of every feed's first article.
+const FIRST_DATE: OffsetDateTime = datetime!(2026-01-01 0:00 UTC);
+
 /// When the source started: the feeds grow by the minute from then on.
 #[derive(Clone)]
 struct Source {
@@ -115,11 +119,15 @@ async fn feed(State(source): State<Source>, Path(n): Path<u32>, headers: HeaderM
         return StatusCode::NOT_MODIFIED.into_response();
     }
     let mut items = String::new();
-    // The newest 20, as feeds keep only their latest.
+    // The newest 20, as feeds keep only their latest, a minute apart, as
+    // their new ones come.
     for seq in (count.saturating_sub(20) + 1..=count).rev() {
+        let date = (FIRST_DATE + time::Duration::minutes(seq.cast_signed()))
+            .format(&Rfc2822)
+            .unwrap_or_default();
         items.push_str(&format!(
             "<item><guid>feed-{n}-{seq}</guid><title>Report {seq} of feed {n}</title>\
-             <link>https://feed-{n}.example/{seq}?utm_source=rss</link>\
+             <pubDate>{date}</pubDate><link>https://feed-{n}.example/{seq}?utm_source=rss</link>\
              <description><![CDATA[<p>The council met again on {seq} and talked for a long \
              time about the budget, the roads and the new school. Nothing was decided, but \
              everybody agreed to meet again next week.</p>\

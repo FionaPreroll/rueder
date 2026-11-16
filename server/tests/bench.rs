@@ -69,7 +69,7 @@ async fn made_up_data_can_be_measured(db: PgPool) {
     // Made-up texts repeat their sentences, so every word is in a few dozen of
     // 3,000 articles: there is no rare word, and its four kinds of search are
     // left out.
-    assert_eq!(report.timings.len(), 20, "{report}");
+    assert_eq!(report.timings.len(), 22, "{report}");
     assert!(
         report
             .timings
@@ -78,6 +78,7 @@ async fn made_up_data_can_be_measured(db: PgPool) {
     );
     let printed = report.to_string();
     assert!(printed.contains("| All feeds, unread only |"));
+    assert!(printed.contains("| Fetch, 100 new ids by title and date |"));
     assert!(printed.contains("| articles_pkey |"));
     assert!(printed.contains("| Search, a common word |"));
     assert!(!printed.contains("| Search, a rare word |"));
