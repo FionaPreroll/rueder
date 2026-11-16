@@ -21,7 +21,8 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    reclean, registration, reports, retention, router, second_factor, sessions, transfer, version,
+    progress, reclean, registration, reports, retention, router, second_factor, sessions, transfer,
+    version,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -381,10 +382,7 @@ async fn main() -> anyhow::Result<()> {
         .connect_with(options)
         .await
         .context("connecting to PostgreSQL")?;
-    sqlx::migrate!()
-        .run(&db)
-        .await
-        .context("running migrations")?;
+    progress::migrate(&db).await?;
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(db, problems).await,

@@ -6,7 +6,7 @@
 //! rules of today and puts the result in place. Versions are not touched, and
 //! nothing about what anybody has read changes.
 
-use std::{fmt, time::Instant};
+use std::fmt;
 
 use sqlx::PgPool;
 
@@ -14,6 +14,7 @@ use crate::{
     articles::{self, Original},
     cleaning::{self, Base, Rules},
     feeds::add_inline,
+    progress::Progress,
 };
 
 /// Articles read and written in one go.
@@ -50,7 +51,6 @@ impl fmt::Display for Report {
 
 /// Cleans the articles of all feeds again, or of one.
 pub async fn run(db: &PgPool, rules: &Rules, feed: Option<i32>) -> anyhow::Result<Report> {
-    let started = Instant::now();
     let mut report = Report::default();
     let feeds = sqlx::query!(
         "SELECT id, feed_url, last_seq FROM feeds WHERE $1::integer IS NULL OR id = $1 ORDER BY id",
@@ -58,6 +58,11 @@ pub async fn run(db: &PgPool, rules: &Rules, feed: Option<i32>) -> anyhow::Resul
     )
     .fetch_all(db)
     .await?;
+    let total = feeds
+        .iter()
+        .map(|feed| u64::from(feed.last_seq.unsigned_abs()))
+        .sum();
+    let mut progress = Progress::new("articles cleaned again", total);
     for feed in feeds {
         let mut after = 0;
         while after < feed.last_seq {
@@ -80,6 +85,7 @@ pub async fn run(db: &PgPool, rules: &Rules, feed: Option<i32>) -> anyhow::Resul
             .fetch_all(db)
             .await?;
             after = upto;
+            progress.add(rows.len() as u64);
 
             let (mut seqs, mut texts, mut checksums, mut all_enclosures) =
                 (Vec::new(), Vec::new(), Vec::new(), Vec::new());
@@ -129,13 +135,6 @@ pub async fn run(db: &PgPool, rules: &Rules, feed: Option<i32>) -> anyhow::Resul
             .await?;
             report.changed += seqs.len() as u64;
         }
-        tracing::info!(
-            "feed {}: {} articles so far, {} changed, after {} s",
-            feed.id,
-            report.articles,
-            report.changed,
-            started.elapsed().as_secs()
-        );
     }
     Ok(report)
 }

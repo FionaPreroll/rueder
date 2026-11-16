@@ -1,7 +1,8 @@
 //! The search over the articles of the feeds an account subscribes to.
 //!
-//! An index over `article_content` holds the words of every article's current
-//! version: title, author, tags and text (`migrations/0005_search.sql`). A
+//! `article_content` keeps the words of every article's current version, worked
+//! out once when it is stored: title, author, tags and text
+//! (`migrations/0024_search_words.sql`), with an index over them. A
 //! search asks for articles that have all the words, or words that begin with
 //! them, newest first, and pages through them with the same anchor as the lists.
 //!
@@ -12,9 +13,9 @@
 //! There are two ways to find the newest hits, and which one is quicker
 //! depends on how common the words are:
 //!
-//! - Looking at the articles themselves, newest first, and working out the
-//!   words of each. That costs the same for every article looked at, so it is
-//!   quick when every few articles is a hit, and slow for a rare word.
+//! - Looking at the articles themselves, newest first, and at the words kept
+//!   with each. That costs about the same for every article looked at, so it
+//!   is quick when every few articles is a hit, and slow for a rare word.
 //! - Asking the index. It knows which articles have a word, not in which order
 //!   they came, and reading what it holds for a word costs as much as there
 //!   are articles with it, in all feeds and all years. That is quick for a
@@ -59,8 +60,8 @@ const FIRST_WINDOW: i64 = 20_000;
 /// What reading one article from the index costs, in microseconds, measured
 /// with 10 million made-up articles (`docs/implementation.md`, "Messung").
 /// What it costs to look at an article is measured by every search itself, as
-/// it depends on how long the texts are and how far apart the articles of the
-/// search lie.
+/// it depends on how many words the texts have and how far apart the articles
+/// of the search lie.
 const INDEX_HIT_COST: f64 = 1.3;
 /// The index is not asked if one window is expected to take longer than this,
 /// in microseconds: looking at the articles goes on instead, in steps that
@@ -352,15 +353,14 @@ async fn look_at(
     limit: i64,
     page: Page,
 ) -> Result<Vec<Looked>, sqlx::Error> {
-    // The inner query finds the articles, the outer one works out their
-    // words: only for those, as a query with a limit is planned on its own,
-    // and once for each, as the lateral query is too.
+    // The inner query finds the articles, the outer one looks at their words:
+    // only for those, as a query with a limit is planned on its own.
     let rows = sqlx::query!(
         r#"
-        SELECT z.feed_id, z.seq, z.id, d.doc @@ $3::text::tsquery AS "hit!",
-               ARRAY(SELECT d.doc @@ t::tsquery FROM unnest($8::text[]) t) AS "with_word!"
+        SELECT z.feed_id, z.seq, z.id, z.words @@ $3::text::tsquery AS "hit!",
+               ARRAY(SELECT z.words @@ t::tsquery FROM unnest($8::text[]) t) AS "with_word!"
         FROM (
-            SELECT x.feed_id, x.seq, x.id, x.title, x.author, x.tags, x.html
+            SELECT x.feed_id, x.seq, x.id, x.words
             FROM article_content x
             JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = x.feed_id
             WHERE x.id >= $4 AND x.id < $5 AND x.feed_id = ANY($2)
@@ -375,9 +375,6 @@ async fn look_at(
             ORDER BY x.id DESC
             LIMIT $7
         ) z
-        CROSS JOIN LATERAL (
-            SELECT article_search_doc(z.title, z.author, z.tags, z.html) AS doc OFFSET 0
-        ) d
         ORDER BY z.id DESC
         "#,
         account_id,
@@ -437,10 +434,10 @@ async fn ask_index(
         r#"
         SELECT c.feed_id, c.seq, c.id
         FROM (
-        SELECT x.feed_id, x.seq, x.id, x.title, x.author, x.tags, x.html
+        SELECT x.feed_id, x.seq, x.id, x.words
         FROM article_content x
         JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = x.feed_id
-        WHERE article_search_doc(x.title, x.author, x.tags, x.html) @@ $3::text::tsquery
+        WHERE x.words @@ $3::text::tsquery
           AND x.id >= $4 AND x.id < $5 AND x.feed_id = ANY($2)
           AND NOT EXISTS (
               SELECT 1 FROM article_states h
@@ -452,8 +449,7 @@ async fn ask_index(
                 AND k.kept_unread))
         OFFSET 0
         ) c
-        WHERE $8::text IS NULL
-           OR article_search_doc(c.title, c.author, c.tags, c.html) @@ $8::text::tsquery
+        WHERE $8::text IS NULL OR c.words @@ $8::text::tsquery
         ORDER BY c.id DESC
         LIMIT $7
         "#,

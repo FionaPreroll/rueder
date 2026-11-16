@@ -397,7 +397,10 @@ docker compose pull rueder
 docker compose up --detach
 ```
 
-The new server applies new migrations when it starts. Make a backup first.
+The new server applies new migrations when it starts. Make a backup first. A
+migration that rewrites a large table can take minutes and needs free disk for a
+second copy of that table; while it runs, `docker compose logs -f rueder` says
+regularly which one it is and how far it has come.
 
 ## Backup
 
@@ -442,7 +445,9 @@ docker compose start rueder
 The dry run says which feeds and accounts would be merged and which added. An
 old account that nobody uses any more is best disabled before the server
 starts: the feeds no other enabled account reads are then never fetched, and
-`account enable` brings them back. If the import stops halfway, run it again.
+`account enable` brings them back. While the import runs, it says regularly
+how many of the old articles it has brought and about how long it still needs.
+If it stops halfway, run it again.
 The way back is `before-import.dump`, put in as under [Backup](#backup).
 Afterwards `rueder_old` can go:
 `docker compose exec db dropdb -U rueder rueder_old`.
