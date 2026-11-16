@@ -322,8 +322,11 @@ cargo run --release -- bench measure    # times the queries, prints a table
 
 `bench generate` wants an empty database and takes `--accounts`, `--feeds` and
 `--articles`; 10 million articles take about 50 minutes, 30 of them for the
-search index, and 21 GB. `bench measure`
-puts back what its writing queries changed, so it can run again.
+search index, and 21 GB. Their texts are as long as those of a real
+installation. `bench measure` works on any database, a copy of a real one too:
+it takes the words it searches for from the articles there and says how long
+their texts are. It puts back what its writing queries changed, so it can run
+again.
 
 ```sh
 FETCH_ROUND=1000 FETCH_AT_ONCE=64 FETCH_EVERY=10 \
