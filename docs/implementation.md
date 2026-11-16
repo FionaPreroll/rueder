@@ -827,27 +827,29 @@ Nach Paket 5.32: `rueder bench fetch --feeds 5000 --hosts 250 --seconds 120` mit
 
 ### Gespeicherte Wörter vom 2026-11-16
 
-Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder Suche für die neuesten Artikel neu zu bestimmen (`migrations/0024_search_words.sql`). Ergebnis: An erfundenen Daten, deren neueste Artikel so lang sind wie die echten, braucht die Suche im Median 7 bis 21 ms statt 130 bis 160 ms. Die Wörter brauchen dafür etwa so viel Platz wie die Texte selbst. Entschieden von Fiona am 2026-11-16.
+Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder Suche für die neuesten Artikel neu zu bestimmen (`migrations/0024_search_words.sql`). Ergebnis: An den echten Daten braucht die Suche im Median 9 bis 23 ms statt 30 bis 264 ms, an erfundenen Daten, deren neueste Artikel so lang sind wie die echten, 7 bis 21 ms statt 130 bis 160 ms. Die Wörter brauchen dafür etwa so viel Platz wie die Texte selbst. Entschieden von Fiona am 2026-11-16.
 
-- **An den echten Daten** (Fionas Testinstanz wie im [Probelauf](#probelauf-vom-2026-11-15), `bench measure` mit Wörtern aus dem Bestand, vorher): Die Suche brauchte im Median 116 bis 264 ms, für das Konto mit den wenigsten Artikeln aber 30 ms und tief in der Liste 84 ms. Langsam war also, was bei den neuesten Artikeln der großen Konten anfängt. Die 3.429 Artikel, die seit dem Import abgerufen wurden, haben im Mittel 4.006 Zeichen HTML (90 % bis 10.072), die 707.040 importierten 632, die neuesten 500 im Mittel 1.804. Die Wörter dieser 500 zu bestimmen dauerte 103 ms, und jede Suche tat das zuerst (`search::PROBE`).
-- **Maschine:** wie unter [Suche vom 2026-11-15](#suche-vom-2026-11-15).
+- **Vorher an den echten Daten** (Fionas Testinstanz wie im [Probelauf](#probelauf-vom-2026-11-15), `bench measure` mit Wörtern aus dem Bestand): Die Suche brauchte im Median 116 bis 264 ms, für das Konto mit den wenigsten Artikeln aber 30 ms und tief in der Liste 84 ms. Langsam war also, was bei den neuesten Artikeln der großen Konten anfängt. Die 3.429 Artikel, die seit dem Import abgerufen wurden, haben im Mittel 4.006 Zeichen HTML (90 % bis 10.072), die 707.040 importierten 632, die neuesten 500 im Mittel 1.804. Die Wörter dieser 500 zu bestimmen dauerte 103 ms, und jede Suche tat das zuerst (`search::PROBE`).
+- **Maschine für die erfundenen Daten:** wie unter [Suche vom 2026-11-15](#suche-vom-2026-11-15).
 - **Daten:** die erfundenen von dort, die neuesten 4.000 Artikel mit den Texten von je fünf anderen: im Mittel 3.465 Zeichen, die neuesten 500 3.888. Die Wörter dieser 500 zu bestimmen dauert hier 119 ms.
+- **Nachher an den echten Daten:** dieselbe Testinstanz nach dem Update, mit 710.590 Artikeln, wieder während der Server Feeds abrief. `bench measure` zieht die Wörter bei jedem Lauf neu aus dem Bestand; verglichen wird also je Art von Suche, nicht dasselbe Wort.
 
-| Suche, Median | Echt, vorher | Erfunden, vorher | Erfunden, mit gespeicherten Wörtern | p99 damit |
-|---|---:|---:|---:|---:|
-| Ein sehr häufiges Wort | 116 ms | 131 ms | 7 ms | 18 ms |
-| Ein häufiges Wort | 234 ms | 132 ms | 7 ms | 27 ms |
-| Ein selteneres Wort | 248 ms | 138 ms | 14 ms | 35 ms |
-| Ein seltenes Wort | 246 ms | 140 ms | 15 ms | 32 ms |
-| Zwei Wörter | 264 ms | 162 ms | 20 ms | 35 ms |
-| Ein häufiges Wort, tief | 84 ms | 59 ms | 7 ms | 24 ms |
-| Ein selteneres Wort, nur ungelesen | 248 ms | 153 ms | 21 ms | 37 ms |
-| Ein häufiges Wort, Konto mit den wenigsten Artikeln | 30 ms | 82 ms | 15 ms | 25 ms |
+| Suche, Median | Echt, vorher | Echt, nachher | p99 nachher | Erfunden, vorher | Erfunden, nachher | p99 nachher |
+|---|---:|---:|---:|---:|---:|---:|
+| Ein sehr häufiges Wort | 116 ms | 9 ms | 105 ms | 131 ms | 7 ms | 18 ms |
+| Ein häufiges Wort | 234 ms | 13 ms | 70 ms | 132 ms | 7 ms | 27 ms |
+| Ein selteneres Wort | 248 ms | 20 ms | 42 ms | 138 ms | 14 ms | 35 ms |
+| Ein seltenes Wort | 246 ms | 18 ms | 61 ms | 140 ms | 15 ms | 32 ms |
+| Zwei Wörter | 264 ms | 23 ms | 149 ms | 162 ms | 20 ms | 35 ms |
+| Ein häufiges Wort, tief | 84 ms | 12 ms | 111 ms | 59 ms | 7 ms | 24 ms |
+| Ein selteneres Wort, nur ungelesen | 248 ms | 20 ms | 43 ms | 153 ms | 21 ms | 37 ms |
+| Ein häufiges Wort, Konto mit den wenigsten Artikeln | 30 ms | 11 ms | 44 ms | 82 ms | 15 ms | 25 ms |
 
-- **Platz:** `article_content` wächst von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB. Der Index bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer. An den echten Daten sind die Wörter so groß wie die Texte, an jedem zehnten Artikel je 34 MB, für den ganzen Bestand also rund 340 MB; an den erfundenen sind sie anderthalbmal so groß, vermutlich weil deren Texte kaum HTML haben.
-- **Migration:** 235 s für 710.000 Artikel. So lange startet der Server beim Update nicht.
-- **Listen, Artikel und Speichern** werden nicht langsamer.
-- **Nicht gemessen:** an den echten Daten mit gespeicherten Wörtern.
+- **Die langsamsten Suchen** brauchen an den echten Daten länger als an den erfundenen: Das 99. Perzentil liegt bei bis zu 149 ms (vorher bis zu 582 ms), die längste Suche brauchte 443 ms (vorher 664 ms). Ob das am Abruf liegt, der nebenher lief, ist nicht untersucht.
+- **Platz:** An den echten Daten wächst `article_content` von 617 auf 992 MB, um etwa so viel, wie die Texte brauchen; ihre übrigen Indexe werden beim Umschreiben etwas kleiner. An den erfundenen wächst sie von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB, weil deren Wörter anderthalbmal so groß sind wie die Texte, vermutlich weil die Texte kaum HTML haben. Der Index der Suche bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer.
+- **Migration:** 235 s für 710.000 erfundene Artikel. So lange startet der Server beim Update nicht.
+- **Listen, Artikel und Speichern** werden nicht langsamer. An den echten Daten brauchen 20 neue Artikel im Median 16,8 statt 18,0 ms; davon fällt mehr auf den Teil ohne den Index (6,9 statt 4,2 ms), weil die Wörter jetzt in der Tabelle bestimmt werden und nicht mehr im Index.
+- **Nicht gemessen:** wie lange die Migration an den echten Daten dauerte.
 
 ## Wissen über das Altsystem
 
