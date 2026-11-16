@@ -159,6 +159,7 @@ async fn the_status_says_how_fast_feeds_are_fetched_and_how_far_behind(db: PgPoo
         round: 2,
         at_once: 4,
         every: std::time::Duration::from_secs(60),
+        per_host: 1,
     };
     state.monitor.fetching_runs(pace);
     let now = Instant::now();
