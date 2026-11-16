@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) und für 100.000 Konten auf einer Maschine 5.32 bis 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) und für 100.000 Konten auf einer Maschine 5.33 bis 5.36 |
 
 Was es gibt:
 
@@ -368,10 +368,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.29 Drossel für Registrierungen.** Siehe [Registrierung und Einladungen](architecture.md#registrierung-und-einladungen).
 - [x] **5.30 Lastmessung für viele Konten.** `rueder bench readers` und die Lasttests in `web/load/`, siehe [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) und `server/README.md` unter „Measuring“.
 - [x] **5.31 Live-Updates je Konto (A6).** Siehe [Live-Updates](architecture.md#live-updates).
-- [ ] **5.32 Abruf je Host über Runden hinweg (A6).** Heute holt eine Runde die Feeds eines Hosts nacheinander und wartet auf den letzten, so dass ein Host mit vielen langsamen Feeds (etwa YouTube) die ganze Runde aufhält; nach 600 Sekunden kann eine zweite Runde denselben Feed nehmen. Künftig hat jeder Host eine Warteschlange über die Runden hinweg, `FETCH_PER_HOST` erlaubt mehr als einen Abruf je Host zugleich (Standard 1), das Vorrecht auf einen Feed wird verlängert, solange er ansteht, und Namen merkt sich der Server für ihre TTL, ohne die Prüfung der Adressen zu ändern. Fertig, wenn:
-  - in `rueder bench fetch` ein Host mit 2.000 Feeds, die je eine halbe Sekunde brauchen, die übrigen nicht aufhält;
-  - ein Test zeigt, dass nie mehr Abrufe je Host laufen, als eingestellt, und kein Feed doppelt geholt wird;
-  - der DNS-Cache einen Test hat, dass eine gesperrte Adresse auch aus dem Cache gesperrt bleibt.
+- [x] **5.32 Abruf je Host über Runden hinweg (A6).** Siehe [Abruf](architecture.md#abruf) und [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client).
 - [ ] **5.33 Größen einstellbar.** Die Verbindungen zur Datenbank (heute fest 10, die gemessene Grenze des Lesens), die schweren Anfragen zugleich (3) und die Mails je Tag (1.000) kommen aus der Umgebung, mit den heutigen Werten als Standard (A16). `deploy/README.md` bekommt eine Tabelle für 10.000 und 100.000 Konten: Maschine, Einstellungen von PostgreSQL, Takt des Abrufs, Aufbewahrung. Fertig, wenn:
   - Tests die Grenzen der Einstellungen prüfen;
   - `load/reading.js` mit 10 und mit 20 Verbindungen unter [Messung](#messung) steht.
@@ -812,6 +809,20 @@ Nach Paket 5.31, wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-
 
 - **Die Kosten hängen nicht mehr an den Verbindungen.** Bei 10.000 Verbindungen kosten 800 Änderungen je Sekunde 0,6 statt 2,7 Kerne, und kein Lauf sah ein `resync`; vorher war die Maschine ab 200 je Sekunde voll. Was bei 2.000 je Sekunde bleibt, sind die Anfragen selbst und das Schreiben in die Datenbank.
 - **Mehr Speicher je Verbindung**, rund 8 KB, weil jedes Konto mit offener Verbindung einen eigenen Puffer hat. Bei 5.000 Verbindungen sind das 40 MB.
+
+### Abruf je Host vom 2026-11-16
+
+Nach Paket 5.32: `rueder bench fetch --feeds 5000 --hosts 250 --seconds 120` mit `FETCH_ROUND=1000`, `FETCH_AT_ONCE=64`, `FETCH_EVERY=10`, dazu mit `--slow 2000` ein weiterer Name mit 2.000 Feeds, der jede Antwort eine halbe Sekunde später gibt. Dieselbe Maschine wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15), Release-Build, eine Datenbank für sich. „Vorher“ ist derselbe Lauf mit Runden, die aufeinander warten, wie bis Paket 5.32.
+
+| Lauf | Abrufe je Stunde | davon nicht vom langsamen Namen | vom langsamen Namen in 120 s |
+|---|---:|---:|---:|
+| ohne langsamen Namen | 359.815 | 359.815 | – |
+| mit, vorher | 23.717 | 16.792 | 292 |
+| mit, nachher | 357.772 | 350.997 | 226 |
+| mit, nachher, `FETCH_PER_HOST=4` | 357.892 | 333.544 | 812 |
+
+- **Vorher hielt der langsame Name alles auf.** Die erste Runde nahm neben den übrigen Feeds 292 langsame und holte sie nacheinander, 151 Sekunden lang; so lange wartete die nächste Runde.
+- **Nachher hält er nur sich selbst auf.** Die übrigen Feeds kommen fast so oft wie ohne ihn, der langsame Name einmal je halbe Sekunde. Mit vier zugleich kommt er gut dreieinhalbmal so oft dran.
 
 ### Gespeicherte Wörter vom 2026-11-16
 

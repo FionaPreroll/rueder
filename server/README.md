@@ -334,10 +334,12 @@ FETCH_ROUND=1000 FETCH_AT_ONCE=64 FETCH_EVERY=10 \
 ```
 
 `bench fetch` measures how many feeds the server fetches in an hour at the pace
-the three settings give. It serves made-up feeds itself, under `--hosts` names
-out of 127.0.0.0/8 (one fetch runs per name), on `--port` (39871), and fetches
-them round after round, every feed due again before each round. It wants a
-database of its own, where nobody reads other feeds.
+the settings give. It serves made-up feeds itself, under `--hosts` names out of
+127.0.0.0/8 (`FETCH_PER_HOST` fetches run per name, one as it comes), on
+`--port` (39871), and fetches them round after round as the server does,
+every feed due again before each round. `--slow N` adds N feeds under one name
+more that answers half a second late, to see that a slow host holds up only
+itself. It wants a database of its own, where nobody reads other feeds.
 
 ### Many readers
 
