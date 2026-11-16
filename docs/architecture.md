@@ -349,18 +349,18 @@ Ereignisse sind Hinweise, nicht die Daten selbst. Sie sagen, was sich geändert 
 
 So greift es ineinander:
 
-- **Wer was hört.** Jedes Ereignis nennt die Konten, für die es gilt, und eine Verbindung reicht nur weiter, was ihr eigenes nennt. Ereignisse des Abrufs gehen an alle, die den Feed abonnieren.
+- **Wer was hört.** Jedes Konto mit einer offenen Verbindung hat einen eigenen Kanal, auf dem alle seine Verbindungen hören. Ein Ereignis nennt die Konten, für die es gilt, und geht nur in deren Kanäle. Ereignisse des Abrufs gehen an alle, die den Feed abonnieren.
 - **Der eigene Tab.** Ein Tab kann sich in der Kopfzeile `X-Rueder-Tab` einen Namen geben (bis 64 Zeichen aus Buchstaben, Ziffern, `-` und `_`). Der Name kommt im Ereignis als `by` zurück; so erkennt der Tab seine eigene Änderung und lädt nichts doppelt.
 - **Nach einem Abbruch.** Der Server hebt keine Ereignisse auf. Der Browser öffnet die Verbindung von selbst neu, bekommt `hello` und lädt alles neu, was er zeigt. Ein Nachliefern verpasster Ereignisse gibt es nicht (von Fiona entschieden): Neuladen genügt.
 - **Reihenfolge beim Start.** Der Client öffnet erst die Verbindung und lädt dann Baum und Zahlen. Umgekehrt ginge verloren, was dazwischen geschieht.
-- **Grenzen.** Je Konto ist die Zahl der Verbindungen begrenzt, darüber kommt 429. Liest eine Verbindung zu langsam und stauen sich Ereignisse, bekommt sie `resync`, statt den Server aufzuhalten. Eine leere Zeile in Abständen hält die Verbindung bei Proxys offen.
+- **Grenzen.** Je Konto ist die Zahl der Verbindungen begrenzt, darüber kommt 429. Liest eine Verbindung zu langsam und stauen sich die Ereignisse ihres Kontos, bekommt sie `resync`, statt den Server aufzuhalten; andere Konten merken davon nichts. Eine leere Zeile in Abständen hält die Verbindung bei Proxys offen.
 - **Sitzung.** Die Verbindung gibt es nur mit Sitzung, und sie bleibt offen, solange die Sitzung gilt. Endet eine Sitzung, durch Logout, von einem anderen Gerät aus oder durch ein neues Passwort, enden ihre Verbindungen sofort. Dazu sieht jede Verbindung regelmäßig nach, ob ihre Sitzung noch gilt (`events::SESSION_CHECK`), so enden auch die einer Sitzung, die abläuft oder auf der Kommandozeile beendet wird.
 
 Warum so:
 
 - **Ereignisse tragen nicht die Daten.** Beim Lesestand kommen die Nummern des Feeds mit, die eine Anfrage sparen, aber nicht die Ausnahmen, und der Baum wird neu geladen statt nachgeführt. Das hält Server und Client einfach, und ein Tab kann nie von einem verpassten Ereignis falsch werden.
 - **Ein Prozess hält sie im Speicher.** Liefe rueder in mehreren Prozessen, müsste `LISTEN/NOTIFY` von PostgreSQL sie zwischen ihnen tragen. Nach einem Neustart öffnen alle Browser die Verbindung neu und laden alles neu.
-- **Gemessen am 2026-11-15:** Weil jede Verbindung jedes Ereignis sieht und selbst nachsieht, ob es ihr gilt, wachsen die Kosten mit Verbindungen mal Ereignissen. Ab einigen tausend Verbindungen ist das die erste Grenze eines Servers ([Viele Konten](implementation.md#viele-konten-vom-2026-11-14-und-2026-11-15)); Paket 5.31 verteilt die Ereignisse deshalb je Konto.
+- **Ein Kanal je Konto.** Ein Ereignis kostet so viel, wie es Empfänger hat. Mit einem Kanal für alle sähe jede Verbindung jedes Ereignis: Die Kosten wüchsen mit Verbindungen mal Ereignissen, und ein Konto mit vielen Ereignissen brächte die Verbindungen der anderen zum `resync` ([Live-Updates je Konto](implementation.md#live-updates-je-konto-vom-2026-11-16)). Dafür hält jedes Konto mit offener Verbindung einen eigenen Puffer.
 
 ## Login und Sitzungen
 

@@ -7,8 +7,10 @@
 //!   Whatever a reader changes through the API is announced without the
 //!   endpoint doing anything for it: [`announce`] wraps the whole API and
 //!   publishes after every request that changed something and went well.
-//! - **Who gets them.** Every event names the accounts it is for, and a
-//!   connection passes on only what names its own.
+//! - **Who gets them.** Every account with a connection open has a channel of
+//!   its own, which all its connections listen on. An event goes into the
+//!   channels of the accounts it names, so it costs as much as it has
+//!   readers, however many connections other accounts hold.
 //! - **After a break.** Every connection begins with `hello`. A browser that
 //!   comes back after a break loads what it shows anew; the server keeps
 //!   nothing for it.
@@ -20,7 +22,7 @@
 use std::{
     collections::HashMap,
     convert::Infallible,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, PoisonError},
     time::Duration,
 };
 
@@ -50,8 +52,8 @@ use crate::{
 /// How many connections one account may hold open: a few devices with a few
 /// tabs each.
 pub const STREAMS_PER_ACCOUNT: usize = 20;
-/// How many events may wait for a connection that reads slowly. One that falls
-/// further behind is told to load everything anew.
+/// How many events of its account may wait for a connection that reads
+/// slowly. One that falls further behind is told to load everything anew.
 const WAITING: usize = 256;
 /// How often a connection sees whether its session still holds. A session
 /// that ends through a request closes its connections at once (see
@@ -160,17 +162,15 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
     types.add::<ServerEvent>();
 }
 
-/// An event on its way, with the accounts it is for.
-#[derive(Debug)]
-struct Notice {
-    accounts: Vec<i32>,
-    event: ServerEvent,
+/// The connections of an account and the channel they listen on.
+struct Listening {
+    sender: broadcast::Sender<Arc<ServerEvent>>,
+    streams: usize,
 }
 
 struct Inner {
-    sender: broadcast::Sender<Arc<Notice>>,
-    /// How many connections each account holds.
-    streams: Mutex<HashMap<i32, usize>>,
+    /// The accounts that hold a connection open.
+    accounts: Mutex<HashMap<i32, Listening>>,
     /// See [`SESSION_CHECK`].
     session_check: Duration,
 }
@@ -196,12 +196,11 @@ struct Closing {
 
 impl Drop for Closing {
     fn drop(&mut self) {
-        if let Ok(mut streams) = self.events.inner.streams.lock()
-            && let Some(count) = streams.get_mut(&self.account_id)
-        {
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                streams.remove(&self.account_id);
+        let mut accounts = self.events.accounts();
+        if let Some(listening) = accounts.get_mut(&self.account_id) {
+            listening.streams = listening.streams.saturating_sub(1);
+            if listening.streams == 0 {
+                accounts.remove(&self.account_id);
             }
         }
     }
@@ -215,23 +214,32 @@ impl Events {
     /// Events whose connections see this often whether their session still
     /// holds, in place of [`SESSION_CHECK`].
     pub fn checking_sessions_every(session_check: Duration) -> Self {
-        let (sender, _) = broadcast::channel(WAITING);
         Self {
             inner: Arc::new(Inner {
-                sender,
-                streams: Mutex::new(HashMap::new()),
+                accounts: Mutex::new(HashMap::new()),
                 session_check,
             }),
         }
     }
 
-    /// Tells the accounts' open connections about a change.
+    fn accounts(&self) -> std::sync::MutexGuard<'_, HashMap<i32, Listening>> {
+        self.inner
+            .accounts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Tells the accounts' open connections about a change. An account
+    /// without one hears nothing.
     pub fn publish(&self, accounts: Vec<i32>, event: ServerEvent) {
-        if accounts.is_empty() {
-            return;
+        let event = Arc::new(event);
+        let listening = self.accounts();
+        for account_id in accounts {
+            if let Some(account) = listening.get(&account_id) {
+                // A connection that just went is no error.
+                let _ = account.sender.send(event.clone());
+            }
         }
-        // Nobody listening is no error.
-        let _ = self.inner.sender.send(Arc::new(Notice { accounts, event }));
     }
 
     /// Tells everybody who subscribes to the feed about a change of it.
@@ -251,31 +259,39 @@ impl Events {
         Ok(())
     }
 
-    /// Takes a place for a connection of the account, or `None` if it holds
-    /// as many as it may.
-    fn open(&self, account_id: i32) -> Option<Closing> {
-        let mut streams = self.inner.streams.lock().ok()?;
-        let count = streams.entry(account_id).or_default();
-        if *count >= STREAMS_PER_ACCOUNT {
+    /// Takes a place for a connection of the account and listens on its
+    /// channel, or `None` if it holds as many as it may.
+    fn open(&self, account_id: i32) -> Option<(Closing, broadcast::Receiver<Arc<ServerEvent>>)> {
+        let mut accounts = self.accounts();
+        let listening = accounts.entry(account_id).or_insert_with(|| Listening {
+            sender: broadcast::channel(WAITING).0,
+            streams: 0,
+        });
+        if listening.streams >= STREAMS_PER_ACCOUNT {
             return None;
         }
-        *count += 1;
-        Some(Closing {
+        listening.streams += 1;
+        let receiver = listening.sender.subscribe();
+        let closing = Closing {
             events: self.clone(),
             account_id,
-        })
+        };
+        Some((closing, receiver))
     }
 
     /// How many connections are open, of all accounts.
     pub fn all_streams(&self) -> usize {
-        let streams = self.inner.streams.lock();
-        streams.map_or(0, |streams| streams.values().sum())
+        self.accounts()
+            .values()
+            .map(|account| account.streams)
+            .sum()
     }
 
     /// How many connections the account holds open.
     pub fn streams(&self, account_id: i32) -> usize {
-        let streams = self.inner.streams.lock();
-        streams.map_or(0, |streams| streams.get(&account_id).copied().unwrap_or(0))
+        self.accounts()
+            .get(&account_id)
+            .map_or(0, |account| account.streams)
     }
 }
 
@@ -283,10 +299,10 @@ impl Events {
 struct Serving {
     events: Events,
     db: PgPool,
-    account_id: i32,
     /// The session's token, to see whether the session still holds.
     token: String,
-    receiver: broadcast::Receiver<Arc<Notice>>,
+    /// The account's channel.
+    receiver: broadcast::Receiver<Arc<ServerEvent>>,
     /// When it sees next whether its session still holds.
     check: Instant,
     _closing: Closing,
@@ -297,7 +313,7 @@ impl Serving {
     async fn next(&mut self) -> Option<SseEvent> {
         loop {
             let received = tokio::time::timeout_at(self.check, self.receiver.recv()).await;
-            let notice = match received {
+            let event = match received {
                 // Time to see whether the session still holds.
                 Err(_) => {
                     if !self.session_holds().await {
@@ -312,18 +328,15 @@ impl Serving {
                     self.receiver = self.receiver.resubscribe();
                     return Some(ServerEvent::Resync {}.sse());
                 }
-                Ok(Ok(notice)) => notice,
+                Ok(Ok(event)) => event,
             };
-            if !notice.accounts.contains(&self.account_id) {
-                continue;
-            }
             // A session of the account ended. If it was this connection's, the
             // connection ends with it.
-            let session_ended = matches!(notice.event, ServerEvent::Session { .. });
+            let session_ended = matches!(*event, ServerEvent::Session { .. });
             if session_ended && !self.session_holds().await {
                 return None;
             }
-            return Some(notice.event.sse());
+            return Some(event.sse());
         }
     }
 
@@ -359,7 +372,7 @@ pub async fn stream(
     session: Session,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
-    let Some(closing) = state.events.open(session.account_id) else {
+    let Some((closing, receiver)) = state.events.open(session.account_id) else {
         return Err(AppError::Status(
             StatusCode::TOO_MANY_REQUESTS,
             "too many open connections for this account".into(),
@@ -370,9 +383,8 @@ pub async fn stream(
     let serving = Serving {
         events: state.events.clone(),
         db: state.db.clone(),
-        account_id: session.account_id,
         token: sessions::token(&headers).unwrap_or_default().to_owned(),
-        receiver: state.events.inner.sender.subscribe(),
+        receiver,
         check: Instant::now() + state.events.inner.session_check,
         _closing: closing,
     };

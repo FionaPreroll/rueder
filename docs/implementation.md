@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) und für 100.000 Konten auf einer Maschine 5.31 bis 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) und für 100.000 Konten auf einer Maschine 5.32 bis 5.36 |
 
 Was es gibt:
 
@@ -367,10 +367,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.28 Captcha bei der Registrierung.** Siehe [Captcha](architecture.md#captcha).
 - [x] **5.29 Drossel für Registrierungen.** Siehe [Registrierung und Einladungen](architecture.md#registrierung-und-einladungen).
 - [x] **5.30 Lastmessung für viele Konten.** `rueder bench readers` und die Lasttests in `web/load/`, siehe [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) und `server/README.md` unter „Measuring“.
-- [ ] **5.31 Live-Updates je Konto verteilen (A6).** Heute geht jedes Ereignis an jede offene Verbindung, die dann selbst prüft, ob es ihr gilt; die Kosten wachsen mit Verbindungen mal Ereignissen, und ab 5.000 Verbindungen bei 800 Änderungen je Sekunde ist die Maschine voll, mit Tausenden `resync`. Künftig hält der Server je Konto seine Verbindungen, ein Ereignis geht nur an die seines Kontos, ein neuer Artikel nur an die seiner Leser, und den Puffer für Wiederverbindungen gibt es je Konto statt 2.000 Ereignisse für den ganzen Server. Fertig, wenn:
-  - `load/live.js` mit 10.000 Verbindungen und 800 Änderungen je Sekunde weniger als einen Kern braucht und kein `resync` sieht;
-  - ein Modelltest mit Zufallsdaten zeigt, dass jede Verbindung genau die Ereignisse ihres Kontos bekommt, in ihrer Reihenfolge;
-  - eine Verbindung, die nach einer Minute wiederkommt, ihre verpassten Ereignisse bekommt statt `resync`.
+- [x] **5.31 Live-Updates je Konto (A6).** Siehe [Live-Updates](architecture.md#live-updates).
 - [ ] **5.32 Abruf je Host über Runden hinweg (A6).** Heute holt eine Runde die Feeds eines Hosts nacheinander und wartet auf den letzten, so dass ein Host mit vielen langsamen Feeds (etwa YouTube) die ganze Runde aufhält; nach 600 Sekunden kann eine zweite Runde denselben Feed nehmen. Künftig hat jeder Host eine Warteschlange über die Runden hinweg, `FETCH_PER_HOST` erlaubt mehr als einen Abruf je Host zugleich (Standard 1), das Vorrecht auf einen Feed wird verlängert, solange er ansteht, und Namen merkt sich der Server für ihre TTL, ohne die Prüfung der Adressen zu ändern. Fertig, wenn:
   - in `rueder bench fetch` ein Host mit 2.000 Feeds, die je eine halbe Sekunde brauchen, die übrigen nicht aufhält;
   - ein Test zeigt, dass nie mehr Abrufe je Host laufen, als eingestellt, und kein Feed doppelt geholt wird;
@@ -801,6 +798,19 @@ Länge der Texte in Zeichen HTML, an jedem zehnten Artikel:
 - **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 10 ms, wie im Probelauf.
 - **Die Suche ist hier schneller als an den echten Daten.** Im Probelauf brauchten Suchen nach seltenen oder fehlenden Wörtern im Median 140 bis 220 ms, hier brauchen seltene Wörter 46 bis 56 ms. Die Länge der Texte ist dieselbe, und auch das Konto mit wenigen Artikeln erklärt den Abstand nicht. Für ein solches Konto die neuesten Artikel Feed für Feed zu holen, statt rückwärts durch alle zu gehen, änderte die Zeiten nicht und wurde deshalb nicht gebaut.
 - **Offen:** `bench measure` an den echten Daten, jetzt mit Wörtern aus dem Bestand und der Suche für das kleinste Konto. Bleibt der Abstand, liegt es an der Maschine, am Abruf, der dort nebenher lief, oder an etwas in den echten Texten, das die erfundenen nicht haben.
+
+### Live-Updates je Konto vom 2026-11-16
+
+Nach Paket 5.31, wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) gemessen: dieselbe Maschine, `load/live.js` mit `rueder bench readers --shared`, dazu 2.000 Änderungen je Sekunde.
+
+| Verbindungen | Speicher je Verbindung | Neuer Artikel bei allen | 50 Änderungen je s | 200 je s | 800 je s | 2.000 je s |
+|---:|---:|---:|---|---|---|---|
+| 2.000 | 33,2 KB | in 39 ms | 0,1 Kerne | 0,2 Kerne | 0,7 Kerne | 1,0 Kerne, p99 12 ms |
+| 5.000 | 31,8 KB | in 73 ms | 0,1 | 0,2 | 0,6 | 0,9, p99 65 ms |
+| 10.000 | 31,2 KB | in 121 ms | 0,1 | 0,2 | 0,6 | 1,0, p99 145 ms |
+
+- **Die Kosten hängen nicht mehr an den Verbindungen.** Bei 10.000 Verbindungen kosten 800 Änderungen je Sekunde 0,6 statt 2,7 Kerne, und kein Lauf sah ein `resync`; vorher war die Maschine ab 200 je Sekunde voll. Was bei 2.000 je Sekunde bleibt, sind die Anfragen selbst und das Schreiben in die Datenbank.
+- **Mehr Speicher je Verbindung**, rund 8 KB, weil jedes Konto mit offener Verbindung einen eigenen Puffer hat. Bei 5.000 Verbindungen sind das 40 MB.
 
 ## Wissen über das Altsystem
 
