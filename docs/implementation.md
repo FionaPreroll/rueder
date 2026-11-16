@@ -832,7 +832,7 @@ Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder 
 | Ein selteneres Wort, nur ungelesen | 248 ms | 153 ms | 21 ms | 37 ms |
 | Ein häufiges Wort, Konto mit den wenigsten Artikeln | 30 ms | 82 ms | 15 ms | 25 ms |
 
-- **Platz:** `article_content` wächst von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB. Der Index bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer. An den echten Daten sind die Wörter so groß wie die Texte, an jedem zehnten Artikel je 34 MB, für den ganzen Bestand also rund 340 MB; an den erfundenen sind sie anderthalbmal so groß, weil deren Wörter aus Silben gebaut sind und kaum HTML drumherum steht.
+- **Platz:** `article_content` wächst von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB. Der Index bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer. An den echten Daten sind die Wörter so groß wie die Texte, an jedem zehnten Artikel je 34 MB, für den ganzen Bestand also rund 340 MB; an den erfundenen sind sie anderthalbmal so groß, vermutlich weil deren Texte kaum HTML haben.
 - **Migration:** 235 s für 710.000 Artikel. So lange startet der Server beim Update nicht.
 - **Listen, Artikel und Speichern** werden nicht langsamer.
 - **Nicht gemessen:** an den echten Daten mit gespeicherten Wörtern.
