@@ -39,6 +39,7 @@ const en = {
 		renameFeed: 'Rename',
 		unsubscribe: 'Unsubscribe',
 		reportFeed: 'Report the feed …',
+		feedInfo: 'Feed info …',
 		feedActions: (title: string) => `Actions for the feed ${title}`,
 		unsubscribeTitle: 'Unsubscribe?',
 		unsubscribeText: (title: string) =>
@@ -163,6 +164,35 @@ const en = {
 		sent: 'Thank you. The report reached the operator of this rueder.',
 		tooMany: 'You sent many reports lately. Try again later.',
 		unreachable: 'The report did not reach the server. Try again later.'
+	},
+
+	feedInfo: {
+		title: 'Feed info',
+		text: (title: string) =>
+			`What this rueder knows of “${title}” and how it fetches it. If the feed does not work, copy it into your message to the operator.`,
+		number: 'Number',
+		name: 'Name',
+		address: 'Feed address',
+		site: 'Website',
+		noSite: 'None',
+		agent: 'Fetched as',
+		agents: { rueder: 'rueder', browser: 'Browser' },
+		every: 'Fetched every',
+		fetched: 'Last fetch',
+		succeeded: 'Last fetch that worked',
+		failed: 'Last error',
+		next: 'Next fetch',
+		blocked: 'None, the operator blocked the feed',
+		articles: 'Articles so far',
+		never: 'Never',
+		fetchAs: 'Fetch it as',
+		fetchAsHint:
+			'For everyone who reads the feed. As a browser for sites that turn rueder away. It is fetched again at once.',
+		notSwitched: 'That did not work. Try again later.',
+		copy: 'Copy',
+		copied: 'Copied',
+		loading: 'Loading …',
+		unreachable: 'The server did not answer. Try again later.'
 	},
 
 	media: {

@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.33 bis 5.36, für den Support 5.40 (Feed-Infos) und 5.41 (User-Agent nur für Admins) |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.33 bis 5.36 |
 
 Was es gibt:
 
@@ -383,11 +383,8 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.37 Messen in der Form des alten Bestands.** Siehe [Suche vom 2026-11-15](#suche-vom-2026-11-15).
 - [x] **5.38 Gespeicherte Wörter für die Suche.** Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
 - [x] **5.39 Fortschritt langer Läufe.** Migrationen, `import-legacy` und `reclean` sagen im Log regelmäßig, wie weit sie sind (`server/src/progress.rs`).
-- [ ] **5.40 Feed-Infos.** Im Menü eines Feeds öffnet „Feed-Infos …“ einen Dialog mit Nummer, Feed-Adresse, Website, User-Agent, letztem Abruf, letztem Fehler und nächstem Abruf, dazu „Kopieren“ für eine Nachricht an den Support. Jeder Abonnent sieht das für seine eigenen Feeds (`GET /api/feeds/{id}/info`), auch in der Demo; über andere Konten steht darin nichts. Für den Betreiber zeigt `rueder feed show <Nummer oder Adresse>` dasselbe und die Zahl der Abonnenten, ohne Namen, auch für Feeds, die er nicht liest. Fertig, wenn:
-  - ein Test zeigt, dass ein Konto, das den Feed nicht liest, nichts davon sieht;
-  - der Dialog in beiden Readern und in beiden Sprachen da ist.
-- [ ] **5.41 User-Agent je Feed nur für Admins.** Siehe [Detailfragen](plan.md#detailfragen). Den Schalter im Dialog aus 5.40 und `PUT /api/feeds/{id}/agent` haben nur Admins, `rueder feed agent <Nummer oder Adresse> browser|rueder` schaltet auch Feeds um, die der Betreiber nicht liest. Der Import eines Kontos übernimmt den User-Agent eines neuen Feeds aus der Datei nur, wenn ein Admin importiert. Fertig, wenn:
-  - ein Test zeigt, dass ein Abonnent ohne Admin-Recht nichts umstellt, auch nicht über den Import.
+- [x] **5.40 Feed-Infos.** Siehe [Ordner und Abos](architecture.md#ordner-und-abos).
+- [x] **5.41 User-Agent je Feed nur für Admins.** Siehe [Detailfragen](plan.md#detailfragen).
 - [x] **5.42 Duplikate unter neuer Kennung.** Siehe [Abruf](architecture.md#abruf) und [Duplikate vom 2026-11-16](#duplikate-vom-2026-11-16).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 

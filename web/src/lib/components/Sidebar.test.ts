@@ -230,6 +230,17 @@ describe('Sidebar', () => {
 		expect(row('feed-tagesbote')).toBeNull();
 	});
 
+	it('shows what is known of a feed, for a message to the operator', async () => {
+		setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Actions for the feed Tagesbote' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Feed info …' }));
+		const dialog = screen.getByRole('dialog', { name: 'Feed info' });
+		expect(await within(dialog).findByText('Feed address')).toBeInTheDocument();
+		expect(dialog).toHaveTextContent('What this rueder knows of “Tagesbote”');
+		await userEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[1]!);
+		expect(screen.queryByRole('dialog')).toBeNull();
+	});
+
 	it('reports a feed where the server takes reports, and marks a blocked one', async () => {
 		const reader = new DemoReader(() => now);
 		const feedMenu = () =>
