@@ -847,9 +847,8 @@ Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder 
 
 - **Die langsamsten Suchen** brauchen an den echten Daten länger als an den erfundenen: Das 99. Perzentil liegt bei bis zu 149 ms (vorher bis zu 582 ms), die längste Suche brauchte 443 ms (vorher 664 ms). Ob das am Abruf liegt, der nebenher lief, ist nicht untersucht.
 - **Platz:** An den echten Daten wächst `article_content` von 617 auf 992 MB, um etwa so viel, wie die Texte brauchen; ihre übrigen Indexe werden beim Umschreiben etwas kleiner. An den erfundenen wächst sie von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB, weil deren Wörter anderthalbmal so groß sind wie die Texte, vermutlich weil die Texte kaum HTML haben. Der Index der Suche bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer.
-- **Migration:** 235 s für 710.000 erfundene Artikel. So lange startet der Server beim Update nicht.
+- **Migration:** 235 s für 710.000 erfundene Artikel, rund 200 s an den echten Daten. So lange startet der Server beim Update nicht. Die Datenbank wuchs an den echten Daten zwischendurch um 1,2 GB, weil PostgreSQL die Tabelle neu schreibt, bevor die alte Kopie wegfällt.
 - **Listen, Artikel und Speichern** werden nicht langsamer. An den echten Daten brauchen 20 neue Artikel im Median 16,8 statt 18,0 ms; davon fällt mehr auf den Teil ohne den Index (6,9 statt 4,2 ms), weil die Wörter jetzt in der Tabelle bestimmt werden und nicht mehr im Index.
-- **Nicht gemessen:** wie lange die Migration an den echten Daten dauerte.
 
 ## Wissen über das Altsystem
 
