@@ -123,7 +123,7 @@ async fn made_up_texts_are_words(db: PgPool) {
     assert_eq!(others, 0);
     let statistics: i16 = sqlx::query_scalar(
         "SELECT attstattarget FROM pg_attribute
-         WHERE attrelid = 'article_content_search'::regclass AND attnum = 1",
+         WHERE attrelid = 'article_content'::regclass AND attname = 'words'",
     )
     .fetch_one(&db)
     .await

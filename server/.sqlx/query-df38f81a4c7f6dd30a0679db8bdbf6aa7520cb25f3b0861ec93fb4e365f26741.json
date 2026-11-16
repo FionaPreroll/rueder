@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT z.feed_id, z.seq, z.id, d.doc @@ $3::text::tsquery AS \"hit!\",\n               ARRAY(SELECT d.doc @@ t::tsquery FROM unnest($8::text[]) t) AS \"with_word!\"\n        FROM (\n            SELECT x.feed_id, x.seq, x.id, x.title, x.author, x.tags, x.html\n            FROM article_content x\n            JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = x.feed_id\n            WHERE x.id >= $4 AND x.id < $5 AND x.feed_id = ANY($2)\n              AND NOT EXISTS (\n                  SELECT 1 FROM article_states h\n                  WHERE h.account_id = $1 AND h.feed_id = x.feed_id AND h.seq = x.seq\n                    AND (h.hidden OR ($6 AND h.read)))\n              AND ($6 IS NOT TRUE OR x.seq > s.read_upto OR EXISTS (\n                  SELECT 1 FROM article_states k\n                  WHERE k.account_id = $1 AND k.feed_id = x.feed_id AND k.seq = x.seq\n                    AND k.kept_unread))\n            ORDER BY x.id DESC\n            LIMIT $7\n        ) z\n        CROSS JOIN LATERAL (\n            SELECT article_search_doc(z.title, z.author, z.tags, z.html) AS doc OFFSET 0\n        ) d\n        ORDER BY z.id DESC\n        ",
+  "query": "\n        SELECT z.feed_id, z.seq, z.id, z.words @@ $3::text::tsquery AS \"hit!\",\n               ARRAY(SELECT z.words @@ t::tsquery FROM unnest($8::text[]) t) AS \"with_word!\"\n        FROM (\n            SELECT x.feed_id, x.seq, x.id, x.words\n            FROM article_content x\n            JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = x.feed_id\n            WHERE x.id >= $4 AND x.id < $5 AND x.feed_id = ANY($2)\n              AND NOT EXISTS (\n                  SELECT 1 FROM article_states h\n                  WHERE h.account_id = $1 AND h.feed_id = x.feed_id AND h.seq = x.seq\n                    AND (h.hidden OR ($6 AND h.read)))\n              AND ($6 IS NOT TRUE OR x.seq > s.read_upto OR EXISTS (\n                  SELECT 1 FROM article_states k\n                  WHERE k.account_id = $1 AND k.feed_id = x.feed_id AND k.seq = x.seq\n                    AND k.kept_unread))\n            ORDER BY x.id DESC\n            LIMIT $7\n        ) z\n        ORDER BY z.id DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -69,5 +69,5 @@
       null
     ]
   },
-  "hash": "4d7fda240aee16e81d54647be5d85e957a3f165851bf48f575d867f1c698c409"
+  "hash": "df38f81a4c7f6dd30a0679db8bdbf6aa7520cb25f3b0861ec93fb4e365f26741"
 }

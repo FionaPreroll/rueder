@@ -155,13 +155,10 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
     // The search index is built when all articles are in, the way the
     // migration builds it for the articles already there: that is quicker than
     // keeping it up to date article by article, and it is the time measured.
-    let (search_index, statistics): (String, i16) = sqlx::query_as(
-        "SELECT pg_get_indexdef(i.indexrelid), a.attstattarget
-         FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indexrelid AND a.attnum = 1
-         WHERE i.indexrelid = 'article_content_search'::regclass",
-    )
-    .fetch_one(db)
-    .await?;
+    let search_index: String =
+        sqlx::query_scalar("SELECT pg_get_indexdef('article_content_search'::regclass)")
+            .fetch_one(db)
+            .await?;
     sqlx::query("DROP INDEX article_content_search")
         .execute(db)
         .await?;
@@ -198,13 +195,6 @@ pub async fn generate(db: &PgPool, size: Size) -> anyhow::Result<()> {
         .execute(db)
         .await
         .context("building the search index")?;
-    if statistics > 0 {
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "ALTER INDEX article_content_search ALTER COLUMN 1 SET STATISTICS {statistics}"
-        )))
-        .execute(db)
-        .await?;
-    }
     tracing::info!(
         "search index built in {} s, after {} s",
         building.elapsed().as_secs(),
@@ -595,8 +585,7 @@ impl Texts {
             "SELECT word, ndoc FROM ts_stat($1) WHERE word ~ '^[[:alpha:]]{2,}$' ORDER BY md5(word)",
         )
         .bind(format!(
-            "SELECT article_search_doc(c.title, c.author, c.tags, c.html)
-             FROM generate_series({first}, {last}, {step}) g JOIN article_content c ON c.id = g"
+            "SELECT c.words FROM generate_series({first}, {last}, {step}) g JOIN article_content c ON c.id = g"
         ))
         .fetch_all(db)
         .await?;
@@ -637,7 +626,7 @@ async fn articles_with(db: &PgPool, words: &str) -> anyhow::Result<i64> {
     };
     Ok(sqlx::query_scalar(
         "SELECT count(*) FROM article_content
-         WHERE article_search_doc(title, author, tags, html) @@ $1::text::tsquery",
+         WHERE words @@ $1::text::tsquery",
     )
     .bind(query)
     .fetch_one(db)

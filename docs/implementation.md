@@ -384,6 +384,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
   - ein Test die Header prüft;
   - der Bild-Proxy unter Last gemessen ist.
 - [x] **5.37 Messen in der Form des alten Bestands.** Siehe [Suche vom 2026-11-15](#suche-vom-2026-11-15).
+- [x] **5.38 Gespeicherte Wörter für die Suche.** Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -766,7 +767,7 @@ Danach hat die Datenbank 710.030 Artikel in 167 Feeds und 1,9 GB:
 - **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 8 ms, schneller als an den erfundenen Daten, deren Konten mehr Abos haben. Der langsamste von 6.000 Läufen brauchte 72 ms. Als gelesen markieren ist langsamer als an den erfundenen Daten, aber weit unter dem Ziel; warum, ist nicht untersucht.
 - **Speichern:** Der Index der Suche kostet beim Abruf rund 0,7 ms je Artikel, halb so viel wie an den erfundenen Daten.
 - **Die Wörter der Suchen waren erfunden.** `bench measure` setzte sie hier noch aus den Silben der erfundenen Daten zusammen (seit Paket 5.37 nimmt es sie aus dem Bestand); in den echten Texten finden drei der sieben Arten keinen Artikel, die anderen zwischen 71 und 9.061. Keine der Zeilen ist deshalb eine Suche nach einem häufigen Wort.
-- **Die Suche nach einem Wort braucht bis zu fünfmal so lange wie an den erfundenen Daten**, im Median 140 bis 220 ms; zwei Wörter und die Suche tief in der Liste sind etwa gleich schnell. Das 99. Perzentil bleibt unter 0,4 s, die längste Suche brauchte 0,5 s. Auch ein Wort, das kein Artikel hat, kostet 140 bis 220 ms. An der Länge der Texte liegt es nicht: An erfundenen Daten mit denselben Längen und in der Form dieses Bestands ist die Suche drei- bis viermal so schnell ([Suche vom 2026-11-15](#suche-vom-2026-11-15)). Woran es liegt, ist offen.
+- **Die Suche nach einem Wort braucht bis zu fünfmal so lange wie an den erfundenen Daten**, im Median 140 bis 220 ms; zwei Wörter und die Suche tief in der Liste sind etwa gleich schnell. Das 99. Perzentil bleibt unter 0,4 s, die längste Suche brauchte 0,5 s. Auch ein Wort, das kein Artikel hat, kostet 140 bis 220 ms. Das liegt an den neuesten Artikeln: Sie sind viel länger als die alten, und jede Suche bestimmte zuerst ihre Wörter ([Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16)).
 - **Nicht gemessen:** nach einem Neustart mit kaltem Cache. Die Datenbank passt mit 1,9 GB ganz in den Arbeitsspeicher; die langsameren Zugriffe auf alte Artikel nach einem Neustart, die bei 21 GB erfundenen Daten auffielen ([Suche vom 2026-11-11](#suche-vom-2026-11-11)), sind bei dieser Größe nicht zu erwarten.
 
 ### Suche vom 2026-11-15
@@ -797,7 +798,7 @@ Länge der Texte in Zeichen HTML, an jedem zehnten Artikel:
 
 - **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 10 ms, wie im Probelauf.
 - **Die Suche ist hier schneller als an den echten Daten.** Im Probelauf brauchten Suchen nach seltenen oder fehlenden Wörtern im Median 140 bis 220 ms, hier brauchen seltene Wörter 46 bis 56 ms. Die Länge der Texte ist dieselbe, und auch das Konto mit wenigen Artikeln erklärt den Abstand nicht. Für ein solches Konto die neuesten Artikel Feed für Feed zu holen, statt rückwärts durch alle zu gehen, änderte die Zeiten nicht und wurde deshalb nicht gebaut.
-- **Offen:** `bench measure` an den echten Daten, jetzt mit Wörtern aus dem Bestand und der Suche für das kleinste Konto. Bleibt der Abstand, liegt es an der Maschine, am Abruf, der dort nebenher lief, oder an etwas in den echten Texten, das die erfundenen nicht haben.
+- **Woran es lag:** an den neuesten Artikeln der echten Daten, die viel länger sind als die übrigen; die Stichprobe über den ganzen Bestand sieht sie nicht, weil es wenige sind. Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
 
 ### Live-Updates je Konto vom 2026-11-16
 
@@ -811,6 +812,30 @@ Nach Paket 5.31, wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-
 
 - **Die Kosten hängen nicht mehr an den Verbindungen.** Bei 10.000 Verbindungen kosten 800 Änderungen je Sekunde 0,6 statt 2,7 Kerne, und kein Lauf sah ein `resync`; vorher war die Maschine ab 200 je Sekunde voll. Was bei 2.000 je Sekunde bleibt, sind die Anfragen selbst und das Schreiben in die Datenbank.
 - **Mehr Speicher je Verbindung**, rund 8 KB, weil jedes Konto mit offener Verbindung einen eigenen Puffer hat. Bei 5.000 Verbindungen sind das 40 MB.
+
+### Gespeicherte Wörter vom 2026-11-16
+
+Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder Suche für die neuesten Artikel neu zu bestimmen (`migrations/0024_search_words.sql`). Ergebnis: An erfundenen Daten, deren neueste Artikel so lang sind wie die echten, braucht die Suche im Median 7 bis 21 ms statt 130 bis 160 ms. Die Tabelle der Artikeltexte wird dafür fast doppelt so groß.
+
+- **An den echten Daten** (Fionas Testinstanz wie im [Probelauf](#probelauf-vom-2026-11-15), `bench measure` mit Wörtern aus dem Bestand, vorher): Die Suche brauchte im Median 116 bis 264 ms, für das Konto mit den wenigsten Artikeln aber 30 ms und tief in der Liste 84 ms. Langsam war also, was bei den neuesten Artikeln der großen Konten anfängt. Die 3.429 Artikel, die seit dem Import abgerufen wurden, haben im Mittel 4.006 Zeichen HTML (90 % bis 10.072), die 707.040 importierten 632, die neuesten 500 im Mittel 1.804. Die Wörter dieser 500 zu bestimmen dauerte 103 ms, und jede Suche tat das zuerst (`search::PROBE`).
+- **Maschine:** wie unter [Suche vom 2026-11-15](#suche-vom-2026-11-15).
+- **Daten:** die erfundenen von dort, die neuesten 4.000 Artikel mit den Texten von je fünf anderen: im Mittel 3.465 Zeichen, die neuesten 500 3.888. Die Wörter dieser 500 zu bestimmen dauert hier 119 ms.
+
+| Suche, Median | Echt, vorher | Erfunden, vorher | Erfunden, mit gespeicherten Wörtern | p99 damit |
+|---|---:|---:|---:|---:|
+| Ein sehr häufiges Wort | 116 ms | 131 ms | 7 ms | 18 ms |
+| Ein häufiges Wort | 234 ms | 132 ms | 7 ms | 27 ms |
+| Ein selteneres Wort | 248 ms | 138 ms | 14 ms | 35 ms |
+| Ein seltenes Wort | 246 ms | 140 ms | 15 ms | 32 ms |
+| Zwei Wörter | 264 ms | 162 ms | 20 ms | 35 ms |
+| Ein häufiges Wort, tief | 84 ms | 59 ms | 7 ms | 24 ms |
+| Ein selteneres Wort, nur ungelesen | 248 ms | 153 ms | 21 ms | 37 ms |
+| Ein häufiges Wort, Konto mit den wenigsten Artikeln | 30 ms | 82 ms | 15 ms | 25 ms |
+
+- **Platz:** `article_content` wächst von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB. Der Index bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer.
+- **Migration:** 235 s für 710.000 Artikel. So lange startet der Server beim Update nicht.
+- **Listen, Artikel und Speichern** werden nicht langsamer.
+- **Nicht gemessen:** an den echten Daten mit gespeicherten Wörtern.
 
 ## Wissen über das Altsystem
 
