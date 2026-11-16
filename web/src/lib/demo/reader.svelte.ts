@@ -9,6 +9,8 @@ import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filt
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from '#lib/model.ts';
 import type {
 	Abilities,
+	FeedInfo,
+	FetchAgent,
 	Found,
 	Fresh,
 	Imported,
@@ -112,7 +114,8 @@ export class DemoReader implements Reader {
 		move: false,
 		status: true,
 		reports: false,
-		reportContent: false
+		reportContent: false,
+		fetchAgent: true
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -158,6 +161,8 @@ export class DemoReader implements Reader {
 	private addresses = new Map<string, string>();
 	/** The names the feeds had before the reader gave them one. */
 	private ownTitles = new Map<string, string>();
+	/** The feeds that are said to be fetched as a browser. */
+	private asBrowser = new Set<string>();
 
 	constructor(now: () => number = Date.now, data: DemoData = demoData(now())) {
 		this.now = now;
@@ -599,6 +604,38 @@ export class DemoReader implements Reader {
 			if (feedId === id) this.addresses.delete(address);
 		}
 		if (this.stream.kind === 'feed' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
+	/** Made up: the draft fetches nothing. It plays an admin, as for the status. */
+	async feedInfo(id: string): Promise<FeedInfo | null> {
+		const feed = this.feeds[id];
+		if (!feed) return null;
+		const every = 30 * 60;
+		const fetched = this.now() - 12 * 60_000;
+		const at = (time: number) => new Date(time).toISOString();
+		const address = [...this.addresses].find(([, feedId]) => feedId === id)?.[0];
+		return {
+			id: Object.keys(this.feeds).indexOf(id) + 1,
+			title: this.ownTitles.get(id) ?? feed.title,
+			feed_url: address ?? `${feed.siteUrl}/feed.xml`,
+			site_url: feed.siteUrl,
+			fetch_agent: this.asBrowser.has(id) ? 'browser' : 'rueder',
+			fetch_interval_s: every,
+			fetched_at: at(fetched),
+			last_success_at: at(feed.error ? fetched - 3 * 24 * 3600_000 : fetched),
+			last_error_at: feed.error ? at(fetched) : null,
+			error: feed.error,
+			next_fetch_at: at(fetched + every * 1000),
+			last_seq: feed.lastSeq,
+			blocked: feed.blocked ?? false
+		};
+	}
+
+	async setFetchAgent(id: string, agent: FetchAgent) {
+		if (!this.feeds[id]) return false;
+		if (agent === 'browser') this.asBrowser.add(id);
+		else this.asBrowser.delete(id);
+		return true;
 	}
 
 	/** The draft has no OPML; `can.opml` keeps the page from asking. */

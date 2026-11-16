@@ -1,0 +1,168 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, title, feed_url, site_url, fetch_agent, fetch_interval_s, fetched_at,\n                  last_success_at, last_error_at, error_message AS error, next_fetch_at,\n                  last_seq, blocked_at IS NOT NULL AS \"blocked!\"\n           FROM feeds f\n           WHERE id = $1 AND ($2::integer IS NULL OR EXISTS (\n               SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id AND s.account_id = $2))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "feed_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "feed_url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "site_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "site_url"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "fetch_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "fetch_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "fetch_interval_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "fetch_interval_s"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "fetched_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "fetched_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_success_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_success_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_error_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_error_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "error_message"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "next_fetch_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "next_fetch_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "last_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "last_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "blocked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "171ed84de7af1901fd99b5e9de910c85453f8b5079a3b8eb32e1708030a22f14"
+}

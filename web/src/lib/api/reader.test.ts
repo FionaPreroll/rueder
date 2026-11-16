@@ -1004,7 +1004,8 @@ describe('reading', () => {
 			move: true,
 			status: true,
 			reports: true,
-			reportContent: false
+			reportContent: false,
+			fetchAgent: true
 		});
 	});
 });

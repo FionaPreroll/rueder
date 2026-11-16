@@ -761,6 +761,7 @@ async fn import_file(
         &rules,
         session.account_id,
         file,
+        session.is_admin,
         Some(&state.rates),
     )
     .await?;
@@ -768,14 +769,17 @@ async fn import_file(
 }
 
 /// Takes a file into an account. See the head of this module for what that
-/// means. With the server's `rates`, the feeds nobody read before count
-/// against the account's limit, and a file over it is not taken at all; the
-/// command line has none.
+/// means. A feed nobody read before is fetched as the file says only with
+/// `agents`, for an admin and the command line: whoever says it says it for
+/// all who will read the feed. With the server's `rates`, the feeds nobody
+/// read before count against the account's limit, and a file over it is not
+/// taken at all; the command line has none.
 pub async fn import(
     db: &PgPool,
     rules: &Rules,
     account_id: i32,
     file: Export,
+    agents: bool,
     rates: Option<&Rates>,
 ) -> Result<Imported, AppError> {
     let plan = plan(file, rules)?;
@@ -840,7 +844,16 @@ pub async fn import(
             imported.known += 1;
         }
         feed_ids.insert(feed.url.clone(), found.feed_id);
-        take_feed(&mut tx, account_id, found, feed, &label_ids, &mut imported).await?;
+        take_feed(
+            &mut tx,
+            account_id,
+            found,
+            agents,
+            feed,
+            &label_ids,
+            &mut imported,
+        )
+        .await?;
     }
 
     take_rules(
@@ -910,20 +923,22 @@ async fn find(
         .collect())
 }
 
-/// What the account did in one feed of the file.
+/// What the account did in one feed of the file; with `agent`, a feed nobody
+/// read before is fetched as the file says.
 async fn take_feed(
     tx: &mut PgConnection,
     account_id: i32,
     found: &subscribe::TakenFeed,
+    agent: bool,
     feed: WantedFeed,
     label_ids: &HashMap<String, i32>,
     imported: &mut Imported,
 ) -> Result<(), AppError> {
     let feed_id = found.feed_id;
     if found.created {
-        let agent = match feed.agent {
-            Agent::Rueder => "rueder",
-            Agent::Browser => "browser",
+        let agent = match (agent, feed.agent) {
+            (true, Agent::Browser) => "browser",
+            _ => "rueder",
         };
         sqlx::query!(
             "UPDATE feeds SET fetch_agent = $2, site_url = coalesce(site_url, $3) WHERE id = $1",

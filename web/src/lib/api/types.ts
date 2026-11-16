@@ -1150,6 +1150,57 @@ export type Rename = {
 };
 
 /**
+ * What the server knows of a feed and how it is fetched, for a reader to
+ * pass on to whoever helps with it. Nothing in it is about other accounts.
+ *
+ * `GET /api/feeds/{id}/info` answers with it; `rueder feed show` prints it.
+ */
+export type FeedInfo = {
+	id: number,
+	/**
+	 * The feed's own name.
+	 */
+	title: string,
+	feed_url: string,
+	site_url: string | null,
+	fetch_agent: FetchAgent,
+	/**
+	 * How long it waits from one fetch to the next, in seconds.
+	 */
+	fetch_interval_s: number,
+	/**
+	 * When it was fetched last, whether that worked or not; null before the
+	 * first time.
+	 */
+	fetched_at: string | null,
+	/**
+	 * When a fetch worked last.
+	 */
+	last_success_at: string | null,
+	/**
+	 * When a fetch failed last, also if one worked since.
+	 */
+	last_error_at: string | null,
+	/**
+	 * Why the last fetch failed, if it did.
+	 */
+	error: string | null,
+	/**
+	 * When it is fetched next, unless it is blocked.
+	 */
+	next_fetch_at: string,
+	/**
+	 * The number of its newest article.
+	 */
+	last_seq: number,
+	/**
+	 * The operator blocked the feed: nobody sees its articles, and it is not
+	 * fetched.
+	 */
+	blocked: boolean,
+};
+
+/**
  * What `PUT /api/feeds/{id}/agent` reads.
  */
 export type NewAgent = {

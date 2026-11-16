@@ -36,6 +36,7 @@ import {
 	type Abilities,
 	type Account,
 	type Connection,
+	type FetchAgent,
 	type LegalLinks,
 	type ReportOutcome,
 	type ReportReason,
@@ -450,7 +451,8 @@ export class ServerReader implements Reader {
 			move: true,
 			status: account.admin,
 			reports: true,
-			reportContent: account.contentReports === true
+			reportContent: account.contentReports === true,
+			fetchAgent: account.admin
 		};
 		this.session = session;
 		this.api = api;
@@ -2149,6 +2151,26 @@ export class ServerReader implements Reader {
 			if (this.stream.kind !== 'feed') this.reload();
 		});
 		if (this.stream.kind === 'feed' && this.stream.id === id) this.show({ kind: 'all' });
+	}
+
+	async feedInfo(id: string) {
+		try {
+			return await this.api.feedInfo(serverId(id));
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
+
+	/** The server fetches the feed again at once; the dialog asks for what it then knows. */
+	async setFetchAgent(id: string, agent: FetchAgent) {
+		try {
+			await this.api.setFetchAgent(serverId(id), agent);
+			return true;
+		} catch (error) {
+			this.refusal(error);
+			return false;
+		}
 	}
 
 	/** The feeds of a file are fetched by the server's next round, not here. */

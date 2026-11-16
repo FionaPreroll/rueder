@@ -36,6 +36,7 @@ const de: Messages = {
 		renameFeed: 'Umbenennen',
 		unsubscribe: 'Abbestellen',
 		reportFeed: 'Feed melden …',
+		feedInfo: 'Feed-Infos …',
 		feedActions: (title) => `Aktionen für den Feed ${title}`,
 		unsubscribeTitle: 'Abbestellen?',
 		unsubscribeText: (title) =>
@@ -158,6 +159,35 @@ const de: Messages = {
 		sent: 'Danke. Die Meldung ist beim Betreiber dieses rueder angekommen.',
 		tooMany: 'Du hast zuletzt viele Meldungen gesendet. Versuch es später wieder.',
 		unreachable: 'Die Meldung hat den Server nicht erreicht. Versuch es später wieder.'
+	},
+
+	feedInfo: {
+		title: 'Feed-Infos',
+		text: (title) =>
+			`Was dieser rueder über „${title}“ weiß und wie er ihn abruft. Wenn der Feed nicht geht, kopier das in deine Nachricht an den Betreiber.`,
+		number: 'Nummer',
+		name: 'Name',
+		address: 'Feed-Adresse',
+		site: 'Website',
+		noSite: 'Keine',
+		agent: 'Abgerufen als',
+		agents: { rueder: 'rueder', browser: 'Browser' },
+		every: 'Abgerufen alle',
+		fetched: 'Letzter Abruf',
+		succeeded: 'Letzter Abruf, der ging',
+		failed: 'Letzter Fehler',
+		next: 'Nächster Abruf',
+		blocked: 'Keiner, der Betreiber hat den Feed gesperrt',
+		articles: 'Artikel bisher',
+		never: 'Nie',
+		fetchAs: 'Abrufen als',
+		fetchAsHint:
+			'Für alle, die den Feed lesen. Als Browser für Websites, die rueder abweisen. Er wird gleich neu abgerufen.',
+		notSwitched: 'Das ging nicht. Versuch es später wieder.',
+		copy: 'Kopieren',
+		copied: 'Kopiert',
+		loading: 'Wird geladen …',
+		unreachable: 'Der Server hat nicht geantwortet. Versuch es später wieder.'
 	},
 
 	media: {

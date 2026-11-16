@@ -22,13 +22,13 @@ use rueder::{
     oidc,
     oidc::Oidc,
     progress, reclean, registration, reports, retention, router, second_factor, sessions, transfer,
-    version,
+    tree, version,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
-use time::OffsetDateTime;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::{
     net::TcpListener,
     signal::unix::{SignalKind, signal},
@@ -69,13 +69,15 @@ enum Command {
     /// Make accounts and set their passwords. There is no other way to get one.
     #[command(subcommand)]
     Account(AccountCommand),
-    /// Say which accounts are admins: they see the status of the server and
-    /// make accounts in the browser.
+    /// Say which accounts are admins: they see the status of the server, make
+    /// accounts and say as what the feeds they read are fetched, in the
+    /// browser.
     #[command(subcommand)]
     Admin(AdminCommand),
-    /// Block a feed readers reported, or lift the block: a blocked feed is not
-    /// fetched, nobody sees its articles or subscribes to it anew, and its
-    /// images go from the cache.
+    /// Show what the server knows of a feed, say as what it is fetched, or
+    /// block a feed readers reported: a blocked feed is not fetched, nobody
+    /// sees its articles or subscribes to it anew, and its images go from the
+    /// cache.
     #[command(subcommand)]
     Feed(FeedCommand),
     /// Say whether readers can make accounts for themselves or invite others,
@@ -296,6 +298,17 @@ enum FeedCommand {
     Block { address: String },
     /// Lift the block of the feed at this address; it is fetched again at once.
     Unblock { address: String },
+    /// Show what a reader's "Feed info" shows and how many read the feed, by
+    /// its number or its address.
+    Show { feed: String },
+    /// Say as what the feed with this number or at this address is fetched:
+    /// as rueder, or as a browser for sites that turn rueder away. It holds
+    /// for all who read it, and the feed is fetched at once.
+    Agent {
+        feed: String,
+        #[arg(value_parser = ["rueder", "browser"])]
+        agent: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -505,12 +518,13 @@ async fn account(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
                 std::fs::read(&file).with_context(|| format!("reading {}", file.display()))?;
             let file: transfer::Export =
                 serde_json::from_slice(&text).context("this is not a file of a rueder account")?;
-            let imported = match transfer::import(db, &Rules::from_env()?, id, file, None).await {
-                Ok(imported) => imported,
-                Err(rueder::AppError::BadRequest(reason)) => anyhow::bail!("{reason}"),
-                Err(rueder::AppError::Internal(err)) => return Err(err),
-                Err(_) => anyhow::bail!("the import failed"),
-            };
+            let imported =
+                match transfer::import(db, &Rules::from_env()?, id, file, true, None).await {
+                    Ok(imported) => imported,
+                    Err(rueder::AppError::BadRequest(reason)) => anyhow::bail!("{reason}"),
+                    Err(rueder::AppError::Internal(err)) => return Err(err),
+                    Err(_) => anyhow::bail!("the import failed"),
+                };
             println!("{imported}");
         }
         AccountCommand::SecondFactorOff { name } => {
@@ -773,8 +787,60 @@ async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
                 address.trim()
             );
         }
+        FeedCommand::Show { feed } => {
+            let found = moderation::named(db, &feed).await?;
+            if found.is_empty() {
+                anyhow::bail!("there is no feed {}", feed.trim());
+            }
+            for feed_id in found {
+                let Some(info) = tree::feed_info(db, feed_id, None).await? else {
+                    continue;
+                };
+                let readers = moderation::readers(db, feed_id).await?;
+                let next = if info.blocked {
+                    "blocked".to_owned()
+                } else {
+                    when(Some(info.next_fetch_at))
+                };
+                println!("Feed {}", info.id);
+                println!("  Title:        {}", info.title);
+                println!("  Address:      {}", info.feed_url);
+                println!(
+                    "  Site:         {}",
+                    info.site_url.as_deref().unwrap_or("-")
+                );
+                println!("  Fetched as:   {}", info.fetch_agent);
+                println!("  Every:        {} s", info.fetch_interval_s);
+                println!("  Last fetch:   {}", when(info.fetched_at));
+                println!("  Last success: {}", when(info.last_success_at));
+                println!("  Last error:   {}", when(info.last_error_at));
+                println!("  Error:        {}", info.error.as_deref().unwrap_or("-"));
+                println!("  Next fetch:   {next}");
+                println!("  Articles:     {}", info.last_seq);
+                println!("  Readers:      {readers}");
+            }
+        }
+        FeedCommand::Agent { feed, agent } => {
+            let found = moderation::named(db, &feed).await?;
+            if found.is_empty() {
+                anyhow::bail!("there is no feed {}", feed.trim());
+            }
+            moderation::set_agent(db, &found, &agent).await?;
+            let numbers: Vec<String> = found.iter().map(i32::to_string).collect();
+            println!(
+                "Feed {} is fetched as {agent} from now on, the first time at once.",
+                numbers.join(", ")
+            );
+        }
     }
     Ok(())
+}
+
+/// A time for the command line, to the second; "never" for none.
+fn when(at: Option<OffsetDateTime>) -> String {
+    at.and_then(|at| at.replace_nanosecond(0).ok())
+        .and_then(|at| at.format(&Rfc3339).ok())
+        .unwrap_or_else(|| "never".to_owned())
 }
 
 /// Where the image proxy keeps its images and its key, from the environment:

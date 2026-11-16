@@ -116,6 +116,13 @@ What is here:
   reported. `rueder feed block <address>` stops fetching the feed, hides its
   articles from everybody, refuses new subscriptions and removes its images
   from the cache; `rueder feed unblock <address>` lifts it.
+- What is known of a feed, for support (`src/tree.rs`): its readers see its
+  addresses, as what and when it was fetched and why that failed under "Feed
+  info …" in its menu (`GET /api/feeds/{id}/info`); `rueder feed show
+  <number or address>` prints the same for any feed, with the number of its
+  readers. Only an admin who reads a feed says as what it is fetched, for all
+  who read it (`PUT /api/feeds/{id}/agent`), and the operator for any feed with
+  `rueder feed agent <number or address> browser|rueder`.
 - The status for admins (`src/monitor.rs`, `src/status.rs`): `GET /api/status`
   for the last hour, in memory, and the same numbers for Prometheus under
   `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).
@@ -211,6 +218,8 @@ cargo run -- retention run              # clear all that is old now, not within 
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
 cargo run -- account second-factor-off ada   # ada lost the app and the recovery codes
 cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
+cargo run -- feed show 130              # what is known of a feed, by number or address
+cargo run -- feed agent 130 browser     # fetch it as a browser, for all who read it; or rueder
 ```
 
 Admins see the status of the server in the account menu of the page

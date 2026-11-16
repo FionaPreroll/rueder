@@ -14,12 +14,13 @@ use axum::{
     http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgConnection;
+use sqlx::{PgConnection, PgPool};
+use time::OffsetDateTime;
 use ts_rs::TS;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppError, AppState, accounts, filters, sessions::Session};
+use crate::{AppError, AppState, accounts, filters, profile, sessions::Session};
 
 /// The longest name of a folder or a subscription, in characters.
 pub const MAX_TITLE: usize = 100;
@@ -40,6 +41,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<NewFolder>()
         .add::<Created>()
         .add::<Rename>()
+        .add::<FeedInfo>()
         .add::<NewAgent>();
 }
 
@@ -49,6 +51,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(add_folder))
         .routes(routes!(rename_folder, remove_folder))
         .routes(routes!(rename_feed, unsubscribe))
+        .routes(routes!(info))
         .routes(routes!(set_agent))
         .routes(routes!(settings, set_settings))
 }
@@ -559,6 +562,94 @@ pub(crate) enum FetchAgent {
     Browser,
 }
 
+/// What the server knows of a feed and how it is fetched, for a reader to
+/// pass on to whoever helps with it. Nothing in it is about other accounts.
+///
+/// `GET /api/feeds/{id}/info` answers with it; `rueder feed show` prints it.
+#[derive(Serialize, TS, ToSchema)]
+pub struct FeedInfo {
+    pub id: i32,
+    /// The feed's own name.
+    pub title: String,
+    pub feed_url: String,
+    pub site_url: Option<String>,
+    #[ts(as = "FetchAgent")]
+    #[schema(value_type = FetchAgent)]
+    pub fetch_agent: String,
+    /// How long it waits from one fetch to the next, in seconds.
+    pub fetch_interval_s: i32,
+    /// When it was fetched last, whether that worked or not; null before the
+    /// first time.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
+    pub fetched_at: Option<OffsetDateTime>,
+    /// When a fetch worked last.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
+    pub last_success_at: Option<OffsetDateTime>,
+    /// When a fetch failed last, also if one worked since.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
+    pub last_error_at: Option<OffsetDateTime>,
+    /// Why the last fetch failed, if it did.
+    pub error: Option<String>,
+    /// When it is fetched next, unless it is blocked.
+    #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
+    #[schema(value_type = String)]
+    pub next_fetch_at: OffsetDateTime,
+    /// The number of its newest article.
+    pub last_seq: i32,
+    /// The operator blocked the feed: nobody sees its articles, and it is not
+    /// fetched.
+    pub blocked: bool,
+}
+
+/// What the server knows of a feed: with `reader`, only if that account reads
+/// it; without, of any feed, for the operator.
+pub async fn feed_info(
+    db: &PgPool,
+    feed_id: i32,
+    reader: Option<i32>,
+) -> sqlx::Result<Option<FeedInfo>> {
+    sqlx::query_as!(
+        FeedInfo,
+        r#"SELECT id, title, feed_url, site_url, fetch_agent, fetch_interval_s, fetched_at,
+                  last_success_at, last_error_at, error_message AS error, next_fetch_at,
+                  last_seq, blocked_at IS NOT NULL AS "blocked!"
+           FROM feeds f
+           WHERE id = $1 AND ($2::integer IS NULL OR EXISTS (
+               SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id AND s.account_id = $2))"#,
+        feed_id,
+        reader,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// What the server knows of a feed the account reads and how it is fetched:
+/// its number, its addresses, as what and when it was fetched and why that
+/// failed, for a message to support.
+#[utoipa::path(
+    get,
+    path = "/feeds/{id}/info",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The feed.")),
+    security(("session" = [])),
+    responses((status = OK, body = FeedInfo), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
+async fn info(
+    State(state): State<AppState>,
+    session: Session,
+    Path(feed_id): Path<i32>,
+) -> Result<Json<FeedInfo>, AppError> {
+    let info = feed_info(&state.db, feed_id, Some(session.account_id)).await?;
+    Ok(Json(info.ok_or(AppError::NotFound)?))
+}
+
 /// What `PUT /api/feeds/{id}/agent` reads.
 #[derive(Deserialize, TS, ToSchema)]
 struct NewAgent {
@@ -567,7 +658,8 @@ struct NewAgent {
 
 /// Says as what a feed is fetched: as rueder, or as a browser for sites that
 /// turn rueder away. The feed is one for all who read it, so this holds for
-/// all of them, and any of them can say it. The next fetch comes at once.
+/// all of them, and rueder passes for a browser in the name of the whole
+/// server: only an admin who reads it says it. The next fetch comes at once.
 #[utoipa::path(
     put,
     path = "/feeds/{id}/agent",
@@ -575,7 +667,7 @@ struct NewAgent {
     params(("id" = i32, Path, description = "The feed.")),
     request_body = NewAgent,
     security(("session" = [])),
-    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it."), (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
 )]
 async fn set_agent(
     State(state): State<AppState>,
@@ -583,6 +675,7 @@ async fn set_agent(
     Path(feed_id): Path<i32>,
     Json(new): Json<NewAgent>,
 ) -> Result<StatusCode, AppError> {
+    profile::admin(&session)?;
     let agent = match new.agent {
         FetchAgent::Rueder => "rueder",
         FetchAgent::Browser => "browser",
