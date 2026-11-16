@@ -891,6 +891,7 @@ async fn a_disabled_account_is_told_so_and_not_logged_in(db: PgPool) {
         rueder::accounts::set_disabled(&db, "ada", true)
             .await
             .unwrap()
+            .is_some()
     );
     let sessions_before = count(&db, "sessions").await;
     let (headers, _) = log_in(

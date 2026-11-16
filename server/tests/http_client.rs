@@ -25,7 +25,9 @@ use axum::{
     response::{IntoResponse, Response as ServerResponse},
     routing::get,
 };
-use rueder::http_client::{Agent, Config, Error, HttpClient, Looking, Lookup, Request};
+use rueder::http_client::{
+    Agent, Config, Error, HttpClient, Looking, Lookup, Remembering, Request,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -580,4 +582,44 @@ async fn what_the_network_does_wrong_is_told_without_the_password() {
     .await;
     let err = world.get(&format!("http://{cut}/")).await.unwrap_err();
     assert!(matches!(err, Error::Network(_)), "{err:?}");
+}
+
+/// The client as the server builds it remembers the answers of the resolver
+/// for a while: a host with many feeds is asked about once. Failures are not
+/// remembered, and a remembered address that is not allowed stays refused.
+#[tokio::test]
+async fn answers_of_the_resolver_are_taken_again_and_checked_again() {
+    let world = World::new().await;
+    let remembering = Arc::new(Remembering::new(world.names.clone()));
+    let config = Config {
+        allow: vec!["127.0.0.1".parse().unwrap()],
+        ..Config::default()
+    };
+    let client = HttpClient::with_lookup(config, remembering).unwrap();
+    let get = |url: String| {
+        let client = client.clone();
+        async move { client.get(Request::new(&url)).await }
+    };
+
+    world.names.set("feeds.test", &[&["127.0.0.1"]]);
+    for n in 0..3 {
+        let url = format!("http://feeds.test:{}/feed?n={n}", world.outside.port());
+        assert_eq!(get(url).await.unwrap().status, StatusCode::OK);
+    }
+    assert_eq!(world.names.asked("feeds.test"), 1);
+
+    world.names.set("inside.test", &[&["127.0.0.2"]]);
+    for _ in 0..2 {
+        let url = format!("http://inside.test:{}/", world.inside.port());
+        let err = get(url).await.unwrap_err();
+        assert!(matches!(err, Error::Internal { .. }), "{err:?}");
+    }
+    assert_eq!(world.names.asked("inside.test"), 1);
+    assert_eq!(world.inside_hits.load(Ordering::SeqCst), 0);
+
+    for _ in 0..2 {
+        let url = format!("http://nowhere.test:{}/", world.outside.port());
+        assert!(get(url).await.is_err());
+    }
+    assert_eq!(world.names.asked("nowhere.test"), 2);
 }

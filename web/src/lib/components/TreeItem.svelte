@@ -29,6 +29,7 @@
 	import FeedIcon from './FeedIcon.svelte';
 	import Icon from './Icon.svelte';
 	import Menu from './Menu.svelte';
+	import FeedInfoDialog from './FeedInfoDialog.svelte';
 	import ReportDialog from './ReportDialog.svelte';
 	import TreeItem from './TreeItem.svelte';
 
@@ -59,6 +60,7 @@
 	let newTitle = $state('');
 	let unsubscribing = $state(false);
 	let reporting = $state(false);
+	let informing = $state(false);
 
 	function pick() {
 		reader.show({ kind: node.kind, id: node.id });
@@ -288,6 +290,14 @@
 					>
 						{m.nav.unsubscribe}
 					</button>
+					<button
+						type="button"
+						role="menuitem"
+						class="menu-item"
+						onclick={() => (informing = true)}
+					>
+						{m.nav.feedInfo}
+					</button>
 					{#if reader.can.reportContent && !feed.blocked}
 						<button
 							type="button"
@@ -330,6 +340,15 @@
 			feedId={node.id}
 			title={feed.title}
 			onclose={() => (reporting = false)}
+		/>
+	{/if}
+
+	{#if informing && feed}
+		<FeedInfoDialog
+			{reader}
+			feedId={node.id}
+			title={feed.title}
+			onclose={() => (informing = false)}
 		/>
 	{/if}
 

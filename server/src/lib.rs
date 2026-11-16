@@ -61,6 +61,7 @@ pub mod oidc;
 pub mod openapi;
 pub mod passkeys;
 pub mod profile;
+pub mod progress;
 pub mod rate;
 pub mod reading;
 pub mod reclean;

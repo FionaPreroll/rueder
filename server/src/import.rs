@@ -30,7 +30,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt,
-    time::Instant,
 };
 
 use anyhow::{Context, bail};
@@ -45,6 +44,7 @@ use crate::{
     cleaning::{self, Base, Rules},
     feeds::add_inline,
     filters,
+    progress::Progress,
 };
 
 /// Articles read and written in one go.
@@ -436,7 +436,12 @@ async fn import_feeds(
     rules: &Rules,
     report: &mut Report,
 ) -> anyhow::Result<HashMap<Uuid, Target>> {
-    let started = Instant::now();
+    let to_bring = plans
+        .iter()
+        .filter(|plan| !matches!(plan.place, Place::Done(_)))
+        .map(|plan| plan.articles.unsigned_abs())
+        .sum();
+    let mut progress = Progress::new("old articles brought", to_bring);
     let mut targets = HashMap::new();
     let mut done = Vec::new();
     let mut unreadable = 0;
@@ -450,7 +455,7 @@ async fn import_feeds(
             continue;
         }
         let old_id = plan.feed.id;
-        let brought = import_feed(db, old, plan, rules).await?;
+        let brought = import_feed(db, old, plan, rules, &mut progress).await?;
         report.articles_matched += brought.matched.len() as u64;
         unreadable += brought.unreadable;
         targets.insert(
@@ -461,11 +466,6 @@ async fn import_feeds(
                 old_end: brought.old_end,
                 matched: brought.matched,
             },
-        );
-        tracing::info!(
-            "{} feeds brought, after {} s",
-            targets.len(),
-            started.elapsed().as_secs()
         );
     }
     // What the planning counted as to bring includes what turned out to be there.
@@ -553,6 +553,7 @@ async fn import_feed(
     old: &mut PgConnection,
     plan: FeedPlan,
     rules: &Rules,
+    progress: &mut Progress,
 ) -> anyhow::Result<Brought> {
     let FeedPlan { feed, place, .. } = plan;
     let merge = match place {
@@ -687,6 +688,7 @@ async fn import_feed(
         )
         .execute(&mut *tx)
         .await?;
+        progress.add(batch.len() as u64);
     }
     if seq != old_end {
         bail!(

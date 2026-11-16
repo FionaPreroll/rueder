@@ -33,6 +33,8 @@ import type {
 	ForgotPassword,
 	ResetPassword,
 	Feed,
+	FeedInfo,
+	FetchAgent,
 	FindFeeds,
 	Folder,
 	FoundFeeds,
@@ -45,6 +47,7 @@ import type {
 	MadeInvite,
 	Me,
 	Move,
+	NewAgent,
 	NewFolder,
 	NewInvite,
 	NewLabel,
@@ -424,6 +427,10 @@ export const api = {
 	renameFeed: (id: number, title: string) =>
 		call<void>('PATCH', `/feeds/${id}`, { title } satisfies Rename),
 	unsubscribe: (id: number) => call<void>('DELETE', `/feeds/${id}`),
+	feedInfo: (id: number) => call<FeedInfo>('GET', `/feeds/${id}/info`),
+	/** For admins only. */
+	setFetchAgent: (id: number, agent: FetchAgent) =>
+		call<void>('PUT', `/feeds/${id}/agent`, { agent } satisfies NewAgent),
 	importOpml: (file: Blob) => call<OpmlImported>('POST', '/opml', file),
 	exportOpml: () => text('GET', '/opml'),
 	/** The whole account as a file, for another rueder. */

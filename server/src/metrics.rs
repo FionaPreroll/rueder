@@ -485,7 +485,7 @@ fn database(out: &mut Text, from_db: &FromDb) {
     out.gauge("feeds", "Feeds the server knows.", counts.feeds);
     out.gauge(
         "subscribed_feeds",
-        "Feeds somebody subscribes to, which are the ones fetched.",
+        "Feeds that are fetched: not blocked, and read by an account that is not disabled.",
         counts.subscribed,
     );
     out.gauge(

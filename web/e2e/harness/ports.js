@@ -65,5 +65,7 @@ export const ACCOUNTS = [
 	'cutoff',
 	'waiter',
 	'addressee',
-	'forgetful'
+	'forgetful',
+	'support',
+	'helper'
 ];

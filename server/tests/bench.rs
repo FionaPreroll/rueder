@@ -66,7 +66,10 @@ async fn made_up_data_can_be_measured(db: PgPool) {
         (report.accounts, report.feeds, report.articles),
         (3, 12, 3000)
     );
-    assert_eq!(report.timings.len(), 23);
+    // Made-up texts repeat their sentences, so every word is in a few dozen of
+    // 3,000 articles: there is no rare word, and its four kinds of search are
+    // left out.
+    assert_eq!(report.timings.len(), 22, "{report}");
     assert!(
         report
             .timings
@@ -75,14 +78,17 @@ async fn made_up_data_can_be_measured(db: PgPool) {
     );
     let printed = report.to_string();
     assert!(printed.contains("| All feeds, unread only |"));
+    assert!(printed.contains("| Fetch, 100 new ids by title and date |"));
     assert!(printed.contains("| articles_pkey |"));
-    assert!(printed.contains("| Search, a rare word |"));
+    assert!(printed.contains("| Search, a common word |"));
+    assert!(!printed.contains("| Search, a rare word |"));
     assert!(printed.contains("| article_content_search |"));
-    // The most common word is in most articles, and the search finds it.
+    // The words to search for come from the texts: a very common one is in a
+    // fifth of the articles or more.
     let (_, word, articles) = &report.searched[0];
-    assert!(*articles > 1000, "{word}: {articles}");
-    assert_eq!(bench::word(1), "er");
-    assert_eq!(bench::word(32 * 32 + 3), "kaener");
+    assert!(*articles >= 600, "{word}: {articles}");
+    assert!(report.sampled > 1000 && report.length.0 > 0, "{report}");
+    assert!(printed.contains("Texts of "));
 }
 
 /// The made-up texts are words, and the search index is there afterwards,
@@ -95,16 +101,30 @@ async fn made_up_texts_are_words(db: PgPool) {
         articles: 200,
     };
     bench::generate(&db, size).await.unwrap();
-    let (title, html): (String, String) =
-        sqlx::query_as("SELECT title, html FROM article_content ORDER BY id LIMIT 1")
-            .fetch_one(&db)
-            .await
-            .unwrap();
+    let title: String = sqlx::query_scalar("SELECT title FROM article_content ORDER BY id LIMIT 1")
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(title.split(' ').count(), 9, "{title}");
-    assert!(html.starts_with("<p>") && html.ends_with(".</p>"), "{html}");
+    // Some texts are empty, the others paragraphs, many with a link.
+    let (empty, paragraphs, links, others): (i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE html = ''),
+                count(*) FILTER (WHERE html LIKE '<p>%.</p>'),
+                count(*) FILTER (WHERE html LIKE '%<a href=\"https://%'),
+                count(*) FILTER (WHERE html <> '' AND html NOT LIKE '<p>%.</p>')
+         FROM article_content",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(
+        empty > 0 && paragraphs > empty && links > 0,
+        "{empty} {paragraphs} {links}"
+    );
+    assert_eq!(others, 0);
     let statistics: i16 = sqlx::query_scalar(
         "SELECT attstattarget FROM pg_attribute
-         WHERE attrelid = 'article_content_search'::regclass AND attnum = 1",
+         WHERE attrelid = 'article_content'::regclass AND attname = 'words'",
     )
     .fetch_one(&db)
     .await
@@ -129,4 +149,70 @@ async fn nothing_to_measure_in_an_empty_database(db: PgPool) {
         articles: 10,
     };
     assert!(bench::generate(&db, none).await.is_err());
+}
+
+/// Many readers for the load tests: subscriptions by popularity that differ
+/// from reader to reader, a session each, and never in a real database.
+#[sqlx::test]
+async fn readers_come_with_subscriptions_and_sessions(db: PgPool) {
+    let size = Size {
+        accounts: 2,
+        feeds: 200,
+        articles: 4000,
+    };
+    bench::generate(&db, size).await.unwrap();
+    let tokens = std::env::temp_dir().join(format!("rueder-tokens-{}", std::process::id()));
+    let shared = "http://127.0.0.1:1/shared.xml";
+    let added = bench::readers::add(&db, 300, &tokens, Some(shared))
+        .await
+        .unwrap();
+    assert_eq!(added.readers, 300);
+    // Everyone reads the shared feed, and some more than the ten at least.
+    assert_eq!(added.top_feed_readers, 300);
+    assert!(added.mean > 20.0 && added.mean < 80.0, "{added}");
+    assert!(added.most > added.mean as i64 + 20, "{added}");
+    let fewest: i64 = sqlx::query_scalar(
+        "SELECT min(c) FROM (SELECT count(*) AS c FROM subscriptions s
+         JOIN accounts a ON a.id = s.account_id WHERE a.username LIKE 'reader-%'
+         GROUP BY s.account_id) x",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(fewest >= 5, "{fewest}");
+    // The first feeds are the popular ones.
+    let (first, last): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE feed_id = (SELECT min(id) FROM feeds)),
+                count(*) FILTER (WHERE feed_id = (SELECT max(id) FROM feeds WHERE feed_url LIKE 'https://feed-%'))
+         FROM subscriptions s JOIN accounts a ON a.id = s.account_id WHERE a.username LIKE 'reader-%'",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(first > 3 * last.max(1), "{first} {last}");
+
+    // Every token in the file opens its reader's session, and no other.
+    let text = std::fs::read_to_string(&tokens).unwrap();
+    let lines: Vec<(i32, String)> = text
+        .lines()
+        .map(|line| {
+            let (id, token) = line.split_once(' ').unwrap();
+            (id.parse().unwrap(), token.to_owned())
+        })
+        .collect();
+    assert_eq!(lines.len(), 300);
+    for (id, token) in lines.iter().step_by(37) {
+        let session = rueder::sessions::find(&db, token).await.unwrap().unwrap();
+        assert_eq!(session.account_id, *id);
+    }
+
+    // More can come; a real account keeps them all out.
+    let more = bench::readers::add(&db, 10, &tokens, None).await.unwrap();
+    assert_eq!(more.readers, 10);
+    rueder::accounts::create(&db, "fiona", Some("correct horse battery"), false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(bench::readers::add(&db, 10, &tokens, None).await.is_err());
+    std::fs::remove_file(&tokens).unwrap();
 }

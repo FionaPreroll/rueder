@@ -17,12 +17,14 @@ fn options(port: u16) -> fetching::Options {
     fetching::Options {
         feeds: 6,
         hosts: 3,
+        slow: 0,
         seconds: 2,
         port,
         pace: Pace {
             round: 6,
             at_once: 3,
             every: Duration::from_secs(1),
+            per_host: 1,
         },
     }
 }
@@ -48,6 +50,24 @@ async fn fetches_the_made_up_feeds_round_after_round(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(feeds, 6);
+}
+
+/// The slow name holds up only itself: the others are fetched round after
+/// round while it takes half a second for each of its feeds.
+#[sqlx::test]
+async fn a_slow_name_is_fetched_beside_the_others(db: PgPool) {
+    let mut options = fetching::Options {
+        slow: 3,
+        seconds: 3,
+        ..options(free_port())
+    };
+    options.pace.round = 20;
+    let report = fetching::run(&db, options).await.unwrap();
+    assert!(report.slow >= 2, "{report}");
+    // In three seconds the six quick ones came at least twice, whatever the
+    // slow ones took.
+    assert!(report.fetches() - report.slow >= 6 * 2, "{report}");
+    assert!(report.to_string().contains("and 3 slow ones"), "{report}");
 }
 
 #[sqlx::test]

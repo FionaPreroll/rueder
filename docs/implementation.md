@@ -32,8 +32,8 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 1 Fundament und Daten | Fertig |
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
-| 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.4 (Probelauf), 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz) und E13 (inaktive Konten) |
+| 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.33 bis 5.36 |
 
 Was es gibt:
 
@@ -50,7 +50,7 @@ Was es gibt:
 | Pfad | Was |
 |---|---|
 | `server/` | Rust: HTTP-Server mit `axum`, `sqlx` und PostgreSQL. Dasselbe Programm hat die Kommandozeile (Konten, Admins, Registrierung, Umzug, Import, erneutes Bereinigen, Messdaten, `health`). Siehe [server/README.md](../server/README.md). |
-| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `http_client.rs` der gehärtete HTTP-Client, `feeds.rs` und `fetch.rs` Abruf, `cleaning.rs` Bereinigung, `reclean.rs` erneutes Bereinigen des Bestands, `images.rs` Bild-Proxy, `accounts.rs` Konten und Passwörter, `sessions.rs` Sitzungen und der Extraktor für eingeloggte Anfragen, `login.rs` Login, Logout und Rate-Limit auf falsche Passwörter, `hardening.rs` Header jeder Antwort und Prüfung der Herkunft ändernder Anfragen, `rate.rs` Rate-Limits je Adresse und je Konto, `events.rs` Live-Updates, `typescript.rs` die Typen der API für das Frontend, `api.rs` die API zum Lesen (Baum, Listen, Artikel, Versionen, Lesestand), `tree.rs` Änderungen am Baum und Einstellungen, `labels.rs` Labels, `filters.rs` Filterregeln, `subscribe.rs` Feed-Suche, Abonnieren und OPML, `profile.rs` eigene Sitzungen, Passwort und Konten für Admins, `oidc.rs` Login über OpenID Connect, `transfer.rs` Umzug eines Kontos als JSON-Datei (Export und Import), `health.rs` der Unterbefehl `health` für den Healthcheck des Containers, `import.rs` Import der alten Datenbank, `search.rs` die Suche, `registration.rs` Registrierung und Einladungen, `monitor.rs` was der Server über sich festhält, `retention.rs` wie lange alte Artikel bleiben, `status.rs` der Status für Admins, `metrics.rs` dieselben Zahlen für Prometheus, `reports.rs` Fehlerberichte aus den Browsern, `second_factor.rs` zweiter Faktor mit TOTP und Wiederherstellungscodes, `passkeys.rs` Passkeys, `asset_links.rs` `/.well-known/assetlinks.json` für Passkeys in der Android-App, `app_passwords.rs` App-Passwörter, `greader/` die Google-Reader-API für Apps anderer Anbieter, `email.rs` die E-Mail-Adresse eines Kontos, `mail.rs` Versand über SMTP, `recovery.rs` Passwort vergessen, `legal.rs` Rechtstexte und Zustimmung, `moderation.rs` Meldungen und gesperrte Feeds, `openapi.rs` die Beschreibung der Schnittstelle, `version.rs` was dieser Build ist, `bench.rs` Messdaten und Messung, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
+| `server/src/` | `articles.rs` Artikelspeicher und Listen, `reading.rs` Lesestand, `http_client.rs` der gehärtete HTTP-Client, `feeds.rs` und `fetch.rs` Abruf, `cleaning.rs` Bereinigung, `reclean.rs` erneutes Bereinigen des Bestands, `images.rs` Bild-Proxy, `accounts.rs` Konten und Passwörter, `sessions.rs` Sitzungen und der Extraktor für eingeloggte Anfragen, `login.rs` Login, Logout und Rate-Limit auf falsche Passwörter, `hardening.rs` Header jeder Antwort und Prüfung der Herkunft ändernder Anfragen, `rate.rs` Rate-Limits je Adresse und je Konto, `events.rs` Live-Updates, `typescript.rs` die Typen der API für das Frontend, `api.rs` die API zum Lesen (Baum, Listen, Artikel, Versionen, Lesestand), `tree.rs` Änderungen am Baum und Einstellungen, `labels.rs` Labels, `filters.rs` Filterregeln, `subscribe.rs` Feed-Suche, Abonnieren und OPML, `profile.rs` eigene Sitzungen, Passwort und Konten für Admins, `oidc.rs` Login über OpenID Connect, `transfer.rs` Umzug eines Kontos als JSON-Datei (Export und Import), `health.rs` der Unterbefehl `health` für den Healthcheck des Containers, `import.rs` Import der alten Datenbank, `search.rs` die Suche, `registration.rs` Registrierung und Einladungen, `monitor.rs` was der Server über sich festhält, `retention.rs` wie lange alte Artikel bleiben, `status.rs` der Status für Admins, `metrics.rs` dieselben Zahlen für Prometheus, `reports.rs` Fehlerberichte aus den Browsern, `second_factor.rs` zweiter Faktor mit TOTP und Wiederherstellungscodes, `passkeys.rs` Passkeys, `asset_links.rs` `/.well-known/assetlinks.json` für Passkeys in der Android-App, `app_passwords.rs` App-Passwörter, `greader/` die Google-Reader-API für Apps anderer Anbieter, `email.rs` die E-Mail-Adresse eines Kontos, `mail.rs` Versand über SMTP, `recovery.rs` Passwort vergessen, `legal.rs` Rechtstexte und Zustimmung, `moderation.rs` Meldungen und gesperrte Feeds, `openapi.rs` die Beschreibung der Schnittstelle, `version.rs` was dieser Build ist, `bench.rs` Messdaten und Messung, `progress.rs` wie weit Migrationen, Import und erneutes Bereinigen sind, `lib.rs` Router und Fehlertyp, `main.rs` Kommandozeile. |
 | `server/rules/` | Die Listen der Bereinigung als Daten: gesperrte Adressen und Tracking-Parameter, eine Regel je Zeile. |
 | `server/migrations/` | SQL-Migrationen, laufen beim Start von selbst. |
 | `server/deny.toml`, `server/.cargo/audit.toml` | Was `cargo deny` den Abhängigkeiten erlaubt (Lizenzen, Quellen, gesperrte Crates), und die Ausnahmen von `cargo audit` mit Begründung. |
@@ -329,10 +329,11 @@ Es gibt keinen Parallelbetrieb: Die alte Produktion ist abgeschaltet, ihre Daten
 - [x] **4.1 Zweites Security-Review.** Siehe [Restrisiken](architecture.md#restrisiken).
 - [x] **4.2 Inbetriebnahme.** Der neue rueder läuft in der Produktion, mit neu angelegten Konten und neu abonnierten Feeds.
 - [x] **4.3 Import in den laufenden Bestand.** Siehe [Einmaliger Import in den laufenden Bestand](#einmaliger-import-in-den-laufenden-bestand).
-- [ ] **4.4 Probelauf.** Das Backup der alten Produktion in ein PostgreSQL einspielen und in eine Kopie der neuen Produktion importieren. Dieselben Messungen wie in Schritt 1, Dauer des Imports notieren.
+- [x] **4.4 Probelauf.** Siehe [Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15).
 - [ ] **4.5 Einmaliger Import in der Produktion.** Server anhalten, Backup, Import, Start. Weg zurück festhalten (das Backup von davor).
 - [ ] **4.6 Lesestand und Labels aus dem Browser.** Das neue Frontend liest nach dem Import die Schlüssel `feedstate` und `labels` aus dem `localStorage` des alten Frontends ([user_data.md](user_data.md)) und schickt sie an einen einmaligen Endpunkt. Das geht nur, wenn das neue Frontend unter derselben Adresse läuft wie das alte und der Browser den Speicher noch hat. Weil der Import nach der Inbetriebnahme kommt, bietet das Frontend die Übernahme an, sobald das Konto importierte Daten hat, nicht beim ersten Login. Wer die Aufbewahrung (5.3) einschaltet, tut es erst danach.
 - [x] **4.7 Abbau.** `backend/`, `frontend/` und `config/` sind entfernt; was 4.4 bis 4.6 vom alten Code brauchen, steht im Commit `0b36a96`.
+- [x] **4.8 Feeds gesperrter Konten ruhen (A18).** Für alte, importierte Konten, die niemand mehr nutzt. Siehe [Konto löschen und sperren](architecture.md#konto-löschen-und-sperren).
 
 ### Schritt 5: Öffentliche Instanz
 
@@ -365,7 +366,27 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.27 Ein Knopf schließt den offenen Artikel.** Siehe [Frontend](architecture.md#frontend).
 - [x] **5.28 Captcha bei der Registrierung.** Siehe [Captcha](architecture.md#captcha).
 - [x] **5.29 Drossel für Registrierungen.** Siehe [Registrierung und Einladungen](architecture.md#registrierung-und-einladungen).
-- [x] **5.30 Abruf achtet auf 429 und `Retry-After`.** Siehe [Abruf](architecture.md#abruf).
+- [x] **5.30 Lastmessung für viele Konten.** `rueder bench readers` und die Lasttests in `web/load/`, siehe [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) und `server/README.md` unter „Measuring“.
+- [x] **5.31 Live-Updates je Konto (A6).** Siehe [Live-Updates](architecture.md#live-updates).
+- [x] **5.32 Abruf je Host über Runden hinweg (A6).** Siehe [Abruf](architecture.md#abruf) und [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client).
+- [ ] **5.33 Größen einstellbar.** Die Verbindungen zur Datenbank (heute fest 10, die gemessene Grenze des Lesens), die schweren Anfragen zugleich (3) und die Mails je Tag (1.000) kommen aus der Umgebung, mit den heutigen Werten als Standard (A16). `deploy/README.md` bekommt eine Tabelle für 10.000 und 100.000 Konten: Maschine, Einstellungen von PostgreSQL, Takt des Abrufs, Aufbewahrung. Fertig, wenn:
+  - Tests die Grenzen der Einstellungen prüfen;
+  - `load/reading.js` mit 10 und mit 20 Verbindungen unter [Messung](#messung) steht.
+- [ ] **5.34 Grenzen im Speicher für viele Schlüssel.** Ist eine Grenze voll (10.000 Schlüssel), durchsucht heute jeder neue Schlüssel die ganze Tabelle unter einer Sperre. Künftig verdrängt sie ohne zu suchen, und die Obergrenzen passen zu 100.000 Konten; ebenso die Login-Grenzen und die benutzten Aufgaben des Captchas. Fertig, wenn:
+  - ein Test zeigt, dass die Grenzen beim Verdrängen halten;
+  - eine Messung zeigt, dass eine Anfrage bei 100.000 Schlüsseln nicht mehr kostet als bei 100.
+- [ ] **5.35 Platz und Datenbank für große Instanzen.** Wie viel Platz ein Konto und ein Feed im Jahr brauchen, mit der Aufbewahrung aus 5.3 und ohne, und was davon in den Arbeitsspeicher gehört: Mit kaltem Cache und 128 MB `shared_buffers` war das Lesen tausendfach langsamer. Dazu Autovacuum und Füllgrad für die Tabellen, die jedes Lesen ändert (`subscriptions`, `article_states`), wenn die Messung es rechtfertigt. Fertig, wenn:
+  - Zuwachs und Zeiten unter [Messung](#messung) stehen und `deploy/README.md` sie nennt.
+- [ ] **5.36 Bilder vor einem Cache.** Prüfen, ob die Adressen des Bild-Proxys je Konto signiert sind; wo nicht, sagen die Antworten, dass ein Cache vor rueder (ein Reverse-Proxy oder ein CDN unter derselben Domain) sie halten darf, mit einem Beispiel in `deploy/README.md`. Fertig, wenn:
+  - ein Test die Header prüft;
+  - der Bild-Proxy unter Last gemessen ist.
+- [x] **5.37 Messen in der Form des alten Bestands.** Siehe [Suche vom 2026-11-15](#suche-vom-2026-11-15).
+- [x] **5.38 Gespeicherte Wörter für die Suche.** Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
+- [x] **5.39 Fortschritt langer Läufe.** Migrationen, `import-legacy` und `reclean` sagen im Log regelmäßig, wie weit sie sind (`server/src/progress.rs`).
+- [x] **5.40 Feed-Infos.** Siehe [Ordner und Abos](architecture.md#ordner-und-abos).
+- [x] **5.41 User-Agent je Feed nur für Admins.** Siehe [Detailfragen](plan.md#detailfragen).
+- [x] **5.42 Duplikate unter neuer Kennung.** Siehe [Abruf](architecture.md#abruf) und [Duplikate vom 2026-11-16](#duplikate-vom-2026-11-16).
+- [x] **5.43 Abruf achtet auf 429 und `Retry-After`.** Siehe [Abruf](architecture.md#abruf).
 - [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
 
 ### Nicht mit Fiona abgesprochen
@@ -377,13 +398,25 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **Passwort vergessen (5.5):** Gesucht und verschickt wird nach der Antwort, so dass auch die Zeit nichts verrät. Ein Link gilt nur, solange das Konto die Adresse hat, an die er ging. Wer Passwort und zweiten Faktor zugleich verliert, braucht den Betreiber (`rueder account second-factor-off`).
 - **Ein Knopf schließt den offenen Artikel (5.27):** Er steht am Ende der Zeile unter dem Text, wo der Leser nach dem Lesen ist, nicht oben am Titel, und zeigt das Kreuz und „Schließen“. Im Magazin steht er zusätzlich zum Kreuz oben am Blatt, damit jeder offene Artikel gleich endet.
 - **Drossel für Registrierungen (5.29):** Je Netz 5 Versuche auf einmal und dann einer alle 12 Minuten statt der vorgeschlagenen 3 und einer alle 20 Minuten, weil ein vergebener Name ebenso zählt und sich viele Leser im Mobilfunk eine IPv4-Adresse teilen. Der Topf des ganzen Servers zählt Versuche mit einer gültigen Lösung auch dann, wenn sie danach aus anderem Grund abgewiesen werden.
-- **Abruf bei 429 (5.30):** Nach einem 429 bleibt das längere Intervall einen Tag, statt sich langsam zu verkürzen oder dauerhaft zu bleiben; ein weiteres 429 verdoppelt es wieder und beginnt den Tag neu. `Retry-After` zählt auch bei 503, nicht bei anderen Fehlern. Andere Feeds desselben Hosts warten nicht mit; jeder richtet sich nach seinem eigenen 429.
+- **Abruf bei 429 (5.43):** Nach einem 429 bleibt das längere Intervall einen Tag, statt sich langsam zu verkürzen oder dauerhaft zu bleiben; ein weiteres 429 verdoppelt es wieder und beginnt den Tag neu. `Retry-After` zählt auch bei 503, nicht bei anderen Fehlern. Andere Feeds desselben Hosts warten nicht mit; jeder richtet sich nach seinem eigenen 429.
 - **Captcha (5.28):** Die Höchstzahl ist 100.000 und eine Aufgabe gilt fünf Minuten; im Speicher stehen höchstens 100.000 benutzte. Die Seite rechnet in einem Strang, ohne Worker, und der Knopf sagt derweil „Dieser Browser wird geprüft …“. Zählt eine Lösung nicht, etwa nach einem Neustart des Servers mitten im Rechnen, bittet die Seite, es noch einmal zu versuchen, statt selbst eine neue Aufgabe zu holen. Das Wort der Ablehnung ist `captcha`, wie der Schalter.
+- **Lastmessung (5.30):** Die Lasttests sind Node ohne Pakete in `web/load/`, neben den Werkzeugen der Tests im Browser, statt ein zweites Programm in Rust. `rueder bench readers` schreibt die Tokens der Sitzungen in eine Datei, damit ein Lasttest nicht für jeden Leser ein Passwort hashen lässt, und lehnt jede Datenbank mit einem Konto ab, das keine erfundenen Daten gemacht haben.
+- **Duplikate (5.42):** Ein Eintrag ohne Titel wird nur an seiner Kennung erkannt, auch mit Datum.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später
 
 Von Fiona notiert, noch keinem Schritt zugeordnet:
+
+- **Mehrere Prozesse (horizontal).** Von Fiona am 2026-11-15 zurückgestellt: Erst trägt eine Maschine 100.000 Konten (5.30 bis 5.36). Laufen später mehrere Prozesse desselben Programms hinter einem Load Balancer, braucht es:
+  1. Ereignisse zwischen den Prozessen über `LISTEN/NOTIFY` von PostgreSQL, aufbauend auf 5.31; hinüber geht nur die Nummer von Konto oder Feed, weil eine Nachricht höchstens 8 KB hat.
+  2. Die Login-Grenzen, die Zeremonien der Passkeys, die Aufgaben des Captchas und die Drossel der Registrierung gemeinsam in PostgreSQL; im Speicher jedes Prozesses vervielfachten sie die erlaubten Versuche.
+  3. Die stündlichen Aufgaben (Aufbewahrung, Aufräumen) nur in einem Prozess, über eine Sperre in PostgreSQL (Advisory Lock).
+  4. Einen Prozess nur für den Abruf und `FETCH=off` auf den übrigen; die Feeds teilt `FOR UPDATE SKIP LOCKED` schon heute.
+  5. Einen gemeinsamen Cache der Bilder oder ein CDN, mit demselben `IMAGE_PROXY_KEY` auf allen.
+  6. PgBouncer für die Verbindungen zur Datenbank, mit einer eigenen direkten Verbindung für `LISTEN`.
+  7. Metriken und Statusseite je Prozess, zusammengeführt in Prometheus.
+  8. Für die Ausfallsicherheit eine PostgreSQL in Bereitschaft und Backups mit Wiederherstellung auf einen Zeitpunkt.
 
 - **Ein Fuzz-Target für die Datei eines Kontos** (`transfer.rs`), die jedes Konto über `POST /api/import` hochladen kann. Das Parsen macht serde; das Target prüfte vor allem die eigenen Grenzen und Abgleiche.
 - **Offline lesen.** Pro Gerät die neuesten, etwa 200 ungelesenen Artikel mit Texten und Bildern im Browser halten. Zurückgestellt, weil es mit der Regel bricht, dass im Browser nichts liegt, was einem Konto gehört (siehe [Frontend](architecture.md#frontend)), und weil der Reader dann die Zahlen ohne Server schätzen müsste. Offline lesen geht heute mit den Apps über die Google-Reader-API.
@@ -405,13 +438,13 @@ Die alte Datenbank ist PostgreSQL, das Schema stand in `backend/migrations/` (Fi
 
 Nach dem Import und vor der Übernahme aus dem Browser hat ein Konto für die alten Artikel keinen Lesestand. Gebaut ist der Vorschlag: Alte Artikel gelten als gelesen, und die Übernahme aus dem Browser (Paket 4.6) setzt den genauen Stand einmalig. Wer keinen alten Browser-Speicher mehr hat, beginnt dann mit null ungelesenen alten Artikeln statt mit zehntausenden.
 
-Gemessen am 2026-11-10, noch mit der Wiederholung aus Schritt 1 und in eine leere Datenbank, an einer nachgebauten alten Datenbank mit 1 Million Artikeln (1,4 GB): 3 Minuten 50 Sekunden, also rund 4.300 Artikel je Sekunde und hochgerechnet etwa 40 Minuten für 10 Millionen. Ein zweiter Lauf ohne Neues dauert 35 Sekunden. Das Ergebnis stimmte in Nummern, Reihenfolge, Titeln und Texten aller Artikel mit der Quelle überein (Prüfsumme über beide Datenbanken). Seit Paket 2.3 bereinigt der Import jeden Text; das ist in dieser Messung nicht enthalten und kostet nach den Zeiten der Bereinigung grob 0,2 Millisekunden je Artikel zusätzlich, bei 10 Millionen also etwa eine halbe Stunde. Die Dauer an echten Daten gehört zu Paket 4.4. Eine Messung des Zusammenführens steht unter [Import vom 2026-11-12](#import-vom-2026-11-12).
+Gemessen am 2026-11-10, noch mit der Wiederholung aus Schritt 1 und in eine leere Datenbank, an einer nachgebauten alten Datenbank mit 1 Million Artikeln (1,4 GB): 3 Minuten 50 Sekunden, also rund 4.300 Artikel je Sekunde und hochgerechnet etwa 40 Minuten für 10 Millionen. Ein zweiter Lauf ohne Neues dauert 35 Sekunden. Das Ergebnis stimmte in Nummern, Reihenfolge, Titeln und Texten aller Artikel mit der Quelle überein (Prüfsumme über beide Datenbanken). Seit Paket 2.3 bereinigt der Import jeden Text; das ist in dieser Messung nicht enthalten und kostet nach den Zeiten der Bereinigung grob 0,2 Millisekunden je Artikel zusätzlich, bei 10 Millionen also etwa eine halbe Stunde. An echten Daten siehe [Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15). Eine Messung des Zusammenführens steht unter [Import vom 2026-11-12](#import-vom-2026-11-12).
 
 ### Einmaliger Import in den laufenden Bestand
 
 Gebaut mit Paket 4.3. Der neue rueder läuft schon, mit eigenen Konten und Feeds, wenn die alten Daten aus dem Backup dazukommen. Der Import führt sie mit dem Bestand zusammen:
 
-- **Ablauf.** Das Backup der alten Produktion wird in ein PostgreSQL eingespielt, das der Import erreicht. Der neue Server steht während des Imports, davor gibt es ein Backup der neuen Datenbank. `rueder import-legacy --from <alte Datenbank> --dry-run` zeigt vorab als Trockenlauf, welche Feeds und Konten zusammengeführt und welche neu angelegt würden, und schreibt nichts. Danach derselbe Aufruf ohne `--dry-run`. Am Ende sagt der Import, was er zusammengeführt, angelegt und ausgelassen hat.
+- **Ablauf.** Die alte Datenbank muss für den Import erreichbar sein: als Backup in ein PostgreSQL eingespielt oder mit ihrem alten Volume in einem eigenen Container mit PostgreSQL 13 ([deploy/README.md](../deploy/README.md#bringing-over-the-old-rueder)). Der Import liest sie nur. Der neue Server steht während des Imports, davor gibt es ein Backup der neuen Datenbank. `rueder import-legacy --from <alte Datenbank> --dry-run` zeigt vorab als Trockenlauf, welche Feeds und Konten zusammengeführt und welche neu angelegt würden, und schreibt nichts. Danach derselbe Aufruf ohne `--dry-run`. Am Ende sagt der Import, was er zusammengeführt, angelegt und ausgelassen hat.
 - **Feeds.** Ein alter Feed wird mit einem vorhandenen zusammengeführt, wenn die Adresse gleich ist. Gleich heißt zuerst wörtlich; sonst zählen `http` und `https`, Groß- und Kleinschreibung des Hosts, der Standard-Port und ein Schrägstrich am Ende nicht (`import::address_key`), weil der neue rueder beim Abonnieren oft die Adresse mit `https` gespeichert hat. Wo nur so ein Paar gefunden wurde, nennt der Bericht beide Adressen, damit der Trockenlauf zeigt, ob es stimmt. Ein Feed des neuen rueder nimmt höchstens einen alten auf. Der vorhandene behält Titel, Adresse, Intervall und Abrufstand und bekommt die alte UUID in `legacy_id`. Alle anderen alten Feeds kommen neu dazu, wie in der Tabelle oben.
 - **Artikel eines zusammengeführten Feeds.** Die alten Artikel sind älter als alles, was der neue rueder abgerufen hat, und stehen deshalb davor: Sie bekommen die Nummern 1 bis n in ihrer alten Reihenfolge, die vorhandenen Artikel rücken um n nach hinten, mit den Lesemarken, Ausnahmen und Labels ihrer Abonnenten. Die Fremdschlüssel auf `articles` folgen dafür der Änderung (`ON UPDATE CASCADE`, Migration `0006_merging_import.sql`) und nehmen Text, Fassungen, Labels und alte UUIDs mit; die Kopie für die Suche in `article_content` zieht so ebenfalls mit. Die Ausnahmen in `article_states` hängen am Abo, die verschiebt der Import selbst (`import::move_up`), in zwei Schritten über die höchste Nummer hinaus, damit zwei Zeilen nie dieselbe Nummer haben. Das ist die einzige Stelle, an der vergebene Nummern sich ändern; sie ist vertretbar, weil der Server steht und es einmal geschieht. Offene Tabs laden nach dem Neustart des Servers ohnehin alles neu (`hello`). Ein Artikel, den beide Seiten haben (gleiche Kennung im Feed), bleibt, wie der neue rueder ihn hat, und wird nicht doppelt angelegt; seine alte UUID zeigt auf ihn.
 - **Reihenfolge des Eintreffens.** Die alten Artikel behalten ihr altes `seq` als ID. Damit sie vor allem stehen, was der neue rueder abgerufen hat, bekommen dessen Artikel vor dem ersten alten einmal neue IDs hinter dem höchsten alten `seq` (`import::make_room`), und neue Artikel kommen danach.
@@ -460,7 +493,7 @@ Alle Abfragen bleiben unter 50 ms, auch im 99. Perzentil und auch direkt nach ei
 
 Die ersten drei Spalten sind 10 Millionen Artikel mit warmem Cache. „Nach Neustart“ ist dieselbe Datenbank nach einem Neustart von PostgreSQL mit geleertem Cache des Betriebssystems. Einzelne Läufe lagen über dem Ziel, wenn eine Seite erst von der Platte kam: Der langsamste von 21.000 Läufen brauchte 139 ms.
 
-**Zehnfache Artikelzahl:** 100 Millionen Artikel brauchen rund 180 GB, die Messmaschine hat 30 GB Platte. Statt nach oben wurde deshalb nach unten verglichen: Dieselben Abfragen brauchen bei 1 Million und bei 10 Millionen Artikeln gleich lang (die beiden rechten Spalten gegen die linken). Die Abfragen lesen je Feed und je Zeile der Seite eine feste Zahl von Indexseiten, die Tiefe des Index wächst mit dem Zehnfachen um höchstens eine Ebene. Die Wiederholung mit mehr Daten gehört zum Probelauf auf einer Kopie der Produktion (Paket 4.4).
+**Zehnfache Artikelzahl:** 100 Millionen Artikel brauchen rund 180 GB, die Messmaschine hat 30 GB Platte. Statt nach oben wurde deshalb nach unten verglichen: Dieselben Abfragen brauchen bei 1 Million und bei 10 Millionen Artikeln gleich lang (die beiden rechten Spalten gegen die linken). Die Abfragen lesen je Feed und je Zeile der Seite eine feste Zahl von Indexseiten, die Tiefe des Index wächst mit dem Zehnfachen um höchstens eine Ebene. Mehr Daten hat die alte Produktion nicht: 707.040 Artikel, siehe [Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15).
 
 Größe auf der Platte bei 10 Millionen Artikeln, zusammen 18 GB:
 
@@ -481,7 +514,7 @@ Die erzeugten Texte sind Zufallszeichen und lassen sich kaum komprimieren. Echte
 - **Der Lesestand wird je Zeile nachgeschlagen**, nicht mit allen Zuständen des Kontos verbunden. Für ein Konto mit zehntausenden Sternen und ausgeblendeten Artikeln kostet eine Seite deshalb nicht mehr als für jedes andere.
 - **Ungelesen-Zahlen** brauchen 7 ms für alle Feeds eines Kontos und werden aus Lesemarke und Ausnahmen berechnet, wie geplant. Verdichten hält die Ausnahmen klein: Je Abo sind es im Schnitt 54.
 - **Alte Versionen stören nicht.** Das Öffnen eines Artikels liest nur `articles` und `article_content` über ihre Primärschlüssel und ist bei jedem Alter gleich schnell.
-- **Nicht gemessen:** der Index für die Volltextsuche; das kam mit Paket 2.13, siehe [Suche vom 2026-11-11](#suche-vom-2026-11-11). Offen ist die Messung an echten Daten (Paket 4.4).
+- **Nicht gemessen:** der Index für die Volltextsuche; das kam mit Paket 2.13, siehe [Suche vom 2026-11-11](#suche-vom-2026-11-11). An echten Daten siehe [Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15).
 - **Reserve, falls es später eng wird:** Die Übersetzung der Lesemarke und die wieder ungelesenen Artikel unter der Marke kosten je Feed einen Zugriff auf die Tabelle. Ein Index auf `(feed_id, seq)`, der die ID mitführt, würde ihn sparen. Bei den gemessenen Zeiten lohnt das den größeren Index nicht.
 
 ### Soak-Test vom 2026-11-11
@@ -569,11 +602,11 @@ Nach einem Neustart von PostgreSQL mit geleertem Cache des Betriebssystems, mit 
 | Ein häufiges Wort, tief | 77 ms | 159 ms | 198 ms | 224 ms |
 | Ein selteneres Wort, nur ungelesen | 130 ms | 220 ms | 263 ms | 7,4 s |
 
-Die Listen blieben in beiden Läufen bei den Zeiten unter [Ergebnisse vom 2026-11-10](#ergebnisse-vom-2026-11-10), im 99. Perzentil unter 80 ms. Nach dem Neustart waren aber die Abfragen langsamer, die alte Artikel von der Platte lesen: Versionen eines Artikels beliebigen Alters im Median 72 ms statt 3 ms, das Öffnen im 99. Perzentil 63 ms statt 2 ms. Vermutlich, weil die Datenbank mit Index und Wörtern jetzt 21 GB hat und weniger davon in die 15 GB Arbeitsspeicher passt; mit warmem Cache war davon nichts zu sehen. Das gehört zur Messung an echten Daten (Paket 4.4).
+Die Listen blieben in beiden Läufen bei den Zeiten unter [Ergebnisse vom 2026-11-10](#ergebnisse-vom-2026-11-10), im 99. Perzentil unter 80 ms. Nach dem Neustart waren aber die Abfragen langsamer, die alte Artikel von der Platte lesen: Versionen eines Artikels beliebigen Alters im Median 72 ms statt 3 ms, das Öffnen im 99. Perzentil 63 ms statt 2 ms. Vermutlich, weil die Datenbank mit Index und Wörtern jetzt 21 GB hat und weniger davon in die 15 GB Arbeitsspeicher passt; mit warmem Cache war davon nichts zu sehen. Die echten Daten passen mit 1,9 GB ganz in den Arbeitsspeicher ([Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15)).
 
 - **Warum der Planer daneben lag.** Ein häufiges Wort ist am schnellsten gefunden, wenn man rückwärts durch die neuesten Artikel geht: Jeder zehnte ist ein Treffer, nach 500 Artikeln ist die Seite voll. Der Planer nahm stattdessen oft den Index, der für das Wort eine Million Artikel lesen musste, auch wenn nur die im Fenster der neuesten 20.000 gebraucht wurden: eine halbe Sekunde. Bei seltenen Wörtern lag er manchmal andersherum und ging rückwärts durch ein Fenster von Millionen Artikeln, bis die Grenze von drei Sekunden die Suche abbrach (14 von 3.500 Suchen). Beides kommt von seiner Schätzung, wie viele Artikel ein Wort und seine Verlängerungen haben; mit höheren Kosten für den Index (`cpu_index_tuple_cost`) verschob sich der Fehler nur von der einen Seite auf die andere.
 - **Was die eigene Wahl kostet.** Ein sehr häufiges Wort ist langsamer als beim Planer (29 statt 6 ms), weil die Suche immer erst 500 Artikel ansieht, bevor sie entscheidet. Dafür bleibt jede Art von Suche im 99. Perzentil unter einer halben Sekunde. Die zwei Ausreißer über zwei Sekunden mit warmem Cache kamen in einem Lauf, kurz nachdem PostgreSQL nach einem Neustart des Containers den Absturz aufgeräumt hatte, und im selben Lauf hatte auch das Schreiben Ausreißer. Im Lauf davor, der bei mehreren Wörtern noch alle im Index fragte, blieb jede Suche mit einem Wort unter 350 ms, und nach dem Neustart gab es einen Ausreißer von 7,4 s, als die Seiten noch von der Platte kamen. Die Kosten je Artikel misst die Suche selbst, die je Artikel im Index (1,3 µs) sind in `server/src/search.rs` eingetragen und stammen aus dieser Messung.
-- **Nicht gemessen:** Suchen in einem einzelnen Feed oder Ordner und mit langen Texten. Die Wahl rechnet mit beidem (wie weit die Artikel der Suche auseinanderliegen und was einer kostet), geprüft ist das aber nur mit dem Modell-Test in `server/tests/search.rs` und kleinen Versuchen von Hand. Die Messung an echten Daten gehört zu Paket 4.4.
+- **Nicht gemessen:** Suchen in einem einzelnen Feed oder Ordner und mit langen Texten. Die Wahl rechnet mit beidem (wie weit die Artikel der Suche auseinanderliegen und was einer kostet), geprüft ist das aber nur mit dem Modell-Test in `server/tests/search.rs` und kleinen Versuchen von Hand. Mit echten, längeren Texten siehe [Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15).
 
 ### Abruf vom 2026-11-12
 
@@ -608,7 +641,7 @@ Das Zusammenführen aus Paket 4.3, gemessen am 2026-11-12 in der Entwicklungsumg
 
 Danach hat jeder Feed die Nummern 1 bis `last_seq` ohne Lücke, in jedem Feed steigt die ID mit der Nummer, jedes alte Konto hat in den zusammengeführten Feeds seine 25 ungelesenen eigenen Artikel, und die neuen Konten haben die 50 eigenen Artikel je Feed ungelesen, die alten gelesen. Die neue Datenbank hat danach 660 MB.
 
-Langsamer als 2026-11-10 (4.300 je Sekunde), weil seither jeder Text bereinigt wird und der Index der Suche mitwächst. Hochgerechnet bräuchten 10 Millionen Artikel rund anderthalb Stunden. Gelesen werden die alten Artikel jetzt Feed für Feed statt in der Reihenfolge des Eintreffens; bei einer Datenbank, die nicht in den Arbeitsspeicher passt, kann das mehr von der Platte lesen. Die Dauer an echten Daten gehört zum Probelauf (Paket 4.4).
+Langsamer als 2026-11-10 (4.300 je Sekunde), weil seither jeder Text bereinigt wird und der Index der Suche mitwächst. Hochgerechnet bräuchten 10 Millionen Artikel rund anderthalb Stunden. Gelesen werden die alten Artikel jetzt Feed für Feed statt in der Reihenfolge des Eintreffens; bei einer Datenbank, die nicht in den Arbeitsspeicher passt, kann das mehr von der Platte lesen. An echten Daten waren es rund 1.470 je Sekunde ([Probelauf vom 2026-11-15](#probelauf-vom-2026-11-15)).
 
 ### Design-Review vom 2026-11-14
 
@@ -651,6 +684,196 @@ Wie lange die Seite für das [Captcha](architecture.md#captcha) rechnet, gemesse
 Auf einem echten Telefon ist es nicht gemessen. Bündel von 1.000 Hashes auf einmal waren nicht schneller als einer nach dem anderen.
 
 Eigener Code dagegen, gemessen am 2026-11-15 auf demselben Container mit `openssl speed -bytes 64 sha256` auf einem Kern: rund 4,4 Millionen Hashes je Sekunde, also im Mittel etwa 11 ms je Aufgabe und 23 ms für alle 100.001 Zahlen; Python mit `hashlib` schafft rund 2 Millionen je Sekunde. Eigener Code ist damit etwa zwanzigmal so schnell wie die Seite, je Kern.
+
+### Viele Konten vom 2026-11-14 und 2026-11-15
+
+Für die Frage, was rueder für 10.000 und 100.000 registrierte Konten braucht, und als Ausgangslage für die Pakete 5.31 bis 5.36. Am 2026-11-14 mit Skripten im Scratchpad gemessen, am 2026-11-15 mit `rueder bench readers` und `web/load/` aus Paket 5.30 wiederholt; die Tabellen sind die vom 2026-11-15, die Werte vom Vortag lagen gleich.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher, virtuelle Platte. PostgreSQL 16.15 mit `shared_buffers = 2GB`, sonst Standardwerte, Release-Build. Server, Datenbank und Lastgenerator (Node 22) auf derselben Maschine; der Lastgenerator braucht davon rund einen Kern.
+- **Lesen:** `rueder bench generate --accounts 10 --feeds 20000 --articles 3000000`, dazu `rueder bench readers --count 100000`: 100.000 Leser mit 4.915.319 Abos, im Schnitt 49, höchstens 470, der beliebteste Feed mit 27.279 Lesern. Die Datenbank hat 8,8 GB. Ein Besuch ist, was die Seite tut: Baum, erste Seite der ungelesenen Artikel aller Feeds, drei davon öffnen und als gelesen markieren, eine Seite eines Feeds, zusammen 9 Anfragen. Gemessen nach `VACUUM ANALYZE` und 90 Sekunden zum Aufwärmen, je 30 Sekunden.
+- **Live-Updates:** eine leere Datenbank mit `rueder bench readers --count N --shared …`, alle lesen denselben Feed aus `load/feed.js`. Jeder Leser hält eine Verbindung zu `/api/events`. Dann ein neuer Artikel in diesem Feed, dann je 20 Sekunden lang Änderungen von 50 Lesern (ein Artikel gelesen und wieder ungelesen), jede ein Ereignis nur für ihren Leser.
+
+Lesen mit 100.000 Lesern:
+
+| Zugleich | Anfragen je s | Besuche je s | Server | PostgreSQL | Baum p99 | Ungelesen p99 | Artikel p99 | Markieren p99 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 1.452 | 161 | 0,9 Kerne | 1,8 Kerne | 13 ms | 19 ms | 9 ms | 13 ms |
+| 32 | 1.635 | 182 | 1,0 | 1,9 | 39 ms | 41 ms | 30 ms | 35 ms |
+| 64 | 1.645 | 183 | 1,0 | 1,9 | 81 ms | 75 ms | 57 ms | 58 ms |
+
+Live-Updates:
+
+| Verbindungen | Speicher je Verbindung | Neuer Artikel bei allen | 50 Änderungen je s | 200 je s | 800 je s |
+|---:|---:|---:|---|---|---|
+| 2.000 | 24,5 KB | in 44 ms | 0,8 Kerne | 2,3 Kerne | 763 je s geschafft, p50 1,0 s |
+| 5.000 | 23,3 KB | in 71 ms | 1,8 Kerne | 2,6 Kerne | 512 je s, p50 6,0 s, 2.083 `resync` |
+| 10.000 | 22,8 KB | in 141 ms | 2,7 Kerne | 2,7 Kerne | 313 je s, p50 15,6 s, 4.659 `resync` |
+
+- **Lesen ist nicht die Grenze.** Die Anfragen enden bei rund 1.650 je Sekunde, weil der Pool 10 Verbindungen zur Datenbank hat und eine Anfrage dort rund 5 ms braucht; die Kerne sind dann zwischen Server, PostgreSQL und Lastgenerator aufgeteilt. Bei 100.000 Konten mit 20 bis 30 % täglich aktiven und einer Spitze von 15 bis 35 Besuchen je Sekunde ist das ein Zehntel davon. Am Vortag mit im Schnitt 43 Abos ohne lange Ausreißer waren es 2.050 je Sekunde.
+- **Live-Updates sind die Grenze.** Jedes Ereignis geht an jede offene Verbindung, und jede sieht selbst in der Liste der Konten nach, ob es ihr gilt (`events.rs`). Mit 10 Verbindungen kosteten 800 Änderungen je Sekunde am Vortag 0,3 Kerne; mit 10.000 kosten schon 50 je Sekunde 2,7. Kommt eine Verbindung nicht nach, fällt sie aus dem Puffer und bekommt `resync`, und die Seite lädt alles neu. Bei 100.000 Konten wären 3.000 bis 5.000 Verbindungen und um 150 Ereignisse je Sekunde zu erwarten, mehr als diese Maschine schafft. Paket 5.31.
+- **Ein großes Konto.** Eines der Konten des Generators mit 12.012 Abos brauchte für den Baum 0,34 s (3,6 MB JSON) und für eine Liste über alle Feeds rund 0,3 s; ein Konto darf aber höchstens 2.000 Abos haben. Die Leser des beliebtesten Feeds zu finden, wie es jeder Abruf mit Neuem tut, kostete bei 26.246 Lesern 67 ms.
+- **Kalter Cache.** Nach dem Löschen und Neuanlegen von fünf Millionen Abos, mit `shared_buffers = 128MB`, brauchte eine Seite der ungelesenen Artikel im Median 37 s und die Maschine rechnete fast nichts: Alles kam von der Platte. Was gelesen wird, muss in den Arbeitsspeicher passen. Paket 5.35.
+- **Nicht gemessen:** Apps über die Google-Reader-API, der Bild-Proxy unter Last, Abrufe gegen echte, langsame Websites und die Suche mit Hunderten Millionen Artikeln.
+
+### Probelauf vom 2026-11-15
+
+Paket 4.4: die alte Datenbank, wie die alte Produktion sie hinterlassen hat, in eine Testinstanz des neuen rueder importiert und danach mit `rueder bench measure` an den echten Daten gemessen. Ergebnis: Der Import dauert acht Minuten, Listen, Artikel und Ungelesen-Zahlen bleiben weit unter dem Ziel von 50 ms. Die Suche ist langsamer als an erfundenen Daten, bleibt aber in ihrer halben Sekunde.
+
+- **Maschine:** virtuelle Maschine (libvirt/KVM) mit 4 Kernen (Intel Xeon E3-1225 v3, 3,2 GHz), 10 GB Arbeitsspeicher und NVMe-SSD. rueder und PostgreSQL 16 aus `deploy/compose.yaml`, die alte Datenbank daneben in einem eigenen Container mit PostgreSQL 13 auf ihrem alten Volume ([deploy/README.md](../deploy/README.md#bringing-over-the-old-rueder)). Während `bench measure` lief der Server und rief Feeds ab.
+- **Alt:** 143 Feeds mit 707.040 Artikeln und 4 User.
+- **Neu davor:** 2 Konten mit eigenen Feeds, zwei davon mit der Adresse eines alten Feeds.
+- **Texte**, an jedem zehnten Artikel: Ein Zehntel hat keinen Text, der Median hat 130 Zeichen HTML (107 ohne Tags), 90 % haben bis 1.223, 99 % bis 8.099, im Mittel sind es 654, der längste hat 135.707. Ein Titel hat im Median 67 Zeichen.
+- **Konten danach:** Ihre Feeds haben 72 %, 23 %, 1,7 % und 0,08 % aller Artikel.
+
+| Lauf | Dauer |
+|---|---|
+| Import: 2 Feeds zusammengeführt, 141 neu, 707.040 Artikel, 2 Konten zusammengeführt (mit `--account`), 2 neu, 17 Ordner, 169 Abos | 480 s, rund 1.470 Artikel je Sekunde |
+
+Die Zeit geht an wenige große Feeds: Fünf Feeds brauchten zusammen 324 der 480 Sekunden. Je Artikel ist das etwas langsamer als an erfundenen Daten am 2026-11-12 (1.750 je Sekunde), vermutlich weil die echten Texte länger sind. In den beiden zusammengeführten Feeds hatte der neue rueder keinen der alten Artikel schon abgerufen.
+
+Danach hat die Datenbank 710.030 Artikel in 167 Feeds und 1,9 GB:
+
+| Tabelle | Daten | Indizes | Anmerkung |
+|---|---:|---:|---|
+| `articles` | 354 MB | 39 MB | Rund 500 Byte je Artikel. |
+| `article_content` | 587 MB | 292 MB | Rund 840 Byte je Artikel, mit lz4 gepackt. Der Index der Suche hat 178 MB, rund 250 Byte je Artikel. |
+| `article_versions` | 447 MB | (enthalten) | |
+| `legacy_articles` | 89 MB | (enthalten) | Die alte UUID und Nummer jedes alten Artikels, für Paket 4.6. |
+
+`bench measure`, je Abfrage 500 Läufe, mit warmem Cache, verglichen mit den 10 Millionen erfundenen Artikeln unter [Ergebnisse vom 2026-11-10](#ergebnisse-vom-2026-11-10) und [Suche vom 2026-11-11](#suche-vom-2026-11-11):
+
+| Abfrage | Median | p95 | p99 | Max | Erfunden: Median | Erfunden: p99 |
+|---|---:|---:|---:|---:|---:|---:|
+| Ein Feed, erste Seite | 1,4 ms | 2,2 ms | 3,8 ms | 11,7 ms | 1,8 ms | 4,5 ms |
+| Ein Feed, nur ungelesen | 0,7 ms | 1,5 ms | 1,8 ms | 2,7 ms | 1,3 ms | 2,5 ms |
+| Größter Feed, tief in der Liste | 1,9 ms | 2,7 ms | 3,9 ms | 33,5 ms | 1,9 ms | 3,1 ms |
+| Ein Ordner, nur ungelesen | 1,7 ms | 1,9 ms | 3,1 ms | 7,3 ms | 2,6 ms | 3,7 ms |
+| Alle Feeds, erste Seite | 2,9 ms | 3,5 ms | 4,4 ms | 7,1 ms | 7,1 ms | 12,9 ms |
+| Alle Feeds, nur ungelesen | 2,9 ms | 3,9 ms | 5,0 ms | 14,8 ms | 8,6 ms | 17,9 ms |
+| Alle Feeds, tief in der Liste | 4,0 ms | 5,8 ms | 7,5 ms | 44,8 ms | 10,8 ms | 17,5 ms |
+| Alle Feeds, nur ungelesen, tief in der Liste | 1,1 ms | 1,4 ms | 2,0 ms | 4,5 ms | 11,4 ms | 15,9 ms |
+| Ungelesen-Zahlen aller Feeds eines Kontos | 0,7 ms | 0,9 ms | 1,4 ms | 2,6 ms | 7,1 ms | 14,7 ms |
+| Neuen Artikel öffnen | 0,3 ms | 0,6 ms | 1,0 ms | 71,6 ms | 0,3 ms | 0,7 ms |
+| Artikel beliebigen Alters öffnen | 0,3 ms | 0,8 ms | 1,2 ms | 1,7 ms | 0,3 ms | 0,7 ms |
+| Versionen eines Artikels beliebigen Alters | 0,4 ms | 1,8 ms | 4,9 ms | 14,2 ms | 1,7 ms | 7,0 ms |
+| Einen Artikel als gelesen markieren | 1,7 ms | 2,2 ms | 3,6 ms | 5,6 ms | 0,7 ms | 1,5 ms |
+| Einen Feed als gelesen markieren | 2,0 ms | 2,3 ms | 3,5 ms | 5,7 ms | 1,0 ms | 2,2 ms |
+| 20 neue Artikel eines Feeds speichern | 17,5 ms | 23,4 ms | 29,9 ms | 43,8 ms | | |
+| Dasselbe ohne den Index der Suche | 4,1 ms | 6,6 ms | 9,4 ms | 11,4 ms | 8 bis 11 ms | 59 bis 65 ms |
+| Suche, ein sehr häufiges Wort | 152 ms | 257 ms | 273 ms | 289 ms | 29 ms | 46 ms |
+| Suche, ein häufiges Wort | 219 ms | 282 ms | 316 ms | 499 ms | 67 ms | 156 ms |
+| Suche, ein selteneres Wort | 219 ms | 247 ms | 253 ms | 271 ms | 67 ms | 128 ms |
+| Suche, ein seltenes Wort | 138 ms | 249 ms | 254 ms | 273 ms | 97 ms | 143 ms |
+| Suche, zwei Wörter | 147 ms | 252 ms | 285 ms | 472 ms | 165 ms | 423 ms |
+| Suche, ein häufiges Wort, tief | 65 ms | 341 ms | 362 ms | 458 ms | 89 ms | 321 ms |
+| Suche, ein selteneres Wort, nur ungelesen | 220 ms | 248 ms | 255 ms | 289 ms | 136 ms | 452 ms |
+
+- **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 8 ms, schneller als an den erfundenen Daten, deren Konten mehr Abos haben. Der langsamste von 6.000 Läufen brauchte 72 ms. Als gelesen markieren ist langsamer als an den erfundenen Daten, aber weit unter dem Ziel; warum, ist nicht untersucht.
+- **Speichern:** Der Index der Suche kostet beim Abruf rund 0,7 ms je Artikel, halb so viel wie an den erfundenen Daten.
+- **Die Wörter der Suchen waren erfunden.** `bench measure` setzte sie hier noch aus den Silben der erfundenen Daten zusammen (seit Paket 5.37 nimmt es sie aus dem Bestand); in den echten Texten finden drei der sieben Arten keinen Artikel, die anderen zwischen 71 und 9.061. Keine der Zeilen ist deshalb eine Suche nach einem häufigen Wort.
+- **Die Suche nach einem Wort braucht bis zu fünfmal so lange wie an den erfundenen Daten**, im Median 140 bis 220 ms; zwei Wörter und die Suche tief in der Liste sind etwa gleich schnell. Das 99. Perzentil bleibt unter 0,4 s, die längste Suche brauchte 0,5 s. Auch ein Wort, das kein Artikel hat, kostet 140 bis 220 ms. Das liegt an den neuesten Artikeln: Sie sind viel länger als die alten, und jede Suche bestimmte zuerst ihre Wörter ([Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16)).
+- **Nicht gemessen:** nach einem Neustart mit kaltem Cache. Die Datenbank passt mit 1,9 GB ganz in den Arbeitsspeicher; die langsameren Zugriffe auf alte Artikel nach einem Neustart, die bei 21 GB erfundenen Daten auffielen ([Suche vom 2026-11-11](#suche-vom-2026-11-11)), sind bei dieser Größe nicht zu erwarten.
+
+### Suche vom 2026-11-15
+
+Paket 5.37: erfundene Daten in der Form des alten Bestands aus dem [Probelauf](#probelauf-vom-2026-11-15), um die langsame Suche dort nachzustellen. Ergebnis: Hier braucht die Suche im Median 33 bis 87 ms, seltene Wörter ein Drittel bis ein Viertel der Zeit an den echten Daten. Nachgestellt ist die Langsamkeit damit nicht.
+
+- **Maschine:** Cloud-Container mit 4 virtuellen Kernen (Intel Xeon, 2,3 GHz), 15 GB Arbeitsspeicher, PostgreSQL 16 mit Standardwerten (`shared_buffers = 128MB`), Release-Build. Server und Datenbank auf derselben Maschine.
+- **Daten:** `rueder bench generate --accounts 4 --feeds 170 --articles 710000`, 1,6 GB. Die Texte haben die Längen des alten Bestands (unten), mit einem Absatz alle drei Sätze und einem Link alle vier. Ein Konto hat alle Feeds, zwei haben sechs von zehn, das vierte nur die sieben kleinsten mit 0,7 % der Artikel, als Leser mit wenigen Feeds neben Lesern mit vielen.
+- **Messung:** `rueder bench measure`, je 500 Läufe, mit warmem Cache. Die Wörter nimmt es aus einer Stichprobe des Bestands selbst, nach dem Anteil der Artikel, in denen sie stehen (`bench::Texts`), damit eine Art von Suche an erfundenen und echten Daten dasselbe heißt. Dazu kommt eine Suche nach einem häufigen Wort für das Konto mit den wenigsten Artikeln.
+
+Länge der Texte in Zeichen HTML, an jedem zehnten Artikel:
+
+| | Ohne Text | Median | 90 % | 95 % | 99 % | Mittel | Längster |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Alter Bestand | ein Zehntel | 130 | 1.223 | 2.128 | 8.099 | 654 | 135.707 |
+| Erfunden | ein Zehntel | 137 | 1.228 | 2.176 | 8.188 | 654 | 14.013 |
+
+| Suche | Median | p95 | p99 | Max | Artikel mit dem ersten Wort |
+|---|---:|---:|---:|---:|---:|
+| Ein sehr häufiges Wort | 33 ms | 53 ms | 64 ms | 72 ms | 175.692 |
+| Ein häufiges Wort | 66 ms | 109 ms | 119 ms | 148 ms | 44.637 |
+| Ein selteneres Wort | 53 ms | 114 ms | 125 ms | 131 ms | 87 |
+| Ein seltenes Wort | 46 ms | 103 ms | 120 ms | 138 ms | 52 |
+| Zwei Wörter | 87 ms | 134 ms | 159 ms | 186 ms | 34 |
+| Ein häufiges Wort, tief | 60 ms | 91 ms | 120 ms | 148 ms | 64.284 |
+| Ein selteneres Wort, nur ungelesen | 56 ms | 82 ms | 99 ms | 127 ms | 98 |
+| Ein häufiges Wort, Konto mit den wenigsten Artikeln | 79 ms | 111 ms | 130 ms | 147 ms | 58.342 |
+
+- **Listen, Artikel und Ungelesen-Zahlen** bleiben im 99. Perzentil unter 10 ms, wie im Probelauf.
+- **Die Suche ist hier schneller als an den echten Daten.** Im Probelauf brauchten Suchen nach seltenen oder fehlenden Wörtern im Median 140 bis 220 ms, hier brauchen seltene Wörter 46 bis 56 ms. Die Länge der Texte ist dieselbe, und auch das Konto mit wenigen Artikeln erklärt den Abstand nicht. Für ein solches Konto die neuesten Artikel Feed für Feed zu holen, statt rückwärts durch alle zu gehen, änderte die Zeiten nicht und wurde deshalb nicht gebaut.
+- **Woran es lag:** an den neuesten Artikeln der echten Daten, die viel länger sind als die übrigen; die Stichprobe über den ganzen Bestand sieht sie nicht, weil es wenige sind. Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
+
+### Live-Updates je Konto vom 2026-11-16
+
+Nach Paket 5.31, wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) gemessen: dieselbe Maschine, `load/live.js` mit `rueder bench readers --shared`, dazu 2.000 Änderungen je Sekunde.
+
+| Verbindungen | Speicher je Verbindung | Neuer Artikel bei allen | 50 Änderungen je s | 200 je s | 800 je s | 2.000 je s |
+|---:|---:|---:|---|---|---|---|
+| 2.000 | 33,2 KB | in 39 ms | 0,1 Kerne | 0,2 Kerne | 0,7 Kerne | 1,0 Kerne, p99 12 ms |
+| 5.000 | 31,8 KB | in 73 ms | 0,1 | 0,2 | 0,6 | 0,9, p99 65 ms |
+| 10.000 | 31,2 KB | in 121 ms | 0,1 | 0,2 | 0,6 | 1,0, p99 145 ms |
+
+- **Die Kosten hängen nicht mehr an den Verbindungen.** Bei 10.000 Verbindungen kosten 800 Änderungen je Sekunde 0,6 statt 2,7 Kerne, und kein Lauf sah ein `resync`; vorher war die Maschine ab 200 je Sekunde voll. Was bei 2.000 je Sekunde bleibt, sind die Anfragen selbst und das Schreiben in die Datenbank.
+- **Mehr Speicher je Verbindung**, rund 8 KB, weil jedes Konto mit offener Verbindung einen eigenen Puffer hat. Bei 5.000 Verbindungen sind das 40 MB.
+
+### Abruf je Host vom 2026-11-16
+
+Nach Paket 5.32: `rueder bench fetch --feeds 5000 --hosts 250 --seconds 120` mit `FETCH_ROUND=1000`, `FETCH_AT_ONCE=64`, `FETCH_EVERY=10`, dazu mit `--slow 2000` ein weiterer Name mit 2.000 Feeds, der jede Antwort eine halbe Sekunde später gibt. Dieselbe Maschine wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15), Release-Build, eine Datenbank für sich. „Vorher“ ist derselbe Lauf mit Runden, die aufeinander warten, wie bis Paket 5.32.
+
+| Lauf | Abrufe je Stunde | davon nicht vom langsamen Namen | vom langsamen Namen in 120 s |
+|---|---:|---:|---:|
+| ohne langsamen Namen | 359.815 | 359.815 | – |
+| mit, vorher | 23.717 | 16.792 | 292 |
+| mit, nachher | 357.772 | 350.997 | 226 |
+| mit, nachher, `FETCH_PER_HOST=4` | 357.892 | 333.544 | 812 |
+
+- **Vorher hielt der langsame Name alles auf.** Die erste Runde nahm neben den übrigen Feeds 292 langsame und holte sie nacheinander, 151 Sekunden lang; so lange wartete die nächste Runde.
+- **Nachher hält er nur sich selbst auf.** Die übrigen Feeds kommen fast so oft wie ohne ihn, der langsame Name einmal je halbe Sekunde. Mit vier zugleich kommt er gut dreieinhalbmal so oft dran.
+
+### Gespeicherte Wörter vom 2026-11-16
+
+Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder Suche für die neuesten Artikel neu zu bestimmen (`migrations/0024_search_words.sql`). Ergebnis: An den echten Daten braucht die Suche im Median 9 bis 23 ms statt 30 bis 264 ms, an erfundenen Daten, deren neueste Artikel so lang sind wie die echten, 7 bis 21 ms statt 130 bis 160 ms. Die Wörter brauchen dafür etwa so viel Platz wie die Texte selbst. Entschieden von Fiona am 2026-11-16.
+
+- **Vorher an den echten Daten** (Fionas Testinstanz wie im [Probelauf](#probelauf-vom-2026-11-15), `bench measure` mit Wörtern aus dem Bestand): Die Suche brauchte im Median 116 bis 264 ms, für das Konto mit den wenigsten Artikeln aber 30 ms und tief in der Liste 84 ms. Langsam war also, was bei den neuesten Artikeln der großen Konten anfängt. Die 3.429 Artikel, die seit dem Import abgerufen wurden, haben im Mittel 4.006 Zeichen HTML (90 % bis 10.072), die 707.040 importierten 632, die neuesten 500 im Mittel 1.804. Die Wörter dieser 500 zu bestimmen dauerte 103 ms, und jede Suche tat das zuerst (`search::PROBE`).
+- **Maschine für die erfundenen Daten:** wie unter [Suche vom 2026-11-15](#suche-vom-2026-11-15).
+- **Daten:** die erfundenen von dort, die neuesten 4.000 Artikel mit den Texten von je fünf anderen: im Mittel 3.465 Zeichen, die neuesten 500 3.888. Die Wörter dieser 500 zu bestimmen dauert hier 119 ms.
+- **Nachher an den echten Daten:** dieselbe Testinstanz nach dem Update, mit 710.590 Artikeln, wieder während der Server Feeds abrief. `bench measure` zieht die Wörter bei jedem Lauf neu aus dem Bestand; verglichen wird also je Art von Suche, nicht dasselbe Wort.
+
+| Suche, Median | Echt, vorher | Echt, nachher | p99 nachher | Erfunden, vorher | Erfunden, nachher | p99 nachher |
+|---|---:|---:|---:|---:|---:|---:|
+| Ein sehr häufiges Wort | 116 ms | 9 ms | 105 ms | 131 ms | 7 ms | 18 ms |
+| Ein häufiges Wort | 234 ms | 13 ms | 70 ms | 132 ms | 7 ms | 27 ms |
+| Ein selteneres Wort | 248 ms | 20 ms | 42 ms | 138 ms | 14 ms | 35 ms |
+| Ein seltenes Wort | 246 ms | 18 ms | 61 ms | 140 ms | 15 ms | 32 ms |
+| Zwei Wörter | 264 ms | 23 ms | 149 ms | 162 ms | 20 ms | 35 ms |
+| Ein häufiges Wort, tief | 84 ms | 12 ms | 111 ms | 59 ms | 7 ms | 24 ms |
+| Ein selteneres Wort, nur ungelesen | 248 ms | 20 ms | 43 ms | 153 ms | 21 ms | 37 ms |
+| Ein häufiges Wort, Konto mit den wenigsten Artikeln | 30 ms | 11 ms | 44 ms | 82 ms | 15 ms | 25 ms |
+
+- **Die langsamsten Suchen** brauchen an den echten Daten länger als an den erfundenen: Das 99. Perzentil liegt bei bis zu 149 ms (vorher bis zu 582 ms), die längste Suche brauchte 443 ms (vorher 664 ms). Ob das am Abruf liegt, der nebenher lief, ist nicht untersucht.
+- **Platz:** An den echten Daten wächst `article_content` von 617 auf 992 MB, um etwa so viel, wie die Texte brauchen; ihre übrigen Indexe werden beim Umschreiben etwas kleiner. An den erfundenen wächst sie von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB, weil deren Wörter anderthalbmal so groß sind wie die Texte, vermutlich weil die Texte kaum HTML haben. Der Index der Suche bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer.
+- **Migration:** 235 s für 710.000 erfundene Artikel, rund 200 s an den echten Daten. So lange startet der Server beim Update nicht. Die Datenbank wuchs an den echten Daten zwischendurch um 1,2 GB, weil PostgreSQL die Tabelle neu schreibt, bevor die alte Kopie wegfällt.
+- **Listen, Artikel und Speichern** werden nicht langsamer. An den echten Daten brauchen 20 neue Artikel im Median 16,8 statt 18,0 ms; davon fällt mehr auf den Teil ohne den Index (6,9 statt 4,2 ms), weil die Wörter jetzt in der Tabelle bestimmt werden und nicht mehr im Index.
+
+### Duplikate vom 2026-11-16
+
+Paket 5.42: wie rueder einen Artikel erkennt, dem der Feed bei jedem Abruf eine neue Kennung gibt, und was das kostet. Ergebnis: Mit einem Index auf Feed und Datum kostet das Nachschlagen 0,3 ms je Abruf, auch mit kaltem Cache rund 1 ms; ohne Index las jeder Abruf rund 1.000 Seiten der Tabelle. Entschieden von Fiona am 2026-11-16.
+
+- **Echte Daten:** ein Feed eines Themas von Google News in der Produktion, mit lesenden Abfragen von Fiona: 27.143 Artikel, 3.921 mit einem Titel, den es im Feed schon gab, 2.892 davon mit gleichem Datum. Der Feed wird alle 30 Minuten abgerufen. Seit November kamen drei Artikel je 18-mal, einer je Abruf, mit jedes Mal neuer GUID. Diese Kennungen enthalten seit 2024 nicht mehr die Adresse des Artikels. Die von 2021 und 2022 enthielten sie noch, und an ihnen ist zu sehen, dass derselbe Titel an verschiedenen Tagen verschiedene Artikel sind, etwa die Termine einer Veranstaltung. Kopien mit gleichem Titel und Datum lagen höchstens 448 Artikel auseinander, bis auf einen Ausreißer mit 15.093. Auch der alte rueder hatte solche Kopien, 100 bis 230 im Monat, obwohl er sich als Chrome ausgab.
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher, virtuelle Platte, PostgreSQL 16.15 mit `shared_buffers = 2GB`, Release-Build.
+- **Daten:** `rueder bench generate --articles 2000000`: 10 Konten, 300 Feeds, 2.000.000 Artikel, der größte Feed mit 318.563.
+- **Messung:** `rueder bench measure`, je 500-mal ein Abruf mit 100 Einträgen unter unbekannten Kennungen, die Hälfte mit Titel und Datum eines der neuesten Artikel des Feeds, einmal für einen zufälligen Feed und einmal für den größten. Mit kaltem Cache `EXPLAIN (ANALYZE, BUFFERS)` derselben Abfrage für vier Feeds, nach einem Neustart von PostgreSQL mit geleertem Cache des Betriebssystems.
+
+| Weg | Warm, ein Feed: Median, p99 | Warm, größter Feed | Kalt | Seiten von der Platte, kalt |
+|---|---:|---:|---:|---:|
+| Index auf Feed und Datum (gebaut) | 0,35 ms, 0,65 ms | 0,31 ms | rund 1 ms | 2 bis 3 |
+| Ohne Index, die neuesten 1.000 über die Nummern | 1,7 ms, 4,0 ms | 0,9 ms | 25 ms bis 1 s | 470 bis 950 |
+| Ohne Index, der ganze Feed | 4,9 ms, 440 ms | 414 ms | – | – |
+
+- **Ohne Index liegt jeder Artikel auf einer eigenen Seite.** Die Artikel aller Feeds treffen gemischt ein. Von den 1.000 neuesten Artikeln eines kleinen Feeds liegt deshalb fast jeder auf einer eigenen Seite, zusammen rund 8 MB, beim größten Feed sind es rund 340 Seiten. Bei vielen Feeds passen diese Seiten nicht mehr in den Cache. Der Index fragt nur nach den Daten der Einträge, die neuesten liegen beieinander.
+- **Schreiben.** 20 neue Artikel zu speichern brauchte mit dem Index 20,7 ms im Median und 84,7 ms im 95. Perzentil, ohne ihn 25,5 und 83,5 ms; der Unterschied geht in der Streuung unter, die der Index der Suche macht. Ohne den Index der Suche waren es 5,7 und 6,0 ms.
+- **Platz und Migration.** Der Index braucht 61 MB für 2 Millionen Artikel, rund 30 Byte je Artikel, und entstand in 1,1 Sekunden.
 
 ## Wissen über das Altsystem
 

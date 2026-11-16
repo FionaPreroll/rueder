@@ -10,7 +10,9 @@
 //! a paragraph and a picture for the cleaning to work on. It answers "not
 //! modified" while nothing is new, as most feeds do. Before every round all
 //! feeds are made due again, so each round takes as many as the pace allows;
-//! what comes out is how far the machine gets at that pace.
+//! what comes out is how far the machine gets at that pace. Rounds overlap as
+//! in the server. With `--slow`, that many more feeds come from one name more,
+//! each answer half a second late, as a large platform far away would be.
 
 use std::{
     fmt,
@@ -28,6 +30,7 @@ use axum::{
     routing::get,
 };
 use sqlx::PgPool;
+use time::{OffsetDateTime, format_description::well_known::Rfc2822, macros::datetime};
 use tokio::{net::TcpListener, task::JoinSet};
 
 use crate::{
@@ -45,12 +48,18 @@ pub const MAX_HOSTS: u32 = 1000;
 pub const MAX_FEEDS: u32 = 100_000;
 /// The account that reads the made-up feeds.
 const READER: &str = "bench-fetch";
+/// How late the slow name answers.
+const SLOW: Duration = Duration::from_millis(500);
+/// The name the slow feeds come from.
+const SLOW_HOST: Ipv4Addr = Ipv4Addr::new(127, 0, 9, 1);
 
 /// What to measure.
 #[derive(Debug, Clone, Copy)]
 pub struct Options {
     pub feeds: u32,
     pub hosts: u32,
+    /// Feeds of one more name that answers slowly.
+    pub slow: u32,
     pub seconds: u64,
     /// The port the source answers on, under every name. A fixed one keeps the
     /// addresses of the feeds, so a second run finds the feeds of the first.
@@ -71,10 +80,19 @@ fn feed_url(options: &Options, n: u32) -> String {
     )
 }
 
+fn slow_url(options: &Options, n: u32) -> String {
+    format!("http://{SLOW_HOST}:{}/feed/{}", options.port, MAX_FEEDS + n)
+}
+
+/// The date of every feed's first article.
+const FIRST_DATE: OffsetDateTime = datetime!(2026-01-01 0:00 UTC);
+
 /// When the source started: the feeds grow by the minute from then on.
 #[derive(Clone)]
 struct Source {
     started: Instant,
+    /// How many answers the slow name gave.
+    slow: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Source {
@@ -86,6 +104,12 @@ impl Source {
 }
 
 async fn feed(State(source): State<Source>, Path(n): Path<u32>, headers: HeaderMap) -> Response {
+    if n >= MAX_FEEDS {
+        tokio::time::sleep(SLOW).await;
+        source
+            .slow
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     let count = source.articles(n);
     let etag = format!("\"{count}\"");
     if headers
@@ -95,11 +119,15 @@ async fn feed(State(source): State<Source>, Path(n): Path<u32>, headers: HeaderM
         return StatusCode::NOT_MODIFIED.into_response();
     }
     let mut items = String::new();
-    // The newest 20, as feeds keep only their latest.
+    // The newest 20, as feeds keep only their latest, a minute apart, as
+    // their new ones come.
     for seq in (count.saturating_sub(20) + 1..=count).rev() {
+        let date = (FIRST_DATE + time::Duration::minutes(seq.cast_signed()))
+            .format(&Rfc2822)
+            .unwrap_or_default();
         items.push_str(&format!(
             "<item><guid>feed-{n}-{seq}</guid><title>Report {seq} of feed {n}</title>\
-             <link>https://feed-{n}.example/{seq}?utm_source=rss</link>\
+             <pubDate>{date}</pubDate><link>https://feed-{n}.example/{seq}?utm_source=rss</link>\
              <description><![CDATA[<p>The council met again on {seq} and talked for a long \
              time about the budget, the roads and the new school. Nothing was decided, but \
              everybody agreed to meet again next week.</p>\
@@ -127,15 +155,14 @@ async fn feed(State(source): State<Source>, Path(n): Path<u32>, headers: HeaderM
     clippy::disallowed_methods,
     reason = "the made-up sites of the measurement, not a route of rueder"
 )]
-async fn serve(options: &Options) -> anyhow::Result<JoinSet<()>> {
+async fn serve(options: &Options, source: &Source) -> anyhow::Result<JoinSet<()>> {
     let app = Router::new()
         .route("/feed/{n}", get(feed))
-        .with_state(Source {
-            started: Instant::now(),
-        });
+        .with_state(source.clone());
     let mut servers = JoinSet::new();
-    for n in 0..options.hosts {
-        let at = SocketAddr::from((host(n), options.port));
+    let slow = (options.slow > 0).then_some(SLOW_HOST);
+    for name in (0..options.hosts).map(host).chain(slow) {
+        let at = SocketAddr::from((name, options.port));
         let listener = TcpListener::bind(at)
             .await
             .with_context(|| format!("listening on {at}"))?;
@@ -157,7 +184,10 @@ async fn set_up(db: &PgPool, options: &Options) -> anyhow::Result<()> {
     .bind(READER)
     .fetch_one(db)
     .await?;
-    let urls: Vec<String> = (0..options.feeds).map(|n| feed_url(options, n)).collect();
+    let urls: Vec<String> = (0..options.feeds)
+        .map(|n| feed_url(options, n))
+        .chain((0..options.slow).map(|n| slow_url(options, n)))
+        .collect();
     sqlx::query(
         "INSERT INTO feeds (feed_url, site_url, title)
          SELECT url, url, 'Made-up feed' FROM unnest($1::text[]) url
@@ -191,6 +221,8 @@ pub struct Report {
     pub failed: u64,
     pub broken: u64,
     pub new_articles: u64,
+    /// Fetches of the slow name.
+    pub slow: u64,
     pub round_mean_ms: f64,
     pub round_max_ms: f64,
     pub fetch_median_ms: Option<f64>,
@@ -200,6 +232,12 @@ pub struct Report {
 impl Report {
     pub fn fetches(&self) -> u64 {
         self.fetched + self.unchanged + self.failed + self.broken
+    }
+
+    /// The fetches of the run that were not of the slow name, as many an hour.
+    pub fn others_per_hour(&self) -> f64 {
+        self.per_hour() * (self.fetches() - self.slow.min(self.fetches())) as f64
+            / self.fetches().max(1) as f64
     }
 
     /// The fetches of the run, as many an hour. A round stands for the time of
@@ -217,14 +255,16 @@ impl fmt::Display for Report {
         let ms = |value: Option<f64>| value.map_or("-".to_owned(), |ms| format!("{ms:.0} ms"));
         writeln!(
             f,
-            "{} feeds under {} names, {} s; pace: {} feeds every {} s, {} at once \
-             (at most {} an hour)",
+            "{} feeds under {} names and {} slow ones, {} s; pace: {} feeds every {} s, \
+             {} at once, {} of a name (at most {} an hour)",
             o.feeds,
             o.hosts,
+            o.slow,
             self.took.as_secs(),
             o.pace.round,
             o.pace.every.as_secs(),
             o.pace.at_once,
+            o.pace.per_host,
             o.pace.per_hour()
         )?;
         writeln!(
@@ -249,7 +289,13 @@ impl fmt::Display for Report {
             ms(self.fetch_median_ms),
             ms(self.fetch_p95_ms)
         )?;
-        write!(f, "{:.0} fetches an hour", self.per_hour())
+        write!(
+            f,
+            "{:.0} fetches an hour, {:.0} of them not of the slow name ({} slow ones in all)",
+            self.per_hour(),
+            self.others_per_hour(),
+            self.slow
+        )
     }
 }
 
@@ -261,6 +307,9 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
     }
     if options.feeds == 0 || options.feeds > MAX_FEEDS {
         bail!("--feeds must be from 1 to {MAX_FEEDS}");
+    }
+    if options.slow > MAX_FEEDS {
+        bail!("--slow must be at most {MAX_FEEDS}");
     }
     let prefix = "http://127.0.";
     let others: i64 = sqlx::query_scalar(
@@ -280,7 +329,11 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
     set_up(db, &options).await?;
     // As the server does when it starts, so fetches do not make them at once.
     articles::ensure_current_partitions(db).await?;
-    let mut source = serve(&options).await?;
+    let source = Source {
+        started: Instant::now(),
+        slow: Arc::default(),
+    };
+    let mut servers = serve(&options, &source).await?;
 
     let client = HttpClient::new(http_client::Config {
         allow: vec![
@@ -292,9 +345,10 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
     })?;
     let rules = Arc::new(Rules::built_in()?);
     let (events, monitor) = (Events::new(), Arc::new(Monitor::default()));
+    let underway = fetch::Underway::new(&options.pace);
     let mut every = tokio::time::interval(options.pace.every);
     every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    let (began, mut rounds, mut round_ms) = (Instant::now(), 0u64, Vec::new());
+    let (began, mut rounds) = (Instant::now(), JoinSet::new());
     let end = began + Duration::from_secs(options.seconds);
     while Instant::now() < end {
         every.tick().await;
@@ -306,24 +360,38 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
         .bind(prefix)
         .execute(db)
         .await?;
-        let round = Instant::now();
-        fetch::fetch_due(db, &client, &rules, &events, &monitor, &options.pace).await?;
-        round_ms.push(round.elapsed().as_secs_f64() * 1000.0);
-        rounds += 1;
+        // As in the server, a round does not wait for the one before.
+        let (db, client, rules, events) =
+            (db.clone(), client.clone(), rules.clone(), events.clone());
+        let (monitor, underway, pace) = (monitor.clone(), underway.clone(), options.pace);
+        rounds.spawn(async move {
+            let started = Instant::now();
+            fetch::round(&db, &client, &rules, &events, &monitor, &pace, &underway).await?;
+            anyhow::Ok(started.elapsed().as_secs_f64() * 1000.0)
+        });
     }
     let took = began.elapsed();
-    source.abort_all();
+    // What is still under way counts no more.
+    rounds.abort_all();
+    let mut round_ms = Vec::new();
+    while let Some(round) = rounds.join_next().await {
+        if let Ok(round) = round {
+            round_ms.push(round?);
+        }
+    }
+    servers.abort_all();
 
     let fetches = monitor.fetches(Instant::now());
     Ok(Report {
         options,
-        rounds,
+        rounds: round_ms.len() as u64,
         took,
         fetched: fetches.fetched,
         unchanged: fetches.unchanged,
         failed: fetches.failed,
         broken: fetches.broken,
         new_articles: fetches.new_articles,
+        slow: source.slow.load(std::sync::atomic::Ordering::Relaxed),
         round_mean_ms: round_ms.iter().sum::<f64>() / round_ms.len().max(1) as f64,
         round_max_ms: round_ms.iter().copied().fold(0.0, f64::max),
         fetch_median_ms: fetches.timing.quantile(0.5),

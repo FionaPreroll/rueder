@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use axum::http::{Method, StatusCode, header};
 use common::{START, article, call, raw, session};
 use rueder::{
-    AppState, articles,
+    AppState, accounts, articles,
     rate::{Limits, Rate, Rates},
     reading, transfer,
 };
@@ -163,6 +163,8 @@ async fn first_rueder(db: &PgPool) -> Value {
         json!({ "title": "Cee" }),
     )
     .await;
+    // An admin says that B is fetched as a browser.
+    accounts::set_admin(db, "ada", true).await.unwrap();
     send(
         &state,
         Method::PUT,
@@ -451,13 +453,14 @@ async fn an_account_moves_to_a_rueder_where_numbers_differ(db: PgPool) {
             (C.into(), Some("News".into()), Some("Cee".into())),
         ]
     );
+    // Grace is no admin: the feed she brings is fetched as rueder, as any.
     let (b, agent): (i32, String) =
         sqlx::query_as("SELECT id, fetch_agent FROM feeds WHERE feed_url = $1")
             .bind(B)
             .fetch_one(&db)
             .await
             .unwrap();
-    assert_eq!(agent, "browser");
+    assert_eq!(agent, "rueder");
 
     // What was read, starred and labelled, by article and not by number.
     assert_eq!(
@@ -860,11 +863,38 @@ async fn the_command_line_moves_an_account_too(db: PgPool) {
     let grace = common::account(&db, "grace").await;
     let rules = rueder::cleaning::Rules::built_in().unwrap();
     let file: transfer::Export = serde_json::from_value(exported).unwrap();
-    let Ok(imported) = transfer::import(&db, &rules, grace, file, None).await else {
+    let Ok(imported) = transfer::import(&db, &rules, grace, file, true, None).await else {
         panic!("the import failed");
     };
     assert_eq!(imported.feeds, 3);
     // Not a single article was here, and none came along.
     assert_eq!(imported.missing, 6);
     assert!(imported.to_string().contains("3 new, 0 known"));
+    // The operator says as what the feeds are fetched.
+    assert_eq!(agent_of(&db, B).await, "browser");
+}
+
+async fn agent_of(db: &PgPool, url: &str) -> String {
+    sqlx::query_scalar("SELECT fetch_agent FROM feeds WHERE feed_url = $1")
+        .bind(url)
+        .fetch_one(db)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn only_an_admin_brings_a_feed_fetched_as_a_browser(db: PgPool) {
+    let file = first_rueder(&db).await;
+    let state = AppState::new(db.clone());
+    for admin in [false, true] {
+        forget(&db).await;
+        let grace = common::account(&db, "grace").await;
+        accounts::set_admin(&db, "grace", admin).await.unwrap();
+        let cookie = session(&db, grace).await;
+        let (status, report) = import(&state, &cookie, &file).await;
+        assert_eq!(status, StatusCode::OK, "{report}");
+        let wanted = if admin { "browser" } else { "rueder" };
+        assert_eq!(agent_of(&db, B).await, wanted, "admin: {admin}");
+        assert_eq!(agent_of(&db, A).await, "rueder");
+    }
 }

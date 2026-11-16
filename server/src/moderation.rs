@@ -1,4 +1,5 @@
-//! Reports of feeds and articles by their readers, and blocking a feed.
+//! Reports of feeds and articles by their readers, blocking a feed, and what
+//! else the operator does to a feed.
 //!
 //! - **Reporting** (`POST /api/feeds/{id}/report`,
 //!   `POST /api/feeds/{id}/articles/{seq}/report`) takes a reason from a fixed
@@ -15,6 +16,9 @@
 //!   `blocked_images`, so that the proxy does not fetch them back for a
 //!   browser that still knows their addresses. `rueder feed unblock` lifts it
 //!   ([`unblock`]).
+//! - **For support** `rueder feed show` prints what a reader's "Feed info"
+//!   shows and how many read the feed, and `rueder feed agent` says as what
+//!   it is fetched, for any feed, by its number or its address ([`named`]).
 
 use axum::{
     Json,
@@ -328,6 +332,49 @@ pub async fn unblock(db: &PgPool, url: &str) -> anyhow::Result<u64> {
     .await?;
     tx.commit().await?;
     Ok(lifted.len() as u64)
+}
+
+/// The feeds a number or an address names: the one with that number, or
+/// every one at that address, as there may be several.
+pub async fn named(db: &PgPool, feed: &str) -> anyhow::Result<Vec<i32>> {
+    let feed = feed.trim();
+    let found = match feed.parse::<i32>() {
+        Ok(id) => {
+            sqlx::query_scalar!("SELECT id FROM feeds WHERE id = $1", id)
+                .fetch_all(db)
+                .await?
+        }
+        Err(_) => {
+            sqlx::query_scalar!("SELECT id FROM feeds WHERE feed_url = $1 ORDER BY id", feed)
+                .fetch_all(db)
+                .await?
+        }
+    };
+    Ok(found)
+}
+
+/// How many accounts read a feed.
+pub async fn readers(db: &PgPool, feed_id: i32) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM subscriptions WHERE feed_id = $1"#,
+        feed_id
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(count)
+}
+
+/// Says as what these feeds are fetched, `rueder` or `browser`; they are
+/// fetched at once.
+pub async fn set_agent(db: &PgPool, feed_ids: &[i32], agent: &str) -> anyhow::Result<()> {
+    sqlx::query!(
+        "UPDATE feeds SET fetch_agent = $2, next_fetch_at = now() WHERE id = ANY($1)",
+        feed_ids,
+        agent,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 /// How many articles [`images_of`] reads at a time.

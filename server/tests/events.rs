@@ -523,6 +523,93 @@ async fn a_connection_that_falls_behind_is_told_to_start_over(db: PgPool) {
     assert_eq!(tab.next().await.unwrap().kind, "tree");
 }
 
+/// Compared with a plain model, for many accounts with several tabs each and
+/// events for any mix of them: every tab hears exactly the events of its
+/// account, in the order they were told, and nothing of the others.
+#[sqlx::test]
+async fn every_tab_hears_what_is_for_its_account_and_nothing_else(db: PgPool) {
+    let state = AppState::new(db.clone());
+    for seed in 1..=4 {
+        let mut random = common::Random::new(seed);
+        let mut accounts = Vec::new();
+        for n in 0..8 {
+            let id = common::account(&db, &format!("reader-{seed}-{n}")).await;
+            let cookie = common::session(&db, id).await;
+            let mut tabs = Vec::new();
+            for _ in 0..1 + random.below(3) {
+                tabs.push(listening(&state, &cookie).await);
+            }
+            accounts.push((id, tabs));
+        }
+        // An account that is not listening, as most are.
+        let away = common::account(&db, &format!("away-{seed}")).await;
+        let mut expected: Vec<Vec<i32>> = vec![Vec::new(); accounts.len()];
+        for number in 0..120 {
+            let mut to: Vec<i32> = accounts
+                .iter()
+                .filter(|_| random.below(3) == 0)
+                .map(|(id, _)| *id)
+                .collect();
+            if random.below(4) == 0 {
+                to.push(away);
+            }
+            for (n, (id, _)) in accounts.iter().enumerate() {
+                if to.contains(id) {
+                    expected[n].push(number);
+                }
+            }
+            let event = ServerEvent::Updated {
+                feed_id: number,
+                count: 1,
+            };
+            state.events.publish(to, event);
+        }
+        // Last, one for everybody: what comes before it is all a tab heard.
+        let everybody = accounts.iter().map(|(id, _)| *id).collect();
+        state
+            .events
+            .publish(everybody, ServerEvent::Tree { by: None });
+        for (n, (_, tabs)) in accounts.iter_mut().enumerate() {
+            for tab in tabs {
+                let mut heard = Vec::new();
+                loop {
+                    let event = tab.next().await.expect("an event");
+                    if event.kind == "tree" {
+                        break;
+                    }
+                    heard.push(event.data["feed_id"].as_i64().unwrap() as i32);
+                }
+                assert_eq!(heard, expected[n], "seed {seed}, account {n}");
+            }
+        }
+    }
+}
+
+/// One account flooded with events falls behind alone: the others hear what
+/// is theirs and are not told to start over.
+#[sqlx::test]
+async fn an_account_that_falls_behind_does_not_hold_up_the_others(db: PgPool) {
+    let state = AppState::new(db.clone());
+    let ada = common::account(&db, "ada").await;
+    let grace = common::account(&db, "grace").await;
+    let mut ada_tab = listening(&state, &common::session(&db, ada).await).await;
+    let mut grace_tab = listening(&state, &common::session(&db, grace).await).await;
+    for n in 0..1000 {
+        let by = Some(n.to_string());
+        state.events.publish(vec![ada], ServerEvent::Labels { by });
+        if n % 100 == 0 {
+            state
+                .events
+                .publish(vec![grace], ServerEvent::Tree { by: None });
+        }
+    }
+    for _ in 0..10 {
+        assert_eq!(grace_tab.next().await.unwrap().kind, "tree");
+    }
+    assert!(grace_tab.is_quiet().await);
+    assert_eq!(ada_tab.next().await.unwrap().kind, "resync");
+}
+
 #[sqlx::test]
 async fn only_who_is_logged_in_listens_and_not_without_end(db: PgPool) {
     let ada = common::account(&db, "ada").await;
@@ -690,6 +777,7 @@ async fn a_disabled_account_gets_no_events(db: PgPool) {
         rueder::accounts::set_disabled(&db, "ada", true)
             .await
             .unwrap()
+            .is_some()
     );
     assert!(ada_tab.has_ended().await);
     // No new connection, not even with a session made after disabling.

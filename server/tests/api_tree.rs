@@ -781,9 +781,10 @@ async fn the_tree_has_room_for_so_many_folders_and_feeds(db: PgPool) {
 }
 
 #[sqlx::test]
-async fn whoever_reads_a_feed_says_as_what_it_is_fetched(db: PgPool) {
+async fn an_admin_who_reads_a_feed_says_as_what_it_is_fetched(db: PgPool) {
     let (ada, news) = common::reader(&db, "ada", 1).await;
     let (grace, blog) = common::reader(&db, "grace", 1).await;
+    rueder::accounts::set_admin(&db, "ada", true).await.unwrap();
     let state = AppState::new(db.clone());
     let (cookie, grace_cookie) = (
         common::session(&db, ada).await,
@@ -816,8 +817,13 @@ async fn whoever_reads_a_feed_says_as_what_it_is_fetched(db: PgPool) {
         .unwrap();
     assert_eq!(due, [news]);
 
-    // Not for a feed one does not read, not without a session, and not as
-    // anything else.
+    // Not by a reader who is no admin, not for a feed the admin does not
+    // read, not without a session, and not as anything else.
+    assert_eq!(
+        set(Some(&grace_cookie), blog, browser.clone()).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(agent(&grace_cookie).await, "rueder");
     assert_eq!(
         set(Some(&cookie), blog, browser.clone()).await,
         StatusCode::NOT_FOUND
@@ -835,4 +841,48 @@ async fn whoever_reads_a_feed_says_as_what_it_is_fetched(db: PgPool) {
     let back = json!({ "agent": "rueder" });
     assert_eq!(set(Some(&cookie), news, back).await, StatusCode::NO_CONTENT);
     assert_eq!(agent(&cookie).await, "rueder");
+}
+
+#[sqlx::test]
+async fn a_reader_sees_how_a_feed_of_theirs_is_fetched(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 3).await;
+    let grace = common::account(&db, "grace").await;
+    sqlx::query(
+        "UPDATE feeds SET site_url = 'https://news.example/', fetch_interval_s = 1800,
+             fetched_at = '2026-11-16 12:30Z', last_success_at = '2026-11-16 12:00Z',
+             last_error_at = '2026-11-16 12:30Z', error_message = '404 Not Found',
+             next_fetch_at = '2026-11-16 13:30Z'
+         WHERE id = $1",
+    )
+    .bind(news)
+    .execute(&db)
+    .await
+    .unwrap();
+    let state = AppState::new(db.clone());
+    let path = format!("/api/feeds/{news}/info");
+    let cookie = common::session(&db, ada).await;
+
+    let (status, info) = call(&state, Method::GET, &path, Some(&cookie), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        info,
+        json!({
+            "id": news, "title": "ada",
+            "feed_url": "https://ada.example/feed.xml", "site_url": "https://news.example/",
+            "fetch_agent": "rueder", "fetch_interval_s": 1800,
+            "fetched_at": "2026-11-16T12:30:00Z", "last_success_at": "2026-11-16T12:00:00Z",
+            "last_error_at": "2026-11-16T12:30:00Z", "error": "404 Not Found",
+            "next_fetch_at": "2026-11-16T13:30:00Z", "last_seq": 3, "blocked": false
+        })
+    );
+
+    // Nobody else sees it, nor learns whether there is such a feed.
+    let other = common::session(&db, grace).await;
+    let (status, _) = call(&state, Method::GET, &path, Some(&other), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let missing = format!("/api/feeds/{}/info", news + 1);
+    let (status, _) = call(&state, Method::GET, &missing, Some(&other), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(&state, Method::GET, &path, None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

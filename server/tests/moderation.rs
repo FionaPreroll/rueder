@@ -15,6 +15,7 @@ use rueder::{
     moderation,
     monitor::Monitor,
     rate::{Limits, Rate, Rates},
+    tree,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -512,4 +513,61 @@ async fn the_proxy_does_not_fetch_the_images_of_a_blocked_feed_again(db: PgPool)
         Err(Refused::Source(_))
     ));
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[sqlx::test]
+async fn the_operator_finds_any_feed_and_says_as_what_it_is_fetched(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 2).await;
+    // Another feed at the same address, which nobody reads.
+    let twin = common::feed(&db, "ada").await;
+    let blog = common::feed(&db, "blog").await;
+    let grace = common::account(&db, "grace").await;
+    common::subscribe(&db, grace, news).await;
+    sqlx::query("UPDATE feeds SET next_fetch_at = now() + interval '1 hour'")
+        .execute(&db)
+        .await
+        .unwrap();
+
+    let named = async |feed: &str| moderation::named(&db, feed).await.unwrap();
+    assert_eq!(named(&format!(" {news} ")).await, [news]);
+    assert_eq!(named("https://ada.example/feed.xml").await, [news, twin]);
+    assert!(named("999999").await.is_empty());
+    assert!(named("https://nowhere.example/feed.xml").await.is_empty());
+    assert_eq!(moderation::readers(&db, news).await.unwrap(), 2);
+    assert_eq!(moderation::readers(&db, twin).await.unwrap(), 0);
+    // The operator sees a feed nobody reads; a reader only their own.
+    let info = tree::feed_info(&db, twin, None).await.unwrap().unwrap();
+    assert_eq!(
+        (info.id, info.feed_url.as_str()),
+        (twin, "https://ada.example/feed.xml")
+    );
+    assert!(
+        tree::feed_info(&db, twin, Some(ada))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        tree::feed_info(&db, news, Some(ada))
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    moderation::set_agent(&db, &[news, twin], "browser")
+        .await
+        .unwrap();
+    let agents: Vec<(i32, String, bool)> =
+        sqlx::query_as("SELECT id, fetch_agent, next_fetch_at <= now() FROM feeds ORDER BY id")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert_eq!(
+        agents,
+        [
+            (news, "browser".into(), true),
+            (twin, "browser".into(), true),
+            (blog, "rueder".into(), false),
+        ]
+    );
 }

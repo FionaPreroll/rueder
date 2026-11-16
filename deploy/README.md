@@ -222,7 +222,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `POSTGRES_SHARED_BUFFERS` | Memory for PostgreSQL's cache, `128MB` if not set. |
 | `IMAGE_CACHE_MB`, `IMAGE_PROXY_KEY` | Size of the image proxy's cache, and its secret if you want to set it yourself. |
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
-| `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
+| `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
 | `APP_API` | `off` lets no feed reader app of another maker in. On if not set: readers set up apps such as NetNewsWire and Read You under Settings, Apps, with an app password each, and the apps reach rueder at `https://<your rueder>/greader`. |
 | `CONTENT_REPORTS` | `on` lets readers report a feed or an article to you, with a reason and a short note. The status page lists the reported feeds with their address, never who reported; `rueder feed block` blocks one. Off if not set. |
@@ -243,11 +243,13 @@ that already exists. Change it there first
 
 rueder fetches in rounds: every `FETCH_EVERY` seconds (30) it takes up to
 `FETCH_ROUND` feeds that are due (100) and fetches `FETCH_AT_ONCE` of them at
-the same time (8), never two of one host at once. That is at most 12,000
-fetches an hour, enough for a few thousand feeds: a feed is fetched every 15
-minutes to 12 hours, by how much it publishes. The server refuses to start
-with a value out of bounds (round 1 to 10,000, at once 1 to 256, every 5 to
-3,600 seconds).
+the same time (8), `FETCH_PER_HOST` of one host at once (1). A round does
+not wait for the one before: while a round still works through a host with
+many feeds, the next ones leave that host out and fetch the others. That is
+at most 12,000 fetches an hour, enough for a few thousand feeds: a feed is
+fetched every 15 minutes to 12 hours, by how much it publishes. The server
+refuses to start with a value out of bounds (round 1 to 10,000, at once 1 to
+256, every 5 to 3,600 seconds, of one host 1 to 32).
 
 The status page says the pace, the fetches of the last hour and how far
 fetching is behind. When every round takes all it may and feeds still wait,
@@ -265,7 +267,9 @@ the rounds took about a second each, against made-up feeds on the same
 machine (`rueder bench fetch`; the numbers are in `docs/implementation.md`
 under "Messung"). Real sites answer slower than a source on the same
 machine, so `FETCH_AT_ONCE` is what keeps rounds short: 64 fetches at once of
-sites that take half a second each make about 130 a second.
+sites that take half a second each make about 130 a second. Where many readers
+follow feeds of one large platform, such as a video site, `FETCH_PER_HOST=4`
+fetches four of them at once; ask the platform's terms before you go higher.
 
 ## Commands
 
@@ -278,9 +282,11 @@ docker compose exec rueder rueder admin add fiona          # sees the server sta
 docker compose exec rueder rueder account password fiona   # also ends the account's sessions
 docker compose exec rueder rueder account second-factor-off fiona   # lost the app and the recovery codes
 docker compose exec rueder rueder account link fiona <subject>   # for OpenID Connect
-docker compose exec rueder rueder account disable mallory  # no login, sessions end; `enable` undoes it
+docker compose exec rueder rueder account disable mallory  # no login, sessions end, feeds only it reads rest; `enable` undoes it
 docker compose exec rueder rueder account remove mallory   # deletes the account and all that is its own
 docker compose exec rueder rueder feed block https://spam.example/feed.xml   # not fetched, hidden for all, its images gone; `unblock` undoes it
+docker compose exec rueder rueder feed show 130            # what is known of a feed a reader asks about, by number or address
+docker compose exec rueder rueder feed agent 130 browser   # fetch it as a browser for a site that turns rueder away; `rueder` undoes it
 docker compose exec rueder rueder reclean                  # after the cleaning's rules changed
 docker compose exec rueder rueder retention show           # how long what is kept, see below
 docker compose exec -T rueder rueder account export fiona > fiona.json            # move an account away
@@ -393,7 +399,10 @@ docker compose pull rueder
 docker compose up --detach
 ```
 
-The new server applies new migrations when it starts. Make a backup first.
+The new server applies new migrations when it starts. Make a backup first. A
+migration that rewrites a large table can take minutes and needs free disk for a
+second copy of that table; while it runs, `docker compose logs -f rueder` says
+regularly which one it is and how far it has come.
 
 ## Backup
 
@@ -431,13 +440,42 @@ docker compose exec -T db pg_dump -U rueder --format=custom rueder > before-impo
 export LEGACY_DATABASE_URL="postgres://rueder:$(grep ^POSTGRES_PASSWORD= .env | cut -d= -f2-)@db:5432/rueder_old"
 docker compose run --rm -e LEGACY_DATABASE_URL rueder import-legacy --dry-run
 docker compose run --rm -e LEGACY_DATABASE_URL rueder import-legacy --account oldname=newname
+docker compose run --rm rueder account disable gone   # an old account nobody uses any more
 docker compose start rueder
 ```
 
-The dry run says which feeds and accounts would be merged and which added. If
-the import stops halfway, run it again. The way back is `before-import.dump`,
-put in as under [Backup](#backup). Afterwards `rueder_old` can go:
+The dry run says which feeds and accounts would be merged and which added. An
+old account that nobody uses any more is best disabled before the server
+starts: the feeds no other enabled account reads are then never fetched, and
+`account enable` brings them back. While the import runs, it says regularly
+how many of the old articles it has brought and about how long it still needs.
+If it stops halfway, run it again.
+The way back is `before-import.dump`, put in as under [Backup](#backup).
+Afterwards `rueder_old` can go:
 `docker compose exec db dropdb -U rueder rueder_old`.
+
+The import reads the old database at any address it can reach, so a backup
+need not go into rueder's PostgreSQL. If the old rueder's volume is still
+there, the old database can instead run next to rueder in a container of its
+own, with the version that wrote it (PostgreSQL 13, `postgres:13.6-alpine` in
+the old compose file), on rueder's network. PostgreSQL writes to its volume
+when it starts, so it runs on a copy, and nothing of the old rueder may still
+use the volume. `docker volume ls` shows its name, after the folder the old
+compose file ran in:
+
+```sh
+docker volume create rueder3_db_copy
+docker run --rm -v rueder3_db:/from:ro -v rueder3_db_copy:/to postgres:13.6-alpine cp -a /from/. /to/
+docker run -d --name rueder3-db --network rueder_default \
+  -v rueder3_db_copy:/var/lib/postgresql/data postgres:13.6-alpine
+docker exec rueder3-db psql -U postgres -c '\du' -c '\l'   # its users and databases
+export LEGACY_DATABASE_URL="postgres://postgres:postgres@rueder3-db:5432/rueder_production"
+```
+
+User, password and database are the ones the old compose file set. Then stop
+rueder, take the backup and run the import as above. Afterwards the old
+database can go: `docker rm -f rueder3-db` and
+`docker volume rm rueder3_db_copy`.
 
 ## What the container may do
 

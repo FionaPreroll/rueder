@@ -535,8 +535,18 @@ async fn a_disabled_account_cannot_log_in_and_is_told_so(db: PgPool) {
     let grace = make(&db, "grace", false).await;
     let graces = common::session(&db, grace).await;
 
-    assert!(accounts::set_disabled(&db, " ADA", true).await.unwrap());
-    assert!(!accounts::set_disabled(&db, "nobody", true).await.unwrap());
+    assert!(
+        accounts::set_disabled(&db, " ADA", true)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        accounts::set_disabled(&db, "nobody", true)
+            .await
+            .unwrap()
+            .is_none()
+    );
 
     // Its sessions are over, and a new one would be no session either.
     assert!(!logged_in(&state, &laptop).await && !logged_in(&state, &phone).await);
@@ -576,7 +586,12 @@ async fn a_disabled_account_cannot_log_in_and_is_told_so(db: PgPool) {
             .fetch_one(&db)
             .await
             .unwrap();
-    assert!(accounts::set_disabled(&db, "ada", true).await.unwrap());
+    assert!(
+        accounts::set_disabled(&db, "ada", true)
+            .await
+            .unwrap()
+            .is_some()
+    );
     let again: Option<time::OffsetDateTime> =
         sqlx::query_scalar("SELECT disabled_at FROM accounts WHERE id = $1")
             .bind(ada)
@@ -587,7 +602,12 @@ async fn a_disabled_account_cannot_log_in_and_is_told_so(db: PgPool) {
     assert_eq!(first, again);
 
     // Enabled, it logs in again, and its invitation works again.
-    assert!(accounts::set_disabled(&db, "ada", false).await.unwrap());
+    assert!(
+        accounts::set_disabled(&db, "ada", false)
+            .await
+            .unwrap()
+            .is_some()
+    );
     assert_eq!(log_in(&state, "ada", PASSWORD).await.0, StatusCode::OK);
     assert!(invite_works(state.clone(), token).await);
     // What came about while it was disabled does not come alive with it.

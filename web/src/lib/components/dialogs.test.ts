@@ -12,6 +12,7 @@ import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { MAX_OPML, type Reader } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
+import FeedInfoDialog from './FeedInfoDialog.svelte';
 import ReportDialog from './ReportDialog.svelte';
 import TopBar from './TopBar.svelte';
 import AccountDialog from './AccountDialog.svelte';
@@ -386,7 +387,7 @@ describe('StatusDialog', () => {
 		for (const title of ['Server', 'Database', 'Fetching feeds', 'Feed search', 'Image proxy']) {
 			expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
 		}
-		expect(screen.getByText('31 subscribed, 34 in all')).toBeInTheDocument();
+		expect(screen.getByText('31 fetched, 34 in all')).toBeInTheDocument();
 		expect(screen.getByText('4 open, 3 idle, at most 10')).toBeInTheDocument();
 		expect(screen.getByText('The site answers 403')).toBeInTheDocument();
 		expect(screen.getByText('3 feeds')).toBeInTheDocument();
@@ -1315,6 +1316,83 @@ describe('ReportDialog', () => {
 			'spam',
 			''
 		);
+	});
+});
+
+describe('FeedInfoDialog', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	/** The value next to a label of the list. */
+	const line = (label: string) => screen.getByText(label).nextElementSibling;
+
+	function open(reader: Reader, feedId: string) {
+		render(FeedInfoDialog, { reader, feedId, title: 'Morning paper', onclose: () => {} });
+	}
+
+	it('says what the server knows of a feed, and copies it for the operator', async () => {
+		server.admin = false;
+		const id = server.addFeed('Tagesbote', null, { error: '404 Not Found' });
+		server.addArticles(id, 3);
+		open(new ServerReader({ name: 'fiona', admin: false }, session), `feed-${id}`);
+		expect(screen.getByRole('dialog', { name: 'Feed info' })).toHaveTextContent('Loading …');
+		expect(await screen.findByText(`https://feed-${id}.example/feed.xml`)).toBeInTheDocument();
+		expect(screen.getByText(/knows of “Morning paper”/)).toBeInTheDocument();
+		expect(line('Number')).toHaveTextContent(String(id));
+		expect(line('Name')).toHaveTextContent('Tagesbote');
+		expect(line('Fetched as')).toHaveTextContent('rueder');
+		expect(line('Fetched every')).toHaveTextContent('1 hr');
+		expect(line('Last error')).toHaveTextContent('404 Not Found');
+		expect(line('Articles so far')).toHaveTextContent('3');
+		// Only an admin says as what it is fetched.
+		expect(screen.queryByRole('radio')).toBeNull();
+
+		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+		await userEvent.click(screen.getByRole('button', { name: 'Copy' }));
+		const copied = writeText.mock.lastCall?.[0] ?? '';
+		expect(copied).toMatch(/^Feed info\nNumber: \d+\nName: Tagesbote\n/);
+		expect(copied).toContain('Last error: 2026-11-10T14:00:00Z: 404 Not Found\n');
+		expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+	});
+
+	it('lets an admin say as what the feed is fetched, and says when that did not work', async () => {
+		const id = server.addFeed('Tagesbote');
+		open(new ServerReader({ name: 'fiona', admin: true }, session), `feed-${id}`);
+		await userEvent.click(await screen.findByRole('radio', { name: 'Browser' }));
+		await vi.waitFor(() => expect(server.feeds[0]?.asBrowser).toBe(true));
+		expect(line('Fetched as')).toHaveTextContent('Browser');
+
+		server.admin = false;
+		await userEvent.click(screen.getByRole('radio', { name: 'rueder' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('That did not work.');
+		await vi.waitFor(() => expect(line('Fetched as')).toHaveTextContent('Browser'));
+		expect(screen.getByRole('radio', { name: 'Browser' })).toBeChecked();
+	});
+
+	it('says when the server does not answer', async () => {
+		open(new ServerReader({ name: 'fiona', admin: false }, session), 'feed-999');
+		expect(await screen.findByRole('alert')).toHaveTextContent('The server did not answer.');
+	});
+
+	it('is there with made-up data too, in German', async () => {
+		useLanguage('de');
+		const reader = new DemoReader(() => now);
+		open(reader, 'feed-tagesbote');
+		expect(await screen.findByText('Feed-Adresse')).toBeInTheDocument();
+		expect(screen.getByRole('dialog', { name: 'Feed-Infos' })).toBeInTheDocument();
+		expect(line('Abgerufen als')).toHaveTextContent('rueder');
+		await userEvent.click(screen.getByRole('radio', { name: 'Browser' }));
+		expect(await reader.feedInfo('feed-tagesbote')).toMatchObject({ fetch_agent: 'browser' });
 	});
 });
 

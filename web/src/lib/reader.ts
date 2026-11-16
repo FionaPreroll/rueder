@@ -8,9 +8,9 @@ import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
-import type { ReportKind, ServerStatus } from './api/types.ts';
+import type { FeedInfo, FetchAgent, ReportKind, ServerStatus } from './api/types.ts';
 
-export type { ServerStatus };
+export type { FeedInfo, FetchAgent, ServerStatus };
 
 /** A feed with something unread, for the start page. */
 export interface Fresh {
@@ -113,6 +113,8 @@ export interface Abilities {
 	reports: boolean;
 	/** Feeds and articles can be reported to the admins. */
 	reportContent: boolean;
+	/** As what a feed is fetched can be said, for all who read it: by admins. */
+	fetchAgent: boolean;
 }
 
 /** A feed found at an address. */
@@ -396,6 +398,10 @@ export interface Reader {
 	renameFeed(id: string, title: string): void;
 	/** Ends a subscription, and with it what was read and starred there. */
 	unsubscribe(id: string): void;
+	/** What the server knows of a feed and how it is fetched, for support; null if there was no answer. */
+	feedInfo(id: string): Promise<FeedInfo | null>;
+	/** Says as what a feed is fetched (`can.fetchAgent`); false if that did not work. */
+	setFetchAgent(id: string, agent: FetchAgent): Promise<boolean>;
 	/** Takes the subscriptions of an OPML file in; folders are found by their name or made. */
 	importOpml(file: Blob): Promise<Imported>;
 	/** All subscriptions as an OPML file; null if there was no answer. */

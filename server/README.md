@@ -63,8 +63,9 @@ What is here:
   `DELETE /api/account` deletes the reader's own account after their password,
   and `rueder account remove <name>` any account; everything that is the
   account's own goes with it, the feeds stay for their other readers.
-  `rueder account disable <name>` keeps a misused account from logging in and
-  ends its sessions; `enable` undoes it.
+  `rueder account disable <name>` keeps a misused or abandoned account from
+  logging in and ends its sessions; the feeds no other enabled account reads
+  are not fetched while it is disabled. `enable` undoes it.
 - Apps of other makers (`src/greader/`, `src/app_passwords.rs`): the Google
   Reader API under `/greader`, for apps such as NetNewsWire and Read You,
   logged in with app passwords that readers make under Settings, Apps
@@ -115,6 +116,13 @@ What is here:
   reported. `rueder feed block <address>` stops fetching the feed, hides its
   articles from everybody, refuses new subscriptions and removes its images
   from the cache; `rueder feed unblock <address>` lifts it.
+- What is known of a feed, for support (`src/tree.rs`): its readers see its
+  addresses, as what and when it was fetched and why that failed under "Feed
+  info …" in its menu (`GET /api/feeds/{id}/info`); `rueder feed show
+  <number or address>` prints the same for any feed, with the number of its
+  readers. Only an admin who reads a feed says as what it is fetched, for all
+  who read it (`PUT /api/feeds/{id}/agent`), and the operator for any feed with
+  `rueder feed agent <number or address> browser|rueder`.
 - The status for admins (`src/monitor.rs`, `src/status.rs`): `GET /api/status`
   for the last hour, in memory, and the same numbers for Prometheus under
   `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).
@@ -196,7 +204,7 @@ below):
 cargo run -- account add ada            # asks for the password; --admin for an admin
 cargo run -- account password ada       # a new password, which ends ada's sessions
 cargo run -- account list
-cargo run -- account disable ada        # ada cannot log in, her sessions end; `enable` lets her again
+cargo run -- account disable ada        # ada cannot log in, her sessions end, her feeds rest; `enable` undoes it
 cargo run -- account remove ada         # deletes ada and all that is hers, for good; feeds stay
 cargo run -- registration show          # who may make an account, the limits, how many there are
 cargo run -- registration set --open true --max-accounts 50 --per-day 5
@@ -210,6 +218,8 @@ cargo run -- retention run              # clear all that is old now, not within 
 cargo run -- admin add ada              # ada sees the status of the server; remove, list
 cargo run -- account second-factor-off ada   # ada lost the app and the recovery codes
 cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
+cargo run -- feed show 130              # what is known of a feed, by number or address
+cargo run -- feed agent 130 browser     # fetch it as a browser, for all who read it; or rueder
 ```
 
 Admins see the status of the server in the account menu of the page
@@ -321,8 +331,11 @@ cargo run --release -- bench measure    # times the queries, prints a table
 
 `bench generate` wants an empty database and takes `--accounts`, `--feeds` and
 `--articles`; 10 million articles take about 50 minutes, 30 of them for the
-search index, and 21 GB. `bench measure`
-puts back what its writing queries changed, so it can run again.
+search index, and 21 GB. Their texts are as long as those of a real
+installation. `bench measure` works on any database, a copy of a real one too:
+it takes the words it searches for from the articles there and says how long
+their texts are. It puts back what its writing queries changed, so it can run
+again.
 
 ```sh
 FETCH_ROUND=1000 FETCH_AT_ONCE=64 FETCH_EVERY=10 \
@@ -330,10 +343,50 @@ FETCH_ROUND=1000 FETCH_AT_ONCE=64 FETCH_EVERY=10 \
 ```
 
 `bench fetch` measures how many feeds the server fetches in an hour at the pace
-the three settings give. It serves made-up feeds itself, under `--hosts` names
-out of 127.0.0.0/8 (one fetch runs per name), on `--port` (39871), and fetches
-them round after round, every feed due again before each round. It wants a
-database of its own, where nobody reads other feeds.
+the settings give. It serves made-up feeds itself, under `--hosts` names out of
+127.0.0.0/8 (`FETCH_PER_HOST` fetches run per name, one as it comes), on
+`--port` (39871), and fetches them round after round as the server does,
+every feed due again before each round. `--slow N` adds N feeds under one name
+more that answers half a second late, to see that a slow host holds up only
+itself. It wants a database of its own, where nobody reads other feeds.
+
+### Many readers
+
+`bench readers` adds made-up readers to such a database, or to an empty one:
+each subscribes to some feeds by popularity, 10 and then 40 more on average,
+and gets a session whose token goes to a file. The load tests in
+`../web/load/` (Node, without packages, Linux only) read the tokens and play
+the readers against a running server, which they need started with
+`CLIENT_IP_HEADER=x-forwarded-for`, as every reader comes from an address of
+its own:
+
+```sh
+cargo run --release -- bench readers --count 100000 --tokens /tmp/tokens
+CLIENT_IP_HEADER=x-forwarded-for FETCH=off LISTEN_ADDR=127.0.0.1:3290 \
+  cargo run --release -- serve &
+cd ../web && RUEDER_PID=$! TOKENS=/tmp/tokens node load/reading.js 8,32,64 30
+```
+
+`load/reading.js` lets workers visit random readers as the page would (the
+tree, the first page of unread articles, three of them opened and marked read,
+a page of one feed) and prints requests a second and the times by kind.
+
+The live updates want a database of their own, with readers who all read one
+feed that `load/feed.js` serves:
+
+```sh
+cargo run --release -- bench readers --count 10000 --tokens /tmp/tokens \
+  --shared http://127.0.0.1:3299/feed.xml
+(cd ../web && node load/feed.js &)
+CLIENT_IP_HEADER=x-forwarded-for FETCH_ALLOW_NETS=127.0.0.0/8 FETCH_EVERY=5 \
+  LISTEN_ADDR=127.0.0.1:3290 cargo run --release -- serve &
+cd ../web && RUEDER_PID=$! TOKENS=/tmp/tokens node load/live.js 50,200,800
+```
+
+`load/live.js` opens a stream of `/api/events` for every reader, lets the
+shared feed publish and says how fast that reaches all of them, then lets fifty
+readers change something at each rate and says what it costs. It makes the
+shared feed due in the database, so it needs `DATABASE_URL` too.
 
 Results and how they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).

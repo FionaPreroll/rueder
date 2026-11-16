@@ -18,6 +18,7 @@ use axum::{
     routing::get,
 };
 use rueder::{
+    accounts,
     cleaning::Rules,
     events::Events,
     feeds::Stored,
@@ -454,6 +455,70 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_feed_only_disabled_accounts_read_rests_until_somebody_reads_it(db: PgPool) {
+    let (url, site) = site(&[("a", "First", "one")]).await;
+    let alone = feed_at(&db, "ada", &url).await;
+    let shared = feed_at(&db, "grace", &url).await;
+    let ada: i32 = sqlx::query_scalar("SELECT id FROM accounts WHERE username = 'ada'")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    common::subscribe(&db, ada, shared).await;
+    // A blocked feed is not fetched anyway, so it does not count.
+    let blocked = common::feed(&db, "blocked").await;
+    common::subscribe(&db, ada, blocked).await;
+    sqlx::query("UPDATE feeds SET blocked_at = now() WHERE id = $1")
+        .bind(blocked)
+        .execute(&db)
+        .await
+        .unwrap();
+    let (client, rules, events) = (client(), rules(), Events::new());
+    let monitor = Arc::new(Monitor::default());
+    let pace = fetch::Pace::default();
+    let round = || fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace);
+
+    // Disabled, ada reads nothing: only the feed grace reads too is fetched.
+    assert_eq!(
+        accounts::set_disabled(&db, "ada", true).await.unwrap(),
+        Some(1)
+    );
+    assert_eq!(round().await.unwrap(), 1);
+    assert_eq!(row(&db, shared).await.get::<i32, _>("last_seq"), 1);
+    assert_eq!(row(&db, alone).await.get::<i32, _>("last_seq"), 0);
+    assert_eq!(round().await.unwrap(), 0);
+
+    // Enabled again, the feed comes back with the next round.
+    assert_eq!(
+        accounts::set_disabled(&db, "ada", false).await.unwrap(),
+        Some(1)
+    );
+    assert_eq!(round().await.unwrap(), 1);
+    assert_eq!(row(&db, alone).await.get::<i32, _>("last_seq"), 1);
+
+    // So it does when somebody else subscribes.
+    sqlx::query("UPDATE feeds SET next_fetch_at = now() WHERE id = $1")
+        .bind(alone)
+        .execute(&db)
+        .await
+        .unwrap();
+    accounts::set_disabled(&db, "ada", true).await.unwrap();
+    assert_eq!(round().await.unwrap(), 0);
+    let linus = common::account(&db, "linus").await;
+    common::subscribe(&db, linus, alone).await;
+    assert_eq!(round().await.unwrap(), 1);
+    // And then ada is not alone with any feed.
+    assert_eq!(
+        accounts::set_disabled(&db, "ada", true).await.unwrap(),
+        Some(0)
+    );
+    assert_eq!(site.lock().unwrap().requests, 3);
+    assert_eq!(
+        accounts::set_disabled(&db, "nobody", true).await.unwrap(),
+        None
+    );
+}
+
+#[sqlx::test]
 async fn a_round_takes_no_more_than_the_pace_says(db: PgPool) {
     let (url, site) = site(&[("a", "First", "one")]).await;
     for name in ["ada", "grace", "linus"] {
@@ -514,8 +579,10 @@ fn the_pace_comes_from_the_environment_within_bounds() {
         ),
         (1000, 64, 10, 360_000)
     );
-    // Only what is set changes.
+    // Only what is set changes; one of a host at a time, unless it is set.
     assert_eq!(vars(&[("FETCH_AT_ONCE", "16")]).unwrap().round, 100);
+    assert_eq!(pace.per_host, 1);
+    assert_eq!(vars(&[("FETCH_PER_HOST", "4")]).unwrap().per_host, 4);
     // At the bounds, and beyond them.
     for fine in [
         ("FETCH_ROUND", "1"),
@@ -524,6 +591,8 @@ fn the_pace_comes_from_the_environment_within_bounds() {
         ("FETCH_AT_ONCE", "256"),
         ("FETCH_EVERY", "5"),
         ("FETCH_EVERY", "3600"),
+        ("FETCH_PER_HOST", "1"),
+        ("FETCH_PER_HOST", "32"),
     ] {
         assert!(vars(&[fine]).is_ok(), "{fine:?}");
     }
@@ -538,6 +607,8 @@ fn the_pace_comes_from_the_environment_within_bounds() {
         ("FETCH_EVERY", "30s"),
         ("FETCH_ROUND", ""),
         ("FETCH_AT_ONCE", "99999999999999999999999"),
+        ("FETCH_PER_HOST", "0"),
+        ("FETCH_PER_HOST", "33"),
     ] {
         let error = vars(&[wrong]).unwrap_err().to_string();
         assert!(error.contains(wrong.0), "{wrong:?}: {error}");
@@ -561,5 +632,165 @@ fn feeds_that_publish_more_are_fetched_more_often() {
             let interval = fetch::interval(articles, age).unwrap();
             assert!((MIN_INTERVAL..=MAX_INTERVAL).contains(&interval));
         }
+    }
+}
+
+/// A site that takes its time with every answer, under an address of its own
+/// out of 127.0.0.0/8, and what it saw: how often each feed was asked for and
+/// how many requests it had at once at most.
+#[derive(Default)]
+struct Slow {
+    asked: std::collections::HashMap<u32, usize>,
+    now: usize,
+    most: usize,
+}
+
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
+async fn slow_site(ip: &str, delay: std::time::Duration) -> (String, Arc<Mutex<Slow>>) {
+    let seen = Arc::new(Mutex::new(Slow::default()));
+    let kept = seen.clone();
+    let router = Router::new().route(
+        "/feed/{n}",
+        get(move |axum::extract::Path(n): axum::extract::Path<u32>| {
+            let seen = kept.clone();
+            async move {
+                {
+                    let mut seen = seen.lock().unwrap();
+                    *seen.asked.entry(n).or_default() += 1;
+                    seen.now += 1;
+                    seen.most = seen.most.max(seen.now);
+                }
+                tokio::time::sleep(delay).await;
+                seen.lock().unwrap().now -= 1;
+                rss(&[(&format!("feed-{n}"), "Slow news", "Taken slowly.")])
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind(format!("{ip}:0"))
+        .await
+        .unwrap();
+    let addr: SocketAddr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    (format!("http://{addr}"), seen)
+}
+
+/// Feeds at these addresses, all read by one account.
+async fn feeds_at(db: &PgPool, urls: &[String]) -> Vec<i32> {
+    let reader = common::account(db, &format!("reader-{}", urls.len())).await;
+    let mut ids = Vec::new();
+    for url in urls {
+        let feed = common::feed(db, url).await;
+        sqlx::query("UPDATE feeds SET feed_url = $2 WHERE id = $1")
+            .bind(feed)
+            .bind(url)
+            .execute(db)
+            .await
+            .unwrap();
+        common::subscribe(db, reader, feed).await;
+        ids.push(feed);
+    }
+    ids
+}
+
+/// A client for sites anywhere on this machine.
+fn loopback_client() -> HttpClient {
+    let config = Config {
+        allow: vec!["127.0.0.0/8".parse().unwrap()],
+        ..Config::default()
+    };
+    HttpClient::new(config).unwrap()
+}
+
+/// While a round still works through a slow host, the next one leaves that
+/// host out and fetches the others at once; no feed is fetched twice.
+#[sqlx::test]
+async fn a_slow_host_holds_up_only_itself(db: PgPool) {
+    let delay = std::time::Duration::from_millis(400);
+    let (slow, slow_seen) = slow_site("127.0.0.2", delay).await;
+    let (fast, fast_seen) = slow_site("127.0.0.1", std::time::Duration::ZERO).await;
+    let urls: Vec<String> = (0..5)
+        .map(|n| format!("{slow}/feed/{n}"))
+        .chain((0..2).map(|n| format!("{fast}/feed/{n}")))
+        .collect();
+    feeds_at(&db, &urls).await;
+    let pace = fetch::Pace {
+        round: 20,
+        at_once: 8,
+        ..fetch::Pace::default()
+    };
+    let underway = fetch::Underway::new(&pace);
+    let (client, rules, events) = (loopback_client(), rules(), Events::new());
+    let monitor = Arc::new(Monitor::default());
+    let first = {
+        let (db, client, rules, events, monitor, underway) = (
+            db.clone(),
+            client.clone(),
+            rules.clone(),
+            events.clone(),
+            monitor.clone(),
+            underway.clone(),
+        );
+        tokio::spawn(async move {
+            fetch::round(&db, &client, &rules, &events, &monitor, &pace, &underway).await
+        })
+    };
+    // The first round is done with the fast host and still at the slow one;
+    // everything is due again.
+    while underway.busy() != ["127.0.0.2"] {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    sqlx::query("UPDATE feeds SET next_fetch_at = now()")
+        .execute(&db)
+        .await
+        .unwrap();
+    let started = Instant::now();
+    let second = fetch::round(&db, &client, &rules, &events, &monitor, &pace, &underway)
+        .await
+        .unwrap();
+    assert_eq!(second, 2, "only the feeds of the fast host");
+    assert!(started.elapsed() < delay * 2, "{:?}", started.elapsed());
+    assert!(!first.is_finished(), "the slow host is still at it");
+    assert_eq!(first.await.unwrap().unwrap(), 7);
+    assert!(underway.busy().is_empty());
+
+    let slow_seen = slow_seen.lock().unwrap();
+    assert_eq!(slow_seen.most, 1, "one of a host at a time");
+    assert!(
+        slow_seen.asked.values().all(|&n| n == 1),
+        "{:?}",
+        slow_seen.asked
+    );
+    let fast_seen = fast_seen.lock().unwrap();
+    assert!(
+        fast_seen.asked.values().all(|&n| n == 2),
+        "{:?}",
+        fast_seen.asked
+    );
+}
+
+/// `per_host` feeds of one host are fetched at once, never more.
+#[sqlx::test]
+async fn no_more_of_a_host_at_once_than_the_pace_says(db: PgPool) {
+    let (site, seen) = slow_site("127.0.0.3", std::time::Duration::from_millis(150)).await;
+    let urls: Vec<String> = (0..7).map(|n| format!("{site}/feed/{n}")).collect();
+    feeds_at(&db, &urls).await;
+    let (client, rules, events) = (loopback_client(), rules(), Events::new());
+    let monitor = Arc::new(Monitor::default());
+    for per_host in [1, 3] {
+        sqlx::query("UPDATE feeds SET next_fetch_at = now()")
+            .execute(&db)
+            .await
+            .unwrap();
+        seen.lock().unwrap().most = 0;
+        let pace = fetch::Pace {
+            per_host,
+            ..fetch::Pace::default()
+        };
+        let fetched = fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace).await;
+        assert_eq!(fetched.unwrap(), 7);
+        assert_eq!(seen.lock().unwrap().most, per_host);
     }
 }

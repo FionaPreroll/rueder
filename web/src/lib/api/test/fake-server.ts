@@ -15,7 +15,7 @@ import type {
 	ApiVersion
 } from '#lib/api/client.ts';
 import type { EventStream } from '#lib/api/client.ts';
-import type { CaptchaChallenge, ServerEvent } from '#lib/api/types.ts';
+import type { CaptchaChallenge, FeedInfo, ServerEvent } from '#lib/api/types.ts';
 import { demoStatus } from '#lib/demo/status.ts';
 import { compile, ruleMatches } from '#lib/filters.ts';
 
@@ -33,6 +33,8 @@ interface FakeFeed {
 	fetched: boolean;
 	/** The operator blocked it. */
 	blocked?: boolean;
+	/** Fetched as a browser, as an admin said. */
+	asBrowser?: boolean;
 }
 
 /** A feed the made-up web has, at the address of a site or of the feed itself. */
@@ -1174,18 +1176,38 @@ export class FakeServer {
 		return {
 			folders: this.folders,
 			hidden: this.articles.filter((article) => article.hidden).length,
-			feeds: this.feeds.map(({ name, url, ...feed }) => ({
+			feeds: this.feeds.map(({ name, url, asBrowser, ...feed }) => ({
 				...feed,
 				title: name ?? feed.title,
 				feed_title: feed.title,
 				feed_url: url,
 				site_url: `https://feed-${feed.id}.example`,
-				fetch_agent: 'rueder',
+				fetch_agent: asBrowser ? 'browser' : 'rueder',
 				last_seq: this.articles.filter((a) => a.feed_id === feed.id).length,
 				read_upto: 0,
 				unread: feed.blocked ? 0 : this.unread(feed.id),
 				blocked: feed.blocked ?? false
 			}))
+		};
+	}
+
+	/** What `GET /feeds/{id}/info` says: a feed with an error failed at its last fetch. */
+	private info(feed: FakeFeed): FeedInfo {
+		const [fetched, before] = ['2026-11-10T14:00:00Z', '2026-11-10T13:00:00Z'];
+		return {
+			id: feed.id,
+			title: feed.title,
+			feed_url: feed.url,
+			site_url: `https://feed-${feed.id}.example`,
+			fetch_agent: feed.asBrowser ? 'browser' : 'rueder',
+			fetch_interval_s: 3600,
+			fetched_at: feed.fetched ? fetched : null,
+			last_success_at: feed.fetched ? (feed.error ? before : fetched) : null,
+			last_error_at: feed.fetched && feed.error ? fetched : null,
+			error: feed.error,
+			next_fetch_at: '2026-11-10T15:00:00Z',
+			last_seq: this.articles.filter((a) => a.feed_id === feed.id).length,
+			blocked: feed.blocked ?? false
 		};
 	}
 
@@ -1272,6 +1294,17 @@ export class FakeServer {
 			const feed = this.sites.get(url)?.find((found) => found.url === url);
 			if (!feed) return refused(400, 'this is not a feed that can be read: it is a web page');
 			return json({ id: this.addFeed(feed.title, folder as number | null, { url }) }, 201);
+		}
+		const about = /^\/feeds\/(\d+)\/(info|agent)$/.exec(path);
+		if (about) {
+			const found = this.feeds.find((f) => f.id === Number(about[1]));
+			if (!found) return refused(404);
+			if (method === 'GET' && about[2] === 'info') return json(this.info(found));
+			if (method === 'PUT' && about[2] === 'agent') {
+				if (!this.admin) return refused(403, 'only an admin can do this');
+				found.asBrowser = data.agent === 'browser';
+				return empty();
+			}
 		}
 		const feed = /^\/feeds\/(\d+)$/.exec(path);
 		if (feed) {
