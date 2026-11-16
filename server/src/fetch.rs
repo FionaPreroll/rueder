@@ -5,7 +5,9 @@
 //! costs its site next to nothing. What comes back goes through
 //! [`crate::feeds`]; the feed's row records how the fetch went and when the next
 //! one is due. A failure is written to the feed, where the interface shows it,
-//! and makes the next try come later each time.
+//! and makes the next try come later each time. A site that says it is asked
+//! too often (429) is asked less often for a while, and one that says when to
+//! come back (`Retry-After`) is not asked before then.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -17,7 +19,7 @@ use std::{
 use anyhow::Context;
 use reqwest::{StatusCode, Url};
 use sqlx::PgPool;
-use time::OffsetDateTime;
+use time::{OffsetDateTime, format_description::well_known::Rfc2822};
 use tokio::{sync::Semaphore, task::JoinSet};
 
 use crate::{
@@ -183,6 +185,9 @@ const ACCEPT: &str = "application/atom+xml, application/rss+xml, application/fee
                       application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5";
 /// The longest error text kept at a feed, in characters.
 const MAX_MESSAGE: usize = 300;
+/// How long a feed keeps its longer interval after its site said it is asked
+/// too often (429): a success within that time does not shorten it.
+pub const LIMITED_FOR: time::Duration = time::Duration::days(1);
 
 /// How a fetch went.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -246,7 +251,7 @@ pub async fn fetch_feed(
     };
     let response = match client.get(request).await {
         Ok(response) => response,
-        Err(err) => return failed(db, feed_id, err.to_string()).await,
+        Err(err) => return failed(db, feed_id, err.to_string(), Back::default()).await,
     };
     let now = OffsetDateTime::now_utc();
     if response.status == StatusCode::NOT_MODIFIED {
@@ -264,12 +269,19 @@ pub async fn fetch_feed(
         return Ok(Outcome::NotModified);
     }
     if !response.status.is_success() {
-        return failed(
-            db,
-            feed_id,
-            format!("the site answers with {}", response.status),
-        )
-        .await;
+        // A site that is asked too often or down for a while may say when to
+        // come back.
+        let limited = response.status == StatusCode::TOO_MANY_REQUESTS;
+        let back = Back {
+            after: (limited || response.status == StatusCode::SERVICE_UNAVAILABLE)
+                .then(|| response.header("retry-after"))
+                .flatten()
+                .and_then(|value| retry_after(value, now))
+                .unwrap_or(0),
+            limited,
+        };
+        let message = format!("the site answers with {}", response.status);
+        return failed(db, feed_id, message, back).await;
     }
     // Reading and cleaning a large feed takes a while, so it runs where it
     // keeps nothing else waiting.
@@ -279,8 +291,11 @@ pub async fn fetch_feed(
     };
     let parsed = match reading.await {
         Ok(Ok(parsed)) => parsed,
-        Ok(Err(err)) => return failed(db, feed_id, format!("{err:#}")).await,
-        Err(_) => return failed(db, feed_id, "the feed could not be read".into()).await,
+        Ok(Err(err)) => return failed(db, feed_id, format!("{err:#}"), Back::default()).await,
+        Err(_) => {
+            let message = "the feed could not be read".into();
+            return failed(db, feed_id, message, Back::default()).await;
+        }
     };
 
     let mut tx = db.begin().await?;
@@ -292,14 +307,18 @@ pub async fn fetch_feed(
     // What a reader who moved here had read elsewhere is read here too.
     crate::reading::settle_read_before(&mut tx, feed_id).await?;
     let state = sqlx::query!(
-        "SELECT last_seq, created_at, fetch_interval_s FROM feeds WHERE id = $1",
+        "SELECT last_seq, created_at, fetch_interval_s, limited_at FROM feeds WHERE id = $1",
         feed_id
     )
     .fetch_one(&mut *tx)
     .await?;
-    // A failure made the interval longer; the first success ends that.
-    let interval = interval(state.last_seq, now - state.created_at)
+    // A failure made the interval longer; the first success ends that, unless
+    // the site said not long ago that it is asked too often.
+    let mut interval = interval(state.last_seq, now - state.created_at)
         .unwrap_or(state.fetch_interval_s.min(4 * MIN_INTERVAL));
+    if state.limited_at.is_some_and(|at| now - at < LIMITED_FOR) {
+        interval = interval.max(state.fetch_interval_s);
+    }
     sqlx::query!(
         "UPDATE feeds
          SET title = coalesce($2, title), site_url = coalesce($3, site_url),
@@ -323,20 +342,43 @@ pub async fn fetch_feed(
     Ok(Outcome::Fetched(stored))
 }
 
+/// What a site that failed said about coming back.
+#[derive(Default)]
+struct Back {
+    /// Not before this many seconds from now.
+    after: i32,
+    /// It is asked too often, which keeps the longer interval a while.
+    limited: bool,
+}
+
+/// When a site says to come back, as seconds or a date in `Retry-After`: in
+/// seconds from now, at most the longest interval.
+fn retry_after(value: &str, now: OffsetDateTime) -> Option<i32> {
+    let value = value.trim();
+    let seconds = match value.parse::<i64>() {
+        Ok(seconds) => seconds,
+        Err(_) => (OffsetDateTime::parse(value, &Rfc2822).ok()? - now).whole_seconds(),
+    };
+    i32::try_from(seconds.clamp(0, i64::from(MAX_INTERVAL))).ok()
+}
+
 /// Writes a failure to the feed and doubles the time to the next try, up to
-/// the longest interval.
-async fn failed(db: &PgPool, feed_id: i32, message: String) -> anyhow::Result<Outcome> {
+/// the longest interval, or waits as long as the site asked.
+async fn failed(db: &PgPool, feed_id: i32, message: String, back: Back) -> anyhow::Result<Outcome> {
     let message: String = message.chars().take(MAX_MESSAGE).collect();
     sqlx::query!(
         "UPDATE feeds
          SET fetched_at = now(), last_error_at = now(), error_message = $2,
+             limited_at = CASE WHEN $6 THEN now() ELSE limited_at END,
              fetch_interval_s = least(fetch_interval_s * 2, $3),
-             next_fetch_at = now() + (least(fetch_interval_s * 2, $3) + $4::float8) * interval '1 second'
+             next_fetch_at = now() + (greatest(least(fetch_interval_s * 2, $3), $5) + $4::float8) * interval '1 second'
          WHERE id = $1",
         feed_id,
         message,
         MAX_INTERVAL,
         spread(feed_id),
+        back.after,
+        back.limited,
     )
     .execute(db)
     .await?;
@@ -571,5 +613,34 @@ pub async fn run(
                 tracing::error!("fetching feeds: {err:#}");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::macros::datetime;
+
+    #[test]
+    fn a_site_says_when_to_come_back_in_seconds_or_as_a_date() {
+        let now = datetime!(2026-11-16 12:00 UTC);
+        assert_eq!(retry_after("120", now), Some(120));
+        assert_eq!(retry_after(" 3600 ", now), Some(3600));
+        assert_eq!(
+            retry_after("Mon, 16 Nov 2026 13:30:00 GMT", now),
+            Some(5400)
+        );
+        // Never later than the longest interval, and a time gone by is now.
+        assert_eq!(retry_after("1000000", now), Some(MAX_INTERVAL));
+        assert_eq!(
+            retry_after("Fri, 01 Jan 2027 00:00:00 GMT", now),
+            Some(MAX_INTERVAL)
+        );
+        assert_eq!(retry_after("-5", now), Some(0));
+        assert_eq!(retry_after("Sun, 15 Nov 2026 12:00:00 GMT", now), Some(0));
+        // What is neither says nothing.
+        for value in ["", "soon", "1.5", "16 Nov 2026", "99999999999999999999"] {
+            assert_eq!(retry_after(value, now), None, "{value}");
+        }
     }
 }
