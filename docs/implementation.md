@@ -815,7 +815,7 @@ Nach Paket 5.31, wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-
 
 ### Gespeicherte Wörter vom 2026-11-16
 
-Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder Suche für die neuesten Artikel neu zu bestimmen (`migrations/0024_search_words.sql`). Ergebnis: An erfundenen Daten, deren neueste Artikel so lang sind wie die echten, braucht die Suche im Median 7 bis 21 ms statt 130 bis 160 ms. Die Tabelle der Artikeltexte wird dafür fast doppelt so groß.
+Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder Suche für die neuesten Artikel neu zu bestimmen (`migrations/0024_search_words.sql`). Ergebnis: An erfundenen Daten, deren neueste Artikel so lang sind wie die echten, braucht die Suche im Median 7 bis 21 ms statt 130 bis 160 ms. Die Wörter brauchen dafür etwa so viel Platz wie die Texte selbst. Entschieden von Fiona am 2026-11-16.
 
 - **An den echten Daten** (Fionas Testinstanz wie im [Probelauf](#probelauf-vom-2026-11-15), `bench measure` mit Wörtern aus dem Bestand, vorher): Die Suche brauchte im Median 116 bis 264 ms, für das Konto mit den wenigsten Artikeln aber 30 ms und tief in der Liste 84 ms. Langsam war also, was bei den neuesten Artikeln der großen Konten anfängt. Die 3.429 Artikel, die seit dem Import abgerufen wurden, haben im Mittel 4.006 Zeichen HTML (90 % bis 10.072), die 707.040 importierten 632, die neuesten 500 im Mittel 1.804. Die Wörter dieser 500 zu bestimmen dauerte 103 ms, und jede Suche tat das zuerst (`search::PROBE`).
 - **Maschine:** wie unter [Suche vom 2026-11-15](#suche-vom-2026-11-15).
@@ -832,7 +832,7 @@ Paket 5.38: Die Suche speichert die Wörter jedes Artikels, statt sie bei jeder 
 | Ein selteneres Wort, nur ungelesen | 248 ms | 153 ms | 21 ms | 37 ms |
 | Ein häufiges Wort, Konto mit den wenigsten Artikeln | 30 ms | 82 ms | 15 ms | 25 ms |
 
-- **Platz:** `article_content` wächst von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB. Der Index bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer.
+- **Platz:** `article_content` wächst von 643 auf 1.200 MB, die ganze Datenbank von 1,7 auf 2,25 GB. Der Index bleibt so groß wie vorher. Gespeichert werden die Wörter ohne Positionen, die die Suche nicht braucht; mit ihnen wären sie rund die Hälfte größer. An den echten Daten sind die Wörter so groß wie die Texte, an jedem zehnten Artikel je 34 MB, für den ganzen Bestand also rund 340 MB; an den erfundenen sind sie anderthalbmal so groß, weil deren Wörter aus Silben gebaut sind und kaum HTML drumherum steht.
 - **Migration:** 235 s für 710.000 Artikel. So lange startet der Server beim Update nicht.
 - **Listen, Artikel und Speichern** werden nicht langsamer.
 - **Nicht gemessen:** an den echten Daten mit gespeicherten Wörtern.
