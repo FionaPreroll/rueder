@@ -824,6 +824,8 @@ export class ServerReader implements Reader {
 		if (!more && !again) this.listLoading = true;
 		const length = again ? Math.min(MAX_PAGE, Math.max(PAGE, this.items.length)) : PAGE;
 		try {
+			// A folder lists the feeds the server has in it: a move on its way goes first.
+			if (stream.kind === 'folder' && this.waiting.has('tree')) await this.sending;
 			if (stream.kind === 'home') {
 				const [unread, starred] = await Promise.all([
 					this.api.list({ kind: 'all' }, { limit: HOME_UNREAD, unread: true }),

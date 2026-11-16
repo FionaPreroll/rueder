@@ -574,6 +574,18 @@ describe('the lists', () => {
 		expect(reader.notice).toBeNull();
 		expect(reader.visible.length).toBe(6);
 	});
+	it('show a folder with a feed that was just moved into it', async () => {
+		const reader = await started();
+		const release = server.hold(/^\/tree\/move$/);
+		reader.move(`feed-${lone}`, `folder-${news}`, 'inside');
+		reader.show({ kind: 'folder', id: `folder-${news}` });
+		await settle();
+		release();
+		await settle();
+		expect(new Set(reader.visible.map((a) => a.feedId))).toEqual(
+			new Set([`feed-${tech}`, `feed-${blog}`, `feed-${lone}`])
+		);
+	});
 });
 
 describe('resuming after a reload', () => {
