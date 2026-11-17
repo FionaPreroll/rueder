@@ -1,0 +1,9 @@
+L'adresse de votre compte rueder a changé
+Bonjour {name},
+
+le compte « {name} » sur {site} a désormais une nouvelle adresse : {address}.
+Les e-mails du compte y sont envoyés à partir de maintenant ; celle-ci n'en
+reçoit plus.
+
+Si ce n'était pas vous, quelqu'un connaît peut-être votre mot de passe.
+Écrivez rapidement à l'administrateur de {site}.

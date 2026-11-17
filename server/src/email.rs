@@ -656,7 +656,8 @@ mod tests {
         assert_eq!(language(Some("de-AT")), Language::De);
         assert_eq!(language(Some(" DE_ch ")), Language::De);
         assert_eq!(language(Some("en")), Language::En);
-        assert_eq!(language(Some("fr")), Language::En);
+        assert_eq!(language(Some("fr-CA")), Language::Fr);
+        assert_eq!(language(Some("ko")), Language::En);
         assert_eq!(language(None), Language::En);
     }
 

@@ -1,0 +1,11 @@
+Confirmez votre adresse pour rueder
+Bonjour {name},
+
+quelqu'un, très probablement vous, a indiqué cette adresse pour le compte
+« {name} » sur {site}. Pour la confirmer, ouvrez ce lien dans les {hours}
+heures :
+
+{link}
+
+Si ce n'était pas vous, ignorez cet e-mail : sans le lien, il ne se passe
+rien.
