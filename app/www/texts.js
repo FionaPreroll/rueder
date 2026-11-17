@@ -143,7 +143,30 @@ const it = {
 	terms: 'Condizioni d’uso'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it };
+const ja = {
+	intro: 'あなた自身のサーバで動くフィードリーダーです。',
+	address: 'あなたの rueder のアドレス',
+	open: '開く',
+	opening: '開いています…',
+	updates: '起動するたびにこのアプリの新しいバージョンを探す',
+	updatesHint:
+		'起動するたびに一度 GitHub に新しいビルドがあるか問い合わせ、あればインストールを提案します。それ以外は何も送信しません。',
+	lookNow: '今すぐ探す',
+	looking: '探しています…',
+	current: 'これが最新のバージョンです。',
+	lookFailed: 'GitHub が応答しませんでした。しばらくしてからもう一度お試しください。',
+	unreachable: (address) =>
+		`${address} が応答しません。アドレスを確認するか、オンラインになってからもう一度お試しください。`,
+	empty: 'あなたの rueder のアドレスを入力してください。',
+	invalid: 'ウェブページのアドレスではありません。',
+	insecure: 'アドレスは https:// で始める必要があります。rueder は安全な接続でのみログインします。',
+	version: (name, build) => `アプリのバージョン ${name}（ビルド ${build}）`,
+	imprint: '運営者情報',
+	privacy: 'プライバシーポリシー',
+	terms: '利用規約'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

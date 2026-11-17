@@ -93,7 +93,7 @@
 
 	{#if demo}
 		<Menu
-			class="reach cursor-pointer rounded-full border border-line px-2 py-0.5 text-xs font-medium text-soft hover:bg-hover"
+			class="reach cursor-pointer rounded-full border border-line px-2 py-0.5 text-xs font-medium whitespace-nowrap text-soft hover:bg-hover"
 			title={m.demo.note}
 		>
 			{#snippet button()}

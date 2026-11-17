@@ -57,7 +57,8 @@ describe('catalogs', () => {
 			{ code: 'es', name: 'Español' },
 			{ code: 'fr', name: 'Français' },
 			{ code: 'pt-BR', name: 'Português (Brasil)' },
-			{ code: 'it', name: 'Italiano' }
+			{ code: 'it', name: 'Italiano' },
+			{ code: 'ja', name: '日本語' }
 		]);
 	});
 
@@ -78,6 +79,10 @@ describe('catalogs', () => {
 		useLanguage('fr');
 		expect(m.articles(0)).toBe('0 article');
 		expect(m.articles(2)).toBe('2 articles');
+		// Japanese counts without a plural.
+		useLanguage('ja');
+		expect(m.articles(1)).toBe('1 件の記事');
+		expect(m.articles(1200)).toBe('1,200 件の記事');
 	});
 
 	it('describe every shortcut once', () => {

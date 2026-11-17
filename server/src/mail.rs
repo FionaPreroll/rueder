@@ -59,18 +59,20 @@ pub enum Language {
     #[sqlx(rename = "pt-BR")]
     PtBr,
     It,
+    Ja,
 }
 
 impl Language {
     /// Every language, in the order of the enum, which `in_every_language!`
     /// follows.
-    pub const ALL: [Language; 6] = [
+    pub const ALL: [Language; 7] = [
         Language::En,
         Language::De,
         Language::Es,
         Language::Fr,
         Language::PtBr,
         Language::It,
+        Language::Ja,
     ];
 
     /// Its code, as the page and the database name it.
@@ -82,6 +84,7 @@ impl Language {
             Self::Fr => "fr",
             Self::PtBr => "pt-BR",
             Self::It => "it",
+            Self::Ja => "ja",
         }
     }
 }
@@ -97,6 +100,7 @@ macro_rules! in_every_language {
             include_str!(concat!("../templates/mail/fr/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/pt-BR/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/it/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/ja/", $mail, ".txt")),
         ]
     };
 }
