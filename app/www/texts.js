@@ -119,7 +119,31 @@ const ptBR = {
 	terms: 'Termos de uso'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR };
+const it = {
+	intro: 'Il tuo lettore di feed, sul tuo server.',
+	address: 'Indirizzo del tuo rueder',
+	open: 'Apri',
+	opening: 'Apertura …',
+	updates: 'Cerca una nuova versione di questa app a ogni avvio',
+	updatesHint:
+		'L’app chiede allora a GitHub, una volta a ogni avvio, se c’è una build più recente, e propone di installarla. Non viene inviato nient’altro.',
+	lookNow: 'Cerca ora',
+	looking: 'Ricerca …',
+	current: 'Questa è la versione più recente.',
+	lookFailed: 'GitHub non ha risposto. Riprova più tardi.',
+	unreachable: (address) =>
+		`${address} non risponde. Controlla l’indirizzo, oppure riprova quando sei online.`,
+	empty: 'Inserisci l’indirizzo del tuo rueder.',
+	invalid: 'Questo non è l’indirizzo di una pagina web.',
+	insecure:
+		'L’indirizzo deve iniziare con https://: rueder accede solo tramite una connessione sicura.',
+	version: (name, build) => `Versione dell’app ${name} (build ${build})`,
+	imprint: 'Note legali',
+	privacy: 'Informativa sulla privacy',
+	terms: 'Condizioni d’uso'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

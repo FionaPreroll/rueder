@@ -56,7 +56,8 @@ describe('catalogs', () => {
 			{ code: 'de', name: 'Deutsch' },
 			{ code: 'es', name: 'Español' },
 			{ code: 'fr', name: 'Français' },
-			{ code: 'pt-BR', name: 'Português (Brasil)' }
+			{ code: 'pt-BR', name: 'Português (Brasil)' },
+			{ code: 'it', name: 'Italiano' }
 		]);
 	});
 
