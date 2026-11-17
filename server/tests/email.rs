@@ -382,6 +382,24 @@ async fn mail_is_in_the_language_the_account_was_made_in(db: PgPool) {
     });
     let (status, _) = call(&state, Method::POST, "/api/register", None, Some(english)).await;
     assert_eq!(status, StatusCode::CREATED);
+    // A language with a region is stored with it, and any region gets it.
+    let portuguese = json!({
+        "username": "rui", "password": PASSWORD, "email": "rui@example.org", "language": "pt-PT",
+    });
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/register",
+        None,
+        Some(portuguese),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let stored: String = sqlx::query_scalar("SELECT language FROM accounts WHERE username = 'rui'")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(stored, "pt-BR");
     let mails = sent(&outbox);
     let german = rueder::mail::render(
         rueder::mail::Template::Confirm.text(rueder::mail::Language::De),
@@ -394,6 +412,11 @@ async fn mail_is_in_the_language_the_account_was_made_in(db: PgPool) {
     assert_eq!(mails[0].subject, german.0);
     assert_eq!(mails[1].subject, english.0);
     assert_ne!(german.0, english.0);
+    let brazilian = rueder::mail::render(
+        rueder::mail::Template::Confirm.text(rueder::mail::Language::PtBr),
+        &[],
+    );
+    assert_eq!(mails[2].subject, brazilian.0);
 }
 
 #[sqlx::test]

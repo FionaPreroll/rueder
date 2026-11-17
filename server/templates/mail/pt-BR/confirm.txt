@@ -1,0 +1,9 @@
+Confirme seu endereço para o rueder
+Olá, {name},
+
+alguém, muito provavelmente você, informou este endereço para a conta
+"{name}" em {site}. Para confirmá-lo, abra este link em até {hours} horas:
+
+{link}
+
+Se não foi você, ignore este e-mail: sem o link, nada acontece.

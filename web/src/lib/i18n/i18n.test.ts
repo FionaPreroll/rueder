@@ -55,7 +55,8 @@ describe('catalogs', () => {
 			{ code: 'en', name: 'English' },
 			{ code: 'de', name: 'Deutsch' },
 			{ code: 'es', name: 'Español' },
-			{ code: 'fr', name: 'Français' }
+			{ code: 'fr', name: 'Français' },
+			{ code: 'pt-BR', name: 'Português (Brasil)' }
 		]);
 	});
 
@@ -94,12 +95,17 @@ describe('picking the language', () => {
 		expect(pickLanguage(['EN-gb'])).toBe('en');
 		expect(pickLanguage(['ko', 'zh'])).toBeNull();
 		expect(pickLanguage([])).toBeNull();
+		// Whatever the region: Portugal gets the Portuguese of Brazil.
+		expect(pickLanguage(['pt-PT'])).toBe('pt-BR');
+		expect(pickLanguage(['pt'])).toBe('pt-BR');
 	});
 
 	it('formats for the browser’s own variant of the language', () => {
 		expect(formatLocaleFor('de', ['en-US', 'de-at'])).toBe('de-AT');
 		expect(formatLocaleFor('de', ['en-US'])).toBe('de');
 		expect(formatLocaleFor('en', ['en_US'])).toBe('en');
+		expect(formatLocaleFor('pt-BR', ['pt-PT'])).toBe('pt-PT');
+		expect(formatLocaleFor('pt-BR', ['en'])).toBe('pt-BR');
 	});
 
 	it('follows the browser until something is picked', () => {

@@ -698,7 +698,7 @@ export type MadeInvite = {
  * The languages mail is written in: those of the page
  * (`web/src/lib/i18n/locale.svelte.ts`).
  */
-export type Language = "en" | "de" | "es" | "fr";
+export type Language = "en" | "de" | "es" | "fr" | "pt-BR";
 
 /**
  * The address of an account and the one waiting for its link, as the
