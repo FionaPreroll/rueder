@@ -697,17 +697,24 @@ const de: Messages = {
 		matches: {
 			contains: 'enthält',
 			word: 'enthält das Wort',
-			regex: 'passt zum regulären Ausdruck'
+			starts: 'beginnt mit',
+			ends: 'endet mit',
+			regex: 'passt zum regulären Ausdruck',
+			all: 'jeder Artikel, was immer darin steht'
 		},
 		pattern: 'Gesuchter Text',
 		action: 'Dann',
 		actions: { hide: 'den Artikel ausblenden', read: 'als gelesen markieren' },
 		preview: (count, total) => `Trifft jetzt auf ${n(count)} von ${n(total)} Artikeln hier zu.`,
+		regexTip:
+			'Reguläre Ausdrücke werden gelesen wie in Rust, ohne auf Groß- und Kleinschreibung zu achten.',
+		regexBuilder: 'Auf regex101 bauen und ausprobieren',
 		invalid: 'Das ist kein gültiger regulärer Ausdruck.',
 		empty: 'Gib den gesuchten Text ein.',
 		checking: 'Es wird nachgesehen, was die Regel träfe …',
 		hits: (count) => `${n(count)} Treffer`,
-		summary: (field, match, pattern, action) => `${field} ${match} „${pattern}“: ${action}`
+		summary: (field, match, pattern, action) => `${field} ${match} „${pattern}“: ${action}`,
+		summaryAll: (action) => `Jeder Artikel: ${action}`
 	},
 
 	keys: {

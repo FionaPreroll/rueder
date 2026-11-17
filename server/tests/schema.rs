@@ -327,6 +327,7 @@ async fn rules_labels_and_names_are_checked(db: PgPool) {
         )
     };
     run(&db, &rule("NULL, NULL", "any", "contains", "ad", "hide")).await;
+    run(&db, &rule("NULL, NULL", "any", "all", "", "read")).await;
     run(
         &db,
         &rule(&format!("{folder_id}, NULL"), "tag", "word", "ad", "read"),
@@ -352,6 +353,7 @@ async fn rules_labels_and_names_are_checked(db: PgPool) {
         ("body", "contains", "ad", "hide", "filter_rules_field_check"),
         ("title", "glob", "ad", "hide", "filter_rules_match_check"),
         ("title", "word", "", "hide", "filter_rules_pattern_check"),
+        ("title", "all", "ad", "hide", "filter_rules_pattern_check"),
         (
             "title",
             "word",

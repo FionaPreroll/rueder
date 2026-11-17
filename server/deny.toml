@@ -17,6 +17,11 @@ ignore = [
     # at risk; rueder checks the signatures of passkeys with their public key
     # and holds no private RSA key. See .cargo/audit.toml.
     { id = "RUSTSEC-2023-0071", reason = "rueder only verifies RSA signatures of passkeys" },
+    # chrono is unmaintained, which is no vulnerability. Only feed-rs brings
+    # it along, for the dates in feeds, and its newest version (3.0.0) still
+    # does; rueder itself uses time. `cargo audit` only warns about it. Take
+    # this line out when feed-rs does without chrono.
+    { id = "RUSTSEC-2026-0543", reason = "only feed-rs uses chrono, and no version of it does without" },
 ]
 
 [licenses]

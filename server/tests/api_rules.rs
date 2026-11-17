@@ -341,6 +341,40 @@ async fn new_articles_meet_the_rules_of_everybody_who_reads_the_feed(db: PgPool)
     assert!(is_read(&state, &grace_cookie, news, 3).await);
 }
 
+/// A rule for all articles, say of a feed that is only for now and then: it
+/// takes no pattern, and whatever arrives meets it too.
+#[sqlx::test]
+async fn a_rule_for_all_articles_needs_no_pattern(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 2).await;
+    let blog = common::feed(&db, "blog").await;
+    common::subscribe(&db, ada, blog).await;
+    common::add(&db, blog, 2).await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let scope = json!({ "kind": "feed", "id": news });
+    let all = json!({ "scope": scope, "field": "tag", "match": "all", "pattern": " x ", "action": "read" });
+    let (_, did) = add(&state, &cookie, all).await;
+    assert_eq!(did, [0, 0, 2]);
+    let rules = get(&state, "/api/rules", &cookie).await;
+    assert_eq!(rules[0]["field"], "any");
+    assert_eq!(rules[0]["pattern"], "");
+    assert_eq!(
+        [
+            unread(&state, &cookie, news).await,
+            unread(&state, &cookie, blog).await
+        ],
+        [0, 2]
+    );
+
+    let new: Vec<_> = (3..=4).map(common::article).collect();
+    let mut tx = db.begin().await.unwrap();
+    let first = rueder::articles::insert(&mut tx, news, &new).await.unwrap();
+    filters::apply_new(&mut tx, news, first).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(unread(&state, &cookie, news).await, 0);
+    assert_eq!(listed(&state, &cookie, news).await, [4, 3, 2, 1]);
+}
+
 #[sqlx::test]
 async fn a_changed_rule_looks_at_the_newest_articles_and_at_the_hidden_ones(db: PgPool) {
     let more = filters::RECENT as usize + 5;
@@ -399,6 +433,14 @@ async fn a_preview_counts_what_a_rule_would_catch(db: PgPool) {
     assert_eq!(said, json!({ "matches": 12, "of": 12 }));
     let (_, said) = preview(json!({ "field": "content", "pattern": "<p>" })).await;
     assert_eq!(said, json!({ "matches": 0, "of": 15 }));
+    let (_, said) = preview(json!({ "match": "starts", "pattern": "article 1" })).await;
+    assert_eq!(said, json!({ "matches": 5, "of": 15 }));
+    let (_, said) = preview(json!({ "match": "ends", "pattern": "1" })).await;
+    assert_eq!(said, json!({ "matches": 3, "of": 15 }));
+    let (_, said) = preview(json!({ "match": "starts", "pattern": "1" })).await;
+    assert_eq!(said, json!({ "matches": 0, "of": 15 }));
+    let (_, said) = preview(json!({ "match": "all", "field": "tag" })).await;
+    assert_eq!(said, json!({ "matches": 15, "of": 15 }));
 
     // This is how the interface learns that a pattern is none.
     for broken in [

@@ -70,7 +70,8 @@ pub enum Field {
 }
 
 /// How a rule's pattern is read: as text that stands anywhere, as a whole
-/// word, or as a regular expression.
+/// word, at the start or at the end of the text, or as a regular expression.
+/// A rule for all articles has no pattern.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(rename = "RuleMatch")]
@@ -78,7 +79,10 @@ pub enum Field {
 pub enum Match {
     Contains,
     Word,
+    Starts,
+    Ends,
     Regex,
+    All,
 }
 
 /// What a rule does with an article it matches.
@@ -132,14 +136,24 @@ impl Match {
         match self {
             Self::Contains => "contains",
             Self::Word => "word",
+            Self::Starts => "starts",
+            Self::Ends => "ends",
             Self::Regex => "regex",
+            Self::All => "all",
         }
     }
 
     pub(crate) fn parse(text: &str) -> Option<Self> {
-        [Self::Contains, Self::Word, Self::Regex]
-            .into_iter()
-            .find(|matching| matching.as_str() == text)
+        [
+            Self::Contains,
+            Self::Word,
+            Self::Starts,
+            Self::Ends,
+            Self::Regex,
+            Self::All,
+        ]
+        .into_iter()
+        .find(|matching| matching.as_str() == text)
     }
 }
 
@@ -152,11 +166,23 @@ impl Action {
     }
 }
 
+/// The field and the pattern a rule is stored with, or why it cannot be one:
+/// the pattern without blanks around it, and none for a rule for all
+/// articles, which looks at nothing in particular.
+pub fn tidy(field: Field, matching: Match, pattern: &str) -> Result<(Field, String), String> {
+    if matching == Match::All {
+        return Ok((Field::Any, String::new()));
+    }
+    let pattern = pattern.trim();
+    compile(matching, pattern)?;
+    Ok((field, pattern.to_owned()))
+}
+
 /// The test a pattern stands for, or why it is none. Letters match whatever
 /// their case.
 pub fn compile(matching: Match, pattern: &str) -> Result<Regex, String> {
     let pattern = pattern.trim();
-    if pattern.is_empty() {
+    if pattern.is_empty() && matching != Match::All {
         return Err("the pattern is empty".into());
     }
     if pattern.chars().count() > MAX_PATTERN {
@@ -171,7 +197,12 @@ pub fn compile(matching: Match, pattern: &str) -> Result<Regex, String> {
             r"(?:^|[^\p{{L}}\p{{N}}]){}(?:$|[^\p{{L}}\p{{N}}])",
             regex::escape(pattern)
         ),
+        Match::Starts => format!("^{}", regex::escape(pattern)),
+        Match::Ends => format!("{}$", regex::escape(pattern)),
         Match::Regex => pattern.to_owned(),
+        // The empty pattern is found in every text, in the title of every
+        // article too, which `tidy` makes such a rule look at.
+        Match::All => String::new(),
     };
     RegexBuilder::new(&source)
         .case_insensitive(true)
@@ -674,8 +705,8 @@ impl Rule {
     /// The rule with its pattern as it is stored, if it can be a rule of
     /// this account.
     async fn checked(mut self, state: &AppState, session: &Session) -> Result<Self, AppError> {
-        self.pattern = self.pattern.trim().to_owned();
-        compile(self.matching, &self.pattern).map_err(AppError::BadRequest)?;
+        (self.field, self.pattern) =
+            tidy(self.field, self.matching, &self.pattern).map_err(AppError::BadRequest)?;
         let own = match self.scope {
             Scope::All => true,
             Scope::Folder(id) => sqlx::query_scalar!(
@@ -1168,6 +1199,38 @@ mod tests {
     }
 
     #[test]
+    fn a_start_or_an_end_is_the_one_of_the_whole_text() {
+        assert!(found(Match::Starts, "anzeige", "Anzeige: Lötkolben"));
+        assert!(!found(Match::Starts, "lötkolben", "Anzeige: Lötkolben"));
+        assert!(found(Match::Ends, "Lötkolben", "Anzeige: lötkolben"));
+        assert!(!found(Match::Ends, "anzeige", "Anzeige: Lötkolben"));
+        // Taken as it is, as with "contains".
+        assert!(!found(Match::Starts, "a.", "ab"));
+        assert!(found(Match::Ends, "(1)", "Teil (1)"));
+    }
+
+    #[test]
+    fn a_rule_for_all_articles_has_no_pattern_and_matches_every_one() {
+        assert_eq!(
+            tidy(Field::Tag, Match::All, " ad "),
+            Ok((Field::Any, String::new()))
+        );
+        assert_eq!(
+            tidy(Field::Tag, Match::Word, " ad "),
+            Ok((Field::Tag, "ad".into()))
+        );
+        assert!(tidy(Field::Title, Match::Contains, " ").is_err());
+        let all = Test::new(Field::Any, Match::All, "", Action::Read).unwrap();
+        let nothing = Texts {
+            title: String::new(),
+            text: String::new(),
+            author: String::new(),
+            tags: vec![],
+        };
+        assert!(all.matches(&article()) && all.matches(&nothing));
+    }
+
+    #[test]
     fn a_rule_looks_at_the_field_it_names() {
         assert!(matches(Field::Title, Match::Contains, "anzeige"));
         assert!(!matches(Field::Title, Match::Contains, "zugreifen"));
@@ -1175,6 +1238,8 @@ mod tests {
         assert!(matches(Field::Author, Match::Contains, "werbe"));
         assert!(matches(Field::Tag, Match::Word, "hardware"));
         assert!(!matches(Field::Tag, Match::Contains, "software"));
+        assert!(matches(Field::Tag, Match::Starts, "hard"));
+        assert!(matches(Field::Content, Match::Ends, "diese woche."));
         // Tags are looked at one by one, not as one text.
         assert!(!matches(Field::Tag, Match::Regex, "werbung.*hardware"));
     }

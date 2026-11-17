@@ -3,7 +3,14 @@
 	// The filter rules of the account: a list to switch them on and off, and a form to
 	// add or change one, which says how many articles the rule would catch right now.
 	import type { Reader, RuleBook, RulePreview } from '#lib/reader.ts';
-	import { MAX_PATTERN_LENGTH, type FilterRule, type RuleScope } from '#lib/filters.ts';
+	import {
+		builder,
+		MAX_PATTERN_LENGTH,
+		tidy,
+		wanting,
+		type FilterRule,
+		type RuleScope
+	} from '#lib/filters.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { TreeNode } from '#lib/model.ts';
 	import { ruleText, scopeText } from '#lib/rule-text.ts';
@@ -12,7 +19,7 @@
 	let { reader, book }: { reader: Reader; book: RuleBook } = $props();
 
 	const fields = ['any', 'title', 'content', 'author', 'tag'] as const;
-	const matches = ['contains', 'word', 'regex'] as const;
+	const matches = ['contains', 'word', 'starts', 'ends', 'regex', 'all'] as const;
 	const actions = ['hide', 'read'] as const;
 
 	// A reader with a server has to ask what the saved rules find.
@@ -53,7 +60,7 @@
 	// Every change to the rule in the form is tried at once. A reader with a server
 	// answers later, and an answer to what the form no longer says is dropped.
 	$effect(() => {
-		if (!draft || draft.pattern.trim() === '') {
+		if (!draft || wanting(draft)) {
 			preview = null;
 			return;
 		}
@@ -73,7 +80,9 @@
 	});
 
 	const found = $derived(typeof preview === 'object' ? preview : null);
-	const valid = $derived(draft !== null && draft.pattern.trim() !== '' && found !== null);
+	const valid = $derived(draft !== null && !wanting(draft) && found !== null);
+	/** A rule for all articles looks at nothing in them. */
+	const everything = $derived(draft?.match === 'all');
 
 	function add() {
 		draft = {
@@ -90,7 +99,7 @@
 	function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft || !valid) return;
-		book.saveRule({ ...draft, scope: { ...draft.scope }, pattern: draft.pattern.trim() });
+		book.saveRule(tidy({ ...draft, scope: { ...draft.scope } }));
 		draft = null;
 	}
 </script>
@@ -157,7 +166,11 @@
 			</label>
 			<label class="block">
 				<span class="font-medium">{m.rules.field}</span>
-				<select class="mt-1 block w-full rounded py-1 text-sm" bind:value={draft.field}>
+				<select
+					class="mt-1 block w-full rounded py-1 text-sm disabled:opacity-50"
+					disabled={everything}
+					bind:value={draft.field}
+				>
 					{#each fields as field (field)}
 						<option value={field}>{m.rules.fields[field]}</option>
 					{/each}
@@ -171,14 +184,28 @@
 					{/each}
 				</select>
 			</label>
-			<label class="block">
-				<span class="font-medium">{m.rules.pattern}</span>
-				<input
-					class="mt-1 block w-full rounded py-1 text-sm"
-					maxlength={MAX_PATTERN_LENGTH}
-					bind:value={draft.pattern}
-				/>
-			</label>
+			<div>
+				<label class="block">
+					<span class="font-medium">{m.rules.pattern}</span>
+					<input
+						class="mt-1 block w-full rounded py-1 text-sm disabled:opacity-50"
+						maxlength={MAX_PATTERN_LENGTH}
+						disabled={everything}
+						bind:value={draft.pattern}
+					/>
+				</label>
+				{#if draft.match === 'regex'}
+					<p class="mt-1 text-xs text-soft">
+						{m.rules.regexTip}
+						<a
+							class="reach underline"
+							href={builder(draft.pattern)}
+							target="_blank"
+							rel="noopener noreferrer">{m.rules.regexBuilder}</a
+						>
+					</p>
+				{/if}
+			</div>
 			<label class="block sm:col-span-2">
 				<span class="font-medium">{m.rules.action}</span>
 				<select class="mt-1 block w-full rounded py-1 text-sm" bind:value={draft.action}>
@@ -189,7 +216,7 @@
 			</label>
 		</div>
 		<p class="mt-3 text-sm" role="status">
-			{#if draft.pattern.trim() === ''}
+			{#if wanting(draft)}
 				<span class="text-soft">{m.rules.empty}</span>
 			{:else if found}
 				{m.rules.preview(found.matches, found.of)}

@@ -696,19 +696,25 @@ const en = {
 		matches: {
 			contains: 'contains',
 			word: 'has the word',
-			regex: 'matches the regular expression'
+			starts: 'starts with',
+			ends: 'ends with',
+			regex: 'matches the regular expression',
+			all: 'every article, whatever it says'
 		},
 		pattern: 'Text to look for',
 		action: 'Then',
 		actions: { hide: 'hide the article', read: 'mark it as read' },
 		preview: (count: number, total: number) =>
 			`Applies to ${n(count)} of ${n(total)} articles here now.`,
+		regexTip: 'Regular expressions are read as Rust reads them, whatever the letter case.',
+		regexBuilder: 'Build and try one out on regex101',
 		invalid: 'This is not a valid regular expression.',
 		empty: 'Enter the text to look for.',
 		checking: 'Looking what it would catch …',
 		hits: (count: number) => `${n(count)} ${plural(count, { one: 'hit', other: 'hits' })}`,
 		summary: (field: string, match: string, pattern: string, action: string) =>
-			`${field} ${match} “${pattern}”: ${action}`
+			`${field} ${match} “${pattern}”: ${action}`,
+		summaryAll: (action: string) => `Every article: ${action}`
 	},
 
 	keys: {

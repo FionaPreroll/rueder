@@ -1342,9 +1342,10 @@ export type RuleField = "any" | "title" | "content" | "author" | "tag";
 
 /**
  * How a rule's pattern is read: as text that stands anywhere, as a whole
- * word, or as a regular expression.
+ * word, at the start or at the end of the text, or as a regular expression.
+ * A rule for all articles has no pattern.
  */
-export type RuleMatch = "contains" | "word" | "regex";
+export type RuleMatch = "contains" | "word" | "starts" | "ends" | "regex" | "all";
 
 /**
  * Where a rule holds: everywhere, in a folder with all that is in it, or in

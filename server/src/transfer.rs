@@ -1139,11 +1139,10 @@ async fn take_rules(
     })
     .collect();
     for rule in rules {
-        let pattern = rule.pattern.trim().to_owned();
-        if filters::compile(rule.matching, &pattern).is_err() {
+        let Ok((field, pattern)) = filters::tidy(rule.field, rule.matching, &rule.pattern) else {
             imported.skipped += 1;
             continue;
-        }
+        };
         let scope = match &rule.scope {
             ExportedScope::All => Some((None, None)),
             ExportedScope::Folder { path } => {
@@ -1161,7 +1160,7 @@ async fn take_rules(
         let key: Key = (
             folder_id,
             feed_id,
-            rule.field.as_str().to_owned(),
+            field.as_str().to_owned(),
             rule.matching.as_str().to_owned(),
             pattern.clone(),
             rule.action.as_str().to_owned(),
@@ -1180,7 +1179,7 @@ async fn take_rules(
             rule.enabled,
             folder_id,
             feed_id,
-            rule.field.as_str(),
+            field.as_str(),
             rule.matching.as_str(),
             pattern,
             rule.action.as_str(),

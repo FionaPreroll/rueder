@@ -218,13 +218,13 @@ Eine Regel hat:
 |---|---|
 | Bereich | alle Feeds, ein Ordner (mit allem darunter), ein Feed |
 | Feld | überall, Titel, Text, Autor, Schlagwort |
-| Vergleich | enthält, ganzes Wort, regulärer Ausdruck |
+| Vergleich | enthält, ganzes Wort, beginnt mit, endet mit, regulärer Ausdruck; oder jeder Artikel, ohne Feld und Muster |
 | Aktion | ausblenden, als gelesen markieren |
 
 - Regeln greifen **beim Eintreffen** eines Artikels, für jeden Abonnenten des Feeds. Treffer zählen nicht als ungelesen.
 - Wird eine Regel angelegt, geändert oder gelöscht, bewertet der Server den Bestand des Kontos neu: die jüngsten Artikel jedes Feeds und alles, was ausgeblendet ist. Eine **Vorschau** zeigt vor dem Speichern, wie viele Artikel betroffen wären.
 - Ausgeblendetes bleibt unter „Ausgeblendet“ einsehbar.
-- Der Vergleich arbeitet auf Text ohne HTML-Tags, ohne Rücksicht auf Groß- und Kleinschreibung; „ganzes Wort“ behandelt Umlaute als Buchstaben.
+- Der Vergleich arbeitet auf Text ohne HTML-Tags, ohne Rücksicht auf Groß- und Kleinschreibung; „ganzes Wort“ behandelt Umlaute als Buchstaben. „Beginnt mit“ und „endet mit“ meinen den ganzen Text, bei Schlagwörtern jedes einzeln. Zeilen gibt es dabei nicht: Titel, Autor und Schlagwort haben eine, und der Text ist eine Folge von Wörtern mit einfachen Leerzeichen.
 - Reguläre Ausdrücke laufen mit dem `regex`-Crate in garantiert linearer Zeit. Länge der Muster und Zahl der Regeln sind begrenzt (`filters::MAX_PATTERN`, `filters::MAX_RULES`).
 
 Das Modell mit Tests ist `web/src/lib/filters.ts`. Der Server muss dieselben Fälle gleich entscheiden; die Syntax für reguläre Ausdrücke ist die des `regex`-Crates, das Frontend prüft Muster deshalb über den Server und nicht mit `RegExp` des Browsers.
@@ -235,7 +235,7 @@ Im Code: `server/src/filters.rs`, mit den Fällen aus `filters.test.ts` als Test
 - **Ausblenden geht vor.** Trifft eine Regel zum Ausblenden und eine zum Markieren denselben Artikel, wird er ausgeblendet und nicht hinter dem Rücken des Lesers als gelesen markiert.
 - **Beim Eintreffen** wendet der Abruf die Regeln aller Abonnenten in der Transaktion an, die die Artikel speichert. Niemand sieht einen Artikel ungefiltert.
 - **Der Baum zählt mit.** Ein Zug in einen Ordner oder aus ihm heraus und das Löschen eines Ordners bewerten neu, wenn eine Regel an einem Ordner hängt oder etwas ausgeblendet ist. Eine Regel verschwindet mit ihrem Ordner und mit dem Abo ihres Feeds.
-- **Ein Motor für alle Vergleiche.** „Enthält“ und „ganzes Wort“ werden in denselben regulären Ausdruck übersetzt, den auch ein eigenes Muster ergibt. Wird das übersetzte Programm zu groß, gilt das Muster als zu aufwendig. Rückbezüge und Vorausschau kennt das `regex`-Crate nicht; solche Muster lehnt der Server ab.
+- **Ein Motor für alle Vergleiche.** „Enthält“, „ganzes Wort“, „beginnt mit“ und „endet mit“ werden in denselben regulären Ausdruck übersetzt, den auch ein eigenes Muster ergibt. Wird das übersetzte Programm zu groß, gilt das Muster als zu aufwendig. Rückbezüge und Vorausschau kennt das `regex`-Crate nicht; solche Muster lehnt der Server ab.
 - **Abseits der Anfragen.** Das Vergleichen läuft auf eigenen Threads, damit eine Regel über viele Artikel den Server nicht aufhält. Den Text ohne Tags gewinnt ein einfacher Abschneider aus dem schon bereinigten Text, nicht der HTML-Parser.
 - **Die Reihenfolge** der Regeln ist nur die der Liste; was sie entscheiden, hängt nicht von ihr ab.
 
@@ -740,7 +740,7 @@ Das Frontend ist eine SvelteKit-Anwendung ohne Server-Rendering (`adapter-static
 - **Änderungen ohne Verbindung.** Gelesen, ungelesen, alle als gelesen, Stern, Label und Einstellungen gehen nicht verloren, wenn der Server nicht antwortet (kein Netz oder 502, 503, 504 von einem Proxy): Der Reader hält sie in ihrer Reihenfolge und sendet sie, sobald die Verbindung wieder steht, dann holt er die Zahlen des Servers. Die Liste liegt nur im Speicher des Tabs, damit im Browser nichts bleibt, was einem Konto gehört; solange etwas wartet, fragt der Browser vor dem Schließen. Sie ist begrenzt (`MAX_UNSENT`) und geht mit dem Ende der Sitzung verloren. Einstellungen gelten als gespeichert, sobald sie gesendet sind; ohne Warten erreichte eine Änderung ohne Netz den Server nie. Was eine Antwort des Servers braucht (Ordner, Labels selbst, Regeln, Abonnieren), wartet nicht.
 - **Einstellungen** liegen beim Konto und als Kopie im Browser, damit die Seite vor der Antwort richtig aussieht. Was in ihnen steht, ist Sache der Seite; was sie nicht versteht, wird zum Standard. Textgröße und Breiten gelten je Gerät und gehen nicht an das Konto (`perDevice`). Tastenkürzel sind Aktionen (`keys.ts`), denen der Leser eigene Tasten geben kann; Enter, Escape und `g` bleiben fest.
 - **Zwei Fenster.** „Einstellungen“ (das Zahnrad) haben, was die Seite tut: Aussehen, Lesen, Filterregeln, Tastatur. Die „Kontoeinstellungen“ im Menü des Kontos haben, was dem Konto gehört; welche Reiter es gibt, rechnet `tabsOf` aus.
-- **Filterregeln** rechnet der Server; nach einer Änderung holt die Seite Baum und Liste neu. Während eine Regel geschrieben wird, fragt der Editor `POST /api/rules/preview`, weil die regulären Ausdrücke des Servers nicht die des Browsers sind.
+- **Filterregeln** rechnet der Server; nach einer Änderung holt die Seite Baum und Liste neu. Während eine Regel geschrieben wird, fragt der Editor `POST /api/rules/preview`, weil die regulären Ausdrücke des Servers nicht die des Browsers sind. Für reguläre Ausdrücke verweist er auf regex101 mit der Syntax von Rust und dem Muster bis dahin (`filters.ts`, `builder`); erst ein Klick darauf schickt das Muster dorthin.
 - **Abonnieren** fragt erst `POST /api/feeds/find`, was unter einer Adresse ist, und abonniert dann den gewählten Feed; einen, den noch niemand liest, ruft der Server dabei zuerst ab. Der Dialog sagt Ablehnungen mit eigenen Worten und denen des Servers, nennt bei jedem Treffer, ob er schon abonniert ist, und, wenn die Website weiterleitet, wohin. OPML und der [Umzug](#umzug-eines-kontos) schicken die Datei, wie sie ist, an den Server; der `DemoReader` kann beides nicht, weil er dafür eigene Parser bräuchte.
 - **Artikel** zeigen ihre Anhänge und, wo der Text kein eigenes Bild hat, das Aufmacherbild über den Bild-Proxy. Audio und Video bekommen erst einen Spieler, wenn man auf „Abspielen“ klickt; vorher lädt die Seite nichts von der Adresse des Anhangs. Unter einem geöffneten Artikel endet die Zeile der Aktionen mit „Schließen“ (auf Fionas Wunsch), in der Liste, in drei Bereichen und im Magazin, so dass der Leser nach dem Lesen nicht zurück zur Zeile muss und es auch ohne Tastatur geht; in der erweiterten Ansicht, die jeden Artikel ganz zeigt, fehlt er.
 
