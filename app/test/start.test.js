@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { MAX_ADDRESS, serverAddress } from '../www/address.js';
 import { MAX_URL, MAX_WAYS, legalLinks } from '../www/legal.js';
-import { catalogs, textsFor } from '../www/texts.js';
+import { catalogs, codeFor, textsFor } from '../www/texts.js';
 
 test('takes the address of an https page, as its origin', () => {
 	assert.deepEqual(serverAddress(' reader.example '), { address: 'https://reader.example' });
@@ -40,8 +40,8 @@ test('has every text in English and in German', () => {
 					`${key}:${typeof value}:${typeof value === 'function' ? value.length : ''}`
 			)
 			.sort();
-	assert.deepEqual(shape(catalogs.de), shape(catalogs.en));
 	for (const catalog of Object.values(catalogs)) {
+		assert.deepEqual(shape(catalog), shape(catalogs.en));
 		for (const value of Object.values(catalog)) {
 			const text = typeof value === 'function' ? value('x', 'y') : value;
 			assert.ok(text.trim().length > 0);
@@ -50,6 +50,8 @@ test('has every text in English and in German', () => {
 	assert.equal(textsFor('de-AT'), catalogs.de);
 	assert.equal(textsFor('fr'), catalogs.en);
 	assert.equal(textsFor(undefined), catalogs.en);
+	assert.equal(codeFor('DE_ch'), 'de');
+	assert.equal(codeFor('fr'), 'en');
 });
 
 test('links to the legal texts the server names, and to nothing else', () => {

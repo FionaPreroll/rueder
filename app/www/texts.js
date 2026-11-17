@@ -1,4 +1,5 @@
-// The texts of the start page, in English and in German, as everywhere in rueder.
+// The texts of the start page, in every language of rueder's page
+// (web/src/lib/i18n/locale.svelte.ts), with the same form of address.
 
 const en = {
 	intro: 'Your feed reader, on your own server.',
@@ -49,11 +50,15 @@ const de = {
 
 export const catalogs = { en, de };
 
+/** The language of a tag such as "de-AT" without its region: "de". */
+const primary = (tag) =>
+	String(tag ?? '')
+		.split(/[-_]/)[0]
+		.toLowerCase();
+
+/** The code of the language for a tag such as "de-AT" or "pt-PT", whatever its region; "en" for any other. */
+export const codeFor = (language) =>
+	Object.keys(catalogs).find((code) => primary(code) === primary(language)) ?? 'en';
+
 /** The texts for a language such as "de-DE"; English for any other. */
-export function textsFor(language) {
-	return String(language ?? '')
-		.toLowerCase()
-		.startsWith('de')
-		? de
-		: en;
-}
+export const textsFor = (language) => catalogs[codeFor(language)];

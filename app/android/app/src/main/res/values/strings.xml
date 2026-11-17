@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<!-- The app's own texts, in English; values-de/ has them in German. The page of
-     rueder has its own, in web/src/lib/i18n/, and the start page in www/texts.js. -->
+<!-- The app's own texts, in English; values-*/ have them in the other languages
+     of rueder's page. The page has its own, in web/src/lib/i18n/, and the start
+     page in www/texts.js. -->
 <resources>
     <string name="app_name" translatable="false">rueder</string>
     <string name="title_activity_main" translatable="false">rueder</string>

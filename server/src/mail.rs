@@ -42,7 +42,8 @@ const TIMEOUT: Duration = Duration::from_secs(15);
 /// The longest address there may be (RFC 5321).
 pub const MAX_ADDRESS: usize = 254;
 
-/// The languages mail is written in: those of the page.
+/// The languages mail is written in: those of the page
+/// (`web/src/lib/i18n/locale.svelte.ts`).
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, ToSchema, sqlx::Type,
 )]
@@ -52,6 +53,31 @@ pub enum Language {
     #[default]
     En,
     De,
+}
+
+impl Language {
+    /// Every language, in the order of the enum, which `in_every_language!`
+    /// follows.
+    pub const ALL: [Language; 2] = [Language::En, Language::De];
+
+    /// Its code, as the page and the database name it.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::En => "en",
+            Self::De => "de",
+        }
+    }
+}
+
+/// The file of a mail in every language, in the order of `Language::ALL`, as
+/// it is built into the program.
+macro_rules! in_every_language {
+    ($mail:literal) => {
+        [
+            include_str!(concat!("../templates/mail/en/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/de/", $mail, ".txt")),
+        ]
+    };
 }
 
 /// The mails there are.
@@ -80,20 +106,13 @@ impl Template {
 
     /// The file of the mail in this language, as it is built into the program.
     pub fn text(self, language: Language) -> &'static str {
-        match (self, language) {
-            (Self::Confirm, Language::En) => include_str!("../templates/mail/en/confirm.txt"),
-            (Self::Confirm, Language::De) => include_str!("../templates/mail/de/confirm.txt"),
-            (Self::Changed, Language::En) => include_str!("../templates/mail/en/changed.txt"),
-            (Self::Changed, Language::De) => include_str!("../templates/mail/de/changed.txt"),
-            (Self::Reset, Language::En) => include_str!("../templates/mail/en/reset.txt"),
-            (Self::Reset, Language::De) => include_str!("../templates/mail/de/reset.txt"),
-            (Self::PasswordChanged, Language::En) => {
-                include_str!("../templates/mail/en/password_changed.txt")
-            }
-            (Self::PasswordChanged, Language::De) => {
-                include_str!("../templates/mail/de/password_changed.txt")
-            }
-        }
+        let texts = match self {
+            Self::Confirm => in_every_language!("confirm"),
+            Self::Changed => in_every_language!("changed"),
+            Self::Reset => in_every_language!("reset"),
+            Self::PasswordChanged => in_every_language!("password_changed"),
+        };
+        texts[language as usize]
     }
 
     /// The places the mail fills in.
@@ -307,9 +326,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_language_has_its_place_and_its_code() {
+        for (place, language) in Language::ALL.into_iter().enumerate() {
+            assert_eq!(language as usize, place, "{language:?}");
+            assert_eq!(serde_json::to_value(language).unwrap(), language.code());
+            assert_eq!(crate::email::language(Some(language.code())), language);
+        }
+    }
+
+    #[test]
     fn every_mail_has_its_places_in_every_language() {
         for template in Template::ALL {
-            for language in [Language::En, Language::De] {
+            for language in Language::ALL {
                 let text = template.text(language);
                 let (subject, body) = render(text, &[]);
                 assert!(!subject.is_empty(), "{template:?} {language:?}");

@@ -6,6 +6,9 @@
 
 import type { FilterRule } from '#lib/filters.ts';
 import type { Language } from '#lib/i18n/locale.svelte.ts';
+
+/** The languages the made-up feeds are written in; any other page gets them in English. */
+type Corpus = 'de' | 'en';
 import type { Article, ArticleVersion, Changed, Feed, Label, TreeNode } from '#lib/model.ts';
 
 const HOUR = 3_600_000;
@@ -493,7 +496,7 @@ const inEnglish: Record<string, Partial<FeedSeed>> = {
 };
 
 /** The feeds of a corpus. */
-const seedsOf = (corpus: Language): FeedSeed[] =>
+const seedsOf = (corpus: Corpus): FeedSeed[] =>
 	corpus === 'de' ? seeds : seeds.map((seed) => ({ ...seed, ...inEnglish[seed.id], lang: 'en' }));
 
 const sentences = {
@@ -688,7 +691,7 @@ const folderTitles = {
 	en: { tech: 'Technology', news: 'News', science: 'Science', fun: 'Comics & Oddities' }
 };
 
-const tree = (corpus: Language): TreeNode[] => [
+const tree = (corpus: Corpus): TreeNode[] => [
 	{
 		kind: 'folder',
 		id: 'folder-tech',
@@ -740,13 +743,13 @@ const tree = (corpus: Language): TreeNode[] => [
 ];
 
 /** The reader's labels to start with, in each corpus; two articles of the daily news have them. */
-const startLabels = (corpus: Language): Label[] => [
+const startLabels = (corpus: Corpus): Label[] => [
 	{ id: 'label-later', title: corpus === 'de' ? 'Später lesen' : 'Read later', color: '#1a73e8' },
 	{ id: 'label-work', title: corpus === 'de' ? 'Arbeit' : 'Work', color: '#1e8e3e' }
 ];
 
 /** The reader's filter rules to start with, in each corpus. */
-const startRules = (corpus: Language): FilterRule[] => [
+const startRules = (corpus: Corpus): FilterRule[] => [
 	{
 		id: 'rule-1',
 		enabled: true,
@@ -779,10 +782,11 @@ const startRules = (corpus: Language): FilterRule[] => [
 
 /**
  * The made-up feeds with their articles, the newest ones shortly before `now`,
- * and the reader's labels and rules to start with: in German unless asked for
- * English, which the demo does when it starts in English.
+ * and the reader's labels and rules to start with: in German for a page in
+ * German, else in English.
  */
-export function demoData(now: number, corpus: Language = 'de'): DemoData {
+export function demoData(now: number, language: Language = 'de'): DemoData {
+	const corpus: Corpus = language === 'de' ? 'de' : 'en';
 	const feeds: Record<string, Feed> = {};
 	const articles: Record<string, DemoArticle[]> = {};
 	const pace: Record<string, number> = {};
