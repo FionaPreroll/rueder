@@ -1738,7 +1738,8 @@ export class ServerReader implements Reader {
 	 * Takes the account's settings into the page. An account that has none yet,
 	 * a new one, gets what this browser had.
 	 */
-	private async loadSettings() {
+	/** Takes the account's settings in; `changed` when another tab or device changed them. */
+	private async loadSettings(changed = false) {
 		try {
 			const stored = await this.api.settings();
 			const empty =
@@ -1748,10 +1749,12 @@ export class ServerReader implements Reader {
 				this.saveSettings({ ...shown });
 				return;
 			}
-			const settings = understood(stored);
+			// The text size and whatever else each device, or this open tab, keeps for
+			// itself stay as they are here. What the tab keeps counts as saved, so it
+			// goes to the account only with the next change made here.
+			const settings = onThisDevice(understood(stored), shown, changed);
 			this.savedSettings = JSON.stringify(forAccount(settings));
-			// The text size and whatever else each device keeps for itself stay as they are here.
-			Object.assign(shown, onThisDevice(settings, shown));
+			Object.assign(shown, settings);
 		} catch (error) {
 			this.failed(error, 'unreachable');
 		}
@@ -2037,7 +2040,7 @@ export class ServerReader implements Reader {
 				return;
 			case 'settings':
 				if (!own) {
-					void this.loadSettings();
+					void this.loadSettings(true);
 					void this.loadConsent();
 				}
 				return;

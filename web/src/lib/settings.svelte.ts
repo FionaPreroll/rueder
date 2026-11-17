@@ -91,6 +91,13 @@ export const perDevice = [
 	'listWidth'
 ] as const satisfies readonly (keyof Settings)[];
 
+/**
+ * The settings an open tab keeps when another tab or device changes them: one tab
+ * may show three panes while another shows the magazine. They go to the account
+ * all the same, and a tab that opens starts with the account's.
+ */
+export const perTab = ['view'] as const satisfies readonly (keyof Settings)[];
+
 /** The settings as the account keeps them: without those of the device. */
 export function forAccount(settings: Settings): Partial<Settings> {
 	const shared: Partial<Settings> = { ...settings };
@@ -98,10 +105,15 @@ export function forAccount(settings: Settings): Partial<Settings> {
 	return shared;
 }
 
-/** The account's settings, with this device's own where it has its own. */
-export function onThisDevice(account: Settings, here: Settings): Settings {
+/**
+ * The account's settings, with this device's own where it has its own, and, when
+ * they changed elsewhere while the tab is open, with the tab's own too.
+ */
+export function onThisDevice(account: Settings, here: Settings, open = false): Settings {
 	const mine: Partial<Settings> = {};
-	for (const key of perDevice) Object.assign(mine, { [key]: here[key] });
+	for (const key of open ? [...perDevice, ...perTab] : perDevice) {
+		Object.assign(mine, { [key]: here[key] });
+	}
 	return { ...account, ...mine };
 }
 
