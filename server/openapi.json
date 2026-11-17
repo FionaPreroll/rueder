@@ -8411,11 +8411,14 @@
       },
       "RuleMatch": {
         "type": "string",
-        "description": "How a rule's pattern is read: as text that stands anywhere, as a whole\nword, or as a regular expression.",
+        "description": "How a rule's pattern is read: as text that stands anywhere, as a whole\nword, at the start or at the end of the text, or as a regular expression.\nA rule for all articles has no pattern.",
         "enum": [
           "contains",
           "word",
-          "regex"
+          "starts",
+          "ends",
+          "regex",
+          "all"
         ]
       },
       "RuleOutcome": {

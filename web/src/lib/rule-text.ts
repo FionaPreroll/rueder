@@ -11,11 +11,13 @@ export function scopeText(reader: Reader, scope: RuleScope) {
 	return scope.kind === 'folder' ? m.rules.scopeFolder(title) : m.rules.scopeFeed(title);
 }
 
-/** "Title has the word “Anzeige”: hide the article". */
+/** "Title has the word “Anzeige”: hide the article", or "Every article: mark it as read". */
 export const ruleText = (rule: FilterRule) =>
-	m.rules.summary(
-		m.rules.fields[rule.field],
-		m.rules.matches[rule.match],
-		rule.pattern,
-		m.rules.actions[rule.action]
-	);
+	rule.match === 'all'
+		? m.rules.summaryAll(m.rules.actions[rule.action])
+		: m.rules.summary(
+				m.rules.fields[rule.field],
+				m.rules.matches[rule.match],
+				rule.pattern,
+				m.rules.actions[rule.action]
+			);

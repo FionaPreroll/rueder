@@ -83,6 +83,35 @@ describe('RulesEditor', () => {
 		expect(screen.getByRole('button', { name: 'Add a rule' })).toBeInTheDocument();
 	});
 
+	it('points to a builder for regular expressions, with the pattern so far', async () => {
+		setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Add a rule' }));
+		expect(screen.queryByRole('link', { name: /regex101/ })).toBeNull();
+		await userEvent.selectOptions(screen.getByLabelText('Match'), 'regex');
+		await userEvent.type(screen.getByLabelText('Text to look for'), '^Hafen');
+		const link = screen.getByRole('link', { name: 'Build and try one out on regex101' });
+		expect(link).toHaveAttribute('target', '_blank');
+		expect(new URL(link.getAttribute('href') ?? '').searchParams.get('regex')).toBe('^Hafen');
+	});
+
+	it('adds a rule for all articles, which needs no text', async () => {
+		const reader = setup();
+		await userEvent.click(screen.getByRole('button', { name: 'Add a rule' }));
+		await userEvent.type(screen.getByLabelText('Text to look for'), 'left over');
+		await userEvent.selectOptions(screen.getByLabelText('In'), 'feed:feed-tagesbote');
+		await userEvent.selectOptions(screen.getByLabelText('Match'), 'all');
+		expect(screen.getByLabelText('Text to look for')).toBeDisabled();
+		expect(screen.getByLabelText('Look at')).toBeDisabled();
+		const all = reader.articles['feed-tagesbote'].length;
+		expect(screen.getByRole('status')).toHaveTextContent(
+			`Applies to ${all} of ${all} articles here now.`
+		);
+		await userEvent.selectOptions(screen.getByLabelText('Then'), 'read');
+		await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+		expect(reader.rules[3]).toMatchObject({ field: 'any', match: 'all', pattern: '' });
+		expect(screen.getAllByRole('listitem')[3]).toHaveTextContent('Every article: mark it as read');
+	});
+
 	it('edits and deletes a rule', async () => {
 		const reader = setup();
 		await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1]);

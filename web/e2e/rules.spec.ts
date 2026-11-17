@@ -25,6 +25,11 @@ test('writes a rule with the server saying what it would catch, and the articles
 	const save = dialog.getByRole('button', { name: 'Save' });
 	await expect(save).toBeDisabled();
 
+	// A rule for every article needs no text, and the server counts them all.
+	await dialog.getByLabel('Match').selectOption('all');
+	await expect(dialog.getByLabel('Text to look for')).toBeDisabled();
+	await expect(dialog.getByRole('status')).toHaveText('Applies to 4 of 4 articles here now.');
+
 	// The server's regular expressions decide what a pattern is.
 	await dialog.getByLabel('Match').selectOption('regex');
 	await dialog.getByLabel('Text to look for').fill('^(Sponsored');
