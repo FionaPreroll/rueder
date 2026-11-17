@@ -144,6 +144,12 @@
 		border-color: var(--color-field);
 	}
 
+	/* The search field has a button of its own to clear it, in every browser; the
+	   one some browsers draw would be a second. */
+	[type='search']::-webkit-search-cancel-button {
+		appearance: none;
+	}
+
 	/* Images stay a little dimmer on the dark theme, so a bright one does not glare,
 	   until the pointer is on them. */
 	[data-theme='dark'] :is(.article-body :where(img, video), img.dimmed):not(:hover) {

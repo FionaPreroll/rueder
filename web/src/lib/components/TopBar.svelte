@@ -41,6 +41,14 @@
 	/** The account's own settings, where there are any of them. */
 	const hasAccountSettings = $derived(tabsOf(reader, accountSettings, apps).length > 0);
 
+	let field = $state<HTMLInputElement>();
+
+	/** Empties the search and leaves the reader in the field, to type anew. */
+	function clear() {
+		reader.query = '';
+		field?.focus();
+	}
+
 	/** Searching from the start page searches all articles. */
 	function search(words: string) {
 		if (reader.stream.kind === 'home' && words.trim()) reader.show({ kind: 'all' });
@@ -122,20 +130,34 @@
 		</Menu>
 	{/if}
 
-	<label class="relative mx-auto w-full max-w-xl">
-		<span class="sr-only">{m.nav.search}</span>
-		<span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-soft">
-			<Icon name="search" />
-		</span>
-		<input
-			type="search"
-			class="h-8 w-full rounded border-line py-0 pr-2 pl-8 text-sm"
-			placeholder={m.nav.searchPlaceholder}
-			value={reader.query}
-			oninput={(event) => search(event.currentTarget.value)}
-			onkeydown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
-		/>
-	</label>
+	<div class="relative mx-auto w-full max-w-xl">
+		<label>
+			<span class="sr-only">{m.nav.search}</span>
+			<span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-soft">
+				<Icon name="search" />
+			</span>
+			<input
+				bind:this={field}
+				type="search"
+				class="h-8 w-full rounded border-line py-0 pr-8 pl-8 text-sm"
+				placeholder={m.nav.searchPlaceholder}
+				value={reader.query}
+				oninput={(event) => search(event.currentTarget.value)}
+				onkeydown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
+			/>
+		</label>
+		{#if reader.query}
+			<button
+				type="button"
+				class="plain absolute top-1/2 right-0.5 size-7 -translate-y-1/2 text-soft"
+				aria-label={m.nav.clearSearch}
+				title={m.nav.clearSearch}
+				onclick={clear}
+			>
+				<Icon name="close" />
+			</button>
+		{/if}
+	</div>
 
 	<ConnectionSign {reader} />
 	{#if demo}

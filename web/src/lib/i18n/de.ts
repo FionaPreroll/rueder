@@ -47,6 +47,7 @@ const de: Messages = {
 		closeSidebar: 'Seitenleiste ausblenden',
 		search: 'Suchen',
 		searchPlaceholder: 'In diesen Artikeln suchen',
+		clearSearch: 'Suche leeren',
 		settings: 'Einstellungen',
 		accountSettings: 'Kontoeinstellungen',
 		shortcuts: 'Tastaturkürzel',

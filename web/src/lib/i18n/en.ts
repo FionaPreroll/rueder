@@ -50,6 +50,7 @@ const en = {
 		closeSidebar: 'Hide the sidebar',
 		search: 'Search',
 		searchPlaceholder: 'Search these articles',
+		clearSearch: 'Clear the search',
 		settings: 'Settings',
 		accountSettings: 'Account settings',
 		shortcuts: 'Keyboard shortcuts',
