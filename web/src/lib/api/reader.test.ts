@@ -2152,6 +2152,29 @@ describe('settings', () => {
 		expect([settings.theme, settings.textSize]).toEqual(['dark', 'medium']);
 	});
 
+	it('leave the view of an open tab as it is when another tab changes it', async () => {
+		server.settings = { view: 'split' };
+		const reader = await started();
+		expect(settings.view).toBe('split');
+		// Another tab shows the magazine; this one keeps its three panes.
+		server.settings = { view: 'magazine', theme: 'dark' };
+		server.emit({ event: 'settings', data: { by: 'another-tab' } });
+		await settle();
+		expect([settings.view, settings.theme]).toEqual(['split', 'dark']);
+		reader.saveSettings({ ...settings });
+		await saved();
+		expect(puts()).toEqual([]);
+		// A change made here sends this tab's view along.
+		settings.view = 'list';
+		reader.saveSettings({ ...settings });
+		await saved();
+		expect(server.settings).toMatchObject({ view: 'list', theme: 'dark' });
+		// A tab that opens starts with the account's.
+		settings.view = 'expanded';
+		await started();
+		expect(settings.view).toBe('list');
+	});
+
 	it('loads them anew when another tab changed them', async () => {
 		server.settings = { theme: 'light' };
 		await started();
