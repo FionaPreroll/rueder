@@ -206,6 +206,19 @@ describe('the bar on top', () => {
 		expect(search).not.toHaveFocus();
 	});
 
+	it('clears the search with a button that is there while there is something to clear', async () => {
+		render(Page);
+		const search = screen.getByRole('searchbox', { name: 'Search' });
+		expect(screen.queryByRole('button', { name: 'Clear the search' })).toBeNull();
+		await userEvent.type(search, 'jasu?');
+		expect(screen.getByText('No article matches the search.')).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+		expect(search).toHaveValue('');
+		expect(search).toHaveFocus();
+		expect(screen.queryByText('No article matches the search.')).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Clear the search' })).toBeNull();
+	});
+
 	it('pauses live updates, hides the sidebar, opens the settings and the help', async () => {
 		render(Page);
 		const live = screen.getByRole('button', { name: 'Live' });
