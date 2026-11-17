@@ -48,7 +48,31 @@ const de = {
 	terms: 'Nutzungsbedingungen'
 };
 
-export const catalogs = { en, de };
+const es = {
+	intro: 'Tu lector de feeds, en tu propio servidor.',
+	address: 'Dirección de tu rueder',
+	open: 'Abrir',
+	opening: 'Abriendo …',
+	updates: 'Buscar una versión nueva de esta app en cada inicio',
+	updatesHint:
+		'La app pregunta entonces a GitHub una vez en cada inicio si hay un build más nuevo, y ofrece instalarlo. No se envía nada más.',
+	lookNow: 'Buscar ahora',
+	looking: 'Buscando …',
+	current: 'Esta es la versión más nueva.',
+	lookFailed: 'GitHub no respondió. Inténtalo de nuevo más tarde.',
+	unreachable: (address) =>
+		`${address} no responde. Revisa la dirección, o inténtalo de nuevo cuando tengas conexión.`,
+	empty: 'Escribe la dirección de tu rueder.',
+	invalid: 'Esta no es la dirección de una página web.',
+	insecure:
+		'La dirección debe empezar con https://: rueder solo inicia sesión mediante una conexión segura.',
+	version: (name, build) => `Versión de la app ${name} (build ${build})`,
+	imprint: 'Aviso legal',
+	privacy: 'Política de privacidad',
+	terms: 'Condiciones de uso'
+};
+
+export const catalogs = { en, de, es };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

@@ -1,0 +1,14 @@
+Elige una contraseña nueva para rueder
+Hola, {name}:
+
+alguien, muy probablemente tú, pidió elegir una contraseña nueva para la
+cuenta "{name}" en {site}. Para hacerlo, abre este enlace en los próximos
+{minutes} minutos:
+
+{link}
+
+El enlace funciona una sola vez. Al guardar la contraseña nueva se cierra la
+sesión en todos los navegadores y dispositivos de la cuenta. Si la cuenta
+tiene un segundo factor, el inicio de sesión lo sigue pidiendo.
+
+Si no fuiste tú, ignora este correo: sin el enlace no cambia nada.

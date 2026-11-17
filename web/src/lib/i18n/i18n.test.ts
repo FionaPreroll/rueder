@@ -53,7 +53,8 @@ describe('catalogs', () => {
 	it('name themselves for the language picker', () => {
 		expect(languageNames()).toEqual([
 			{ code: 'en', name: 'English' },
-			{ code: 'de', name: 'Deutsch' }
+			{ code: 'de', name: 'Deutsch' },
+			{ code: 'es', name: 'Español' }
 		]);
 	});
 
@@ -68,6 +69,9 @@ describe('catalogs', () => {
 		expect(m.toolbar.newArticles(1)).toBe('1 neuer Artikel');
 		expect(m.toolbar.newArticles(3)).toBe('3 neue Artikel');
 		expect(m.rules.hits(1)).toBe('1 Treffer');
+		useLanguage('es');
+		expect(m.articles(1)).toBe('1 artículo');
+		expect(m.toolbar.newArticles(3)).toBe('3 artículos nuevos');
 	});
 
 	it('describe every shortcut once', () => {

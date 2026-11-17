@@ -53,18 +53,20 @@ pub enum Language {
     #[default]
     En,
     De,
+    Es,
 }
 
 impl Language {
     /// Every language, in the order of the enum, which `in_every_language!`
     /// follows.
-    pub const ALL: [Language; 2] = [Language::En, Language::De];
+    pub const ALL: [Language; 3] = [Language::En, Language::De, Language::Es];
 
     /// Its code, as the page and the database name it.
     pub fn code(self) -> &'static str {
         match self {
             Self::En => "en",
             Self::De => "de",
+            Self::Es => "es",
         }
     }
 }
@@ -76,6 +78,7 @@ macro_rules! in_every_language {
         [
             include_str!(concat!("../templates/mail/en/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/de/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/es/", $mail, ".txt")),
         ]
     };
 }

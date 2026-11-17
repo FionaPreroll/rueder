@@ -1,0 +1,8 @@
+La dirección de tu cuenta de rueder cambió
+Hola, {name}:
+
+la cuenta "{name}" en {site} tiene ahora una dirección nueva: {address}. A
+partir de ahora el correo de la cuenta va allí; esta ya no recibe ninguno.
+
+Si no fuiste tú, puede que alguien conozca tu contraseña. Escribe pronto a
+quien administra {site}.
