@@ -91,7 +91,7 @@ Was es gibt:
 
 - SvelteKit 3 als SPA (`adapter-static`), Svelte 5 mit Runes, TypeScript im strikten Modus, TailwindCSS 4, Vite. Node 22, pnpm in der Version aus `package.json`.
 - Tests mit Vitest und Testing Library, sie liegen als `*.test.ts` neben dem Code.
-- Texte in `web/src/lib/i18n/` auf Englisch und Deutsch, keine Texte in Komponenten.
+- Texte in `web/src/lib/i18n/` in allen Sprachen der Seite, keine Texte in Komponenten.
 - Farben über benannte Variablen (`bg-paper`, `text-soft`, `border-line`), damit Themen und Akzentfarben nur Variablen umfärben.
 - Checks: `pnpm lint` (Prettier), `pnpm check` (svelte-check), `pnpm test:coverage`, `pnpm build`.
 
@@ -99,7 +99,7 @@ Was es gibt:
 
 - Code, Kommentare im Code, READMEs und Commit-Nachrichten auf Englisch.
 - Kommentare in SQL-Migrationen sowie Plan, Architektur und dieses Dokument auf Deutsch.
-- Die Oberfläche auf Englisch und Deutsch.
+- Die Oberfläche in den Sprachen aus `languages` in `web/src/lib/i18n/locale.svelte.ts`. Spanisch, Französisch, brasilianisches Portugiesisch, Italienisch und Japanisch hat noch niemand durchgesehen, der die Sprache als Muttersprache spricht.
 
 ## Einrichten und Befehle
 

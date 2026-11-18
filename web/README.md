@@ -139,8 +139,10 @@ README too.
 
 ## Conventions
 
-- Texts live in `src/lib/i18n/` (English and German); components read them as
-  `m.settings.title`. A new language is a new catalog with the shape of `en.ts`.
+- Texts live in `src/lib/i18n/`, a catalog per language; components read them as
+  `m.settings.title`. A new language is a new catalog with the shape of `en.ts`,
+  its code in `locale.svelte.ts`, its mails in `server/templates/mail/` with its
+  line in `server/src/mail.rs`, and its texts of the app.
 - Colors are named for what they are for (`bg-paper`, `text-soft`, `border-line`)
   and defined in `src/routes/layout.css`; components use no fixed grays, so themes
   and accent colors only repaint variables.

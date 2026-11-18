@@ -124,12 +124,18 @@ pub async fn mode(conn: &mut PgConnection) -> anyhow::Result<Mode> {
     )
 }
 
-/// The language a page names, for the mail: German or English.
+/// The language of the mail for the one a page names, such as "de-AT" or
+/// "pt-PT": the same language whatever its region, else English.
 pub fn language(text: Option<&str>) -> Language {
-    match text.map(|text| text.trim().to_lowercase()) {
-        Some(text) if text == "de" || text.starts_with("de-") => Language::De,
-        _ => Language::En,
-    }
+    let primary = |code: &str| {
+        let code = code.trim().split(['-', '_']).next().unwrap_or_default();
+        code.to_ascii_lowercase()
+    };
+    let asked = primary(text.unwrap_or_default());
+    Language::ALL
+        .into_iter()
+        .find(|language| primary(language.code()) == asked)
+        .unwrap_or_default()
 }
 
 /// The address of an account and the one waiting for its link, as the
@@ -268,7 +274,7 @@ async fn state_of(
 #[derive(Deserialize, TS, ToSchema)]
 pub struct NewEmail {
     email: String,
-    /// The language of the page, `en` or `de`: the account's mail is written
+    /// The language of the page, such as `de`: the account's mail is written
     /// in it from now on, unless a page made the account, whose language
     /// stays.
     #[serde(default)]
@@ -648,8 +654,11 @@ mod tests {
         assert!("sometimes".parse::<Mode>().is_err());
         assert_eq!(language(Some("de")), Language::De);
         assert_eq!(language(Some("de-AT")), Language::De);
+        assert_eq!(language(Some(" DE_ch ")), Language::De);
         assert_eq!(language(Some("en")), Language::En);
-        assert_eq!(language(Some("fr")), Language::En);
+        assert_eq!(language(Some("fr-CA")), Language::Fr);
+        assert_eq!(language(Some("ko")), Language::En);
+        assert_eq!(language(Some("pt-PT")), Language::PtBr);
         assert_eq!(language(None), Language::En);
     }
 

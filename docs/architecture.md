@@ -719,7 +719,7 @@ Das Frontend ist eine SvelteKit-Anwendung ohne Server-Rendering (`adapter-static
 | Versionsvergleich | `web/src/lib/diff.ts` |
 | Tastaturbelegung | `web/src/lib/keys.ts` |
 | Einstellungen | `web/src/lib/settings.svelte.ts` |
-| Texte auf Englisch und Deutsch | `web/src/lib/i18n/` |
+| Texte in allen Sprachen der Seite | `web/src/lib/i18n/` |
 | Komponenten | `web/src/lib/components/` |
 | Die Naht zur Datenquelle | `web/src/lib/reader.ts` |
 | Anbindung an den Server | `web/src/lib/api/` |
@@ -838,7 +838,7 @@ Im Code: `app/`, beschrieben in [app/README.md](../app/README.md). Capacitor um 
 - **Zwei Builds**: `github` mit Update-Suche und der Berechtigung, Apps zu installieren; `play` für den Play Store ohne beides (`src/play/`), weil der Store Updates selbst bringt.
 - **CI** (`app` und `app-release` in `ci.yml`): Tests der Startseite und der nativen Teile, beide Builds. `app` baut ein Debug-APK und ein unsigniertes Release, ohne den Schlüssel je zu sehen, denn der Job führt die Build-Skripte jedes Pull Requests aus. Auf `main` signiert `app-release` das Release mit `apksigner` aus dem Android SDK des Runners, ohne ein Build-Skript des Repositorys auszuführen, und ersetzt das Release `android-latest` durch das signierte APK und `version.json`, wenn die Prüfungen bestanden sind und der Schlüssel in den Secrets liegt; sonst veröffentlicht es nichts. Das nur, wenn sich die App geändert hat: Der Job `app-changed` vergleicht `app/` mit dem Commit, auf den der Tag `android-latest` zeigt, ohne README, Tests und die Einstellungen von Prettier. So bietet die App kein Update an, das nichts Neues bringt. Eine Änderung nur an der CI, die die App anders baut oder signiert, zählt nicht; sie kommt mit der nächsten Änderung in `app/` ins Release. Der Job läuft in der Environment `android-release`, die eine Freigabe verlangen kann, und attestiert das APK, so dass `gh attestation verify rueder.apk --repo FionaPreroll/rueder` seine Herkunft prüft. Der Schlüssel liegt nie im Repository.
 
-Die Update-Logik ist eigene, weil `@fionapreroll/app-updates` nicht aus der npm-Registry kommt. Die Texte der App stehen nicht in `web/src/lib/i18n/`, weil sie nicht Teil der Seite sind: die der Startseite in `app/www/texts.js`, die nativen in `res/values*/strings.xml`, jeweils Englisch und Deutsch.
+Die Update-Logik ist eigene, weil `@fionapreroll/app-updates` nicht aus der npm-Registry kommt. Die Texte der App stehen nicht in `web/src/lib/i18n/`, weil sie nicht Teil der Seite sind: die der Startseite in `app/www/texts.js`, die nativen in `res/values*/strings.xml`, jeweils in allen Sprachen der Seite.
 
 
 ## Seite auf GitHub Pages

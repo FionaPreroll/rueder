@@ -599,7 +599,7 @@ export type NewRegistration = {
 	 */
 	email?: string,
 	/**
-	 * The language of the page, `en` or `de`: the account's mail is
+	 * The language of the page, such as `de`: the account's mail is
 	 * written in it.
 	 */
 	language?: string,
@@ -695,9 +695,10 @@ export type MadeInvite = {
 };
 
 /**
- * The languages mail is written in: those of the page.
+ * The languages mail is written in: those of the page
+ * (`web/src/lib/i18n/locale.svelte.ts`).
  */
-export type Language = "en" | "de";
+export type Language = "en" | "de" | "es" | "fr" | "pt-BR" | "it" | "ja";
 
 /**
  * The address of an account and the one waiting for its link, as the
@@ -724,7 +725,7 @@ export type EmailState = {
 export type NewEmail = {
 	email: string,
 	/**
-	 * The language of the page, `en` or `de`: the account's mail is written
+	 * The language of the page, such as `de`: the account's mail is written
 	 * in it from now on, unless a page made the account, whose language
 	 * stays.
 	 */

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">Serveur et mises à jour</string>
+    <string name="shortcut_setup_long">Serveur et mises à jour de l\'app</string>
+    <string name="update_title">Une nouvelle version de rueder</string>
+    <string name="update_text">Le build %1$d est disponible (%2$s Mo). Le télécharger et l\'installer maintenant ?</string>
+    <string name="update_metered">Vous êtes sur un réseau qui peut être payant.</string>
+    <string name="update_download">Télécharger</string>
+    <string name="update_later">Plus tard</string>
+    <string name="back_again">Appuyez de nouveau sur Retour pour fermer rueder</string>
+</resources>

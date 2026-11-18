@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Brazilian Portuguese, for every Portuguese: values-pt and not values-pt-rBR,
+     so that a phone in pt-PT gets it too. -->
+<resources>
+    <string name="shortcut_setup_short">Servidor e atualizações</string>
+    <string name="shortcut_setup_long">Servidor e atualizações do app</string>
+    <string name="update_title">Uma nova versão do rueder</string>
+    <string name="update_text">O build %1$d saiu (%2$s MB). Baixar e instalar agora?</string>
+    <string name="update_metered">Você está em uma rede que pode custar dinheiro.</string>
+    <string name="update_download">Baixar</string>
+    <string name="update_later">Mais tarde</string>
+    <string name="back_again">Pressione Voltar de novo para fechar o rueder</string>
+</resources>

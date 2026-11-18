@@ -53,7 +53,12 @@ describe('catalogs', () => {
 	it('name themselves for the language picker', () => {
 		expect(languageNames()).toEqual([
 			{ code: 'en', name: 'English' },
-			{ code: 'de', name: 'Deutsch' }
+			{ code: 'de', name: 'Deutsch' },
+			{ code: 'es', name: 'Español' },
+			{ code: 'fr', name: 'Français' },
+			{ code: 'pt-BR', name: 'Português (Brasil)' },
+			{ code: 'it', name: 'Italiano' },
+			{ code: 'ja', name: '日本語' }
 		]);
 	});
 
@@ -68,6 +73,16 @@ describe('catalogs', () => {
 		expect(m.toolbar.newArticles(1)).toBe('1 neuer Artikel');
 		expect(m.toolbar.newArticles(3)).toBe('3 neue Artikel');
 		expect(m.rules.hits(1)).toBe('1 Treffer');
+		useLanguage('es');
+		expect(m.articles(1)).toBe('1 artículo');
+		expect(m.toolbar.newArticles(3)).toBe('3 artículos nuevos');
+		useLanguage('fr');
+		expect(m.articles(0)).toBe('0 article');
+		expect(m.articles(2)).toBe('2 articles');
+		// Japanese counts without a plural.
+		useLanguage('ja');
+		expect(m.articles(1)).toBe('1 件の記事');
+		expect(m.articles(1200)).toBe('1,200 件の記事');
 	});
 
 	it('describe every shortcut once', () => {
@@ -82,16 +97,21 @@ describe('catalogs', () => {
 
 describe('picking the language', () => {
 	it('takes the first language rueder speaks', () => {
-		expect(pickLanguage(['fr-FR', 'de-AT', 'en'])).toBe('de');
+		expect(pickLanguage(['ko-KR', 'de-AT', 'en'])).toBe('de');
 		expect(pickLanguage(['EN-gb'])).toBe('en');
-		expect(pickLanguage(['fr', 'ja'])).toBeNull();
+		expect(pickLanguage(['ko', 'zh'])).toBeNull();
 		expect(pickLanguage([])).toBeNull();
+		// Whatever the region: Portugal gets the Portuguese of Brazil.
+		expect(pickLanguage(['pt-PT'])).toBe('pt-BR');
+		expect(pickLanguage(['pt'])).toBe('pt-BR');
 	});
 
 	it('formats for the browser’s own variant of the language', () => {
 		expect(formatLocaleFor('de', ['en-US', 'de-at'])).toBe('de-AT');
 		expect(formatLocaleFor('de', ['en-US'])).toBe('de');
 		expect(formatLocaleFor('en', ['en_US'])).toBe('en');
+		expect(formatLocaleFor('pt-BR', ['pt-PT'])).toBe('pt-PT');
+		expect(formatLocaleFor('pt-BR', ['en'])).toBe('pt-BR');
 	});
 
 	it('follows the browser until something is picked', () => {
@@ -109,7 +129,7 @@ describe('picking the language', () => {
 	});
 
 	it('falls back to English', () => {
-		vi.stubGlobal('navigator', { language: 'fr-FR' });
+		vi.stubGlobal('navigator', { language: 'ko-KR' });
 		expect(browserLanguage()).toBe('en');
 	});
 
@@ -117,7 +137,7 @@ describe('picking the language', () => {
 		vi.stubGlobal('navigator', { languages: ['de-AT'] });
 		expect(startLanguage('auto')).toBe('de');
 		expect(startLanguage('en')).toBe('en');
-		vi.stubGlobal('navigator', { languages: ['fr'] });
+		vi.stubGlobal('navigator', { languages: ['ko'] });
 		expect(startLanguage('auto')).toBe('en');
 		expect(startLanguage('de')).toBe('de');
 	});

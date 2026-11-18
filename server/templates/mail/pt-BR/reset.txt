@@ -1,0 +1,14 @@
+Crie uma nova senha para o rueder
+Olá, {name},
+
+alguém, muito provavelmente você, pediu para criar uma nova senha para a
+conta "{name}" em {site}. Para isso, abra este link em até {minutes}
+minutos:
+
+{link}
+
+O link funciona uma única vez. Salvar a nova senha desconecta todos os
+navegadores e dispositivos da conta. Se a conta tiver um segundo fator, o
+login continua pedindo por ele.
+
+Se não foi você, ignore este e-mail: sem o link, nada muda.

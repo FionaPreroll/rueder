@@ -7619,7 +7619,7 @@
                   "string",
                   "null"
                 ],
-                "description": "The language of the page, `en` or `de`: the account's mail is written\nin it from now on, unless a page made the account, whose language\nstays."
+                "description": "The language of the page, such as `de`: the account's mail is written\nin it from now on, unless a page made the account, whose language\nstays."
               }
             }
           }
@@ -7786,7 +7786,7 @@
               "string",
               "null"
             ],
-            "description": "The language of the page, `en` or `de`: the account's mail is\nwritten in it."
+            "description": "The language of the page, such as `de`: the account's mail is\nwritten in it."
           },
           "captcha": {
             "oneOf": [

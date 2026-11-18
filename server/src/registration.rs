@@ -546,7 +546,7 @@ struct NewRegistration {
     #[serde(default)]
     #[ts(optional)]
     email: Option<String>,
-    /// The language of the page, `en` or `de`: the account's mail is
+    /// The language of the page, such as `de`: the account's mail is
     /// written in it.
     #[serde(default)]
     #[ts(optional)]

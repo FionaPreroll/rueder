@@ -1,0 +1,14 @@
+Choisissez un nouveau mot de passe pour rueder
+Bonjour {name},
+
+quelqu'un, très probablement vous, a demandé à choisir un nouveau mot de
+passe pour le compte « {name} » sur {site}. Pour cela, ouvrez ce lien dans
+les {minutes} minutes :
+
+{link}
+
+Le lien ne fonctionne qu'une fois. Enregistrer le nouveau mot de passe
+déconnecte tous les navigateurs et appareils du compte. Si le compte a un
+second facteur, la connexion le demande toujours.
+
+Si ce n'était pas vous, ignorez cet e-mail : sans le lien, rien ne change.

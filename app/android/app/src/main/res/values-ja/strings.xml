@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">サーバとアップデート</string>
+    <string name="shortcut_setup_long">サーバとアプリのアップデート</string>
+    <string name="update_title">rueder の新しいバージョン</string>
+    <string name="update_text">ビルド %1$d が公開されました（%2$s MB）。今すぐダウンロードしてインストールしますか？</string>
+    <string name="update_metered">料金がかかる可能性のあるネットワークに接続しています。</string>
+    <string name="update_download">ダウンロード</string>
+    <string name="update_later">あとで</string>
+    <string name="back_again">もう一度「戻る」を押すと rueder を閉じます</string>
+</resources>

@@ -1,0 +1,14 @@
+Imposta una nuova password per rueder
+Ciao {name},
+
+qualcuno, molto probabilmente tu, ha chiesto di impostare una nuova password
+per l'account "{name}" su {site}. Per farlo, apri questo link entro
+{minutes} minuti:
+
+{link}
+
+Il link funziona una sola volta. Impostare la nuova password disconnette
+tutti i browser e i dispositivi dell'account. Se l'account ha un secondo
+fattore, l'accesso continua a chiederlo.
+
+Se non sei stato tu, ignora questa email: senza il link non cambia niente.
