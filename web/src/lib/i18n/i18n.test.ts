@@ -65,7 +65,8 @@ describe('catalogs', () => {
 			{ code: 'ko', name: '한국어' },
 			{ code: 'tr', name: 'Türkçe' },
 			{ code: 'zh-Hans', name: '简体中文' },
-			{ code: 'zh-Hant', name: '繁體中文' }
+			{ code: 'zh-Hant', name: '繁體中文' },
+			{ code: 'id', name: 'Bahasa Indonesia' }
 		]);
 	});
 

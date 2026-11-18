@@ -1,0 +1,8 @@
+Alamat akun rueder Anda telah berubah
+Halo {name},
+
+akun "{name}" di {site} kini memiliki alamat baru: {address}. Mulai sekarang
+email untuk akun ini dikirim ke sana, alamat ini tidak menerimanya lagi.
+
+Jika itu bukan Anda, mungkin ada yang mengetahui kata sandi Anda. Segera
+hubungi pengelola {site}.

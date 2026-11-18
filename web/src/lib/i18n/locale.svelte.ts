@@ -20,7 +20,8 @@ export const languages = [
 	'ko',
 	'tr',
 	'zh-Hans',
-	'zh-Hant'
+	'zh-Hant',
+	'id'
 ] as const;
 export type Language = (typeof languages)[number];
 

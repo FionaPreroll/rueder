@@ -304,6 +304,29 @@ const zhHant = {
 	terms: '使用條款'
 };
 
+const id = {
+	intro: 'Pembaca feed Anda, di server Anda sendiri.',
+	address: 'Alamat rueder Anda',
+	open: 'Buka',
+	opening: 'Membuka …',
+	updates: 'Cari versi baru aplikasi ini setiap kali dibuka',
+	updatesHint:
+		'Aplikasi akan bertanya sekali ke GitHub setiap kali dibuka apakah ada build yang lebih baru, lalu menawarkan untuk memasangnya. Tidak ada yang lain yang dikirim.',
+	lookNow: 'Cari sekarang',
+	looking: 'Mencari …',
+	current: 'Ini versi terbaru.',
+	lookFailed: 'GitHub tidak menjawab. Coba lagi nanti.',
+	unreachable: (address) =>
+		`${address} tidak menjawab. Periksa alamatnya, atau coba lagi setelah Anda online.`,
+	empty: 'Masukkan alamat rueder Anda.',
+	invalid: 'Ini bukan alamat halaman web.',
+	insecure: 'Alamat harus diawali dengan https://: rueder hanya masuk melalui koneksi yang aman.',
+	version: (name, build) => `Versi aplikasi ${name} (build ${build})`,
+	imprint: 'Informasi hukum',
+	privacy: 'Kebijakan privasi',
+	terms: 'Ketentuan penggunaan'
+};
+
 export const catalogs = {
 	en,
 	de,
@@ -317,7 +340,8 @@ export const catalogs = {
 	ko,
 	tr,
 	'zh-Hans': zhHans,
-	'zh-Hant': zhHant
+	'zh-Hant': zhHant,
+	id
 };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
