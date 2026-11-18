@@ -393,7 +393,7 @@
 						<li data-article={article.id} use:measure={article.id}>
 							<ArticleRow {reader} {article} {now} {showFeed} stacked={pane} />
 							{#if !pane && reader.open === article.id}
-								<div class="border-t border-l-3 border-line border-l-accent-line bg-paper">
+								<div class="border-s-3 border-t border-line border-s-accent-line bg-paper">
 									<ArticleBody {reader} {article} {now} {onversions} closable />
 								</div>
 							{/if}
@@ -416,7 +416,7 @@
 	{#if farDown}
 		<button
 			type="button"
-			class="absolute right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex size-12 cursor-pointer items-center justify-center rounded-full bg-accent text-on-accent shadow-lg hover:brightness-110"
+			class="absolute inset-e-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex size-12 cursor-pointer items-center justify-center rounded-full bg-accent text-on-accent shadow-lg hover:brightness-110"
 			aria-label={m.list.toTop}
 			title={m.list.toTop}
 			onclick={toTop}

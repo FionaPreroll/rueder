@@ -124,10 +124,10 @@
 	>
 		<Icon
 			name="right"
-			class="size-4 shrink-0 text-soft transition-transform group-open:rotate-90"
+			class="size-4 shrink-0 text-soft transition-transform group-open:rotate-90 rtl:group-open:-rotate-90"
 		/>
 		<h3 {id} class="text-sm font-semibold">{title}</h3>
-		{#if note}<span class="basis-full pl-6 text-sm text-soft">{note}</span>{/if}
+		{#if note}<span class="basis-full ps-6 text-sm text-soft">{note}</span>{/if}
 	</summary>
 {/snippet}
 
@@ -162,7 +162,7 @@
 		</p>
 		<button
 			type="button"
-			class="tool ml-auto aria-disabled:opacity-50"
+			class="tool ms-auto aria-disabled:opacity-50"
 			aria-disabled={asking}
 			onclick={() => void ask()}
 		>
@@ -228,7 +228,7 @@
 									<span class="text-xs font-semibold text-warn">{m.status.reported.blocked}</span>
 								{/if}
 								<span
-									class="ml-auto text-xs text-soft"
+									class="ms-auto text-xs text-soft"
 									title={formatFull(Date.parse(feed.last_at))}
 								>
 									{m.status.reported.reports(feed.reports, ago(feed.last_at))}
@@ -395,26 +395,26 @@
 				<p class="mt-2 text-sm text-soft">{m.status.requests.none}</p>
 			{:else}
 				<div class="mt-2 overflow-x-auto">
-					<table class="w-full text-left text-sm">
+					<table class="w-full text-start text-sm">
 						<thead class="text-xs text-soft">
 							<tr>
-								<th class="py-1 pr-3 font-medium">{m.status.requests.route}</th>
-								<th class="py-1 pr-3 text-right font-medium">{m.status.requests.count}</th>
-								<th class="py-1 pr-3 text-right font-medium">{m.status.requests.median}</th>
-								<th class="py-1 pr-3 text-right font-medium">{m.status.requests.p95}</th>
-								<th class="py-1 pr-3 text-right font-medium">{m.status.requests.max}</th>
-								<th class="py-1 text-right font-medium">{m.status.requests.errors}</th>
+								<th class="py-1 pe-3 font-medium">{m.status.requests.route}</th>
+								<th class="py-1 pe-3 text-end font-medium">{m.status.requests.count}</th>
+								<th class="py-1 pe-3 text-end font-medium">{m.status.requests.median}</th>
+								<th class="py-1 pe-3 text-end font-medium">{m.status.requests.p95}</th>
+								<th class="py-1 pe-3 text-end font-medium">{m.status.requests.max}</th>
+								<th class="py-1 text-end font-medium">{m.status.requests.errors}</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-line">
 							{#each s.requests.routes as route (route.route)}
 								<tr>
-									<td class="py-1 pr-3 font-mono text-xs break-all">{route.route}</td>
-									<td class="py-1 pr-3 text-right">{formatNumber(route.took.count)}</td>
-									<td class="py-1 pr-3 text-right whitespace-nowrap">{ms(route.took.p50_ms)}</td>
-									<td class="py-1 pr-3 text-right whitespace-nowrap">{ms(route.took.p95_ms)}</td>
-									<td class="py-1 pr-3 text-right whitespace-nowrap">{ms(route.took.max_ms)}</td>
-									<td class={['py-1 text-right', route.errors > 0 && 'text-warn']}>
+									<td class="py-1 pe-3 font-mono text-xs break-all">{route.route}</td>
+									<td class="py-1 pe-3 text-end">{formatNumber(route.took.count)}</td>
+									<td class="py-1 pe-3 text-end whitespace-nowrap">{ms(route.took.p50_ms)}</td>
+									<td class="py-1 pe-3 text-end whitespace-nowrap">{ms(route.took.p95_ms)}</td>
+									<td class="py-1 pe-3 text-end whitespace-nowrap">{ms(route.took.max_ms)}</td>
+									<td class={['py-1 text-end', route.errors > 0 && 'text-warn']}>
 										{formatNumber(route.errors)}
 									</td>
 								</tr>
@@ -428,20 +428,20 @@
 		<details class="group mt-2 rounded border border-line p-2" aria-labelledby="status-tables">
 			{@render opener(m.status.database.tables, 'status-tables')}
 			<div class="mt-2 overflow-x-auto">
-				<table class="w-full text-left text-sm">
+				<table class="w-full text-start text-sm">
 					<thead class="text-xs text-soft">
 						<tr>
-							<th class="py-1 pr-3 font-medium">{m.status.database.table}</th>
-							<th class="py-1 pr-3 text-right font-medium">{m.status.database.bytes}</th>
-							<th class="py-1 text-right font-medium">{m.status.database.rows}</th>
+							<th class="py-1 pe-3 font-medium">{m.status.database.table}</th>
+							<th class="py-1 pe-3 text-end font-medium">{m.status.database.bytes}</th>
+							<th class="py-1 text-end font-medium">{m.status.database.rows}</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-line">
 						{#each s.database.tables as table (table.name)}
 							<tr>
-								<td class="py-1 pr-3 font-mono text-xs">{table.name}</td>
-								<td class="py-1 pr-3 text-right">{formatBytes(table.bytes)}</td>
-								<td class="py-1 text-right">{formatNumber(table.rows)}</td>
+								<td class="py-1 pe-3 font-mono text-xs">{table.name}</td>
+								<td class="py-1 pe-3 text-end">{formatBytes(table.bytes)}</td>
+								<td class="py-1 text-end">{formatNumber(table.rows)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -471,7 +471,7 @@
 								</span>
 								<span class="font-mono text-xs text-soft">{problem.target}</span>
 								<span
-									class="ml-auto text-xs text-soft"
+									class="ms-auto text-xs text-soft"
 									title={formatFull(Date.parse(problem.last))}
 								>
 									{m.status.problems.times(problem.count, ago(problem.last))}
@@ -501,7 +501,7 @@
 										{m.status.browsers.kinds[error.kind]}
 									</span>
 									<span
-										class="ml-auto text-xs text-soft"
+										class="ms-auto text-xs text-soft"
 										title={formatFull(Date.parse(error.last))}
 									>
 										{m.status.browsers.hits(error.count, error.accounts, ago(error.last))}

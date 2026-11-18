@@ -486,6 +486,8 @@ const de: Messages = {
 		},
 		density: 'Dichte der Liste',
 		densities: { compact: 'Kompakt', comfortable: 'Luftig' },
+		sidebarSide: 'Seitenleiste',
+		sidebarSides: { start: 'Links', end: 'Rechts' },
 		textSize: 'Schriftgröße der Artikel, auf diesem Gerät',
 		textSizes: { small: 'Klein', medium: 'Mittel', large: 'Groß' },
 		readingFont: 'Schrift der Artikel',

@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { MAX_ADDRESS, serverAddress } from '../www/address.js';
 import { MAX_URL, MAX_WAYS, legalLinks } from '../www/legal.js';
-import { catalogs, codeFor, textsFor } from '../www/texts.js';
+import { catalogs, codeFor, directionOf, textsFor } from '../www/texts.js';
 
 test('takes the address of an https page, as its origin', () => {
 	assert.deepEqual(serverAddress(' reader.example '), { address: 'https://reader.example' });
@@ -55,6 +55,8 @@ test('has every text in English and in German', () => {
 	assert.equal(textsFor(undefined), catalogs.en);
 	assert.equal(codeFor('DE_ch'), 'de');
 	assert.equal(codeFor('tlh'), 'en');
+	assert.equal(directionOf('ar-EG'), 'rtl');
+	assert.equal(directionOf('de'), 'ltr');
 });
 
 test('links to the legal texts the server names, and to nothing else', () => {

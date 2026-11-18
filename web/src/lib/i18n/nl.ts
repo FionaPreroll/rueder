@@ -490,6 +490,8 @@ const nl: Messages = {
 		},
 		density: 'Dichtheid van de lijst',
 		densities: { compact: 'Compact', comfortable: 'Ruim' },
+		sidebarSide: 'Zijbalk',
+		sidebarSides: { start: 'Links', end: 'Rechts' },
 		textSize: 'Tekstgrootte van artikelen, op dit apparaat',
 		textSizes: { small: 'Klein', medium: 'Middel', large: 'Groot' },
 		readingFont: 'Lettertype van artikelen',

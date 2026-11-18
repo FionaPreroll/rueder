@@ -45,7 +45,7 @@
 			</span>
 			<button
 				type="button"
-				class="tool -my-1 ml-2 shrink-0"
+				class="tool -my-1 ms-2 shrink-0"
 				onclick={() => (session.confirmation = null)}
 			>
 				{m.email.close}

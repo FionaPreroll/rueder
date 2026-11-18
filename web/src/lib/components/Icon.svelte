@@ -40,6 +40,9 @@
 	} as const;
 
 	export type IconName = keyof typeof paths;
+
+	/** The icons that point the way one reads, so that a page written from right to left mirrors them. */
+	const forward: ReadonlySet<IconName> = new Set(['right', 'logout']);
 </script>
 
 <script lang="ts">
@@ -51,7 +54,7 @@
 </script>
 
 <svg
-	class={['shrink-0', size]}
+	class={['shrink-0', size, forward.has(name) && 'rtl:-scale-x-100']}
 	viewBox="0 0 24 24"
 	fill={filled ? 'currentColor' : 'none'}
 	stroke="currentColor"

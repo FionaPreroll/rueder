@@ -1,8 +1,10 @@
 <script lang="ts">
-	// The bar between two panes that says how wide the one before it is. Drag it with
-	// the pointer, or give it the focus and press the arrow keys; a double click puts
-	// the width back to what it was at the start. On a phone there is nothing to pull
-	// apart, so whoever uses it hides it there.
+	// The bar between two panes that says how wide the one before it is, or the one
+	// after it (`after`), in the reading direction. Drag it with the pointer, or give
+	// it the focus and press the arrow keys; a double click puts the width back to
+	// what it was at the start. Right or left, the pane grows towards the bar: in a
+	// page written from right to left the pane before it lies on the right. On a
+	// phone there is nothing to pull apart, so whoever uses it hides it there.
 
 	let {
 		width,
@@ -10,6 +12,7 @@
 		max,
 		fallback,
 		label,
+		after = false,
 		onwidth
 	}: {
 		width: number;
@@ -18,6 +21,8 @@
 		/** The width a double click goes back to. */
 		fallback: number;
 		label: string;
+		/** The pane comes after the bar in the reading direction, as the sidebar at the end does. */
+		after?: boolean;
 		onwidth: (width: number) => void;
 	} = $props();
 
@@ -32,6 +37,11 @@
 
 	const fits = (pixels: number) => Math.min(max, Math.max(min, Math.round(pixels)));
 
+	/** 1 where the pane lies on the left and grows as the bar moves right, else -1. */
+	const towards = (bar: Element) =>
+		(bar.closest('[dir]')?.getAttribute('dir') === 'rtl') === after ? 1 : -1;
+	let sign = 1;
+
 	function down(event: PointerEvent) {
 		// Only the main button, and never a second pointer in the middle of a drag.
 		if (event.button !== 0 || dragging) return;
@@ -39,11 +49,12 @@
 		dragging = true;
 		from = event.clientX;
 		was = width;
+		sign = towards(event.currentTarget as Element);
 		(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
 	}
 
 	function move(event: PointerEvent) {
-		if (dragging) onwidth(fits(was + event.clientX - from));
+		if (dragging) onwidth(fits(was + sign * (event.clientX - from)));
 	}
 
 	function up(event: PointerEvent) {
@@ -53,7 +64,7 @@
 	}
 
 	function keydown(event: KeyboardEvent) {
-		const step = event.shiftKey ? FAR : STEP;
+		const step = (event.shiftKey ? FAR : STEP) * towards(event.currentTarget as Element);
 		const to = {
 			ArrowLeft: width - step,
 			ArrowRight: width + step,
@@ -80,7 +91,8 @@
 	aria-valuemax={max}
 	tabindex="0"
 	class={[
-		'relative z-10 -ml-1 hidden w-2 shrink-0 cursor-col-resize touch-none transition-colors md:block',
+		'relative z-10 hidden w-2 shrink-0 cursor-col-resize touch-none transition-colors md:block',
+		after ? '-me-1' : '-ms-1',
 		dragging ? 'bg-accent/60' : 'hover:bg-accent/40 focus-visible:bg-accent/60'
 	]}
 	onpointerdown={down}

@@ -127,11 +127,15 @@
 	}
 
 	const steps = { ArrowUp: 'up', ArrowDown: 'down', ArrowRight: 'in', ArrowLeft: 'out' } as const;
+	/** In a page written from right to left, a folder's insides lie to the left. */
+	const mirrored: Record<string, string> = { ArrowRight: 'ArrowLeft', ArrowLeft: 'ArrowRight' };
 
 	async function keydown(event: KeyboardEvent) {
-		if (!event.altKey || !(event.key in steps)) return;
+		const rtl = (event.currentTarget as Element).closest('[dir]')?.getAttribute('dir') === 'rtl';
+		const key = rtl ? (mirrored[event.key] ?? event.key) : event.key;
+		if (!event.altKey || !(key in steps)) return;
 		event.preventDefault();
-		if (reader.nudge(node.id, steps[event.key as keyof typeof steps])) {
+		if (reader.nudge(node.id, steps[key as keyof typeof steps])) {
 			// The row may have been drawn again in another folder.
 			await tick();
 			document.querySelector<HTMLElement>(`[data-node="${node.id}"]`)?.focus();
@@ -156,12 +160,12 @@
 <li>
 	<div
 		class={[
-			'group relative flex items-center gap-0.5 pr-1 select-none',
+			'group relative flex items-center gap-0.5 pe-1 select-none',
 			chosen ? 'bg-chosen' : 'hover:bg-hover',
 			(landing === 'inside' || landing === 'group') && 'ring-2 ring-accent-line ring-inset',
 			drag.id === node.id && 'opacity-40'
 		]}
-		style:padding-left="{0.4 + depth * 0.85}rem"
+		style:padding-inline-start="{0.4 + depth * 0.85}rem"
 		role="presentation"
 		draggable={!renaming}
 		ondragstart={dragstart}
@@ -207,7 +211,7 @@
 			<button
 				type="button"
 				data-node={node.id}
-				class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 py-1 text-left text-sm"
+				class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 py-1 text-start text-sm"
 				aria-current={chosen ? 'page' : undefined}
 				title={m.nav.moveHint}
 				onclick={pick}
@@ -216,7 +220,7 @@
 				{#if node.kind === 'folder'}
 					<Icon name="folder" class="size-4 text-soft" />
 				{/if}
-				<span class={['truncate', count > 0 && 'font-semibold']}>{label}</span>
+				<bdi class={['truncate', count > 0 && 'font-semibold']}>{label}</bdi>
 				{#if feed?.waiting}
 					<span class="text-soft" title={m.nav.waiting}>
 						<Icon name="clock" class="size-3.5" />
@@ -234,13 +238,13 @@
 						<span class="sr-only">{m.nav.fetchFailed(feed.error)}</span>
 					</span>
 				{/if}
-				<span class="ml-auto pl-1"><Counter {count} /></span>
+				<span class="ms-auto ps-1"><Counter {count} /></span>
 			</button>
 		{/if}
 
 		{#if node.kind === 'folder' && !renaming}
 			<div class="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-				<Menu class="plain size-6" align="right" label={m.nav.folderActions(node.title)}>
+				<Menu class="plain size-6" align="end" label={m.nav.folderActions(node.title)}>
 					{#snippet button()}
 						<Icon name="more" />
 					{/snippet}
@@ -267,7 +271,7 @@
 			</div>
 		{:else if node.kind === 'feed' && feed && !renaming}
 			<div class="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-				<Menu class="plain size-6" align="right" label={m.nav.feedActions(feed.title)}>
+				<Menu class="plain size-6" align="end" label={m.nav.feedActions(feed.title)}>
 					{#snippet button()}
 						<Icon name="more" />
 					{/snippet}

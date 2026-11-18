@@ -7,6 +7,7 @@ import { catalogs, language, languageNames, languages, m } from './index.ts';
 import { formatNumber, plural } from './intl.ts';
 import {
 	browserLanguage,
+	directionOf,
 	startLanguage,
 	formatLocale,
 	formatLocaleFor,
@@ -139,6 +140,18 @@ describe('picking the language', () => {
 		expect(formatLocale()).toBe('en');
 		useLanguage('tlh');
 		expect(language()).toBe('de');
+	});
+
+	it('says which way a language is written, and turns the page with it', () => {
+		expect(['ar-EG', 'he', 'fa-IR', 'de', 'ja'].map(directionOf)).toEqual([
+			'rtl',
+			'rtl',
+			'rtl',
+			'ltr',
+			'ltr'
+		]);
+		useLanguage('de');
+		expect(document.documentElement.dir).toBe('ltr');
 	});
 
 	it('falls back to English', () => {

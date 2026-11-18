@@ -238,7 +238,7 @@
 	}
 
 	.menu-item {
-		@apply flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-hover;
+		@apply flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-start text-sm text-ink hover:bg-hover;
 	}
 
 	/* The text of an article: what the server's cleaner lets through, set for reading. */
@@ -263,17 +263,17 @@
 		border-radius: 0.375rem;
 	}
 	.article-body :where(blockquote) {
-		border-left: 3px solid var(--color-line);
-		padding-left: 1em;
+		border-inline-start: 3px solid var(--color-line);
+		padding-inline-start: 1em;
 		color: var(--color-soft);
 	}
 	.article-body :where(ul) {
 		list-style: disc;
-		padding-left: 1.4em;
+		padding-inline-start: 1.4em;
 	}
 	.article-body :where(ol) {
 		list-style: decimal;
-		padding-left: 1.4em;
+		padding-inline-start: 1.4em;
 	}
 	.article-body :where(pre, code) {
 		font-family: var(--font-mono);

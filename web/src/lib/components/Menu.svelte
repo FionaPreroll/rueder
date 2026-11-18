@@ -9,7 +9,7 @@
 		label,
 		title,
 		class: look = 'tool',
-		align = 'left',
+		align = 'start',
 		button,
 		children
 	}: {
@@ -17,7 +17,7 @@
 		label?: string;
 		title?: string;
 		class?: string;
-		align?: 'left' | 'right';
+		align?: 'start' | 'end';
 		button: Snippet;
 		children: Snippet;
 	} = $props();
@@ -90,7 +90,7 @@
 			bind:this={menu}
 			class={[
 				'absolute z-30 max-w-[calc(100vw-1rem)] min-w-52 rounded-md border border-line bg-paper py-1 shadow-lg',
-				align === 'right' ? 'right-0' : 'left-0',
+				align === 'end' ? 'inset-e-0' : 'inset-s-0',
 				above ? 'bottom-full mb-1' : 'mt-1'
 			]}
 			style:translate={shift ? `${shift}px 0` : undefined}

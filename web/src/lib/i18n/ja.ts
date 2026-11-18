@@ -479,6 +479,8 @@ const ja: Messages = {
 		},
 		density: 'リストの密度',
 		densities: { compact: 'コンパクト', comfortable: 'ゆったり' },
+		sidebarSide: 'サイドバー',
+		sidebarSides: { start: '左', end: '右' },
 		textSize: '記事の文字サイズ（このデバイス）',
 		textSizes: { small: '小', medium: '中', large: '大' },
 		readingFont: '記事のフォント',

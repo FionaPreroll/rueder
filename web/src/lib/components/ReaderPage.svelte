@@ -343,7 +343,9 @@
 		onstatus={() => (dialog = 'status')}
 	/>
 
-	<div class="relative flex min-h-0 flex-1">
+	<div
+		class={['relative flex min-h-0 flex-1', settings.sidebarSide === 'end' && 'flex-row-reverse']}
+	>
 		{#if sidebarOpen}
 			<!-- On a phone a tap beside the sidebar closes it. -->
 			<button
@@ -353,7 +355,10 @@
 				onclick={() => (sidebarOpen = false)}
 			></button>
 			<aside
-				class="w-[var(--sidebar-width)] shrink-0 border-r border-line max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:w-[min(20rem,85vw)] max-md:shadow-xl"
+				class={[
+					'w-[var(--sidebar-width)] shrink-0 border-line max-md:absolute max-md:inset-y-0 max-md:z-30 max-md:w-[min(20rem,85vw)] max-md:shadow-xl',
+					settings.sidebarSide === 'end' ? 'border-s max-md:inset-e-0' : 'border-e max-md:inset-s-0'
+				]}
 				style:--sidebar-width="{settings.sidebarWidth}px"
 			>
 				<Sidebar
@@ -368,6 +373,7 @@
 				max={widths.sidebar.max}
 				fallback={widths.sidebar.default}
 				label={m.nav.resizeSidebar}
+				after={settings.sidebarSide === 'end'}
 				onwidth={(width) => (settings.sidebarWidth = width)}
 			/>
 		{/if}
@@ -400,7 +406,7 @@
 						<!-- 60% is LIST_SHARE; it holds before the page is laid out and the
 							width beside the sidebar is known. -->
 						<div
-							class="flex w-[var(--list-width)] max-w-[60%] shrink-0 flex-col border-r border-line"
+							class="flex w-[var(--list-width)] max-w-[60%] shrink-0 flex-col border-e border-line"
 							style:--list-width="{list.width}px"
 							data-pane="list"
 						>

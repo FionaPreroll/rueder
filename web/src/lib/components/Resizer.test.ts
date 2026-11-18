@@ -70,6 +70,38 @@ describe('Resizer', () => {
 		expect(onwidth).not.toHaveBeenCalled();
 	});
 
+	it('grows the pane towards the bar when the pane lies on the right', async () => {
+		// The sidebar at the end: the pane comes after the bar.
+		const onwidth = vi.fn();
+		render(Resizer, {
+			width: 300,
+			min: 200,
+			max: 500,
+			fallback: 288,
+			label: 'After',
+			after: true,
+			onwidth
+		});
+		const after = screen.getByRole('separator', { name: 'After' });
+		await drag(after, 60);
+		expect(onwidth).toHaveBeenLastCalledWith(240);
+		after.focus();
+		await userEvent.keyboard('{ArrowLeft}');
+		expect(onwidth).toHaveBeenLastCalledWith(316);
+		// In a page written from right to left the pane before the bar lies on the right,
+		// and one after it on the left.
+		document.documentElement.dir = 'rtl';
+		try {
+			const { bar, onwidth: before } = setup();
+			await drag(bar, 60);
+			expect(before).toHaveBeenLastCalledWith(240);
+			await drag(after, 60);
+			expect(onwidth).toHaveBeenLastCalledWith(360);
+		} finally {
+			document.documentElement.dir = 'ltr';
+		}
+	});
+
 	it('puts the width back on a double click', async () => {
 		const { bar, onwidth } = setup(500);
 		await userEvent.dblClick(bar);

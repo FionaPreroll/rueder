@@ -268,6 +268,10 @@ const primary = (tag) =>
 		.split(/[-_]/)[0]
 		.toLowerCase();
 
+/** Which way a language is written, by its primary subtag, as on the page. */
+export const directionOf = (language) =>
+	['ar', 'fa', 'he', 'ur'].includes(primary(language)) ? 'rtl' : 'ltr';
+
 /** The code of the language for a tag such as "de-AT" or "pt-PT", whatever its region; "en" for any other. */
 export const codeFor = (language) =>
 	Object.keys(catalogs).find((code) => primary(code) === primary(language)) ?? 'en';

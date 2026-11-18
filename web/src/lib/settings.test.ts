@@ -22,6 +22,7 @@ describe('parse', () => {
 			accent: 'pink',
 			density: 'comfortable',
 			view: 'expanded',
+			sidebarSide: 'end',
 			language: 'de',
 			markOnScroll: false,
 			teasers: 'yes',
@@ -33,11 +34,13 @@ describe('parse', () => {
 			theme: 'dark',
 			density: 'comfortable',
 			view: 'expanded',
+			sidebarSide: 'end',
 			language: 'de',
 			markOnScroll: false,
 			keys: { next: 'l' }
 		});
 		expect(parse(JSON.stringify({ keys: 'j' })).keys).toEqual({});
+		expect(parse(JSON.stringify({ sidebarSide: 'left' })).sidebarSide).toBe('start');
 	});
 });
 

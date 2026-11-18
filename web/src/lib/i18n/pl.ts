@@ -489,6 +489,8 @@ const pl: Messages = {
 		},
 		density: 'Gęstość listy',
 		densities: { compact: 'Zwarta', comfortable: 'Wygodna' },
+		sidebarSide: 'Pasek boczny',
+		sidebarSides: { start: 'Po lewej', end: 'Po prawej' },
 		textSize: 'Rozmiar tekstu artykułów, na tym urządzeniu',
 		textSizes: { small: 'Mały', medium: 'Średni', large: 'Duży' },
 		readingFont: 'Czcionka artykułów',

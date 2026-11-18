@@ -64,7 +64,7 @@
 	<button
 		type="button"
 		class={[
-			'flex w-full cursor-pointer items-center gap-2 px-3 py-1 text-left text-sm',
+			'flex w-full cursor-pointer items-center gap-2 px-3 py-1 text-start text-sm',
 			chosen ? 'bg-chosen' : 'hover:bg-hover'
 		]}
 		aria-current={chosen ? 'page' : undefined}
@@ -72,7 +72,7 @@
 	>
 		<Icon name={icon} class="size-4 text-soft" />
 		<span class={['truncate', unread > 0 && 'font-semibold']}>{label}</span>
-		<span class="ml-auto pl-1">
+		<span class="ms-auto ps-1">
 			<Counter count={unread} />
 			<Counter count={quiet} quiet />
 		</span>
@@ -109,7 +109,7 @@
 			</h2>
 			<button
 				type="button"
-				class="plain ml-auto size-6"
+				class="plain ms-auto size-6"
 				aria-label={m.nav.newFolder}
 				title={m.nav.newFolder}
 				onclick={() => (naming = true)}

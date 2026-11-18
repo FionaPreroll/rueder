@@ -80,12 +80,12 @@
 		>
 			<button
 				type="button"
-				class="block w-full cursor-pointer text-left"
+				class="block w-full cursor-pointer text-start"
 				onclick={() => reader.select(lead)}
 			>
 				{#if leadPicture}{@render picture(leadPicture, true)}{/if}
 				<!-- Room for the star, which sits over the text where there is no picture. -->
-				<span class="block p-4 pr-12">
+				<span class="block p-4 pe-12">
 					{@render byline(lead)}
 					<span
 						class={[
@@ -100,7 +100,7 @@
 					{/if}
 				</span>
 			</button>
-			<span class="absolute top-2 right-2">{@render star(lead)}</span>
+			<span class="absolute inset-e-2 top-2">{@render star(lead)}</span>
 		</article>
 	{/if}
 
@@ -117,12 +117,12 @@
 			>
 				<button
 					type="button"
-					class="flex h-full w-full cursor-pointer flex-col justify-start text-left"
+					class="flex h-full w-full cursor-pointer flex-col justify-start text-start"
 					onclick={() => reader.select(article)}
 				>
 					{@render picture(article.thumbnail, false)}
 					<!-- Without a picture the star sits over the text, so the text keeps clear of it. -->
-					<span class={['block p-3', !article.thumbnail && 'pr-12']}>
+					<span class={['block p-3', !article.thumbnail && 'pe-12']}>
 						{@render byline(article)}
 						<span
 							class={[
@@ -138,13 +138,14 @@
 									'mt-1 block text-sm text-soft',
 									article.thumbnail ? 'line-clamp-2' : 'line-clamp-6'
 								]}
+								dir="auto"
 							>
 								{article.teaser}
 							</span>
 						{/if}
 					</span>
 				</button>
-				<span class="absolute top-2 right-2">{@render star(article)}</span>
+				<span class="absolute inset-e-2 top-2">{@render star(article)}</span>
 			</li>
 		{/each}
 	</ul>

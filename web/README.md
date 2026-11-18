@@ -143,6 +143,9 @@ README too.
   `m.settings.title`. A new language is a new catalog with the shape of `en.ts`,
   its code in `locale.svelte.ts`, its mails in `server/templates/mail/` with its
   line in `server/src/mail.rs`, and its texts of the app.
+- Spacing, borders and alignment are logical (`ms-`, `pe-`, `inset-s-`, `border-s`,
+  `text-start`), never left or right, so that a language written from right to left
+  (`directionOf` in `src/lib/i18n/locale.svelte.ts`) mirrors the page by itself.
 - Colors are named for what they are for (`bg-paper`, `text-soft`, `border-line`)
   and defined in `src/routes/layout.css`; components use no fixed grays, so themes
   and accent colors only repaint variables.

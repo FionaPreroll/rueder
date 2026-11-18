@@ -77,10 +77,10 @@
 >
 	<!-- On a phone the title has a line of its own, so the buttons below stay where they are
 		whatever its length, and at its end the button to mark as read, where it is seen. -->
-	<div class="flex min-w-0 items-center gap-2 max-sm:w-full sm:mr-auto">
+	<div class="flex min-w-0 items-center gap-2 max-sm:w-full sm:me-auto">
 		<h1 class="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h1>
 		<div class="sm:hidden">
-			<Menu label={m.toolbar.markMenu} title={m.toolbar.markAllRead} align="right">
+			<Menu label={m.toolbar.markMenu} title={m.toolbar.markAllRead} align="end">
 				{#snippet button()}
 					<Icon name="check" />
 				{/snippet}
@@ -124,7 +124,7 @@
 	<div class="flex max-sm:hidden">
 		<button
 			type="button"
-			class={['tool', reader.can.markOlder && 'rounded-r-none']}
+			class={['tool', reader.can.markOlder && 'rounded-e-none']}
 			title={m.toolbar.markAllRead}
 			onclick={() => reader.markAllRead()}
 		>
@@ -132,11 +132,7 @@
 			<span class="hidden lg:inline">{m.toolbar.markAllRead}</span>
 		</button>
 		{#if reader.can.markOlder}
-			<Menu
-				class="tool rounded-l-none border-l-0 px-1.5"
-				align="right"
-				label={m.toolbar.markOptions}
-			>
+			<Menu class="tool rounded-s-none border-s-0 px-1.5" align="end" label={m.toolbar.markOptions}>
 				{#snippet button()}
 					<Icon name="down" class="size-3.5" />
 				{/snippet}
@@ -172,7 +168,7 @@
 	<div class="flex max-sm:hidden" role="group" aria-label={m.settings.view}>
 		<button
 			type="button"
-			class="tool rounded-r-none"
+			class="tool rounded-e-none"
 			aria-pressed={settings.view === 'expanded'}
 			aria-label={m.toolbar.expandedView}
 			title={m.toolbar.expandedView}
@@ -182,7 +178,7 @@
 		</button>
 		<button
 			type="button"
-			class="tool rounded-none border-l-0"
+			class="tool rounded-none border-s-0"
 			aria-pressed={settings.view === 'list'}
 			aria-label={m.toolbar.listView}
 			title={m.toolbar.listView}
@@ -192,7 +188,7 @@
 		</button>
 		<button
 			type="button"
-			class="tool rounded-none border-l-0"
+			class="tool rounded-none border-s-0"
 			aria-pressed={settings.view === 'split'}
 			aria-label={m.toolbar.splitView}
 			title={m.toolbar.splitView}
@@ -202,7 +198,7 @@
 		</button>
 		<button
 			type="button"
-			class="tool rounded-l-none border-l-0"
+			class="tool rounded-s-none border-s-0"
 			aria-pressed={settings.view === 'magazine'}
 			aria-label={m.toolbar.magazineView}
 			title={m.toolbar.magazineView}
@@ -212,10 +208,10 @@
 		</button>
 	</div>
 
-	<div class="flex max-sm:ml-auto">
+	<div class="flex max-sm:ms-auto">
 		<button
 			type="button"
-			class="tool rounded-r-none"
+			class="tool rounded-e-none"
 			aria-label={m.toolbar.previous}
 			title={m.toolbar.previous}
 			onclick={() => reader.step(-1)}
@@ -224,7 +220,7 @@
 		</button>
 		<button
 			type="button"
-			class="tool rounded-l-none border-l-0"
+			class="tool rounded-s-none border-s-0"
 			aria-label={m.toolbar.next}
 			title={m.toolbar.next}
 			onclick={() => reader.step(1)}

@@ -5,7 +5,7 @@
 
 import { serverAddress } from './address.js';
 import { legalLinks } from './legal.js';
-import { codeFor, textsFor } from './texts.js';
+import { codeFor, directionOf, textsFor } from './texts.js';
 
 const t = textsFor(navigator.language);
 const call = (method, options = {}) => window.Capacitor.nativePromise('Rueder', method, options);
@@ -22,6 +22,7 @@ function say(text, problem = false) {
 
 function fill(state) {
 	document.documentElement.lang = codeFor(navigator.language);
+	document.documentElement.dir = directionOf(codeFor(navigator.language));
 	$('intro').textContent = t.intro;
 	$('address-label').textContent = t.address;
 	$('open').textContent = t.open;

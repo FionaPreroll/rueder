@@ -14,6 +14,8 @@ export const textSizes = ['small', 'medium', 'large'] as const;
 export const readingFonts = ['sans', 'serif'] as const;
 export const counterStyles = ['parens', 'badge'] as const;
 export const views = ['list', 'expanded', 'split', 'magazine'] as const;
+/** Where the sidebar is: at the start of the reading direction (left in English), or at its end. */
+export const sidebarSides = ['start', 'end'] as const;
 
 /**
  * How wide the sidebar and, in the view of three panes, the list may be, in
@@ -49,6 +51,7 @@ export interface Settings {
 	counters: (typeof counterStyles)[number];
 	language: 'auto' | Language;
 	view: (typeof views)[number];
+	sidebarSide: (typeof sidebarSides)[number];
 	/** How wide the sidebar is, in pixels (see `widths`). */
 	sidebarWidth: number;
 	/** How wide the list is beside an article, in pixels (see `widths`). */
@@ -70,6 +73,7 @@ export const defaults: Settings = {
 	counters: 'parens',
 	language: 'auto',
 	view: 'list',
+	sidebarSide: 'start',
 	sidebarWidth: widths.sidebar.default,
 	listWidth: widths.list.default,
 	markOnScroll: true,
@@ -131,7 +135,8 @@ const choices: { [K in keyof Settings]?: readonly string[] } = {
 	readingFont: readingFonts,
 	counters: counterStyles,
 	language: ['auto', ...languages],
-	view: views
+	view: views,
+	sidebarSide: sidebarSides
 };
 
 /** The stored settings, with the default for everything missing or not understood. */
