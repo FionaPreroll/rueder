@@ -492,6 +492,8 @@ const it: Messages = {
 		},
 		density: 'Densità dell’elenco',
 		densities: { compact: 'Compatta', comfortable: 'Comoda' },
+		sidebarSide: 'Barra laterale',
+		sidebarSides: { start: 'A sinistra', end: 'A destra' },
 		textSize: 'Dimensione del testo degli articoli, su questo dispositivo',
 		textSizes: { small: 'Piccola', medium: 'Media', large: 'Grande' },
 		readingFont: 'Carattere degli articoli',

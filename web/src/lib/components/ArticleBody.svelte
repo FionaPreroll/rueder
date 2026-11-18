@@ -156,7 +156,7 @@
 				{/if}
 			</p>
 		{:else}
-			<div class="article-body mt-3">{@html article.html}</div>
+			<div class="article-body mt-3" dir="auto">{@html article.html}</div>
 		{/if}
 		{#if article.enclosures.length > 0}
 			<Enclosures enclosures={article.enclosures} />
@@ -259,7 +259,7 @@
 				{m.list.openOriginal}
 			</a>
 		{/if}
-		<span class="ml-auto flex gap-1">
+		<span class="ms-auto flex gap-1">
 			{#each article.tags as tag (tag)}
 				<Badge kind="tag">{tag}</Badge>
 			{/each}
@@ -267,7 +267,7 @@
 		{#if reader.can.reportContent}
 			<Menu
 				class="inline-flex cursor-pointer items-center hover:text-ink"
-				align="right"
+				align="end"
 				label={m.list.articleActions}
 			>
 				{#snippet button()}

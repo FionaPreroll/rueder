@@ -172,7 +172,7 @@
 							</span>
 							<button
 								type="button"
-								class="tool ml-auto"
+								class="tool ms-auto"
 								aria-label={texts.revokeName(app.name)}
 								onclick={() => revoke(app.id)}
 							>
@@ -197,7 +197,7 @@
 				<li class="flex flex-col gap-1 rounded border border-line p-3">
 					<button
 						type="button"
-						class="cursor-pointer text-left font-semibold hover:underline"
+						class="cursor-pointer text-start font-semibold hover:underline"
 						onclick={() => choose(app)}
 					>
 						{app.name}
@@ -219,7 +219,7 @@
 			<li class="flex flex-col gap-1 rounded border border-line p-3">
 				<button
 					type="button"
-					class="cursor-pointer text-left font-semibold hover:underline"
+					class="cursor-pointer text-start font-semibold hover:underline"
 					onclick={() => choose('other')}
 				>
 					{texts.other}

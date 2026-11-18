@@ -468,6 +468,8 @@ const ko: Messages = {
 		},
 		density: '목록 간격',
 		densities: { compact: '촘촘하게', comfortable: '넉넉하게' },
+		sidebarSide: '사이드바',
+		sidebarSides: { start: '왼쪽', end: '오른쪽' },
 		textSize: '글자 크기 (이 기기)',
 		textSizes: { small: '작게', medium: '보통', large: '크게' },
 		readingFont: '글 서체',

@@ -481,6 +481,8 @@ const tr: Messages = {
 		},
 		density: 'Listenin yoğunluğu',
 		densities: { compact: 'Sıkı', comfortable: 'Rahat' },
+		sidebarSide: 'Kenar çubuğu',
+		sidebarSides: { start: 'Solda', end: 'Sağda' },
 		textSize: 'Makale metninin boyutu, bu cihazda',
 		textSizes: { small: 'Küçük', medium: 'Orta', large: 'Büyük' },
 		readingFont: 'Makalelerin yazı tipi',

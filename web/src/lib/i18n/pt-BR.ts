@@ -489,6 +489,8 @@ const ptBR: Messages = {
 		},
 		density: 'Densidade da lista',
 		densities: { compact: 'Compacta', comfortable: 'Confortável' },
+		sidebarSide: 'Barra lateral',
+		sidebarSides: { start: 'À esquerda', end: 'À direita' },
 		textSize: 'Tamanho do texto dos artigos, neste dispositivo',
 		textSizes: { small: 'Pequeno', medium: 'Médio', large: 'Grande' },
 		readingFont: 'Fonte dos artigos',

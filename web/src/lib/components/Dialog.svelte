@@ -61,7 +61,7 @@
 			<h2 class="text-lg font-semibold">{title}</h2>
 			<button
 				type="button"
-				class="plain ml-auto size-8"
+				class="plain ms-auto size-8"
 				aria-label={m.common.close}
 				title={m.common.close}
 				onclick={onclose}

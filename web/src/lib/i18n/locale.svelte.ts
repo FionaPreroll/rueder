@@ -23,8 +23,15 @@ export type Language = (typeof languages)[number];
 const isLanguage = (code: string): code is Language =>
 	(languages as readonly string[]).includes(code);
 
+/** The languages written from right to left, by their primary subtag. */
+const RIGHT_TO_LEFT = ['ar', 'fa', 'he', 'ur'];
+
 /** The language of a BCP 47 tag without its region: "de" for "de-AT". */
 const primary = (tag: string) => tag.split(/[-_]/)[0].toLowerCase();
+
+/** Which way a language is written. */
+export const directionOf = (tag: string): 'ltr' | 'rtl' =>
+	RIGHT_TO_LEFT.includes(primary(tag)) ? 'rtl' : 'ltr';
 
 /** The language rueder speaks for a tag such as "de-AT" or "pt-PT", if any. */
 const spoken = (tag: string) => languages.find((code) => primary(code) === primary(tag));
@@ -76,5 +83,7 @@ export const formatLocale = () => current.formatLocale;
 /** Takes the language the account picked (a code such as "de"), or the browser's for null. */
 export function useLanguage(picked: string | null | undefined) {
 	Object.assign(current, settle(picked));
-	if (typeof document !== 'undefined') document.documentElement.lang = current.language;
+	if (typeof document === 'undefined') return;
+	document.documentElement.lang = current.language;
+	document.documentElement.dir = directionOf(current.language);
 }

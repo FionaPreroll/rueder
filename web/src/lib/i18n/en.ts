@@ -487,6 +487,9 @@ const en = {
 		},
 		density: 'Density of the list',
 		densities: { compact: 'Compact', comfortable: 'Comfortable' },
+		/** Where the sidebar is: at the start of the reading direction or at its end, named as they look in this language. */
+		sidebarSide: 'Sidebar',
+		sidebarSides: { start: 'Left', end: 'Right' },
 		textSize: 'Text size of articles, on this device',
 		textSizes: { small: 'Small', medium: 'Medium', large: 'Large' },
 		readingFont: 'Font of articles',

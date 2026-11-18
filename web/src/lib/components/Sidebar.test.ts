@@ -154,6 +154,16 @@ describe('Sidebar', () => {
 		const before = reader.tree;
 		await userEvent.keyboard('{ArrowUp}');
 		expect(reader.tree).toBe(before);
+		// In a page written from right to left, a folder's insides lie to the left.
+		document.documentElement.dir = 'rtl';
+		try {
+			await userEvent.keyboard('{Alt>}{ArrowLeft}{/Alt}');
+			expect(ancestorIds(reader.tree, 'feed-nebenan')).toEqual(['folder-fun']);
+			await userEvent.keyboard('{Alt>}{ArrowRight}{/Alt}');
+			expect(ancestorIds(reader.tree, 'feed-nebenan')).toEqual([]);
+		} finally {
+			document.documentElement.dir = 'ltr';
+		}
 	});
 
 	it('makes, renames and removes folders', async () => {

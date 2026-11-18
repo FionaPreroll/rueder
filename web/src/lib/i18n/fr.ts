@@ -495,6 +495,8 @@ const fr: Messages = {
 		},
 		density: 'Densité de la liste',
 		densities: { compact: 'Compacte', comfortable: 'Aérée' },
+		sidebarSide: 'Barre latérale',
+		sidebarSides: { start: 'À gauche', end: 'À droite' },
 		textSize: 'Taille du texte des articles, sur cet appareil',
 		textSizes: { small: 'Petite', medium: 'Moyenne', large: 'Grande' },
 		readingFont: 'Police des articles',

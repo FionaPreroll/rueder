@@ -133,13 +133,13 @@
 	<div class="relative mx-auto w-full max-w-xl">
 		<label>
 			<span class="sr-only">{m.nav.search}</span>
-			<span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-soft">
+			<span class="pointer-events-none absolute inset-y-0 inset-s-2.5 flex items-center text-soft">
 				<Icon name="search" />
 			</span>
 			<input
 				bind:this={field}
 				type="search"
-				class="h-8 w-full rounded border-line py-0 pr-8 pl-8 text-sm"
+				class="h-8 w-full rounded border-line py-0 ps-8 pe-8 text-sm"
 				placeholder={m.nav.searchPlaceholder}
 				value={reader.query}
 				oninput={(event) => search(event.currentTarget.value)}
@@ -149,7 +149,7 @@
 		{#if reader.query}
 			<button
 				type="button"
-				class="plain absolute top-1/2 right-0.5 size-7 -translate-y-1/2 text-soft"
+				class="plain absolute inset-e-0.5 top-1/2 size-7 -translate-y-1/2 text-soft"
 				aria-label={m.nav.clearSearch}
 				title={m.nav.clearSearch}
 				onclick={clear}
@@ -193,7 +193,7 @@
 	{#if reader.account}
 		<Menu
 			class="plain h-9 gap-1.5 px-2 text-sm"
-			align="right"
+			align="end"
 			label={m.nav.account(reader.account.name)}
 			title={m.nav.account(reader.account.name)}
 		>

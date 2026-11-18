@@ -12,6 +12,7 @@
 		densities,
 		readingFonts,
 		settings,
+		sidebarSides,
 		textSizes,
 		themes,
 		views
@@ -69,7 +70,7 @@
 					<div class="mt-1.5 flex flex-wrap gap-2">
 						{#each accents as accent (accent)}
 							<label
-								class="flex cursor-pointer items-center gap-1.5 rounded border border-line py-1 pr-3 pl-1.5 text-sm hover:bg-hover has-checked:border-accent-line has-checked:bg-chosen has-focus-visible:outline-2 has-focus-visible:outline-link"
+								class="flex cursor-pointer items-center gap-1.5 rounded border border-line py-1 ps-1.5 pe-3 text-sm hover:bg-hover has-checked:border-accent-line has-checked:bg-chosen has-focus-visible:outline-2 has-focus-visible:outline-link"
 							>
 								<input type="radio" class="sr-only" bind:group={settings.accent} value={accent} />
 								<span class="size-4 rounded-full" style:background-color={swatch[accent]}></span>
@@ -82,6 +83,11 @@
 					label={m.settings.density}
 					options={densities.map((value) => ({ value, label: m.settings.densities[value] }))}
 					bind:value={settings.density}
+				/>
+				<Choice
+					label={m.settings.sidebarSide}
+					options={sidebarSides.map((value) => ({ value, label: m.settings.sidebarSides[value] }))}
+					bind:value={settings.sidebarSide}
 				/>
 				<Choice
 					label={m.settings.counters}

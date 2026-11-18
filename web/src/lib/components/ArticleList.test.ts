@@ -28,8 +28,11 @@ describe('the list view', () => {
 		expect(screen.getAllByRole('listitem')).toHaveLength(Math.min(40, reader.list.length));
 		const unread = reader.list.find((article) => !reader.isRead(article))!;
 		const read = reader.list.find((article) => reader.isRead(article))!;
-		expect(within(row(unread.id)).getByText(unread.title)).toHaveClass('font-semibold');
-		expect(within(row(read.id)).getByText(read.title)).not.toHaveClass('font-semibold');
+		// The title runs in its own direction, in a bdi inside the line that carries the look.
+		const title = (article: typeof unread) => within(row(article.id)).getByText(article.title);
+		expect(title(unread).tagName).toBe('BDI');
+		expect(title(unread).parentElement).toHaveClass('font-semibold');
+		expect(title(read).parentElement).not.toHaveClass('font-semibold');
 		expect(row(unread.id)).toHaveTextContent(unread.teaser.slice(0, 30));
 		// In a single feed the rows do not repeat its name.
 		expect(row(unread.id)).not.toHaveTextContent('Tagesbote');

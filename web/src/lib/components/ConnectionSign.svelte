@@ -29,7 +29,7 @@
 <!-- Live, so that a screen reader says it when it comes and goes. -->
 <div class="flex shrink-0 items-center" aria-live="polite">
 	{#if text}
-		<Menu class="plain h-8 gap-1.5 px-2 text-sm text-warn" label={text} title={text} align="right">
+		<Menu class="plain h-8 gap-1.5 px-2 text-sm text-warn" label={text} title={text} align="end">
 			{#snippet button()}
 				{#if connection.state === 'unreachable'}
 					<Icon name="warning" />

@@ -213,7 +213,7 @@
 							{#if removing !== key.id}
 								<button
 									type="button"
-									class="tool ml-auto"
+									class="tool ms-auto"
 									aria-label={texts.removeName(key.name)}
 									disabled={working}
 									onclick={() => open(key.id)}

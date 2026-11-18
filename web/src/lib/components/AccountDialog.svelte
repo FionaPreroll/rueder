@@ -100,7 +100,7 @@
 				<p class="text-soft">{m.settings.reports.intro}</p>
 				<div>
 					<p class="text-soft">{m.settings.reports.what}</p>
-					<ul class="mt-1 list-disc pl-5 text-soft">
+					<ul class="mt-1 list-disc ps-5 text-soft">
 						{#each m.settings.reports.holds as line (line)}
 							<li>{line}</li>
 						{/each}

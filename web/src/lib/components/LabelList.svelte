@@ -49,11 +49,11 @@
 	};
 </script>
 
-<div class="mt-4 flex items-center pr-3 pb-1">
+<div class="mt-4 flex items-center pe-3 pb-1">
 	<h2 class="min-w-0 flex-1">
 		<button
 			type="button"
-			class="flex w-full cursor-pointer items-center gap-1 py-0.5 pl-1.5 text-left text-xs font-semibold tracking-wide text-soft uppercase hover:text-ink"
+			class="flex w-full cursor-pointer items-center gap-1 py-0.5 ps-1.5 text-start text-xs font-semibold tracking-wide text-soft uppercase hover:text-ink"
 			aria-expanded={!closed}
 			aria-label={closed ? m.labels.show : m.labels.hide}
 			title={closed ? m.labels.show : m.labels.hide}
@@ -68,7 +68,7 @@
 	</h2>
 	<button
 		type="button"
-		class="plain ml-auto size-6"
+		class="plain ms-auto size-6"
 		aria-label={m.labels.add}
 		title={m.labels.add}
 		onclick={() => {
@@ -102,7 +102,7 @@
 	<ul>
 		{#each reader.labels as label (label.id)}
 			{@const chosen = sameStream(reader.stream, { kind: 'label', id: label.id })}
-			<li class={['group flex items-center pr-1', chosen ? 'bg-chosen' : 'hover:bg-hover']}>
+			<li class={['group flex items-center pe-1', chosen ? 'bg-chosen' : 'hover:bg-hover']}>
 				{#if renaming === label.id}
 					<form class="min-w-0 flex-1 px-3 py-0.5" onsubmit={(event) => rename(event, label)}>
 						<input
@@ -117,7 +117,7 @@
 				{:else}
 					<button
 						type="button"
-						class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1 text-left text-sm"
+						class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1 text-start text-sm"
 						aria-current={chosen ? 'page' : undefined}
 						onclick={() => pick(label)}
 					>
@@ -126,7 +126,7 @@
 						<span class="truncate">{label.title}</span>
 					</button>
 					<div class="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-						<Menu class="plain size-6" align="right" label={m.labels.actions(label.title)}>
+						<Menu class="plain size-6" align="end" label={m.labels.actions(label.title)}>
 							{#snippet button()}
 								<Icon name="more" />
 							{/snippet}

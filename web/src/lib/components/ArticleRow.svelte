@@ -98,8 +98,8 @@
 {#snippet when(right = false)}
 	<time
 		class={[
-			'min-w-[6ch] shrink-0 text-right text-xs text-soft tabular-nums',
-			right && 'max-sm:order-3 max-sm:ml-auto'
+			'min-w-[6ch] shrink-0 text-end text-xs text-soft tabular-nums',
+			right && 'max-sm:order-3 max-sm:ms-auto'
 		]}
 		datetime={new Date(article.publishedAt).toISOString()}
 		title={formatFull(article.publishedAt)}
@@ -111,15 +111,15 @@
 {#if stacked}
 	<div
 		class={[
-			'flex items-start border-l-3 pr-3',
-			reader.cursor === article.id ? 'border-l-accent-line' : 'border-l-transparent',
+			'flex items-start border-s-3 pe-3',
+			reader.cursor === article.id ? 'border-s-accent-line' : 'border-s-transparent',
 			opened ? 'bg-chosen' : read ? 'bg-panel' : 'bg-paper'
 		]}
 	>
 		{@render star()}
 		<button
 			type="button"
-			class="min-w-0 flex-1 cursor-pointer py-(--row-pad) text-left text-sm"
+			class="min-w-0 flex-1 cursor-pointer py-(--row-pad) text-start text-sm"
 			aria-current={opened ? 'true' : undefined}
 			onclick={() => reader.select(article)}
 		>
@@ -146,22 +146,22 @@
 				</span>
 			{/if}
 			{#if settings.teasers && article.teaser}
-				<span class="mt-0.5 line-clamp-2 text-xs text-soft">{article.teaser}</span>
+				<span class="mt-0.5 line-clamp-2 text-xs text-soft" dir="auto">{article.teaser}</span>
 			{/if}
 		</button>
 	</div>
 {:else}
 	<div
 		class={[
-			'flex items-center border-l-3 pr-3',
-			reader.cursor === article.id ? 'border-l-accent-line' : 'border-l-transparent',
+			'flex items-center border-s-3 pe-3',
+			reader.cursor === article.id ? 'border-s-accent-line' : 'border-s-transparent',
 			read ? 'bg-panel' : 'bg-paper'
 		]}
 	>
 		{@render star()}
 		<button
 			type="button"
-			class="flex min-w-0 flex-1 cursor-pointer items-baseline gap-3 py-(--row-pad) text-left text-sm max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-0.5"
+			class="flex min-w-0 flex-1 cursor-pointer items-baseline gap-3 py-(--row-pad) text-start text-sm max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-0.5"
 			aria-expanded={reader.open === article.id}
 			onclick={() => reader.toggleOpen(article)}
 		>
@@ -182,7 +182,7 @@
 					><Marked text={article.title} query={reader.query} /></span
 				>
 				{#if settings.teasers}
-					<span class="text-soft"> – {article.teaser}</span>
+					<span class="text-soft"> – <bdi>{article.teaser}</bdi></span>
 				{/if}
 			</span>
 			{@render dots(true)}

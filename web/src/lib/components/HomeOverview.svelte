@@ -36,7 +36,7 @@
 							title={m.home.showFeed(feed.title)}
 							onclick={() => reader.show({ kind: 'feed', id: feed.id })}
 						>
-							{feed.title}
+							<bdi>{feed.title}</bdi>
 						</button>
 						<span class="font-normal text-soft">({formatNumber(count)})</span>
 					</h2>
@@ -45,12 +45,12 @@
 							<li>
 								<button
 									type="button"
-									class="reach cursor-pointer text-left text-sm font-semibold wrap-anywhere hover:underline"
+									class="reach cursor-pointer text-start text-sm font-semibold wrap-anywhere hover:underline"
 									onclick={() => open(article)}
 								>
-									{article.title}
+									<bdi>{article.title}</bdi>
 								</button>
-								<p class="line-clamp-2 text-sm text-soft">{article.teaser}</p>
+								<p class="line-clamp-2 text-sm text-soft" dir="auto">{article.teaser}</p>
 							</li>
 						{/each}
 					</ul>
@@ -70,10 +70,10 @@
 						<li>
 							<button
 								type="button"
-								class="reach cursor-pointer text-left wrap-anywhere text-ink hover:underline"
+								class="reach cursor-pointer text-start wrap-anywhere text-ink hover:underline"
 								onclick={() => open(article)}
 							>
-								{article.title}
+								<bdi>{article.title}</bdi>
 							</button>
 							<p class="text-xs text-soft">
 								{reader.feeds[article.feedId]?.title} · {formatAgo(article.publishedAt, now)}
@@ -98,7 +98,7 @@
 										class="reach cursor-pointer text-link hover:underline"
 										onclick={() => reader.show({ kind: 'feed', id: feed.id })}
 									>
-										{feed.title}
+										<bdi>{feed.title}</bdi>
 									</button>
 									<span class="block text-xs text-soft">{m.nav.fetchFailed(feed.error ?? '')}</span>
 								</span>
@@ -110,7 +110,7 @@
 
 			<section class="rounded-md border border-line bg-panel p-3">
 				<h2 class="font-semibold">{m.home.tips}</h2>
-				<ul class="mt-2 list-disc space-y-1.5 pl-4 text-soft">
+				<ul class="mt-2 list-disc space-y-1.5 ps-4 text-soft">
 					<li>{m.home.tipKeys}</li>
 					<li>{m.home.tipDrag}</li>
 					<li>{m.home.tipFilters}</li>
