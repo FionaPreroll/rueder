@@ -1,0 +1,14 @@
+Atur kata sandi baru untuk rueder
+Halo {name},
+
+seseorang, kemungkinan besar Anda, meminta kata sandi baru untuk akun
+"{name}" di {site}. Untuk mengaturnya, buka tautan ini dalam {minutes} menit:
+
+{link}
+
+Tautan ini hanya berlaku sekali. Mengatur kata sandi baru akan mengeluarkan
+akun dari semua browser dan perangkat. Jika akun memakai verifikasi dua
+langkah, saat masuk kodenya tetap diminta.
+
+Jika itu bukan Anda, abaikan email ini: tanpa tautan itu tidak ada yang
+berubah.

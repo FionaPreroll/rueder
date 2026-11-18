@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">服务器与更新</string>
+    <string name="shortcut_setup_long">服务器与应用更新</string>
+    <string name="update_title">rueder 的新版本</string>
+    <string name="update_text">构建 %1$d 已发布（%2$s MB）。现在下载并安装吗？</string>
+    <string name="update_metered">你正在使用可能产生费用的网络。</string>
+    <string name="update_download">下载</string>
+    <string name="update_later">稍后</string>
+    <string name="back_again">再按一次返回键即可关闭 rueder</string>
+</resources>

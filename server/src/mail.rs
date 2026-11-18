@@ -64,12 +64,21 @@ pub enum Language {
     Nl,
     Ko,
     Tr,
+    #[serde(rename = "zh-Hans")]
+    #[sqlx(rename = "zh-Hans")]
+    ZhHans,
+    #[serde(rename = "zh-Hant")]
+    #[sqlx(rename = "zh-Hant")]
+    ZhHant,
+    Id,
+    Ar,
+    Ru,
 }
 
 impl Language {
     /// Every language, in the order of the enum, which `in_every_language!`
     /// follows.
-    pub const ALL: [Language; 11] = [
+    pub const ALL: [Language; 16] = [
         Language::En,
         Language::De,
         Language::Es,
@@ -81,6 +90,11 @@ impl Language {
         Language::Nl,
         Language::Ko,
         Language::Tr,
+        Language::ZhHans,
+        Language::ZhHant,
+        Language::Id,
+        Language::Ar,
+        Language::Ru,
     ];
 
     /// Its code, as the page and the database name it.
@@ -97,6 +111,11 @@ impl Language {
             Self::Nl => "nl",
             Self::Ko => "ko",
             Self::Tr => "tr",
+            Self::ZhHans => "zh-Hans",
+            Self::ZhHant => "zh-Hant",
+            Self::Id => "id",
+            Self::Ar => "ar",
+            Self::Ru => "ru",
         }
     }
 }
@@ -117,6 +136,11 @@ macro_rules! in_every_language {
             include_str!(concat!("../templates/mail/nl/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/ko/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/tr/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/zh-Hans/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/zh-Hant/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/id/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/ar/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/ru/", $mail, ".txt")),
         ]
     };
 }

@@ -63,7 +63,12 @@ describe('catalogs', () => {
 			{ code: 'pl', name: 'Polski' },
 			{ code: 'nl', name: 'Nederlands' },
 			{ code: 'ko', name: '한국어' },
-			{ code: 'tr', name: 'Türkçe' }
+			{ code: 'tr', name: 'Türkçe' },
+			{ code: 'zh-Hans', name: '简体中文' },
+			{ code: 'zh-Hant', name: '繁體中文' },
+			{ code: 'id', name: 'Bahasa Indonesia' },
+			{ code: 'ar', name: 'العربية' },
+			{ code: 'ru', name: 'Русский' }
 		]);
 	});
 
@@ -97,6 +102,29 @@ describe('catalogs', () => {
 			'22 artykuły',
 			'25 artykułów'
 		]);
+		// Arabic says one and two with the noun alone, 3 to 10 in the plural,
+		// 11 to 99 in the singular with tanwin, 100 in the singular.
+		useLanguage('ar');
+		expect([1, 2, 3, 11, 100].map((count) => m.articles(count))).toEqual([
+			'مقالة واحدة',
+			'مقالتان',
+			'3 مقالات',
+			'11 مقالة',
+			'100 مقالة'
+		]);
+		expect(m.invites.goodFor(11)).toBe('الرابط صالح لمدة 11 يومًا.');
+		expect(m.invites.goodFor(100)).toBe('الرابط صالح لمدة 100 يوم.');
+		// Russian counts in three forms, by the last digits.
+		useLanguage('ru');
+		expect([1, 3, 5, 11, 21, 22, 25].map((count) => m.articles(count))).toEqual([
+			'1 статья',
+			'3 статьи',
+			'5 статей',
+			'11 статей',
+			'21 статья',
+			'22 статьи',
+			'25 статей'
+		]);
 	});
 
 	it('describe every shortcut once', () => {
@@ -120,12 +148,24 @@ describe('picking the language', () => {
 		expect(pickLanguage(['pt'])).toBe('pt-BR');
 	});
 
+	it('takes Chinese by its script, else by Taiwan, Hong Kong and Macao', () => {
+		const picked = (tag: string) => pickLanguage([tag]);
+		expect(['zh-TW', 'zh-HK', 'zh_mo', 'zh-Hant', 'zh-Hant-SG'].map(picked)).toEqual(
+			Array(5).fill('zh-Hant')
+		);
+		expect(['zh', 'zh-CN', 'zh-SG', 'zh-Hans', 'zh-Hans-HK'].map(picked)).toEqual(
+			Array(5).fill('zh-Hans')
+		);
+	});
+
 	it('formats for the browser’s own variant of the language', () => {
 		expect(formatLocaleFor('de', ['en-US', 'de-at'])).toBe('de-AT');
 		expect(formatLocaleFor('de', ['en-US'])).toBe('de');
 		expect(formatLocaleFor('en', ['en_US'])).toBe('en');
 		expect(formatLocaleFor('pt-BR', ['pt-PT'])).toBe('pt-PT');
 		expect(formatLocaleFor('pt-BR', ['en'])).toBe('pt-BR');
+		expect(formatLocaleFor('zh-Hant', ['zh-CN', 'zh-HK'])).toBe('zh-HK');
+		expect(formatLocaleFor('zh-Hans', ['zh-TW'])).toBe('zh-Hans');
 	});
 
 	it('follows the browser until something is picked', () => {
@@ -150,6 +190,8 @@ describe('picking the language', () => {
 			'ltr',
 			'ltr'
 		]);
+		useLanguage('ar');
+		expect(document.documentElement.dir).toBe('rtl');
 		useLanguage('de');
 		expect(document.documentElement.dir).toBe('ltr');
 	});

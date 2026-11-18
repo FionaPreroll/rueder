@@ -1,6 +1,8 @@
 // The language of the page: what was picked in the settings,
 // else the first of the browser's languages that rueder speaks, else English.
 // A language counts whatever its region: a browser in pt-PT gets pt-BR.
+// Chinese goes by its script instead: traditional characters where the tag
+// names them or Taiwan, Hong Kong or Macao, else simplified ones.
 // Numbers and dates are formatted for the browser's own locale when it is a
 // variant of that language (de-AT, en-GB), else for the language itself.
 
@@ -16,7 +18,12 @@ export const languages = [
 	'pl',
 	'nl',
 	'ko',
-	'tr'
+	'tr',
+	'zh-Hans',
+	'zh-Hant',
+	'id',
+	'ar',
+	'ru'
 ] as const;
 export type Language = (typeof languages)[number];
 
@@ -33,8 +40,19 @@ const primary = (tag: string) => tag.split(/[-_]/)[0].toLowerCase();
 export const directionOf = (tag: string): 'ltr' | 'rtl' =>
 	RIGHT_TO_LEFT.includes(primary(tag)) ? 'rtl' : 'ltr';
 
-/** The language rueder speaks for a tag such as "de-AT" or "pt-PT", if any. */
-const spoken = (tag: string) => languages.find((code) => primary(code) === primary(tag));
+/** The script of Chinese for a tag such as "zh-TW", "zh-Hant-HK" or "zh-CN". */
+function chinese(tag: string): Language {
+	const subtags = tag.toLowerCase().split(/[-_]/).slice(1);
+	const script = subtags.find((subtag) => subtag.length === 4);
+	const traditional = script
+		? script === 'hant'
+		: subtags.some((subtag) => ['tw', 'hk', 'mo'].includes(subtag));
+	return traditional ? 'zh-Hant' : 'zh-Hans';
+}
+
+/** The language rueder speaks for a tag such as "de-AT", "pt-PT" or "zh-TW", if any. */
+const spoken = (tag: string) =>
+	primary(tag) === 'zh' ? chinese(tag) : languages.find((code) => primary(code) === primary(tag));
 
 const browserLocales = () =>
 	typeof navigator === 'undefined' ? [] : [...(navigator.languages ?? [navigator.language])];
@@ -50,7 +68,7 @@ export function pickLanguage(locales: readonly string[]): Language | null {
 
 /** The locale numbers and dates are formatted in for `language`: the browser's own variant of it, if any. */
 export function formatLocaleFor(language: Language, locales: readonly string[]) {
-	const variant = locales.find((l) => primary(l) === primary(language));
+	const variant = locales.find((l) => spoken(l) === language);
 	if (!variant) return language;
 	try {
 		return Intl.getCanonicalLocales(variant)[0];

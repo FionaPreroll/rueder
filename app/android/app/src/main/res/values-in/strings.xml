@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">Server dan pembaruan</string>
+    <string name="shortcut_setup_long">Server dan pembaruan aplikasi</string>
+    <string name="update_title">Versi baru rueder</string>
+    <string name="update_text">Build %1$d sudah tersedia (%2$s MB). Unduh dan pasang sekarang?</string>
+    <string name="update_metered">Anda memakai jaringan yang mungkin berbayar.</string>
+    <string name="update_download">Unduh</string>
+    <string name="update_later">Nanti</string>
+    <string name="back_again">Tekan kembali sekali lagi untuk menutup rueder</string>
+</resources>

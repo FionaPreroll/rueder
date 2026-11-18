@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">الخادم والتحديثات</string>
+    <string name="shortcut_setup_long">الخادم وتحديثات التطبيق</string>
+    <string name="update_title">إصدار جديد من rueder</string>
+    <string name="update_text">صدر البناء %1$d، وحجمه %2$s ميغابايت. هل يتم تنزيله وتثبيته الآن؟</string>
+    <string name="update_metered">الاتصال الحالي عبر شبكة قد تكون مدفوعة.</string>
+    <string name="update_download">تنزيل</string>
+    <string name="update_later">لاحقًا</string>
+    <string name="back_again">الضغط على «رجوع» مرة أخرى يغلق rueder</string>
+</resources>

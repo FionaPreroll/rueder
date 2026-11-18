@@ -260,7 +260,138 @@ const tr = {
 	terms: 'Kullanım koşulları'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl, ko, tr };
+const zhHans = {
+	intro: '你的订阅源阅读器，在你自己的服务器上。',
+	address: '你的 rueder 的地址',
+	open: '打开',
+	opening: '正在打开…',
+	updates: '每次启动时检查此应用的新版本',
+	updatesHint:
+		'应用会在每次启动时询问 GitHub 一次是否有更新的构建，并提供安装。不会发送任何其他内容。',
+	lookNow: '立即检查',
+	looking: '正在检查…',
+	current: '这是最新版本。',
+	lookFailed: 'GitHub 没有响应。请稍后再试。',
+	unreachable: (address) => `${address} 没有响应。请检查地址，或在联网后重试。`,
+	empty: '请输入你的 rueder 的地址。',
+	invalid: '这不是网页的地址。',
+	insecure: '地址必须以 https:// 开头：rueder 只通过安全连接登录。',
+	version: (name, build) => `应用版本 ${name}（构建 ${build}）`,
+	imprint: '法律声明',
+	privacy: '隐私政策',
+	terms: '使用条款'
+};
+
+const zhHant = {
+	intro: '你的訂閱源閱讀器，在你自己的伺服器上。',
+	address: '你的 rueder 的網址',
+	open: '開啟',
+	opening: '正在開啟⋯',
+	updates: '每次啟動時檢查這個 App 的新版本',
+	updatesHint:
+		'App 會在每次啟動時詢問 GitHub 一次是否有更新的建置，並提供安裝。不會傳送任何其他內容。',
+	lookNow: '立即檢查',
+	looking: '正在檢查⋯',
+	current: '這是最新版本。',
+	lookFailed: 'GitHub 沒有回應。請稍後再試。',
+	unreachable: (address) => `${address} 沒有回應。請檢查網址，或在連上網路後再試一次。`,
+	empty: '請輸入你的 rueder 的網址。',
+	invalid: '這不是網頁的網址。',
+	insecure: '網址必須以 https:// 開頭：rueder 只透過安全連線登入。',
+	version: (name, build) => `App 版本 ${name}（建置 ${build}）`,
+	imprint: '法律聲明',
+	privacy: '隱私權政策',
+	terms: '使用條款'
+};
+
+const id = {
+	intro: 'Pembaca feed Anda, di server Anda sendiri.',
+	address: 'Alamat rueder Anda',
+	open: 'Buka',
+	opening: 'Membuka …',
+	updates: 'Cari versi baru aplikasi ini setiap kali dibuka',
+	updatesHint:
+		'Aplikasi akan bertanya sekali ke GitHub setiap kali dibuka apakah ada build yang lebih baru, lalu menawarkan untuk memasangnya. Tidak ada yang lain yang dikirim.',
+	lookNow: 'Cari sekarang',
+	looking: 'Mencari …',
+	current: 'Ini versi terbaru.',
+	lookFailed: 'GitHub tidak menjawab. Coba lagi nanti.',
+	unreachable: (address) =>
+		`${address} tidak menjawab. Periksa alamatnya, atau coba lagi setelah Anda online.`,
+	empty: 'Masukkan alamat rueder Anda.',
+	invalid: 'Ini bukan alamat halaman web.',
+	insecure: 'Alamat harus diawali dengan https://: rueder hanya masuk melalui koneksi yang aman.',
+	version: (name, build) => `Versi aplikasi ${name} (build ${build})`,
+	imprint: 'Informasi hukum',
+	privacy: 'Kebijakan privasi',
+	terms: 'Ketentuan penggunaan'
+};
+
+const ar = {
+	intro: 'قارئ خلاصاتك، على خادمك الخاص.',
+	address: 'عنوان rueder الخاص بك',
+	open: 'فتح',
+	opening: 'جارٍ الفتح…',
+	updates: 'البحث عن إصدار جديد من هذا التطبيق عند كل تشغيل',
+	updatesHint:
+		'يسأل التطبيق عندئذٍ GitHub مرة واحدة عند كل تشغيل عن وجود بناء أحدث، ويعرض تثبيته. لا يُرسل أي شيء آخر.',
+	lookNow: 'البحث الآن',
+	looking: 'جارٍ البحث…',
+	current: 'هذا هو أحدث إصدار.',
+	lookFailed: 'لم يستجب GitHub. يُرجى المحاولة لاحقًا.',
+	unreachable: (address) =>
+		`لا يستجيب \u2068${address}\u2069. يُرجى التحقق من العنوان، أو المحاولة مجددًا عند الاتصال بالإنترنت.`,
+	empty: 'يُرجى إدخال عنوان rueder الخاص بك.',
+	invalid: 'هذا ليس عنوان صفحة ويب.',
+	insecure:
+		'يجب أن يبدأ العنوان بـ \u2068https://\u2069: لا يسجّل rueder الدخول إلا عبر اتصال آمن.',
+	version: (name, build) => `إصدار التطبيق ${name} (البناء ${build})`,
+	imprint: 'بيانات الناشر',
+	privacy: 'سياسة الخصوصية',
+	terms: 'شروط الاستخدام'
+};
+
+const ru = {
+	intro: 'Ваша программа для чтения лент, на вашем собственном сервере.',
+	address: 'Адрес вашего rueder',
+	open: 'Открыть',
+	opening: 'Открываем…',
+	updates: 'Проверять новую версию приложения при каждом запуске',
+	updatesHint:
+		'Тогда приложение при каждом запуске один раз спрашивает GitHub, нет ли более новой сборки, и предлагает её установить. Больше ничего не отправляется.',
+	lookNow: 'Проверить сейчас',
+	looking: 'Проверяем…',
+	current: 'Это самая новая версия.',
+	lookFailed: 'GitHub не ответил. Попробуйте позже.',
+	unreachable: (address) =>
+		`${address} не отвечает. Проверьте адрес или попробуйте снова, когда будете в сети.`,
+	empty: 'Введите адрес вашего rueder.',
+	invalid: 'Это не адрес веб-страницы.',
+	insecure: 'Адрес должен начинаться с https://: rueder входит только по защищённому соединению.',
+	version: (name, build) => `Версия приложения ${name} (сборка ${build})`,
+	imprint: 'Выходные данные',
+	privacy: 'Политика конфиденциальности',
+	terms: 'Условия использования'
+};
+
+export const catalogs = {
+	en,
+	de,
+	es,
+	fr,
+	'pt-BR': ptBR,
+	it,
+	ja,
+	pl,
+	nl,
+	ko,
+	tr,
+	'zh-Hans': zhHans,
+	'zh-Hant': zhHant,
+	id,
+	ar,
+	ru
+};
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>
@@ -272,9 +403,21 @@ const primary = (tag) =>
 export const directionOf = (language) =>
 	['ar', 'fa', 'he', 'ur'].includes(primary(language)) ? 'rtl' : 'ltr';
 
-/** The code of the language for a tag such as "de-AT" or "pt-PT", whatever its region; "en" for any other. */
+/** Chinese by its script, else in traditional characters for Taiwan, Hong Kong and Macao, as on the page. */
+const chinese = (tag) => {
+	const subtags = String(tag).toLowerCase().split(/[-_]/).slice(1);
+	const script = subtags.find((subtag) => subtag.length === 4);
+	const traditional = script
+		? script === 'hant'
+		: subtags.some((subtag) => ['tw', 'hk', 'mo'].includes(subtag));
+	return traditional ? 'zh-Hant' : 'zh-Hans';
+};
+
+/** The code of the language for a tag such as "de-AT", "pt-PT" or "zh-TW", whatever its region; "en" for any other. */
 export const codeFor = (language) =>
-	Object.keys(catalogs).find((code) => primary(code) === primary(language)) ?? 'en';
+	primary(language) === 'zh'
+		? chinese(language)
+		: (Object.keys(catalogs).find((code) => primary(code) === primary(language)) ?? 'en');
 
 /** The texts for a language such as "de-DE"; English for any other. */
 export const textsFor = (language) => catalogs[codeFor(language)];
