@@ -327,6 +327,30 @@ const id = {
 	terms: 'Ketentuan penggunaan'
 };
 
+const ar = {
+	intro: 'قارئ خلاصاتك، على خادمك الخاص.',
+	address: 'عنوان rueder الخاص بك',
+	open: 'فتح',
+	opening: 'جارٍ الفتح…',
+	updates: 'البحث عن إصدار جديد من هذا التطبيق عند كل تشغيل',
+	updatesHint:
+		'يسأل التطبيق عندئذٍ GitHub مرة واحدة عند كل تشغيل عن وجود بناء أحدث، ويعرض تثبيته. لا يُرسل أي شيء آخر.',
+	lookNow: 'البحث الآن',
+	looking: 'جارٍ البحث…',
+	current: 'هذا هو أحدث إصدار.',
+	lookFailed: 'لم يستجب GitHub. يُرجى المحاولة لاحقًا.',
+	unreachable: (address) =>
+		`لا يستجيب \u2068${address}\u2069. يُرجى التحقق من العنوان، أو المحاولة مجددًا عند الاتصال بالإنترنت.`,
+	empty: 'يُرجى إدخال عنوان rueder الخاص بك.',
+	invalid: 'هذا ليس عنوان صفحة ويب.',
+	insecure:
+		'يجب أن يبدأ العنوان بـ \u2068https://\u2069: لا يسجّل rueder الدخول إلا عبر اتصال آمن.',
+	version: (name, build) => `إصدار التطبيق ${name} (البناء ${build})`,
+	imprint: 'بيانات الناشر',
+	privacy: 'سياسة الخصوصية',
+	terms: 'شروط الاستخدام'
+};
+
 export const catalogs = {
 	en,
 	de,
@@ -341,7 +365,8 @@ export const catalogs = {
 	tr,
 	'zh-Hans': zhHans,
 	'zh-Hant': zhHant,
-	id
+	id,
+	ar
 };
 
 /** The language of a tag such as "de-AT" without its region: "de". */

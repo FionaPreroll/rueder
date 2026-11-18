@@ -66,7 +66,8 @@ describe('catalogs', () => {
 			{ code: 'tr', name: 'Türkçe' },
 			{ code: 'zh-Hans', name: '简体中文' },
 			{ code: 'zh-Hant', name: '繁體中文' },
-			{ code: 'id', name: 'Bahasa Indonesia' }
+			{ code: 'id', name: 'Bahasa Indonesia' },
+			{ code: 'ar', name: 'العربية' }
 		]);
 	});
 
@@ -100,6 +101,18 @@ describe('catalogs', () => {
 			'22 artykuły',
 			'25 artykułów'
 		]);
+		// Arabic says one and two with the noun alone, 3 to 10 in the plural,
+		// 11 to 99 in the singular with tanwin, 100 in the singular.
+		useLanguage('ar');
+		expect([1, 2, 3, 11, 100].map((count) => m.articles(count))).toEqual([
+			'مقالة واحدة',
+			'مقالتان',
+			'3 مقالات',
+			'11 مقالة',
+			'100 مقالة'
+		]);
+		expect(m.invites.goodFor(11)).toBe('الرابط صالح لمدة 11 يومًا.');
+		expect(m.invites.goodFor(100)).toBe('الرابط صالح لمدة 100 يوم.');
 	});
 
 	it('describe every shortcut once', () => {
@@ -165,6 +178,8 @@ describe('picking the language', () => {
 			'ltr',
 			'ltr'
 		]);
+		useLanguage('ar');
+		expect(document.documentElement.dir).toBe('rtl');
 		useLanguage('de');
 		expect(document.documentElement.dir).toBe('ltr');
 	});
