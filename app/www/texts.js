@@ -282,6 +282,28 @@ const zhHans = {
 	terms: '使用条款'
 };
 
+const zhHant = {
+	intro: '你的訂閱源閱讀器，在你自己的伺服器上。',
+	address: '你的 rueder 的網址',
+	open: '開啟',
+	opening: '正在開啟⋯',
+	updates: '每次啟動時檢查這個 App 的新版本',
+	updatesHint:
+		'App 會在每次啟動時詢問 GitHub 一次是否有更新的建置，並提供安裝。不會傳送任何其他內容。',
+	lookNow: '立即檢查',
+	looking: '正在檢查⋯',
+	current: '這是最新版本。',
+	lookFailed: 'GitHub 沒有回應。請稍後再試。',
+	unreachable: (address) => `${address} 沒有回應。請檢查網址，或在連上網路後再試一次。`,
+	empty: '請輸入你的 rueder 的網址。',
+	invalid: '這不是網頁的網址。',
+	insecure: '網址必須以 https:// 開頭：rueder 只透過安全連線登入。',
+	version: (name, build) => `App 版本 ${name}（建置 ${build}）`,
+	imprint: '法律聲明',
+	privacy: '隱私權政策',
+	terms: '使用條款'
+};
+
 export const catalogs = {
 	en,
 	de,
@@ -294,7 +316,8 @@ export const catalogs = {
 	nl,
 	ko,
 	tr,
-	'zh-Hans': zhHans
+	'zh-Hans': zhHans,
+	'zh-Hant': zhHant
 };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
@@ -307,9 +330,21 @@ const primary = (tag) =>
 export const directionOf = (language) =>
 	['ar', 'fa', 'he', 'ur'].includes(primary(language)) ? 'rtl' : 'ltr';
 
-/** The code of the language for a tag such as "de-AT" or "pt-PT", whatever its region; "en" for any other. */
+/** Chinese by its script, else in traditional characters for Taiwan, Hong Kong and Macao, as on the page. */
+const chinese = (tag) => {
+	const subtags = String(tag).toLowerCase().split(/[-_]/).slice(1);
+	const script = subtags.find((subtag) => subtag.length === 4);
+	const traditional = script
+		? script === 'hant'
+		: subtags.some((subtag) => ['tw', 'hk', 'mo'].includes(subtag));
+	return traditional ? 'zh-Hant' : 'zh-Hans';
+};
+
+/** The code of the language for a tag such as "de-AT", "pt-PT" or "zh-TW", whatever its region; "en" for any other. */
 export const codeFor = (language) =>
-	Object.keys(catalogs).find((code) => primary(code) === primary(language)) ?? 'en';
+	primary(language) === 'zh'
+		? chinese(language)
+		: (Object.keys(catalogs).find((code) => primary(code) === primary(language)) ?? 'en');
 
 /** The texts for a language such as "de-DE"; English for any other. */
 export const textsFor = (language) => catalogs[codeFor(language)];

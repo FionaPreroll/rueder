@@ -55,6 +55,9 @@ test('has every text in English and in German', () => {
 	assert.equal(textsFor(undefined), catalogs.en);
 	assert.equal(codeFor('DE_ch'), 'de');
 	assert.equal(codeFor('tlh'), 'en');
+	assert.equal(codeFor('zh-TW'), 'zh-Hant');
+	assert.equal(codeFor('zh-Hans-HK'), 'zh-Hans');
+	assert.equal(codeFor('zh'), 'zh-Hans');
 	assert.equal(directionOf('ar-EG'), 'rtl');
 	assert.equal(directionOf('de'), 'ltr');
 });

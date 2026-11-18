@@ -67,12 +67,15 @@ pub enum Language {
     #[serde(rename = "zh-Hans")]
     #[sqlx(rename = "zh-Hans")]
     ZhHans,
+    #[serde(rename = "zh-Hant")]
+    #[sqlx(rename = "zh-Hant")]
+    ZhHant,
 }
 
 impl Language {
     /// Every language, in the order of the enum, which `in_every_language!`
     /// follows.
-    pub const ALL: [Language; 12] = [
+    pub const ALL: [Language; 13] = [
         Language::En,
         Language::De,
         Language::Es,
@@ -85,6 +88,7 @@ impl Language {
         Language::Ko,
         Language::Tr,
         Language::ZhHans,
+        Language::ZhHant,
     ];
 
     /// Its code, as the page and the database name it.
@@ -102,6 +106,7 @@ impl Language {
             Self::Ko => "ko",
             Self::Tr => "tr",
             Self::ZhHans => "zh-Hans",
+            Self::ZhHant => "zh-Hant",
         }
     }
 }
@@ -123,6 +128,7 @@ macro_rules! in_every_language {
             include_str!(concat!("../templates/mail/ko/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/tr/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/zh-Hans/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/zh-Hant/", $mail, ".txt")),
         ]
     };
 }

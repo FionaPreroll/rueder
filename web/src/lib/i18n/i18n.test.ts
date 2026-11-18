@@ -64,7 +64,8 @@ describe('catalogs', () => {
 			{ code: 'nl', name: 'Nederlands' },
 			{ code: 'ko', name: '한국어' },
 			{ code: 'tr', name: 'Türkçe' },
-			{ code: 'zh-Hans', name: '简体中文' }
+			{ code: 'zh-Hans', name: '简体中文' },
+			{ code: 'zh-Hant', name: '繁體中文' }
 		]);
 	});
 
@@ -121,12 +122,24 @@ describe('picking the language', () => {
 		expect(pickLanguage(['pt'])).toBe('pt-BR');
 	});
 
+	it('takes Chinese by its script, else by Taiwan, Hong Kong and Macao', () => {
+		const picked = (tag: string) => pickLanguage([tag]);
+		expect(['zh-TW', 'zh-HK', 'zh_mo', 'zh-Hant', 'zh-Hant-SG'].map(picked)).toEqual(
+			Array(5).fill('zh-Hant')
+		);
+		expect(['zh', 'zh-CN', 'zh-SG', 'zh-Hans', 'zh-Hans-HK'].map(picked)).toEqual(
+			Array(5).fill('zh-Hans')
+		);
+	});
+
 	it('formats for the browser’s own variant of the language', () => {
 		expect(formatLocaleFor('de', ['en-US', 'de-at'])).toBe('de-AT');
 		expect(formatLocaleFor('de', ['en-US'])).toBe('de');
 		expect(formatLocaleFor('en', ['en_US'])).toBe('en');
 		expect(formatLocaleFor('pt-BR', ['pt-PT'])).toBe('pt-PT');
 		expect(formatLocaleFor('pt-BR', ['en'])).toBe('pt-BR');
+		expect(formatLocaleFor('zh-Hant', ['zh-CN', 'zh-HK'])).toBe('zh-HK');
+		expect(formatLocaleFor('zh-Hans', ['zh-TW'])).toBe('zh-Hans');
 	});
 
 	it('follows the browser until something is picked', () => {

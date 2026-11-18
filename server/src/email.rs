@@ -125,16 +125,27 @@ pub async fn mode(conn: &mut PgConnection) -> anyhow::Result<Mode> {
 }
 
 /// The language of the mail for the one a page names, such as "de-AT" or
-/// "pt-PT": the same language whatever its region, else English.
+/// "pt-PT": the same language whatever its region, else English. Chinese goes
+/// by its script, as on the page: traditional characters where the tag names
+/// them or Taiwan, Hong Kong or Macao, else simplified ones.
 pub fn language(text: Option<&str>) -> Language {
-    let primary = |code: &str| {
-        let code = code.trim().split(['-', '_']).next().unwrap_or_default();
-        code.to_ascii_lowercase()
-    };
-    let asked = primary(text.unwrap_or_default());
+    let tag = text.unwrap_or_default().trim().to_ascii_lowercase();
+    let mut subtags = tag.split(['-', '_']);
+    let asked = subtags.next().unwrap_or_default();
+    if asked == "zh" {
+        let traditional = match subtags.clone().find(|subtag| subtag.len() == 4) {
+            Some(script) => script == "hant",
+            None => subtags.any(|subtag| matches!(subtag, "tw" | "hk" | "mo")),
+        };
+        return if traditional {
+            Language::ZhHant
+        } else {
+            Language::ZhHans
+        };
+    }
     Language::ALL
         .into_iter()
-        .find(|language| primary(language.code()) == asked)
+        .find(|language| language.code().split('-').next() == Some(asked))
         .unwrap_or_default()
 }
 
@@ -658,6 +669,12 @@ mod tests {
         assert_eq!(language(Some("en")), Language::En);
         assert_eq!(language(Some("fr-CA")), Language::Fr);
         assert_eq!(language(Some("tlh")), Language::En);
+        assert_eq!(language(Some("zh-TW")), Language::ZhHant);
+        assert_eq!(language(Some("zh_hk")), Language::ZhHant);
+        assert_eq!(language(Some("zh-Hant")), Language::ZhHant);
+        assert_eq!(language(Some("zh-Hans-HK")), Language::ZhHans);
+        assert_eq!(language(Some("zh-CN")), Language::ZhHans);
+        assert_eq!(language(Some("zh")), Language::ZhHans);
         assert_eq!(language(Some("pt-PT")), Language::PtBr);
         assert_eq!(language(None), Language::En);
     }
