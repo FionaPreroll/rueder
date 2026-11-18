@@ -49,12 +49,12 @@ test('has every text in English and in German', () => {
 	}
 	assert.equal(textsFor('de-AT'), catalogs.de);
 	assert.equal(textsFor('fr-CA'), catalogs.fr);
-	assert.equal(textsFor('ko'), catalogs.en);
+	assert.equal(textsFor('tlh'), catalogs.en);
 	assert.equal(textsFor('pt-PT'), catalogs['pt-BR']);
 	assert.equal(codeFor('pt'), 'pt-BR');
 	assert.equal(textsFor(undefined), catalogs.en);
 	assert.equal(codeFor('DE_ch'), 'de');
-	assert.equal(codeFor('ko'), 'en');
+	assert.equal(codeFor('tlh'), 'en');
 });
 
 test('links to the legal texts the server names, and to nothing else', () => {

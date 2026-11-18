@@ -166,7 +166,101 @@ const ja = {
 	terms: '利用規約'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja };
+const pl = {
+	intro: 'Twój czytnik kanałów, na twoim własnym serwerze.',
+	address: 'Adres twojego rueder',
+	open: 'Otwórz',
+	opening: 'Otwieranie …',
+	updates: 'Szukaj nowej wersji tej aplikacji przy każdym uruchomieniu',
+	updatesHint:
+		'Aplikacja pyta wtedy GitHub raz przy każdym uruchomieniu, czy jest nowsza kompilacja, i proponuje ją zainstalować. Nic innego nie jest wysyłane.',
+	lookNow: 'Szukaj teraz',
+	looking: 'Szukanie …',
+	current: 'To najnowsza wersja.',
+	lookFailed: 'GitHub nie odpowiedział. Spróbuj ponownie później.',
+	unreachable: (address) =>
+		`${address} nie odpowiada. Sprawdź adres albo spróbuj ponownie, gdy będziesz online.`,
+	empty: 'Wpisz adres swojego rueder.',
+	invalid: 'To nie jest adres strony internetowej.',
+	insecure: 'Adres musi zaczynać się od https://: rueder loguje tylko przez bezpieczne połączenie.',
+	version: (name, build) => `Wersja aplikacji ${name} (kompilacja ${build})`,
+	imprint: 'Informacje prawne',
+	privacy: 'Polityka prywatności',
+	terms: 'Regulamin'
+};
+
+const nl = {
+	intro: 'Je feedlezer, op je eigen server.',
+	address: 'Adres van je rueder',
+	open: 'Openen',
+	opening: 'Openen …',
+	updates: 'Bij elke start zoeken naar een nieuwe versie van deze app',
+	updatesHint:
+		'De app vraagt GitHub dan bij elke start één keer of er een nieuwere build is, en biedt aan die te installeren. Er wordt verder niets verstuurd.',
+	lookNow: 'Nu zoeken',
+	looking: 'Zoeken …',
+	current: 'Dit is de nieuwste versie.',
+	lookFailed: 'GitHub antwoordde niet. Probeer het later opnieuw.',
+	unreachable: (address) =>
+		`${address} antwoordt niet. Controleer het adres, of probeer het opnieuw zodra je online bent.`,
+	empty: 'Voer het adres van je rueder in.',
+	invalid: 'Dit is geen adres van een webpagina.',
+	insecure:
+		'Het adres moet met https:// beginnen: rueder logt alleen in via een beveiligde verbinding.',
+	version: (name, build) => `App-versie ${name} (build ${build})`,
+	imprint: 'Colofon',
+	privacy: 'Privacybeleid',
+	terms: 'Gebruiksvoorwaarden'
+};
+
+const ko = {
+	intro: '내 서버에서 돌아가는 나만의 피드 리더입니다.',
+	address: '내 rueder 주소',
+	open: '열기',
+	opening: '여는 중 …',
+	updates: '시작할 때마다 이 앱의 새 버전 찾기',
+	updatesHint:
+		'앱이 시작할 때마다 한 번 GitHub에 새 빌드가 있는지 묻고, 있으면 설치를 제안합니다. 그 밖에는 아무것도 보내지 않습니다.',
+	lookNow: '지금 찾기',
+	looking: '찾는 중 …',
+	current: '최신 버전입니다.',
+	lookFailed: 'GitHub가 응답하지 않았습니다. 나중에 다시 시도하세요.',
+	unreachable: (address) =>
+		`${address} 주소가 응답하지 않습니다. 주소를 확인하거나 온라인 상태에서 다시 시도하세요.`,
+	empty: '내 rueder 주소를 입력하세요.',
+	invalid: '웹 페이지 주소가 아닙니다.',
+	insecure: '주소는 https://로 시작해야 합니다. rueder는 안전한 연결로만 로그인합니다.',
+	version: (name, build) => `앱 버전 ${name} (빌드 ${build})`,
+	imprint: '법적 고지',
+	privacy: '개인정보처리방침',
+	terms: '이용약관'
+};
+
+const tr = {
+	intro: 'Kendi sunucunuzdaki akış okuyucunuz.',
+	address: 'rueder’inizin adresi',
+	open: 'Aç',
+	opening: 'Açılıyor …',
+	updates: 'Her açılışta bu uygulamanın yeni sürümünü ara',
+	updatesHint:
+		'Uygulama her açılışta GitHub’a bir kez daha yeni bir derleme olup olmadığını sorar ve yüklemeyi önerir. Başka hiçbir şey gönderilmez.',
+	lookNow: 'Şimdi ara',
+	looking: 'Aranıyor …',
+	current: 'Bu en yeni sürüm.',
+	lookFailed: 'GitHub yanıt vermedi. Daha sonra yeniden deneyin.',
+	unreachable: (address) =>
+		`${address} yanıt vermiyor. Adresi denetleyin ya da çevrimiçi olduğunuzda yeniden deneyin.`,
+	empty: 'rueder’inizin adresini girin.',
+	invalid: 'Bu bir web sayfasının adresi değil.',
+	insecure:
+		'Adres https:// ile başlamalı: rueder yalnızca güvenli bir bağlantı üzerinden giriş yapar.',
+	version: (name, build) => `Uygulama sürümü ${name} (derleme ${build})`,
+	imprint: 'Künye',
+	privacy: 'Gizlilik politikası',
+	terms: 'Kullanım koşulları'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl, ko, tr };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

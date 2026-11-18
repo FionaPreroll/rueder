@@ -1,0 +1,15 @@
+rueder için yeni bir parola belirleyin
+Merhaba {name},
+
+biri, büyük olasılıkla siz, {site} üzerindeki "{name}" hesabı için yeni bir
+parola belirlemek istedi. Bunun için bu bağlantıyı {minutes} dakika içinde
+açın:
+
+{link}
+
+Bağlantı bir kez çalışır. Yeni parolayı belirlemek, hesabın tüm tarayıcı ve
+cihazlarında oturumu kapatır. Hesapta ikinci faktör varsa giriş yine onu
+ister.
+
+Bunu siz yapmadıysanız bu e-postayı yok sayın: bağlantı açılmadan hiçbir şey
+değişmez.

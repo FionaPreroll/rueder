@@ -1,0 +1,9 @@
+Potwierdź swój adres w rueder
+Cześć {name},
+
+ktoś, najpewniej ty, podał ten adres dla konta „{name}” w {site}. Aby go
+potwierdzić, otwórz ten link w ciągu {hours} godz.:
+
+{link}
+
+Jeśli to nie ty, zignoruj tę wiadomość: bez linku nic się nie stanie.

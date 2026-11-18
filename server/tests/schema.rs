@@ -503,3 +503,22 @@ async fn stored_authors_lose_their_brackets(db: PgPool) {
         assert_eq!(copied, name, "{stored}");
     }
 }
+
+#[sqlx::test]
+async fn the_language_of_an_account_is_a_language_tag(db: PgPool) {
+    let id = account(&db, "ada").await;
+    let set = |tag: &'static str| {
+        sqlx::query("UPDATE accounts SET language = $1 WHERE id = $2")
+            .bind(tag)
+            .bind(id)
+            .execute(&db)
+    };
+    for tag in ["de", "pt-BR", "zh-Hant", "fil"] {
+        set(tag).await.unwrap_or_else(|err| panic!("{tag}: {err}"));
+    }
+    for tag in ["DE", "de_AT", "pt-br", "x", "de-AT-x"] {
+        let err = set(tag).await.expect_err(tag);
+        let constraint = err.as_database_error().and_then(|err| err.constraint());
+        assert_eq!(constraint, Some("accounts_language_check"), "{tag}");
+    }
+}

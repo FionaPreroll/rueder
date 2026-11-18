@@ -378,7 +378,7 @@ async fn mail_is_in_the_language_the_account_was_made_in(db: PgPool) {
     let (status, _) = call(&state, Method::POST, "/api/register", None, Some(body)).await;
     assert_eq!(status, StatusCode::CREATED);
     let english = json!({
-        "username": "ada", "password": PASSWORD, "email": "ada@example.org", "language": "ko",
+        "username": "ada", "password": PASSWORD, "email": "ada@example.org", "language": "tlh",
     });
     let (status, _) = call(&state, Method::POST, "/api/register", None, Some(english)).await;
     assert_eq!(status, StatusCode::CREATED);

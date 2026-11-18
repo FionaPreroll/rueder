@@ -99,7 +99,7 @@ Was es gibt:
 
 - Code, Kommentare im Code, READMEs und Commit-Nachrichten auf Englisch.
 - Kommentare in SQL-Migrationen sowie Plan, Architektur und dieses Dokument auf Deutsch.
-- Die Oberfläche in den Sprachen aus `languages` in `web/src/lib/i18n/locale.svelte.ts`. Spanisch, Französisch, brasilianisches Portugiesisch, Italienisch und Japanisch hat noch niemand durchgesehen, der die Sprache als Muttersprache spricht.
+- Die Oberfläche in den Sprachen aus `languages` in `web/src/lib/i18n/locale.svelte.ts`. Die Sprachen außer Englisch und Deutsch hat noch niemand durchgesehen, der die Sprache als Muttersprache spricht.
 
 ## Einrichten und Befehle
 

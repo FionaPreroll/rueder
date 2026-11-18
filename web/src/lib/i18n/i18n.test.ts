@@ -58,7 +58,11 @@ describe('catalogs', () => {
 			{ code: 'fr', name: 'Français' },
 			{ code: 'pt-BR', name: 'Português (Brasil)' },
 			{ code: 'it', name: 'Italiano' },
-			{ code: 'ja', name: '日本語' }
+			{ code: 'ja', name: '日本語' },
+			{ code: 'pl', name: 'Polski' },
+			{ code: 'nl', name: 'Nederlands' },
+			{ code: 'ko', name: '한국어' },
+			{ code: 'tr', name: 'Türkçe' }
 		]);
 	});
 
@@ -83,6 +87,15 @@ describe('catalogs', () => {
 		useLanguage('ja');
 		expect(m.articles(1)).toBe('1 件の記事');
 		expect(m.articles(1200)).toBe('1,200 件の記事');
+		// Polish counts in three forms.
+		useLanguage('pl');
+		expect([1, 2, 5, 22, 25].map((count) => m.articles(count))).toEqual([
+			'1 artykuł',
+			'2 artykuły',
+			'5 artykułów',
+			'22 artykuły',
+			'25 artykułów'
+		]);
 	});
 
 	it('describe every shortcut once', () => {
@@ -97,9 +110,9 @@ describe('catalogs', () => {
 
 describe('picking the language', () => {
 	it('takes the first language rueder speaks', () => {
-		expect(pickLanguage(['ko-KR', 'de-AT', 'en'])).toBe('de');
+		expect(pickLanguage(['tlh-Latn', 'de-AT', 'en'])).toBe('de');
 		expect(pickLanguage(['EN-gb'])).toBe('en');
-		expect(pickLanguage(['ko', 'zh'])).toBeNull();
+		expect(pickLanguage(['tlh', 'x-pig-latin'])).toBeNull();
 		expect(pickLanguage([])).toBeNull();
 		// Whatever the region: Portugal gets the Portuguese of Brazil.
 		expect(pickLanguage(['pt-PT'])).toBe('pt-BR');
@@ -129,7 +142,7 @@ describe('picking the language', () => {
 	});
 
 	it('falls back to English', () => {
-		vi.stubGlobal('navigator', { language: 'ko-KR' });
+		vi.stubGlobal('navigator', { language: 'tlh-Latn' });
 		expect(browserLanguage()).toBe('en');
 	});
 
@@ -137,7 +150,7 @@ describe('picking the language', () => {
 		vi.stubGlobal('navigator', { languages: ['de-AT'] });
 		expect(startLanguage('auto')).toBe('de');
 		expect(startLanguage('en')).toBe('en');
-		vi.stubGlobal('navigator', { languages: ['ko'] });
+		vi.stubGlobal('navigator', { languages: ['tlh'] });
 		expect(startLanguage('auto')).toBe('en');
 		expect(startLanguage('de')).toBe('de');
 	});

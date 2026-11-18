@@ -1,0 +1,8 @@
+Adres twojego konta rueder się zmienił
+Cześć {name},
+
+konto „{name}” w {site} ma teraz nowy adres: {address}. Poczta dla konta
+trafia od teraz tam; ten adres nie dostanie już żadnej.
+
+Jeśli to nie ty, ktoś może znać twoje hasło. Napisz jak najszybciej do
+operatora {site}.

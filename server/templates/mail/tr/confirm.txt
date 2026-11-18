@@ -1,0 +1,10 @@
+rueder için adresinizi onaylayın
+Merhaba {name},
+
+biri, büyük olasılıkla siz, {site} üzerindeki "{name}" hesabı için bu adresi
+verdi. Onaylamak için bu bağlantıyı {hours} saat içinde açın:
+
+{link}
+
+Bunu siz yapmadıysanız bu e-postayı yok sayın: bağlantı açılmadan hiçbir şey
+olmaz.
