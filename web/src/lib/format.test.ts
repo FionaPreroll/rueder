@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	formatAgo,
 	formatBytes,
@@ -16,7 +16,10 @@ const DAY = 24 * HOUR;
 // The tests run in Europe/Berlin (see vite.config.ts): this is 15:30 there.
 const now = Date.parse('2026-11-10T14:30:00Z');
 
-afterEach(() => useLanguage(null));
+afterEach(() => {
+	vi.unstubAllGlobals();
+	useLanguage(null);
+});
 
 describe('formatWhen', () => {
 	it('is the time for today and the day before that', () => {
@@ -52,6 +55,13 @@ describe('formatAgo', () => {
 		useLanguage('de');
 		expect(formatAgo(now - 8 * HOUR, now)).toBe('vor 8 Stunden');
 		expect(formatAgo(now - DAY, now)).toBe('gestern');
+	});
+
+	it('writes its digits as the browser’s variant of the language does', () => {
+		// Egypt writes Arabic with Arabic-Indic digits, as the times in the list do.
+		vi.stubGlobal('navigator', { languages: ['ar-EG'] });
+		useLanguage(null);
+		expect(formatAgo(now - 12 * MINUTE, now)).toBe('قبل ١٢ دقيقة');
 	});
 });
 

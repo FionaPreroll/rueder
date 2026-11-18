@@ -1,7 +1,6 @@
 // Times as the list and the articles show them, in the page's language.
 
 import { localized } from './i18n/intl.ts';
-import { language } from './i18n/locale.svelte.ts';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -19,7 +18,7 @@ const dayWithYear = localized(
 const whole = localized(
 	(locale) => new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'short' })
 );
-const relative = localized(() => new Intl.RelativeTimeFormat(language(), { numeric: 'auto' }));
+const relative = localized((locale) => new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }));
 
 const sameDay = (a: Date, b: Date) =>
 	a.getFullYear() === b.getFullYear() &&
