@@ -260,7 +260,42 @@ const tr = {
 	terms: 'Kullanım koşulları'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl, ko, tr };
+const zhHans = {
+	intro: '你的订阅源阅读器，在你自己的服务器上。',
+	address: '你的 rueder 的地址',
+	open: '打开',
+	opening: '正在打开…',
+	updates: '每次启动时检查此应用的新版本',
+	updatesHint:
+		'应用会在每次启动时询问 GitHub 一次是否有更新的构建，并提供安装。不会发送任何其他内容。',
+	lookNow: '立即检查',
+	looking: '正在检查…',
+	current: '这是最新版本。',
+	lookFailed: 'GitHub 没有响应。请稍后再试。',
+	unreachable: (address) => `${address} 没有响应。请检查地址，或在联网后重试。`,
+	empty: '请输入你的 rueder 的地址。',
+	invalid: '这不是网页的地址。',
+	insecure: '地址必须以 https:// 开头：rueder 只通过安全连接登录。',
+	version: (name, build) => `应用版本 ${name}（构建 ${build}）`,
+	imprint: '法律声明',
+	privacy: '隐私政策',
+	terms: '使用条款'
+};
+
+export const catalogs = {
+	en,
+	de,
+	es,
+	fr,
+	'pt-BR': ptBR,
+	it,
+	ja,
+	pl,
+	nl,
+	ko,
+	tr,
+	'zh-Hans': zhHans
+};
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

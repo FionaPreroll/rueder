@@ -63,7 +63,8 @@ describe('catalogs', () => {
 			{ code: 'pl', name: 'Polski' },
 			{ code: 'nl', name: 'Nederlands' },
 			{ code: 'ko', name: '한국어' },
-			{ code: 'tr', name: 'Türkçe' }
+			{ code: 'tr', name: 'Türkçe' },
+			{ code: 'zh-Hans', name: '简体中文' }
 		]);
 	});
 
