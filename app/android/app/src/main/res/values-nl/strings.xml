@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">Server en updates</string>
+    <string name="shortcut_setup_long">Server en app-updates</string>
+    <string name="update_title">Een nieuwe versie van rueder</string>
+    <string name="update_text">Build %1$d is uit (%2$s MB). Nu downloaden en installeren?</string>
+    <string name="update_metered">Je zit op een netwerk dat geld kan kosten.</string>
+    <string name="update_download">Downloaden</string>
+    <string name="update_later">Later</string>
+    <string name="back_again">Druk nog een keer op Terug om rueder te sluiten</string>
+</resources>

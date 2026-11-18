@@ -1,0 +1,8 @@
+Het adres van je rueder-account is gewijzigd
+Hallo {name},
+
+het account "{name}" op {site} heeft nu een nieuw adres: {address}. Mail
+voor het account gaat vanaf nu daarheen; dit adres krijgt er geen meer.
+
+Was jij dit niet, dan kent iemand misschien je wachtwoord. Schrijf zo snel
+mogelijk naar de beheerder van {site}.

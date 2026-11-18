@@ -189,7 +189,31 @@ const pl = {
 	terms: 'Regulamin'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl };
+const nl = {
+	intro: 'Je feedlezer, op je eigen server.',
+	address: 'Adres van je rueder',
+	open: 'Openen',
+	opening: 'Openen …',
+	updates: 'Bij elke start zoeken naar een nieuwe versie van deze app',
+	updatesHint:
+		'De app vraagt GitHub dan bij elke start één keer of er een nieuwere build is, en biedt aan die te installeren. Er wordt verder niets verstuurd.',
+	lookNow: 'Nu zoeken',
+	looking: 'Zoeken …',
+	current: 'Dit is de nieuwste versie.',
+	lookFailed: 'GitHub antwoordde niet. Probeer het later opnieuw.',
+	unreachable: (address) =>
+		`${address} antwoordt niet. Controleer het adres, of probeer het opnieuw zodra je online bent.`,
+	empty: 'Voer het adres van je rueder in.',
+	invalid: 'Dit is geen adres van een webpagina.',
+	insecure:
+		'Het adres moet met https:// beginnen: rueder logt alleen in via een beveiligde verbinding.',
+	version: (name, build) => `App-versie ${name} (build ${build})`,
+	imprint: 'Colofon',
+	privacy: 'Privacybeleid',
+	terms: 'Gebruiksvoorwaarden'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

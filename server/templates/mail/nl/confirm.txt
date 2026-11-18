@@ -1,0 +1,9 @@
+Bevestig je adres voor rueder
+Hallo {name},
+
+iemand, waarschijnlijk jij, heeft dit adres opgegeven voor het account
+"{name}" op {site}. Open deze link binnen {hours} uur om het te bevestigen:
+
+{link}
+
+Was jij dit niet, negeer deze mail dan: zonder de link gebeurt er niets.

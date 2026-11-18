@@ -1,0 +1,13 @@
+Stel een nieuw wachtwoord in voor rueder
+Hallo {name},
+
+iemand, waarschijnlijk jij, heeft gevraagd om een nieuw wachtwoord voor het
+account "{name}" op {site}. Open daarvoor deze link binnen {minutes} minuten:
+
+{link}
+
+De link werkt één keer. Een nieuw wachtwoord instellen logt elke browser en
+elk apparaat van het account uit. Heeft het account een tweede factor, dan
+vraagt het inloggen daar nog steeds om.
+
+Was jij dit niet, negeer deze mail dan: zonder de link verandert er niets.
