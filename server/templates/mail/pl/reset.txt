@@ -1,0 +1,13 @@
+Ustaw nowe hasło w rueder
+Cześć {name},
+
+ktoś, najpewniej ty, poprosił o ustawienie nowego hasła dla konta „{name}”
+w {site}. Aby to zrobić, otwórz ten link w ciągu {minutes} min:
+
+{link}
+
+Link działa jeden raz. Ustawienie nowego hasła wylogowuje wszystkie
+przeglądarki i urządzenia konta. Jeśli konto ma drugi składnik, logowanie
+nadal będzie go wymagać.
+
+Jeśli to nie ty, zignoruj tę wiadomość: bez linku nic się nie zmieni.

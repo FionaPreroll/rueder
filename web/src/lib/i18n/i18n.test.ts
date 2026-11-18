@@ -58,7 +58,8 @@ describe('catalogs', () => {
 			{ code: 'fr', name: 'Français' },
 			{ code: 'pt-BR', name: 'Português (Brasil)' },
 			{ code: 'it', name: 'Italiano' },
-			{ code: 'ja', name: '日本語' }
+			{ code: 'ja', name: '日本語' },
+			{ code: 'pl', name: 'Polski' }
 		]);
 	});
 
@@ -83,6 +84,15 @@ describe('catalogs', () => {
 		useLanguage('ja');
 		expect(m.articles(1)).toBe('1 件の記事');
 		expect(m.articles(1200)).toBe('1,200 件の記事');
+		// Polish counts in three forms.
+		useLanguage('pl');
+		expect([1, 2, 5, 22, 25].map((count) => m.articles(count))).toEqual([
+			'1 artykuł',
+			'2 artykuły',
+			'5 artykułów',
+			'22 artykuły',
+			'25 artykułów'
+		]);
 	});
 
 	it('describe every shortcut once', () => {

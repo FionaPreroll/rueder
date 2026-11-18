@@ -60,12 +60,13 @@ pub enum Language {
     PtBr,
     It,
     Ja,
+    Pl,
 }
 
 impl Language {
     /// Every language, in the order of the enum, which `in_every_language!`
     /// follows.
-    pub const ALL: [Language; 7] = [
+    pub const ALL: [Language; 8] = [
         Language::En,
         Language::De,
         Language::Es,
@@ -73,6 +74,7 @@ impl Language {
         Language::PtBr,
         Language::It,
         Language::Ja,
+        Language::Pl,
     ];
 
     /// Its code, as the page and the database name it.
@@ -85,6 +87,7 @@ impl Language {
             Self::PtBr => "pt-BR",
             Self::It => "it",
             Self::Ja => "ja",
+            Self::Pl => "pl",
         }
     }
 }
@@ -101,6 +104,7 @@ macro_rules! in_every_language {
             include_str!(concat!("../templates/mail/pt-BR/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/it/", $mail, ".txt")),
             include_str!(concat!("../templates/mail/ja/", $mail, ".txt")),
+            include_str!(concat!("../templates/mail/pl/", $mail, ".txt")),
         ]
     };
 }

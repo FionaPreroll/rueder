@@ -166,7 +166,30 @@ const ja = {
 	terms: '利用規約'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja };
+const pl = {
+	intro: 'Twój czytnik kanałów, na twoim własnym serwerze.',
+	address: 'Adres twojego rueder',
+	open: 'Otwórz',
+	opening: 'Otwieranie …',
+	updates: 'Szukaj nowej wersji tej aplikacji przy każdym uruchomieniu',
+	updatesHint:
+		'Aplikacja pyta wtedy GitHub raz przy każdym uruchomieniu, czy jest nowsza kompilacja, i proponuje ją zainstalować. Nic innego nie jest wysyłane.',
+	lookNow: 'Szukaj teraz',
+	looking: 'Szukanie …',
+	current: 'To najnowsza wersja.',
+	lookFailed: 'GitHub nie odpowiedział. Spróbuj ponownie później.',
+	unreachable: (address) =>
+		`${address} nie odpowiada. Sprawdź adres albo spróbuj ponownie, gdy będziesz online.`,
+	empty: 'Wpisz adres swojego rueder.',
+	invalid: 'To nie jest adres strony internetowej.',
+	insecure: 'Adres musi zaczynać się od https://: rueder loguje tylko przez bezpieczne połączenie.',
+	version: (name, build) => `Wersja aplikacji ${name} (kompilacja ${build})`,
+	imprint: 'Informacje prawne',
+	privacy: 'Polityka prywatności',
+	terms: 'Regulamin'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

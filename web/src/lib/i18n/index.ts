@@ -10,9 +10,10 @@ import fr from './fr.ts';
 import it from './it.ts';
 import ja from './ja.ts';
 import ptBR from './pt-BR.ts';
+import pl from './pl.ts';
 import { language, languages, type Language } from './locale.svelte.ts';
 
-export const catalogs: Record<Language, Messages> = { en, de, es, fr, 'pt-BR': ptBR, it, ja };
+export const catalogs: Record<Language, Messages> = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl };
 
 /** The texts in the page's language. */
 export const m: Messages = new Proxy({} as Messages, {
