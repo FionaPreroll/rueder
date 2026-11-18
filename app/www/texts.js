@@ -351,6 +351,29 @@ const ar = {
 	terms: 'شروط الاستخدام'
 };
 
+const ru = {
+	intro: 'Ваша программа для чтения лент, на вашем собственном сервере.',
+	address: 'Адрес вашего rueder',
+	open: 'Открыть',
+	opening: 'Открываем…',
+	updates: 'Проверять новую версию приложения при каждом запуске',
+	updatesHint:
+		'Тогда приложение при каждом запуске один раз спрашивает GitHub, нет ли более новой сборки, и предлагает её установить. Больше ничего не отправляется.',
+	lookNow: 'Проверить сейчас',
+	looking: 'Проверяем…',
+	current: 'Это самая новая версия.',
+	lookFailed: 'GitHub не ответил. Попробуйте позже.',
+	unreachable: (address) =>
+		`${address} не отвечает. Проверьте адрес или попробуйте снова, когда будете в сети.`,
+	empty: 'Введите адрес вашего rueder.',
+	invalid: 'Это не адрес веб-страницы.',
+	insecure: 'Адрес должен начинаться с https://: rueder входит только по защищённому соединению.',
+	version: (name, build) => `Версия приложения ${name} (сборка ${build})`,
+	imprint: 'Выходные данные',
+	privacy: 'Политика конфиденциальности',
+	terms: 'Условия использования'
+};
+
 export const catalogs = {
 	en,
 	de,
@@ -366,7 +389,8 @@ export const catalogs = {
 	'zh-Hans': zhHans,
 	'zh-Hant': zhHant,
 	id,
-	ar
+	ar,
+	ru
 };
 
 /** The language of a tag such as "de-AT" without its region: "de". */

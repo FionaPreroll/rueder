@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">Сервер и обновления</string>
+    <string name="shortcut_setup_long">Сервер и обновления приложения</string>
+    <string name="update_title">Новая версия rueder</string>
+    <string name="update_text">Вышла сборка %1$d (%2$s МБ). Скачать и установить её сейчас?</string>
+    <string name="update_metered">Вы в сети, за которую может взиматься плата.</string>
+    <string name="update_download">Скачать</string>
+    <string name="update_later">Позже</string>
+    <string name="back_again">Нажмите «Назад» ещё раз, чтобы закрыть rueder</string>
+</resources>

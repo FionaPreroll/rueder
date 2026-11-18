@@ -18,6 +18,7 @@ import zhHans from './zh-Hans.ts';
 import zhHant from './zh-Hant.ts';
 import id from './id.ts';
 import ar from './ar.ts';
+import ru from './ru.ts';
 import { language, languages, type Language } from './locale.svelte.ts';
 
 export const catalogs: Record<Language, Messages> = {
@@ -35,7 +36,8 @@ export const catalogs: Record<Language, Messages> = {
 	'zh-Hans': zhHans,
 	'zh-Hant': zhHant,
 	id,
-	ar
+	ar,
+	ru
 };
 
 /** The texts in the page's language. */

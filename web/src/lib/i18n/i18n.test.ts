@@ -67,7 +67,8 @@ describe('catalogs', () => {
 			{ code: 'zh-Hans', name: '简体中文' },
 			{ code: 'zh-Hant', name: '繁體中文' },
 			{ code: 'id', name: 'Bahasa Indonesia' },
-			{ code: 'ar', name: 'العربية' }
+			{ code: 'ar', name: 'العربية' },
+			{ code: 'ru', name: 'Русский' }
 		]);
 	});
 
@@ -113,6 +114,17 @@ describe('catalogs', () => {
 		]);
 		expect(m.invites.goodFor(11)).toBe('الرابط صالح لمدة 11 يومًا.');
 		expect(m.invites.goodFor(100)).toBe('الرابط صالح لمدة 100 يوم.');
+		// Russian counts in three forms, by the last digits.
+		useLanguage('ru');
+		expect([1, 3, 5, 11, 21, 22, 25].map((count) => m.articles(count))).toEqual([
+			'1 статья',
+			'3 статьи',
+			'5 статей',
+			'11 статей',
+			'21 статья',
+			'22 статьи',
+			'25 статей'
+		]);
 	});
 
 	it('describe every shortcut once', () => {
