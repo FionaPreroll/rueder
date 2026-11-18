@@ -5,7 +5,19 @@
 // variant of that language (de-AT, en-GB), else for the language itself.
 
 /** The languages rueder speaks; each has a catalog in this folder (see index.ts). */
-export const languages = ['en', 'de', 'es', 'fr', 'pt-BR', 'it', 'ja', 'pl', 'nl', 'ko'] as const;
+export const languages = [
+	'en',
+	'de',
+	'es',
+	'fr',
+	'pt-BR',
+	'it',
+	'ja',
+	'pl',
+	'nl',
+	'ko',
+	'tr'
+] as const;
 export type Language = (typeof languages)[number];
 
 const isLanguage = (code: string): code is Language =>

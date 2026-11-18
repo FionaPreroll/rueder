@@ -1,0 +1,8 @@
+rueder hesabınızın adresi değişti
+Merhaba {name},
+
+{site} üzerindeki "{name}" hesabının artık yeni bir adresi var: {address}.
+Hesabın e-postaları bundan sonra oraya gider; bu adrese artık gelmez.
+
+Bunu siz yapmadıysanız biri parolanızı biliyor olabilir. En kısa sürede
+{site} yöneticisine yazın.

@@ -61,7 +61,8 @@ describe('catalogs', () => {
 			{ code: 'ja', name: '日本語' },
 			{ code: 'pl', name: 'Polski' },
 			{ code: 'nl', name: 'Nederlands' },
-			{ code: 'ko', name: '한국어' }
+			{ code: 'ko', name: '한국어' },
+			{ code: 'tr', name: 'Türkçe' }
 		]);
 	});
 

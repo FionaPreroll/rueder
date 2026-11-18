@@ -236,7 +236,31 @@ const ko = {
 	terms: '이용약관'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl, ko };
+const tr = {
+	intro: 'Kendi sunucunuzdaki akış okuyucunuz.',
+	address: 'rueder’inizin adresi',
+	open: 'Aç',
+	opening: 'Açılıyor …',
+	updates: 'Her açılışta bu uygulamanın yeni sürümünü ara',
+	updatesHint:
+		'Uygulama her açılışta GitHub’a bir kez daha yeni bir derleme olup olmadığını sorar ve yüklemeyi önerir. Başka hiçbir şey gönderilmez.',
+	lookNow: 'Şimdi ara',
+	looking: 'Aranıyor …',
+	current: 'Bu en yeni sürüm.',
+	lookFailed: 'GitHub yanıt vermedi. Daha sonra yeniden deneyin.',
+	unreachable: (address) =>
+		`${address} yanıt vermiyor. Adresi denetleyin ya da çevrimiçi olduğunuzda yeniden deneyin.`,
+	empty: 'rueder’inizin adresini girin.',
+	invalid: 'Bu bir web sayfasının adresi değil.',
+	insecure:
+		'Adres https:// ile başlamalı: rueder yalnızca güvenli bir bağlantı üzerinden giriş yapar.',
+	version: (name, build) => `Uygulama sürümü ${name} (derleme ${build})`,
+	imprint: 'Künye',
+	privacy: 'Gizlilik politikası',
+	terms: 'Kullanım koşulları'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl, ko, tr };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>

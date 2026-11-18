@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">Sunucu ve güncellemeler</string>
+    <string name="shortcut_setup_long">Sunucu ve uygulama güncellemeleri</string>
+    <string name="update_title">rueder\'in yeni bir sürümü</string>
+    <string name="update_text">%1$d numaralı derleme çıktı (%2$s MB). Şimdi indirilip yüklensin mi?</string>
+    <string name="update_metered">Ücretli olabilecek bir ağdasınız.</string>
+    <string name="update_download">İndir</string>
+    <string name="update_later">Sonra</string>
+    <string name="back_again">rueder\'i kapatmak için yeniden Geri\'ye basın</string>
+</resources>
