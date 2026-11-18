@@ -60,7 +60,8 @@ describe('catalogs', () => {
 			{ code: 'it', name: 'Italiano' },
 			{ code: 'ja', name: '日本語' },
 			{ code: 'pl', name: 'Polski' },
-			{ code: 'nl', name: 'Nederlands' }
+			{ code: 'nl', name: 'Nederlands' },
+			{ code: 'ko', name: '한국어' }
 		]);
 	});
 
@@ -108,9 +109,9 @@ describe('catalogs', () => {
 
 describe('picking the language', () => {
 	it('takes the first language rueder speaks', () => {
-		expect(pickLanguage(['ko-KR', 'de-AT', 'en'])).toBe('de');
+		expect(pickLanguage(['tlh-Latn', 'de-AT', 'en'])).toBe('de');
 		expect(pickLanguage(['EN-gb'])).toBe('en');
-		expect(pickLanguage(['ko', 'zh'])).toBeNull();
+		expect(pickLanguage(['tlh', 'x-pig-latin'])).toBeNull();
 		expect(pickLanguage([])).toBeNull();
 		// Whatever the region: Portugal gets the Portuguese of Brazil.
 		expect(pickLanguage(['pt-PT'])).toBe('pt-BR');
@@ -140,7 +141,7 @@ describe('picking the language', () => {
 	});
 
 	it('falls back to English', () => {
-		vi.stubGlobal('navigator', { language: 'ko-KR' });
+		vi.stubGlobal('navigator', { language: 'tlh-Latn' });
 		expect(browserLanguage()).toBe('en');
 	});
 
@@ -148,7 +149,7 @@ describe('picking the language', () => {
 		vi.stubGlobal('navigator', { languages: ['de-AT'] });
 		expect(startLanguage('auto')).toBe('de');
 		expect(startLanguage('en')).toBe('en');
-		vi.stubGlobal('navigator', { languages: ['ko'] });
+		vi.stubGlobal('navigator', { languages: ['tlh'] });
 		expect(startLanguage('auto')).toBe('en');
 		expect(startLanguage('de')).toBe('de');
 	});

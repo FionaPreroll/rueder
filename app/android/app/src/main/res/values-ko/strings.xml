@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_setup_short">서버와 업데이트</string>
+    <string name="shortcut_setup_long">서버와 앱 업데이트</string>
+    <string name="update_title">rueder의 새 버전</string>
+    <string name="update_text">빌드 %1$d이(가) 나왔습니다(%2$s MB). 지금 내려받아 설치할까요?</string>
+    <string name="update_metered">요금이 부과될 수 있는 네트워크에 연결되어 있습니다.</string>
+    <string name="update_download">내려받기</string>
+    <string name="update_later">나중에</string>
+    <string name="back_again">뒤로를 한 번 더 누르면 rueder가 닫힙니다</string>
+</resources>

@@ -12,6 +12,7 @@ import ja from './ja.ts';
 import ptBR from './pt-BR.ts';
 import pl from './pl.ts';
 import nl from './nl.ts';
+import ko from './ko.ts';
 import { language, languages, type Language } from './locale.svelte.ts';
 
 export const catalogs: Record<Language, Messages> = {
@@ -23,7 +24,8 @@ export const catalogs: Record<Language, Messages> = {
 	it,
 	ja,
 	pl,
-	nl
+	nl,
+	ko
 };
 
 /** The texts in the page's language. */

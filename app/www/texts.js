@@ -213,7 +213,30 @@ const nl = {
 	terms: 'Gebruiksvoorwaarden'
 };
 
-export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl };
+const ko = {
+	intro: '내 서버에서 돌아가는 나만의 피드 리더입니다.',
+	address: '내 rueder 주소',
+	open: '열기',
+	opening: '여는 중 …',
+	updates: '시작할 때마다 이 앱의 새 버전 찾기',
+	updatesHint:
+		'앱이 시작할 때마다 한 번 GitHub에 새 빌드가 있는지 묻고, 있으면 설치를 제안합니다. 그 밖에는 아무것도 보내지 않습니다.',
+	lookNow: '지금 찾기',
+	looking: '찾는 중 …',
+	current: '최신 버전입니다.',
+	lookFailed: 'GitHub가 응답하지 않았습니다. 나중에 다시 시도하세요.',
+	unreachable: (address) =>
+		`${address} 주소가 응답하지 않습니다. 주소를 확인하거나 온라인 상태에서 다시 시도하세요.`,
+	empty: '내 rueder 주소를 입력하세요.',
+	invalid: '웹 페이지 주소가 아닙니다.',
+	insecure: '주소는 https://로 시작해야 합니다. rueder는 안전한 연결로만 로그인합니다.',
+	version: (name, build) => `앱 버전 ${name} (빌드 ${build})`,
+	imprint: '법적 고지',
+	privacy: '개인정보처리방침',
+	terms: '이용약관'
+};
+
+export const catalogs = { en, de, es, fr, 'pt-BR': ptBR, it, ja, pl, nl, ko };
 
 /** The language of a tag such as "de-AT" without its region: "de". */
 const primary = (tag) =>
