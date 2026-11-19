@@ -812,3 +812,51 @@ async fn only_logged_in_readers_get_images(db: PgPool) {
     let (status, _, _) = get_path_as(state, &address, Some(&cookie)).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+#[sqlx::test]
+async fn no_shared_cache_keeps_an_image_for_others(db: PgPool) {
+    // An image goes only to a reader with a session or to an app password
+    // that still counts. A cache between them and rueder, such as a reverse
+    // proxy or a CDN, would give it to anyone who has the address, and an
+    // app's after its password was revoked; only the reader's own may keep it.
+    let small = picture(40, 30, ImageFormat::Png);
+    let (at, _) = site(&[("a.png", StatusCode::OK, "image/png", small.clone())]).await;
+    let images = proxy("no-shared-cache", true);
+    let state = AppState {
+        images: Some(images.clone()),
+        ..AppState::new(db.clone())
+    };
+    let source = format!("{at}/a.png");
+
+    let page = images.signer().address(Size::Image, &source).unwrap();
+    let (status, headers, body) = get_path(state.clone(), &page).await;
+    assert_eq!((status, body), (StatusCode::OK, small.clone()));
+    assert_eq!(
+        headers[header::CACHE_CONTROL],
+        "private, max-age=31536000, immutable"
+    );
+
+    let ada: i32 =
+        sqlx::query_scalar("INSERT INTO accounts (username) VALUES ('ada') RETURNING id")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    let app: i32 = sqlx::query_scalar(
+        "INSERT INTO app_passwords (account_id, name, secret_hash) VALUES ($1, 'reader', 'x')
+         RETURNING id",
+    )
+    .bind(ada)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    let for_app = images
+        .signer()
+        .app_address(app, Size::Image, &source)
+        .unwrap();
+    let (status, headers, body) = get_path_as(state, &for_app, None).await;
+    assert_eq!((status, body), (StatusCode::OK, small));
+    assert_eq!(
+        headers[header::CACHE_CONTROL],
+        "private, max-age=31536000, immutable"
+    );
+}

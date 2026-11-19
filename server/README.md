@@ -372,6 +372,23 @@ tree, the first page of unread articles, three of them opened and marked read,
 a page of one feed) and prints requests a second and the times by kind. To
 compare sizes, start the server with another `DATABASE_CONNECTIONS` (10).
 
+The image proxy is measured with the same readers, against a server that
+signs image addresses with a key made up for it:
+
+```sh
+CLIENT_IP_HEADER=x-forwarded-for FETCH=off FETCH_ALLOW_NETS=127.0.0.0/8 \
+  IMAGE_PROXY_KEY=<a made-up key of 32 characters or more> \
+  LISTEN_ADDR=127.0.0.1:3290 cargo run --release -- serve &
+cd ../web && RUEDER_PID=$! TOKENS=/tmp/tokens IMAGE_PROXY_KEY=<the same key> \
+  node load/images.js 8,32,64 30 3000
+```
+
+`load/images.js` serves made-up pictures under 50 names out of 127.0.0.0/8
+on port 3298, asks for each once, so that the proxy fetches, makes smaller
+and keeps it, and then lets workers ask for random ones it keeps, as random
+readers. It prints pictures a second, the times by size and the processor
+time of the server and of PostgreSQL.
+
 The live updates want a database of their own, with readers who all read one
 feed that `load/feed.js` serves:
 
