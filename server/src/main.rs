@@ -389,7 +389,7 @@ async fn main() -> anyhow::Result<()> {
         return health::check(health::address(&listen).await?, health::WAIT).await;
     }
     if matches!(cli.command, Some(Command::Bench(BenchCommand::Limits))) {
-        println!("{}", bench::limits::run());
+        println!("{}", bench::limits::run()?);
         return Ok(());
     }
 

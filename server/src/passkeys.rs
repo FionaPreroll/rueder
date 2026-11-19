@@ -37,7 +37,8 @@
 //! passwords.
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap, hash_map::Entry},
+    hash::Hash,
     net::IpAddr,
     sync::{Mutex, PoisonError},
     time::{Duration, Instant},
@@ -79,7 +80,7 @@ pub const MAX_PER_ACCOUNT: i64 = 10;
 pub const CEREMONY_TIME: Duration = Duration::from_secs(300);
 /// How many ceremonies are kept at most, of all senders. When they are all
 /// open, the oldest login makes room (see [`Passkeys::open`]).
-const MAX_CEREMONIES: usize = 10_000;
+pub const MAX_CEREMONIES: usize = 10_000;
 /// How many logins one sender (its network) can have under way at once.
 const MAX_PER_SENDER: usize = 20;
 /// How many ceremonies of its sessions one account can have under way at once:
@@ -100,9 +101,81 @@ pub struct Passkeys {
     webauthn: Webauthn,
     /// The Android apps that may use them too, see [`crate::asset_links`].
     android_apps: Vec<AndroidApp>,
-    ceremonies: Mutex<HashMap<String, Ceremony>>,
+    ceremonies: Mutex<Open>,
     /// How many ceremonies are kept at most ([`MAX_CEREMONIES`]).
     capacity: usize,
+}
+
+/// The ceremonies under way, with what the limits count kept up to date, so
+/// that beginning one never looks at all the others.
+#[derive(Default)]
+struct Open {
+    ceremonies: HashMap<String, Ceremony>,
+    /// The logins, and the ceremonies of sessions, in the order they run out.
+    logins: BTreeSet<(Instant, String)>,
+    of_sessions: BTreeSet<(Instant, String)>,
+    /// How many logins each sender has under way, and how many ceremonies
+    /// each account.
+    per_sender: HashMap<IpAddr, usize>,
+    per_account: HashMap<i32, usize>,
+}
+
+impl Open {
+    fn insert(&mut self, id: String, ceremony: Ceremony) {
+        let end = (ceremony.until, id.clone());
+        match ceremony.kind.account() {
+            None => {
+                self.logins.insert(end);
+                *self.per_sender.entry(ceremony.sender).or_default() += 1;
+            }
+            Some(account_id) => {
+                self.of_sessions.insert(end);
+                *self.per_account.entry(account_id).or_default() += 1;
+            }
+        }
+        self.ceremonies.insert(id, ceremony);
+    }
+
+    fn remove(&mut self, id: &str) -> Option<Ceremony> {
+        let ceremony = self.ceremonies.remove(id)?;
+        let end = (ceremony.until, id.to_owned());
+        match ceremony.kind.account() {
+            None => {
+                self.logins.remove(&end);
+                one_less(&mut self.per_sender, ceremony.sender);
+            }
+            Some(account_id) => {
+                self.of_sessions.remove(&end);
+                one_less(&mut self.per_account, account_id);
+            }
+        }
+        Some(ceremony)
+    }
+
+    /// Takes out those that ran out, from the front of their order.
+    fn run_out(&mut self, now: Instant) {
+        loop {
+            let next = [&self.logins, &self.of_sessions]
+                .into_iter()
+                .filter_map(BTreeSet::first)
+                .find(|(until, _)| *until <= now)
+                .map(|(_, id)| id.clone());
+            let Some(id) = next else {
+                return;
+            };
+            self.remove(&id);
+        }
+    }
+}
+
+/// Counts one less for the key, and forgets it at none.
+fn one_less<K: Hash + Eq>(counts: &mut HashMap<K, usize>, key: K) {
+    if let Entry::Occupied(mut count) = counts.entry(key) {
+        *count.get_mut() -= 1;
+        if *count.get() == 0 {
+            count.remove();
+        }
+    }
 }
 
 /// One ceremony under way, waiting for the device's answer.
@@ -113,7 +186,7 @@ struct Ceremony {
     sender: IpAddr,
 }
 
-enum Kind {
+pub(crate) enum Kind {
     /// Adding a passkey to an account, from one of its sessions.
     Register {
         account_id: i32,
@@ -211,70 +284,61 @@ impl Passkeys {
     /// blocks the table for the five minutes a ceremony lasts.
     fn open(&self, kind: Kind, sender: IpAddr, now: Instant) -> Result<String, AppError> {
         let sender = login::network(sender);
-        let mut ceremonies = self
+        let mut open = self
             .ceremonies
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        ceremonies.retain(|_, ceremony| ceremony.until > now);
+        open.run_out(now);
         let message = "too many passkey ceremonies, try again later";
-        let account = kind.account();
-        let (same, most) = match account {
-            None => (
-                ceremonies
-                    .values()
-                    .filter(|ceremony| {
-                        ceremony.kind.account().is_none() && ceremony.sender == sender
-                    })
-                    .count(),
-                MAX_PER_SENDER,
-            ),
-            Some(_) => (
-                ceremonies
-                    .values()
-                    .filter(|ceremony| ceremony.kind.account() == account)
-                    .count(),
-                CEREMONIES_PER_ACCOUNT,
-            ),
+        let (same, most) = match kind.account() {
+            None => (open.per_sender.get(&sender), MAX_PER_SENDER),
+            Some(account_id) => (open.per_account.get(&account_id), CEREMONIES_PER_ACCOUNT),
         };
-        if same >= most {
+        if same.is_some_and(|same| *same >= most) {
             return Err(AppError::TooMany(CEREMONY_TIME, message));
         }
-        if ceremonies.len() >= self.capacity {
-            let oldest = ceremonies
-                .iter()
-                .filter(|(_, ceremony)| ceremony.kind.account().is_none())
-                .min_by_key(|(_, ceremony)| ceremony.until)
-                .map(|(id, _)| id.clone());
-            match oldest {
-                Some(id) => {
-                    ceremonies.remove(&id);
-                }
-                None => return Err(AppError::TooMany(CEREMONY_TIME, message)),
-            }
+        if open.ceremonies.len() >= self.capacity {
+            let Some((_, oldest)) = open.logins.first() else {
+                return Err(AppError::TooMany(CEREMONY_TIME, message));
+            };
+            let oldest = oldest.clone();
+            open.remove(&oldest);
         }
         let id = URL_SAFE_NO_PAD.encode(random::<16>()?);
-        ceremonies.insert(
-            id.clone(),
-            Ceremony {
-                kind,
-                until: now + CEREMONY_TIME,
-                sender,
-            },
-        );
+        let ceremony = Ceremony {
+            kind,
+            until: now + CEREMONY_TIME,
+            sender,
+        };
+        open.insert(id.clone(), ceremony);
         Ok(id)
+    }
+
+    /// Begins a login with a passkey from this sender: what to ask the device,
+    /// and the name of the ceremony.
+    pub fn begin_login(
+        &self,
+        sender: IpAddr,
+        now: Instant,
+    ) -> Result<(RequestChallengeResponse, String), AppError> {
+        let (rcr, state) = self
+            .webauthn
+            .start_discoverable_authentication()
+            .map_err(|err| anyhow::anyhow!("starting a passkey login: {err}"))?;
+        Ok((rcr, self.open(Kind::Login { state }, sender, now)?))
     }
 
     /// Takes a ceremony out, if it is there and has not run out: each counts
     /// once, whatever the answer.
-    fn take(&self, id: &str, now: Instant) -> Option<Kind> {
+    pub(crate) fn take(&self, id: &str, now: Instant) -> Option<Kind> {
         if id.len() > MAX_CEREMONY_ID {
             return None;
         }
-        let mut ceremonies = self
+        let mut open = self
             .ceremonies
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        let ceremony = ceremonies.remove(id)?;
+        let ceremony = open.remove(id)?;
         (ceremony.until > now).then_some(ceremony.kind)
     }
 
@@ -283,6 +347,7 @@ impl Passkeys {
         self.ceremonies
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+            .ceremonies
             .len()
     }
 }
@@ -895,18 +960,7 @@ pub async fn start_login(
     State(state): State<AppState>,
     Sender(ip): Sender,
 ) -> Result<Json<Challenge>, AppError> {
-    let keys = passkeys(&state)?;
-    let (rcr, authentication) = keys
-        .webauthn
-        .start_discoverable_authentication()
-        .map_err(|err| anyhow::anyhow!("starting a passkey login: {err}"))?;
-    let ceremony = keys.open(
-        Kind::Login {
-            state: authentication,
-        },
-        ip,
-        Instant::now(),
-    )?;
+    let (rcr, ceremony) = passkeys(&state)?.begin_login(ip, Instant::now())?;
     let options = request_options(rcr)?;
     Ok(Json(Challenge { ceremony, options }))
 }
@@ -981,7 +1035,100 @@ pub async fn finish_login(
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+
+    fn login(passkeys: &Passkeys) -> Kind {
+        let (_, state) = passkeys
+            .webauthn
+            .start_discoverable_authentication()
+            .unwrap();
+        Kind::Login { state }
+    }
+
+    fn register(passkeys: &Passkeys, account_id: i32) -> Kind {
+        let (_, state) = passkeys
+            .webauthn
+            .start_passkey_registration(Uuid::new_v4(), "ada", "ada", None)
+            .unwrap();
+        Kind::Register {
+            account_id,
+            session: vec![1],
+            name: "Phone".into(),
+            state,
+        }
+    }
+
+    /// Whether what is counted and ordered agrees with the ceremonies.
+    fn agrees(open: &Open) -> bool {
+        let mut counted = Open::default();
+        for (id, ceremony) in &open.ceremonies {
+            let end = (ceremony.until, id.clone());
+            match ceremony.kind.account() {
+                None => {
+                    counted.logins.insert(end);
+                    *counted.per_sender.entry(ceremony.sender).or_default() += 1;
+                }
+                Some(account_id) => {
+                    counted.of_sessions.insert(end);
+                    *counted.per_account.entry(account_id).or_default() += 1;
+                }
+            }
+        }
+        counted.logins == open.logins
+            && counted.of_sessions == open.of_sessions
+            && counted.per_sender == open.per_sender
+            && counted.per_account == open.per_account
+    }
+
+    #[derive(Debug, Clone)]
+    enum Step {
+        Login(u8),
+        Register(u8),
+        Take(usize),
+        Wait(u16),
+    }
+
+    fn step() -> impl Strategy<Value = Step> {
+        prop_oneof![
+            3 => any::<u8>().prop_map(Step::Login),
+            1 => any::<u8>().prop_map(Step::Register),
+            2 => any::<usize>().prop_map(Step::Take),
+            1 => (0u16..400).prop_map(Step::Wait),
+        ]
+    }
+
+    proptest! {
+        /// However ceremonies begin, end, run out and make room for others,
+        /// what the limits count is what is under way.
+        #[test]
+        fn what_is_counted_is_what_is_under_way(steps in prop::collection::vec(step(), 0..200)) {
+            let mut passkeys = Passkeys::new("https://reader.example").unwrap();
+            passkeys.capacity = 30;
+            let (mut now, mut begun) = (Instant::now(), Vec::new());
+            for step in steps {
+                match step {
+                    Step::Login(n) => {
+                        let sender = IpAddr::from([192, 0, 2, n % 8]);
+                        begun.extend(passkeys.open(login(&passkeys), sender, now).ok());
+                    }
+                    Step::Register(n) => {
+                        let kind = register(&passkeys, i32::from(n % 4));
+                        begun.extend(passkeys.open(kind, IpAddr::from([203, 0, 113, n]), now).ok());
+                    }
+                    Step::Take(n) if !begun.is_empty() => {
+                        passkeys.take(&begun[n % begun.len()], now);
+                    }
+                    Step::Take(_) => {}
+                    Step::Wait(seconds) => now += Duration::from_secs(u64::from(seconds)),
+                }
+                let open = passkeys.ceremonies.lock().unwrap();
+                prop_assert!(agrees(&open));
+                prop_assert!(open.ceremonies.len() <= 30);
+            }
+        }
+    }
 
     #[test]
     fn the_site_is_https_or_localhost_and_nothing_else() {
@@ -1014,13 +1161,7 @@ mod tests {
         let passkeys = Passkeys::new("https://reader.example").unwrap();
         let ip: IpAddr = "192.0.2.7".parse().unwrap();
         let now = Instant::now();
-        let login = || {
-            let (_, state) = passkeys
-                .webauthn
-                .start_discoverable_authentication()
-                .unwrap();
-            Kind::Login { state }
-        };
+        let login = || login(&passkeys);
         let id = passkeys.open(login(), ip, now).ok().unwrap();
         assert_eq!(id.len(), 22);
         assert!(passkeys.take(&id, now).is_some());
@@ -1058,25 +1199,8 @@ mod tests {
         let mut passkeys = Passkeys::new("https://reader.example").unwrap();
         passkeys.capacity = 50;
         let now = Instant::now();
-        let login = || {
-            let (_, state) = passkeys
-                .webauthn
-                .start_discoverable_authentication()
-                .unwrap();
-            Kind::Login { state }
-        };
-        let register = |account_id| {
-            let (_, state) = passkeys
-                .webauthn
-                .start_passkey_registration(Uuid::new_v4(), "ada", "ada", None)
-                .unwrap();
-            Kind::Register {
-                account_id,
-                session: vec![1],
-                name: "Phone".into(),
-                state,
-            }
-        };
+        let login = || login(&passkeys);
+        let register = |account_id| register(&passkeys, account_id);
         // Whoever has many networks takes every place with logins, one
         // second apart; the first one is the oldest.
         let network = |n: usize| IpAddr::from([198, 51, u8::try_from(n / 10).unwrap(), 1]);
