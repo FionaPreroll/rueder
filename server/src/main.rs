@@ -21,8 +21,11 @@ use rueder::{
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
-    progress, reclean, registration, reports, retention, router, second_factor, sessions, transfer,
-    tree, version,
+    progress,
+    rate::Rates,
+    reclean, registration, reports, retention, router, second_factor, sessions,
+    sizes::Sizes,
+    transfer, tree, version,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -390,15 +393,18 @@ async fn main() -> anyhow::Result<()> {
         .parse::<PgConnectOptions>()
         .context("reading DATABASE_URL")?
         .options([("jit", "off")]);
+    // DATABASE_CONNECTIONS, HEAVY_AT_ONCE and MAILS_PER_DAY size the server for
+    // a large instance; a value out of bounds stops the start.
+    let sizes = Sizes::from_env()?;
     let db = PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(sizes.connections)
         .connect_with(options)
         .await
         .context("connecting to PostgreSQL")?;
     progress::migrate(&db).await?;
 
     match cli.command.unwrap_or(Command::Serve) {
-        Command::Serve => serve(db, problems).await,
+        Command::Serve => serve(db, problems, sizes).await,
         Command::Health => unreachable!("answered before the database was opened"),
         Command::Bench(BenchCommand::Generate {
             accounts,
@@ -911,7 +917,7 @@ fn ask_password() -> anyhow::Result<String> {
     Ok(password)
 }
 
-async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
+async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Result<()> {
     let monitor = Arc::new(Monitor::new(problems));
     let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
     let static_dir =
@@ -1051,8 +1057,17 @@ async fn serve(db: PgPool, problems: Arc<Problems>) -> anyhow::Result<()> {
         events,
         monitor,
         client: Some(client.clone()),
+        rates: Arc::new(Rates::new(sizes.limits())),
         ..AppState::new(db)
     };
+    if sizes != Sizes::default() {
+        tracing::info!(
+            connections = sizes.connections,
+            heavy_at_once = sizes.heavy_at_once,
+            mails_per_day = sizes.mails_per_day,
+            "sized for a large instance"
+        );
+    }
     // OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URL add
     // the login through an OpenID Connect provider.
     if let Some(config) = oidc::Config::from_env()? {

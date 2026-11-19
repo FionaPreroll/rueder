@@ -369,7 +369,8 @@ cd ../web && RUEDER_PID=$! TOKENS=/tmp/tokens node load/reading.js 8,32,64 30
 
 `load/reading.js` lets workers visit random readers as the page would (the
 tree, the first page of unread articles, three of them opened and marked read,
-a page of one feed) and prints requests a second and the times by kind.
+a page of one feed) and prints requests a second and the times by kind. To
+compare sizes, start the server with another `DATABASE_CONNECTIONS` (10).
 
 The live updates want a database of their own, with readers who all read one
 feed that `load/feed.js` serves:

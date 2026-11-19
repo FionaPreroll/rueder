@@ -29,6 +29,7 @@ use crate::{
     filters,
     http_client::{Agent, HttpClient, Request},
     monitor::{Fetched, Monitor, Round},
+    sizes::within,
 };
 
 /// The shortest and the longest time between two fetches of a feed, in seconds.
@@ -79,27 +80,6 @@ impl Pace {
     /// The pace `var` gives, with the default for what it leaves out. A value
     /// that is no number or out of bounds is an error, not quietly the default.
     pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> anyhow::Result<Self> {
-        fn within<T: std::str::FromStr + PartialOrd + std::fmt::Display>(
-            name: &str,
-            value: Option<String>,
-            bounds: &RangeInclusive<T>,
-        ) -> anyhow::Result<Option<T>> {
-            let Some(value) = value else {
-                return Ok(None);
-            };
-            let number: T = value
-                .trim()
-                .parse()
-                .map_err(|_| anyhow::anyhow!("{name} is no number: {value:?}"))?;
-            if !bounds.contains(&number) {
-                anyhow::bail!(
-                    "{name} must be from {} to {}, not {number}",
-                    bounds.start(),
-                    bounds.end()
-                );
-            }
-            Ok(Some(number))
-        }
         let pace = Self::default();
         Ok(Self {
             round: within("FETCH_ROUND", var("FETCH_ROUND"), &ROUNDS)?.unwrap_or(pace.round),

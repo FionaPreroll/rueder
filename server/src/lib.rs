@@ -72,6 +72,7 @@ pub mod retention;
 pub mod search;
 pub mod second_factor;
 pub mod sessions;
+pub mod sizes;
 pub mod status;
 pub mod subscribe;
 pub mod transfer;
