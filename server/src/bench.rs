@@ -12,6 +12,7 @@
 //! depend on.
 
 pub mod fetching;
+pub mod limits;
 pub mod readers;
 
 use std::{

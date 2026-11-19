@@ -23,6 +23,9 @@ hmac = "0.13.0"
 html5ever = "0.40.1"
 # Only the formats the image proxy lets through; no SVG, nothing that needs C code.
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+# A table that finds an entry by its key and by its place, for the limits in
+# memory (`table`).
+indexmap = "2.14.2"
 # Mail goes to the operator's SMTP relay (see `mail`), over rustls with ring like
 # everything else, checking certificates against Mozilla's roots compiled in, as
 # the HTTP client does.

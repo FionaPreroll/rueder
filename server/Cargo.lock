@@ -2919,6 +2919,7 @@ dependencies = [
  "html5ever",
  "http-body-util",
  "image",
+ "indexmap 2.14.2",
  "lettre",
  "markup5ever_rcdom",
  "p256",
