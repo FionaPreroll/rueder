@@ -13,7 +13,7 @@
 //! others. What the server logs is the exception, as an admin who runs the
 //! server reads it anyway.
 
-use std::{fs, time::Instant};
+use std::{fs, ops::RangeInclusive, time::Instant};
 
 use axum::{Json, extract::State};
 use serde::Serialize;
@@ -28,7 +28,7 @@ use crate::{
     monitor::{self, Severity, Timing},
     profile, reports,
     sessions::Session,
-    version,
+    sizes, version,
 };
 
 /// The types this module sends, for the frontend.
@@ -50,6 +50,16 @@ const ENOUGH: u64 = 5;
 const SLOW_MS: f64 = 500.0;
 /// From how many seconds past its time a feed counts as overdue.
 const OVERDUE_S: f64 = 10.0 * 60.0;
+/// The sizes in gigabytes `DATABASE_WARN_GB` may name.
+pub const WARN_GB: RangeInclusive<i64> = 1..=1_000_000;
+
+/// The size of the database from which the status warns, in bytes, if
+/// `DATABASE_WARN_GB` names one in gigabytes of 1,000 MB, as the page counts
+/// them. Without it the status never warns, as rueder keeps every article
+/// unless the operator says otherwise.
+pub fn warn_from(value: Option<String>) -> anyhow::Result<Option<i64>> {
+    Ok(sizes::within("DATABASE_WARN_GB", value, &WARN_GB)?.map(|gb| gb * 1_000_000_000))
+}
 
 /// What `GET /api/status` answers, for admins only.
 #[derive(Serialize, TS, ToSchema)]
@@ -129,6 +139,9 @@ enum Hint {
     NotFetching,
     /// The database reads much from the disk.
     CacheMisses { hit_ratio: f64 },
+    /// The database has grown to the size the operator warns from
+    /// (`DATABASE_WARN_GB`).
+    DatabaseLarge { size_bytes: i64, warn_bytes: i64 },
     /// A query has been running for a long time.
     LongQuery { seconds: f64 },
     /// The image cache is nearly full.
@@ -198,6 +211,8 @@ struct Database {
     /// All connections to the database, the server's and others'.
     connections: i64,
     size_bytes: i64,
+    /// The size from which the status warns, if the operator named one.
+    size_warn_bytes: Option<i64>,
     /// The share of blocks found in memory, since the statistics began.
     cache_hit_ratio: Option<f64>,
     deadlocks: i64,
@@ -431,6 +446,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         pool_max: state.db.options().get_max_connections(),
         connections: database.connections,
         size_bytes: database.size,
+        size_warn_bytes: state.database_warn_bytes,
         cache_hit_ratio: hit_ratio,
         deadlocks: database.deadlocks,
         longest_query_s: database.longest,
@@ -789,6 +805,14 @@ fn hints(
     {
         hints.push(Hint::CacheMisses { hit_ratio });
     }
+    if let Some(warn_bytes) = database.size_warn_bytes
+        && database.size_bytes >= warn_bytes
+    {
+        hints.push(Hint::DatabaseLarge {
+            size_bytes: database.size_bytes,
+            warn_bytes,
+        });
+    }
     if images.cache_max_bytes > 0 {
         let percent = images.cache_bytes as f64 * 100.0 / images.cache_max_bytes as f64;
         if percent >= 95.0 {
@@ -877,8 +901,19 @@ pub(crate) fn memory() -> Option<u64> {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use super::{Failure, failure};
+    use super::{Failure, failure, warn_from};
     use crate::http_client::Error;
+
+    #[test]
+    fn the_size_to_warn_from_is_a_number_of_gigabytes_within_bounds() {
+        let warn = |value: &str| warn_from(Some(value.to_owned()));
+        assert_eq!(warn_from(None).unwrap(), None);
+        assert_eq!(warn(" 50 ").unwrap(), Some(50_000_000_000));
+        assert_eq!(warn("1000000").unwrap(), Some(1_000_000_000_000_000));
+        for wrong in ["0", "-5", "1000001", "50GB", ""] {
+            assert!(warn(wrong).is_err(), "{wrong}");
+        }
+    }
 
     #[test]
     fn failures_are_told_apart_by_their_text() {

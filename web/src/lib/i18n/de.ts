@@ -901,6 +901,8 @@ const de: Messages = {
 				`Jede Runde nimmt so viele Feeds, wie sie darf, und trotzdem warten Feeds: Der Takt erlaubt ${n(most)} Abrufe je Stunde. FETCH_ROUND, FETCH_AT_ONCE und FETCH_EVERY stellen ihn ein.`,
 			cacheMisses: (share) =>
 				`Die Datenbank findet nur ${share} dessen, was sie liest, im Speicher; mehr shared_buffers würden helfen.`,
+			databaseLarge: (size, warn) =>
+				`Die Datenbank ist auf ${size} gewachsen; DATABASE_WARN_GB warnt ab ${warn}. „rueder retention set“ lässt alte Artikel oder ihre Texte gehen.`,
 			longQuery: (took) => `Eine Abfrage läuft seit ${took}.`,
 			imageCacheFull: (share) => `Der Bild-Cache ist zu ${share} voll.`,
 			errors: (count) => `Der Server hat in der letzten Stunde ${n(count)} Fehler geloggt.`,
@@ -946,6 +948,7 @@ const de: Messages = {
 			poolValue: (size, idle, max) => `${n(size)} offen, ${n(idle)} frei, höchstens ${n(max)}`,
 			connections: 'Alle Verbindungen',
 			size: 'Größe',
+			sizeWarn: (size, warn) => `${size}, Warnung ab ${warn}`,
 			hitRatio: 'Aus dem Speicher gelesen',
 			deadlocks: 'Deadlocks',
 			longest: 'Längste laufende Abfrage',

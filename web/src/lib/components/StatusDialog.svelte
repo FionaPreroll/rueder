@@ -71,6 +71,8 @@
 				return hints.fetchPaceFull(h.per_hour);
 			case 'cache_misses':
 				return hints.cacheMisses(formatPercent(h.hit_ratio));
+			case 'database_large':
+				return hints.databaseLarge(formatBytes(h.size_bytes), formatBytes(h.warn_bytes));
 			case 'long_query':
 				return hints.longQuery(formatDuration(h.seconds * 1000));
 			case 'image_cache_full':
@@ -202,7 +204,7 @@
 					{#each s.hints as h, i (i)}
 						<li class="flex items-start gap-2">
 							<Icon name="warning" class="mt-0.5 size-4 shrink-0 text-warn" />
-							<span>{hint(h)}</span>
+							<span>{@render said(hint(h))}</span>
 						</li>
 					{/each}
 				</ul>
@@ -270,7 +272,15 @@
 					)
 				],
 				[m.status.database.connections, formatNumber(s.database.connections)],
-				[m.status.database.size, formatBytes(s.database.size_bytes)],
+				[
+					m.status.database.size,
+					s.database.size_warn_bytes == null
+						? formatBytes(s.database.size_bytes)
+						: m.status.database.sizeWarn(
+								formatBytes(s.database.size_bytes),
+								formatBytes(s.database.size_warn_bytes)
+							)
+				],
 				[
 					m.status.database.hitRatio,
 					s.database.cache_hit_ratio == null ? empty : formatPercent(s.database.cache_hit_ratio)

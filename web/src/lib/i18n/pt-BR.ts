@@ -901,6 +901,8 @@ const ptBR: Messages = {
 				`Cada rodada pega todos os feeds que pode, e ainda há feeds esperando: o ritmo permite ${n(most)} buscas por hora. FETCH_ROUND, FETCH_AT_ONCE e FETCH_EVERY definem isso.`,
 			cacheMisses: (share) =>
 				`O banco de dados encontra na memória só ${share} do que lê; mais shared_buffers ajudaria.`,
+			databaseLarge: (size, warn) =>
+				`O banco de dados chegou a ${size}; DATABASE_WARN_GB avisa a partir de ${warn}. “rueder retention set” remove os artigos antigos ou os textos deles.`,
 			longQuery: (took) => `Uma consulta está rodando há ${took}.`,
 			imageCacheFull: (share) => `O cache de imagens está ${share} cheio.`,
 			errors: (count) =>
@@ -947,6 +949,7 @@ const ptBR: Messages = {
 			poolValue: (size, idle, max) => `${n(size)} abertas, ${n(idle)} ociosas, no máximo ${n(max)}`,
 			connections: 'Todas as conexões',
 			size: 'Tamanho',
+			sizeWarn: (size, warn) => `${size}, aviso a partir de ${warn}`,
 			hitRatio: 'Lido da memória',
 			deadlocks: 'Deadlocks',
 			longest: 'Consulta mais longa em execução',

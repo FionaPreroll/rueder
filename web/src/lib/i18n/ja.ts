@@ -878,6 +878,8 @@ const ja: Messages = {
 				`各巡回はできるだけ多くのフィードを取得していますが、まだ待っているフィードがあります。今のペースでは 1 時間に最大 ${n(most)} 回の取得です。FETCH_ROUND、FETCH_AT_ONCE、FETCH_EVERY で設定します。`,
 			cacheMisses: (share) =>
 				`データベースが読むもののうち、メモリ上にあるのは ${share} だけです。shared_buffers を増やすと改善します。`,
+			databaseLarge: (size, warn) =>
+				`データベースが ${size} になりました。DATABASE_WARN_GB は ${warn} から警告します。「rueder retention set」で古い記事やその本文を削除できます。`,
 			longQuery: (took) => `${took} 実行中のクエリがあります。`,
 			imageCacheFull: (share) => `画像のキャッシュが ${share} 埋まっています。`,
 			errors: (count) => `直近 1 時間に、サーバは ${n(count)} 件のエラーを記録しました。`,
@@ -923,6 +925,7 @@ const ja: Messages = {
 				`${n(size)} 本が開いていて、${n(idle)} 本が待機中、最大 ${n(max)} 本`,
 			connections: 'すべての接続',
 			size: 'サイズ',
+			sizeWarn: (size, warn) => `${size}（${warn} から警告）`,
 			hitRatio: 'メモリから読んだ割合',
 			deadlocks: 'デッドロック',
 			longest: '最も長く実行中のクエリ',

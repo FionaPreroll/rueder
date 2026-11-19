@@ -161,6 +161,9 @@ pub struct AppState {
     /// The key of the captcha of open registration and the solutions that
     /// were used.
     pub captcha: Arc<captcha::Captcha>,
+    /// The size of the database in bytes from which the status page warns
+    /// (`DATABASE_WARN_GB`); none without it.
+    pub database_warn_bytes: Option<i64>,
 }
 
 impl AppState {
@@ -188,6 +191,7 @@ impl AppState {
             mail: None,
             metrics: None,
             captcha: Arc::default(),
+            database_warn_bytes: None,
         }
     }
 }

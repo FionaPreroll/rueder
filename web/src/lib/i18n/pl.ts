@@ -902,6 +902,8 @@ const pl: Messages = {
 				`Każda runda bierze tyle kanałów, ile może, a kanały nadal czekają: tempo pozwala na ${n(most)} pobrań na godzinę. Ustawiają je FETCH_ROUND, FETCH_AT_ONCE i FETCH_EVERY.`,
 			cacheMisses: (share) =>
 				`Baza danych znajduje w pamięci tylko ${share} tego, co czyta; więcej shared_buffers by pomogło.`,
+			databaseLarge: (size, warn) =>
+				`Baza danych urosła do ${size}; DATABASE_WARN_GB ostrzega od ${warn}. „rueder retention set” usuwa stare artykuły albo ich teksty.`,
 			longQuery: (took) => `Zapytanie trwa już ${took}.`,
 			imageCacheFull: (share) => `Pamięć podręczna obrazów jest zapełniona w ${share}.`,
 			errors: (count) => `Błędy zapisane przez serwer w ostatniej godzinie: ${n(count)}.`,
@@ -947,6 +949,7 @@ const pl: Messages = {
 				`otwarte: ${n(size)}, bezczynne: ${n(idle)}, najwyżej ${n(max)}`,
 			connections: 'Wszystkie połączenia',
 			size: 'Rozmiar',
+			sizeWarn: (size, warn) => `${size}, ostrzeżenie od ${warn}`,
 			hitRatio: 'Odczytane z pamięci',
 			deadlocks: 'Zakleszczenia',
 			longest: 'Najdłużej trwające zapytanie',

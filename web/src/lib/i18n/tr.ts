@@ -883,6 +883,8 @@ const tr: Messages = {
 				`Her tur alabildiği kadar akış alıyor, yine de bekleyen akışlar var: tempo saatte en fazla ${n(most)} getirmeye izin veriyor. Bunu FETCH_ROUND, FETCH_AT_ONCE ve FETCH_EVERY belirler.`,
 			cacheMisses: (share) =>
 				`Veritabanı okuduklarının yalnızca ${share} kadarını bellekte buluyor; daha fazla shared_buffers işe yarar.`,
+			databaseLarge: (size, warn) =>
+				`Veritabanı ${size} boyutuna ulaştı; DATABASE_WARN_GB ${warn} itibarıyla uyarır. “rueder retention set” eski makaleleri ya da metinlerini siler.`,
 			longQuery: (took) => `Bir sorgu ${took} süredir çalışıyor.`,
 			imageCacheFull: (share) => `Resim önbelleğinin doluluğu: ${share}.`,
 			errors: (count) => `Sunucu son bir saatte ${n(count)} hata kaydetti.`,
@@ -925,6 +927,7 @@ const tr: Messages = {
 			poolValue: (size, idle, max) => `${n(size)} açık, ${n(idle)} boşta, en fazla ${n(max)}`,
 			connections: 'Tüm bağlantılar',
 			size: 'Boyut',
+			sizeWarn: (size, warn) => `${size}, uyarı sınırı ${warn}`,
 			hitRatio: 'Bellekten okunan',
 			deadlocks: 'Kilitlenmeler',
 			longest: 'En uzun süren sorgu',

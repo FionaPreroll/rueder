@@ -883,6 +883,8 @@ const id: Messages = {
 				`Setiap putaran mengambil feed sebanyak yang diizinkan, dan masih ada feed yang menunggu: laju ini mengizinkan ${n(most)} pengambilan per jam. FETCH_ROUND, FETCH_AT_ONCE, dan FETCH_EVERY mengaturnya.`,
 			cacheMisses: (share) =>
 				`Basis data hanya menemukan ${share} dari yang dibacanya di memori; shared_buffers yang lebih besar akan membantu.`,
+			databaseLarge: (size, warn) =>
+				`Basis data sudah mencapai ${size}; DATABASE_WARN_GB memperingatkan mulai ${warn}. “rueder retention set” menghapus artikel lama atau teksnya.`,
 			longQuery: (took) => `Sebuah kueri sudah berjalan selama ${took}.`,
 			imageCacheFull: (share) => `Cache gambar sudah terisi ${share}.`,
 			errors: (count) => `Server mencatat ${n(count)} kesalahan dalam satu jam terakhir.`,
@@ -927,6 +929,7 @@ const id: Messages = {
 				`${n(size)} terbuka, ${n(idle)} menganggur, paling banyak ${n(max)}`,
 			connections: 'Semua koneksi',
 			size: 'Ukuran',
+			sizeWarn: (size, warn) => `${size}, peringatan mulai ${warn}`,
 			hitRatio: 'Dibaca dari memori',
 			deadlocks: 'Deadlock',
 			longest: 'Kueri yang paling lama berjalan',

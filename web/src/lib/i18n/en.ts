@@ -899,6 +899,8 @@ const en = {
 				`Every round takes as many feeds as it may, and feeds still wait: the pace allows ${n(most)} fetches an hour. FETCH_ROUND, FETCH_AT_ONCE and FETCH_EVERY set it.`,
 			cacheMisses: (share: string) =>
 				`The database finds only ${share} of what it reads in memory; more shared_buffers would help.`,
+			databaseLarge: (size: string, warn: string) =>
+				`The database has grown to ${size}; DATABASE_WARN_GB warns from ${warn}. “rueder retention set” lets old articles or their texts go.`,
 			longQuery: (took: string) => `A query has been running for ${took}.`,
 			imageCacheFull: (share: string) => `The image cache is ${share} full.`,
 			errors: (count: number) =>
@@ -947,6 +949,7 @@ const en = {
 				`${n(size)} open, ${n(idle)} idle, at most ${n(max)}`,
 			connections: 'All connections',
 			size: 'Size',
+			sizeWarn: (size: string, warn: string) => `${size}, warning from ${warn}`,
 			hitRatio: 'Read from memory',
 			deadlocks: 'Deadlocks',
 			longest: 'Longest running query',

@@ -836,6 +836,8 @@ const zhHans: Messages = {
 				`每轮都尽可能多地获取，但仍有订阅源在等待：当前节奏每小时最多获取 ${n(most)} 次。由 FETCH_ROUND、FETCH_AT_ONCE 和 FETCH_EVERY 设置。`,
 			cacheMisses: (share) =>
 				`数据库读取的内容中只有 ${share} 在内存中；增大 shared_buffers 会有帮助。`,
+			databaseLarge: (size, warn) =>
+				`数据库已增长到 ${size}；DATABASE_WARN_GB 从 ${warn} 起发出警告。“rueder retention set”可删除旧文章或其正文。`,
 			longQuery: (took) => `有一个查询已运行 ${took}。`,
 			imageCacheFull: (share) => `图片缓存已用 ${share}。`,
 			errors: (count) => `服务器在最近一小时记录了 ${n(count)} 个错误。`,
@@ -878,6 +880,7 @@ const zhHans: Messages = {
 			poolValue: (size, idle, max) => `打开 ${n(size)} 个，空闲 ${n(idle)} 个，最多 ${n(max)} 个`,
 			connections: '全部连接',
 			size: '大小',
+			sizeWarn: (size, warn) => `${size}，从 ${warn} 起警告`,
 			hitRatio: '从内存读取',
 			deadlocks: '死锁',
 			longest: '运行最久的查询',

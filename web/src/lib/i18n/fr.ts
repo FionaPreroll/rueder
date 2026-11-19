@@ -909,6 +909,8 @@ const fr: Messages = {
 				`Chaque tournée prend autant de flux qu’elle le peut, et des flux attendent encore : le rythme permet ${n(most)} récupérations par heure. FETCH_ROUND, FETCH_AT_ONCE et FETCH_EVERY le fixent.`,
 			cacheMisses: (share) =>
 				`La base de données ne trouve en mémoire que ${share} de ce qu’elle lit ; davantage de shared_buffers aiderait.`,
+			databaseLarge: (size, warn) =>
+				`La base de données a atteint ${size} ; DATABASE_WARN_GB avertit à partir de ${warn}. « rueder retention set » supprime les anciens articles ou leurs textes.`,
 			longQuery: (took) => `Une requête tourne depuis ${took}.`,
 			imageCacheFull: (share) => `Le cache d’images est plein à ${share}.`,
 			errors: (count) =>
@@ -956,6 +958,7 @@ const fr: Messages = {
 				`${n(size)} ouvertes, ${n(idle)} inactives, au plus ${n(max)}`,
 			connections: 'Toutes les connexions',
 			size: 'Taille',
+			sizeWarn: (size, warn) => `${size}, avertissement à partir de ${warn}`,
 			hitRatio: 'Lu depuis la mémoire',
 			deadlocks: 'Interblocages',
 			longest: 'Requête la plus longue en cours',
