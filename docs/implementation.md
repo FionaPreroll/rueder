@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.34 bis 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.35 und 5.36 |
 
 Was es gibt:
 
@@ -370,9 +370,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.31 Live-Updates je Konto (A6).** Siehe [Live-Updates](architecture.md#live-updates).
 - [x] **5.32 Abruf je Host über Runden hinweg (A6).** Siehe [Abruf](architecture.md#abruf) und [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client).
 - [x] **5.33 Größen einstellbar.** `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE` und `MAILS_PER_DAY`, siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits), [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19) und die Tabelle für 10.000 und 100.000 Konten in [deploy/README.md](../deploy/README.md#a-large-instance).
-- [ ] **5.34 Grenzen im Speicher für viele Schlüssel.** Ist eine Grenze voll (10.000 Schlüssel), durchsucht heute jeder neue Schlüssel die ganze Tabelle unter einer Sperre. Künftig verdrängt sie ohne zu suchen, und die Obergrenzen passen zu 100.000 Konten; ebenso die Login-Grenzen und die benutzten Aufgaben des Captchas. Fertig, wenn:
-  - ein Test zeigt, dass die Grenzen beim Verdrängen halten;
-  - eine Messung zeigt, dass eine Anfrage bei 100.000 Schlüsseln nicht mehr kostet als bei 100.
+- [x] **5.34 Grenzen im Speicher für viele Schlüssel.** Siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits) und [Grenzen im Speicher vom 2026-11-19](#grenzen-im-speicher-vom-2026-11-19).
 - [ ] **5.35 Platz und Datenbank für große Instanzen.** Wie viel Platz ein Konto und ein Feed im Jahr brauchen, mit der Aufbewahrung aus 5.3 und ohne, und was davon in den Arbeitsspeicher gehört: Mit kaltem Cache und 128 MB `shared_buffers` war das Lesen tausendfach langsamer. Dazu Autovacuum und Füllgrad für die Tabellen, die jedes Lesen ändert (`subscriptions`, `article_states`), wenn die Messung es rechtfertigt. Fertig, wenn:
   - Zuwachs und Zeiten unter [Messung](#messung) stehen und `deploy/README.md` sie nennt.
 - [ ] **5.36 Bilder vor einem Cache.** Prüfen, ob die Adressen des Bild-Proxys je Konto signiert sind; wo nicht, sagen die Antworten, dass ein Cache vor rueder (ein Reverse-Proxy oder ein CDN unter derselben Domain) sie halten darf, mit einem Beispiel in `deploy/README.md`. Fertig, wenn:
@@ -391,6 +389,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 
 Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 
+- **Grenzen im Speicher (5.34):** Ein neuer Schlüssel sieht 16 Einträge an (`table::LOOK`). Ein gedrosselter Schlüssel kann damit gehen, wenn alle 16 neben ihm gedrosselt sind, nicht erst, wenn es alle der Tabelle sind. Abgelaufene Einträge gehen einzeln, wenn ein neuer Platz braucht, statt alle auf einmal; eine Tabelle bleibt also voll, wenn sie einmal voll war. `indexmap` ist neu als direkte Abhängigkeit, es war schon im Baum. Die benutzten Aufgaben des Captchas verdrängen nichts, denn eine verdrängte gälte wieder; voll nimmt das Captcha wie bisher keine Lösung an.
 - **Aufbewahrung (5.3):** Bei „nur der Text“ bleiben Schlagwörter, Anhänge und Bild, damit eine Podcast-Folge abspielbar bleibt. Was beim Aufräumen markiert war, bleibt, auch wenn die Markierung später geht. Ein gesperrter Feed ohne Leser behält seine Zeile und damit die Sperre. Feeds ohne Leser zählen ihre Tage ab dem ersten Lauf, der sie so sieht. Der Server räumt stündlich höchstens fünf Minuten lang in Portionen von 500 Artikeln.
 - **E-Mail am Konto (5.4):** Mit `optional` fragt die Seite nach dem Login nicht. Mit `required` fragt sie bestehende Konten in einem Fenster, das nur der Link oder das Abmelden schließt, sperrt aber nicht die API oder Apps. Ein Konto, das mit `required` registriert und nie bestätigt wird, geht nach 7 Tagen. Ob eine Adresse schon einem anderen Konto gehört, sagt erst der Link. Mails sind nur Text und gehen sofort, ohne Warteschlange: Nimmt das Relais eine nicht, antwortet der Server 503.
 - **Passwort vergessen (5.5):** Gesucht und verschickt wird nach der Antwort, so dass auch die Zeit nichts verrät. Ein Link gilt nur, solange das Konto die Adresse hat, an die er ging. Wer Passwort und zweiten Faktor zugleich verliert, braucht den Betreiber (`rueder account second-factor-off`).
@@ -896,6 +895,28 @@ Paket 5.33: ob mehr Verbindungen zur Datenbank mehr Lesen tragen, mit `load/read
 - **Die Kerne sind die Grenze, nicht der Pool.** Ab 32 Lesern zugleich sind alle vier Kerne belegt: rund einer für den Server, zwei für PostgreSQL und einer für den Lastgenerator. Mehr Verbindungen lassen dann nur mehr Anfragen in PostgreSQL warten, und die Zeiten wachsen mit den Lesern wie mit 10. Die Läufe streuen um rund 10 %, wie die Wiederholung mit 10 Verbindungen zeigt.
 - **Mehr als am 2026-11-15**, 2.300 statt 1.650 Anfragen je Sekunde: Mit einem Drittel der Artikel ist die erste Seite der ungelesenen Artikel billiger, und die Maschine hat 2,3 statt 2,1 GHz. Für den Vergleich der Verbindungen zählt nur, dass alle Läufe auf denselben Daten liefen.
 - **Was daraus folgt.** Mehr Verbindungen lohnen erst mit mehr Kernen für PostgreSQL. Die Tabelle in [deploy/README.md](../deploy/README.md#a-large-instance) nennt 10 für vier Kerne und 20 für acht, das zweite nach der Faustregel aus dem Wiki von PostgreSQL (zwei Verbindungen je Kern, eine je Platte), nicht gemessen. Mit 250 Besuchen je Sekunde trägt diese Maschine die Spitze von 100.000 Konten (15 bis 35 Besuche je Sekunde, siehe dort) gut siebenfach.
+
+### Grenzen im Speicher vom 2026-11-19
+
+Paket 5.34: was eine Grenze im Speicher einen Aufruf kostet, mit `rueder bench limits` (Release-Build, ohne Datenbank). Gemessen sind je 5.000 Aufrufe der Grenze aller Anfragen (`rate`) und der falschen Passwörter (`login`), für einen Schlüssel, den die Tabelle kennt, und für einen neuen. Das geschah einmal mit 100 Schlüsseln und einmal mit einer vollen Tabelle, in der jeder Schlüssel eben gefragt hat, so dass keiner einfach gehen kann. „Vorher“ ist der Stand vor dem Paket, mit seinen 10.000 Schlüsseln und ein zweites Mal mit 100.000.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz). Aus drei Läufen ist der mittlere genommen; die Läufe streuen um bis zu einem Drittel.
+
+| Stand | Grenze | Schlüssel | bekannt: Mittel / 99 % | neu: Mittel / 99 % |
+|---|---|---:|---:|---:|
+| vorher | Anfragen | 100 | 102 ns / 145 ns | 199 ns / 168 ns |
+| vorher | Anfragen | 10.000 | 128 ns / 311 ns | 130 µs / 200 µs |
+| vorher | Anfragen | 100.000 | 239 ns / 504 ns | 1,4 ms / 1,6 ms |
+| vorher | Passwörter | 100 | 173 ns / 207 ns | 284 ns / 315 ns |
+| vorher | Passwörter | 10.000 | 196 ns / 398 ns | 165 µs / 258 µs |
+| vorher | Passwörter | 100.000 | 400 ns / 684 ns | 1,9 ms / 3,5 ms |
+| nachher | Anfragen | 100 | 139 ns / 163 ns | 233 ns / 1,5 µs |
+| nachher | Anfragen | 100.000 | 206 ns / 367 ns | 413 ns / 808 ns |
+| nachher | Passwörter | 100 | 309 ns / 469 ns | 462 ns / 2,1 µs |
+| nachher | Passwörter | 100.000 | 370 ns / 652 ns | 917 ns / 1,7 µs |
+
+- **Ein neuer Schlüssel in einer vollen Tabelle sucht nicht mehr.** Bei 100.000 Schlüsseln kostet er 0,4 bis 0,9 µs statt 1,4 bis 1,9 ms, weniger als vorher schon bei 10.000. Vorher durchsuchte jeder neue die ganze Tabelle, unter der Sperre, die jede Anfrage nimmt.
+- **Ganz so billig wie bei 100 ist er nicht.** Eine Tabelle mit 100.000 Schlüsseln passt nicht mehr in den Cache des Prozessors. Jeder Zugriff auf sie, auch auf einen bekannten Schlüssel, kostet deshalb einige Zehntel Mikrosekunden mehr, beim Platzmachen mehrmals. Mit der Zahl der Schlüssel wächst das nicht weiter. Dass das 99. Perzentil mit 100 Schlüsseln höher ist, liegt daran, dass die Tabelle dort noch wächst. Gegen die Millisekunden einer Anfrage (siehe [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19)) fällt beides nicht ins Gewicht.
 
 ## Wissen über das Altsystem
 

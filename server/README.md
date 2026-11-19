@@ -389,6 +389,16 @@ shared feed publish and says how fast that reaches all of them, then lets fifty
 readers change something at each rate and says what it costs. It makes the
 shared feed due in the database, so it needs `DATABASE_URL` too.
 
+### Limits in memory
+
+`bench limits` needs no database. It times one call of the limit on every
+request and of the one on wrong passwords, for a key they know and for a new
+one, with 100 keys and with a full table:
+
+```sh
+cargo run --release -- bench limits
+```
+
 Results and how they were measured are in
 [docs/implementation.md](../docs/implementation.md#messung).
 

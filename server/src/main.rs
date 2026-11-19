@@ -339,6 +339,9 @@ enum BenchCommand {
         #[arg(long, value_name = "URL")]
         shared: Option<String>,
     },
+    /// Time the limits in memory with few keys and with a full table, and
+    /// print a table. Needs no database.
+    Limits,
     /// Time the queries and print a table.
     Measure {
         /// How often each query runs.
@@ -384,6 +387,10 @@ async fn main() -> anyhow::Result<()> {
     if matches!(cli.command, Some(Command::Health)) {
         let listen = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
         return health::check(health::address(&listen).await?, health::WAIT).await;
+    }
+    if matches!(cli.command, Some(Command::Bench(BenchCommand::Limits))) {
+        println!("{}", bench::limits::run());
+        return Ok(());
     }
 
     let database_url = env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
@@ -467,6 +474,9 @@ async fn main() -> anyhow::Result<()> {
             let added = bench::readers::add(&db, count, &tokens, shared.as_deref()).await?;
             println!("{added}");
             Ok(())
+        }
+        Command::Bench(BenchCommand::Limits) => {
+            unreachable!("answered before the database was opened")
         }
         Command::Bench(BenchCommand::Measure { runs }) => {
             let report = bench::measure(&db, runs).await?;

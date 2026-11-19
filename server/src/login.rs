@@ -6,7 +6,6 @@
 //! around it, so neither one account nor one sender can be tried without end.
 
 use std::{
-    collections::HashMap,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{Mutex, PoisonError},
     time::{Duration, Instant},
@@ -27,6 +26,7 @@ use crate::{
     legal::Legal,
     recovery, registration, second_factor,
     sessions::{self, Session},
+    table::Table,
 };
 
 /// How long wrong tries count.
@@ -39,8 +39,10 @@ pub const PER_ADDRESS: u32 = 30;
 /// addresses they come from: an IPv4 /24, or an IPv6 /48, which is what one
 /// site gets and holds 65,536 networks of a /64 each.
 pub const PER_NETWORK: u32 = 100;
-/// How many names and addresses are remembered at most.
-const MAX_KEYS: usize = 10_000;
+/// How many names and addresses are remembered at most: more than a server of
+/// 100,000 accounts sees in a [`WINDOW`]. Past that, one that matters least
+/// makes room (see [`count`]).
+pub const MAX_KEYS: usize = 100_000;
 
 /// What wrong tries are counted for.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -109,12 +111,23 @@ struct Tries {
 
 /// Counts wrong tries. It lives in memory: a restart forgets them, which costs
 /// an attacker more than it gains.
-#[derive(Default)]
 pub struct Limiter {
-    tries: Mutex<HashMap<Key, Tries>>,
+    tries: Mutex<Table<Key, Tries>>,
+}
+
+impl Default for Limiter {
+    fn default() -> Self {
+        Self::with_room(MAX_KEYS)
+    }
 }
 
 impl Limiter {
+    fn with_room(keys: usize) -> Self {
+        Self {
+            tries: Mutex::new(Table::new(keys)),
+        }
+    }
+
     /// How long the key has to wait, if it has used up its tries.
     pub fn blocked(&self, key: &Key, now: Instant) -> Option<Duration> {
         let tries = self.tries.lock().unwrap_or_else(PoisonError::into_inner);
@@ -173,31 +186,31 @@ impl Limiter {
 }
 
 /// How long the key has to wait, if it has used up its tries.
-fn wait(tries: &HashMap<Key, Tries>, key: &Key, now: Instant) -> Option<Duration> {
+fn wait(tries: &Table<Key, Tries>, key: &Key, now: Instant) -> Option<Duration> {
     let tries = tries.get(key)?;
     let left = WINDOW.checked_sub(now.saturating_duration_since(tries.since))?;
     (tries.wrong >= key.limit() && !left.is_zero()).then_some(left)
 }
 
 /// Counts a try for the key.
-fn count(tries: &mut HashMap<Key, Tries>, key: Key, now: Instant) {
-    if tries.len() >= MAX_KEYS && !tries.contains_key(&key) {
-        tries.retain(|_, tries| now.saturating_duration_since(tries.since) < WINDOW);
-        // Still full: the one with the fewest tries makes room, of those the
-        // one that has waited longest. A key that is held back stays held
-        // back, so that a flood of other names cannot set it free.
-        if tries.len() >= MAX_KEYS
-            && let Some(least) = tries
-                .iter()
-                .min_by_key(|(key, tries)| (tries.wrong >= key.limit(), tries.wrong, tries.since))
-                .map(|(key, _)| key.clone())
-        {
-            tries.remove(&least);
-        }
-    }
-    let entry = tries.entry(key).or_insert(Tries {
+fn count(tries: &mut Table<Key, Tries>, key: Key, now: Instant) {
+    // In a full table one whose time is over makes room, or else of those
+    // looked at the one with the fewest tries, of those the one that has
+    // waited longest. A key that is held back stays held back as long as
+    // there are others beside it, so that a flood of other names cannot set
+    // it free.
+    let new = || Tries {
         since: now,
         wrong: 0,
+    };
+    let entry = tries.entry(key, new, |key, tries| {
+        let counts = now.saturating_duration_since(tries.since) < WINDOW;
+        (
+            counts,
+            counts && tries.wrong >= key.limit(),
+            tries.wrong,
+            tries.since,
+        )
     });
     if now.saturating_duration_since(entry.since) >= WINDOW {
         *entry = Tries {
@@ -615,7 +628,7 @@ mod tests {
         limiter.succeeded(&grace);
         assert_eq!(limiter.blocked(&Key::name("grace"), now), None);
         assert_eq!(
-            limiter.tries.lock().unwrap()[&ip].wrong,
+            limiter.tries.lock().unwrap().get(&ip).unwrap().wrong,
             PER_NAME,
             "the address keeps the wrong ones"
         );
@@ -680,28 +693,38 @@ mod tests {
     }
 
     #[test]
-    fn what_is_remembered_has_a_limit() {
-        let limiter = Limiter::default();
+    fn what_is_remembered_has_a_limit_that_holds() {
+        let limiter = Limiter::with_room(100);
         let start = Instant::now();
+        let second = Duration::from_secs(1);
         for _ in 0..PER_NAME {
             limiter.failed(name(0), start);
         }
-        for n in 1..MAX_KEYS {
-            limiter.failed(name(n), start + Duration::from_secs(1));
+        for n in 1..100 {
+            limiter.failed(name(n), start + second);
         }
         let count = || limiter.tries.lock().unwrap().len();
-        let has = |key: &Key| limiter.tries.lock().unwrap().contains_key(key);
-        assert_eq!(count(), MAX_KEYS);
-        assert!(limiter.blocked(&name(0), start).is_some());
-        // One more: of those with the fewest tries the oldest goes, and the
-        // name that is held back stays held back.
-        limiter.failed(name(MAX_KEYS), start + Duration::from_secs(2));
-        assert_eq!(count(), MAX_KEYS);
-        assert!(limiter.blocked(&name(0), start).is_some());
-        assert!(has(&name(MAX_KEYS)));
-        assert_eq!((1..MAX_KEYS).filter(|n| !has(&name(*n))).count(), 1);
-        // Once their time is over, all of them go.
-        limiter.failed(name(MAX_KEYS + 1), start + WINDOW + Duration::from_secs(2));
-        assert_eq!(count(), 1);
+        let has = |key: &Key| limiter.tries.lock().unwrap().get(key).is_some();
+        // One more: of those looked at the one with the fewest tries and of
+        // those the oldest goes, not the name that is held back.
+        limiter.failed(name(100), start + 2 * second);
+        assert_eq!(count(), 100);
+        assert!(has(&name(100)));
+        assert!(!has(&name(1)));
+        // A hundred times as many names as there is room for, each tried
+        // once and a moment later than the last: the name that is held back
+        // stays held back.
+        for n in 101..10_000 {
+            limiter.failed(name(n), start + 2 * second);
+            assert_eq!(count(), 100);
+        }
+        assert!(limiter.blocked(&name(0), start + 3 * second).is_some());
+        // Once its time is over, it may make room as well.
+        let later = start + WINDOW + 3 * second;
+        for n in 10_000..10_200 {
+            limiter.failed(name(n), later);
+        }
+        assert_eq!(count(), 100);
+        assert!(!has(&name(0)));
     }
 }

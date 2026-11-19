@@ -53,6 +53,7 @@ use axum::{
 use crate::{
     AppError, AppState,
     login::{self, Sender},
+    table::Table,
 };
 
 /// What an address may send: 1200 requests at once, and 50 more every second.
@@ -108,8 +109,10 @@ pub const REGISTRATIONS_PER_NETWORK: Rate = Rate::new(5, Duration::from_secs(12 
 /// counted, or all where the operator turned it off; and since each network
 /// counts first, it takes many networks to use this up for everybody.
 pub const OPEN_REGISTRATIONS: Rate = Rate::new(20, Duration::from_secs(60));
-/// How many addresses and accounts are remembered at most.
-const MAX_KEYS: usize = 10_000;
+/// How many addresses and accounts each limit remembers at most: as many as
+/// a server of 100,000 accounts has, all asking at once. Past that, one that
+/// has (nearly) everything back makes room (see [`Table`]).
+pub const MAX_KEYS: usize = 100_000;
 /// How many costly requests run at once on the whole server, as rueder
 /// comes: fewer than the database has connections, so that reading goes on
 /// meanwhile. More wait. `HEAVY_AT_ONCE` sets another (see `sizes`).
@@ -143,16 +146,18 @@ impl Rate {
 /// burst away.
 pub struct Limiter<K> {
     rate: Rate,
-    max_keys: usize,
-    used: Mutex<HashMap<K, Instant>>,
+    used: Mutex<Table<K, Instant>>,
 }
 
 impl<K: Hash + Eq + Clone> Limiter<K> {
     pub fn new(rate: Rate) -> Self {
+        Self::with_room(rate, MAX_KEYS)
+    }
+
+    fn with_room(rate: Rate, keys: usize) -> Self {
         Self {
             rate,
-            max_keys: MAX_KEYS,
-            used: Mutex::default(),
+            used: Mutex::new(Table::new(keys)),
         }
     }
 
@@ -176,21 +181,10 @@ impl<K: Hash + Eq + Clone> Limiter<K> {
         {
             return Err(wait);
         }
-        if used.len() >= self.max_keys && !used.contains_key(key) {
-            // Whoever has everything back needs no entry.
-            used.retain(|_, back| *back > now);
-            // Still full: the one that is closest to having everything back
-            // makes room.
-            if used.len() >= self.max_keys
-                && let Some(least) = used
-                    .iter()
-                    .min_by_key(|(_, back)| **back)
-                    .map(|(key, _)| key.clone())
-            {
-                used.remove(&least);
-            }
-        }
-        used.insert(key.clone(), now + ahead);
+        // In a full table one that has everything back makes room, or else
+        // the one closest to it of those looked at: one that is held back
+        // stays as long as there are others beside it.
+        *used.entry(key.clone(), || now, |_, back| *back) = now + ahead;
         Ok(())
     }
 
@@ -536,9 +530,8 @@ mod tests {
     }
 
     #[test]
-    fn what_is_remembered_has_a_limit() {
-        let mut limiter = Limiter::new(Rate::new(2, SECOND));
-        limiter.max_keys = 100;
+    fn what_is_remembered_has_a_limit_that_holds() {
+        let limiter = Limiter::with_room(Rate::new(2, SECOND), 100);
         let start = Instant::now();
         // The first has used up everything, the others one each.
         assert_eq!(limiter.take(&0, start), Ok(()));
@@ -546,14 +539,20 @@ mod tests {
         for key in 1..100 {
             assert_eq!(limiter.take(&key, start), Ok(()));
         }
-        assert_eq!(limiter.len(), 100);
-        // One more: one of those with the most left goes, not the first.
-        assert_eq!(limiter.take(&100, start), Ok(()));
-        assert_eq!(limiter.len(), 100);
+        // A hundred times as many new ones as there is room for: one with
+        // more left makes room each time, and the first stays held back.
+        for key in 100..10_000 {
+            assert_eq!(limiter.take(&key, start), Ok(()));
+            assert_eq!(limiter.len(), 100);
+        }
         assert_eq!(limiter.take(&0, start), Err(SECOND));
-        // Once everything is back, all of them go.
-        assert_eq!(limiter.take(&101, start + SECOND * 5), Ok(()));
-        assert_eq!(limiter.len(), 1);
+        // Once everything is back, new ones take the places of the old.
+        let later = start + SECOND * 5;
+        for key in 10_000..10_200 {
+            assert_eq!(limiter.take(&key, later), Ok(()));
+        }
+        assert_eq!(limiter.len(), 100);
+        assert_eq!(limiter.take(&0, later), Ok(()));
     }
 
     #[test]

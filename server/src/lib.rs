@@ -75,6 +75,7 @@ pub mod sessions;
 pub mod sizes;
 pub mod status;
 pub mod subscribe;
+pub mod table;
 pub mod transfer;
 pub mod tree;
 pub mod typescript;

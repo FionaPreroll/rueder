@@ -12,7 +12,7 @@
 //! makes a new key, so that no challenge from before it is good.
 
 use std::{
-    collections::HashMap,
+    collections::BTreeSet,
     sync::{Mutex, PoisonError},
 };
 
@@ -76,8 +76,9 @@ pub struct Solution {
 pub struct Captcha {
     /// As long as a block of SHA-256, the most HMAC uses of a key.
     key: [u8; 64],
-    /// The challenge of each solution that counted, with its expiry.
-    used: Mutex<HashMap<String, i64>>,
+    /// The expiry and the challenge of each solution that counted, in the
+    /// order they expire, so that those which have go from the front.
+    used: Mutex<BTreeSet<(i64, String)>>,
 }
 
 impl Default for Captcha {
@@ -137,12 +138,13 @@ impl Captcha {
             return false;
         }
         let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
-        used.retain(|_, expires| *expires > now);
+        while used.first().is_some_and(|(expires, _)| *expires <= now) {
+            used.pop_first();
+        }
         if used.len() >= MAX_USED {
             return false;
         }
-        used.insert(solution.challenge.clone(), solution.expires)
-            .is_none()
+        used.insert((solution.expires, solution.challenge.clone()))
     }
 
     fn mac(&self, challenge: &str, expires: i64) -> Hmac<Sha256> {
@@ -244,7 +246,7 @@ mod tests {
             .used
             .lock()
             .unwrap()
-            .extend((0..MAX_USED).map(|n| (n.to_string(), NOW + VALID_SECONDS)));
+            .extend((0..MAX_USED).map(|n| (NOW + VALID_SECONDS, n.to_string())));
         let solution = solve(&captcha.challenge(NOW).unwrap());
         assert!(!captcha.check(&solution, NOW + 1));
         // Once the others expire, there is room again.
