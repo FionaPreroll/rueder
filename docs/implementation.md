@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.35 und 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.36 |
 
 Was es gibt:
 
@@ -371,8 +371,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.32 Abruf je Host über Runden hinweg (A6).** Siehe [Abruf](architecture.md#abruf) und [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client).
 - [x] **5.33 Größen einstellbar.** `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE` und `MAILS_PER_DAY`, siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits), [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19) und die Tabelle für 10.000 und 100.000 Konten in [deploy/README.md](../deploy/README.md#a-large-instance).
 - [x] **5.34 Grenzen im Speicher für viele Schlüssel.** Siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits) und [Grenzen im Speicher vom 2026-11-19](#grenzen-im-speicher-vom-2026-11-19).
-- [ ] **5.35 Platz und Datenbank für große Instanzen.** Wie viel Platz ein Konto und ein Feed im Jahr brauchen, mit der Aufbewahrung aus 5.3 und ohne, und was davon in den Arbeitsspeicher gehört: Mit kaltem Cache und 128 MB `shared_buffers` war das Lesen tausendfach langsamer. Dazu Autovacuum und Füllgrad für die Tabellen, die jedes Lesen ändert (`subscriptions`, `article_states`), wenn die Messung es rechtfertigt. Fertig, wenn:
-  - Zuwachs und Zeiten unter [Messung](#messung) stehen und `deploy/README.md` sie nennt.
+- [x] **5.35 Platz und Datenbank für große Instanzen.** Die Seiten der Abos lassen Platz für die nächste Lesemarke (Migration 0030), siehe [Lesestand und Ungelesen-Zahlen](architecture.md#lesestand-und-ungelesen-zahlen), [Platz, Arbeitsspeicher und Abos](#platz-arbeitsspeicher-und-abos-vom-2026-11-19) und „A large instance“ in [deploy/README.md](../deploy/README.md#a-large-instance).
 - [ ] **5.36 Bilder vor einem Cache.** Prüfen, ob die Adressen des Bild-Proxys je Konto signiert sind; wo nicht, sagen die Antworten, dass ein Cache vor rueder (ein Reverse-Proxy oder ein CDN unter derselben Domain) sie halten darf, mit einem Beispiel in `deploy/README.md`. Fertig, wenn:
   - ein Test die Header prüft;
   - der Bild-Proxy unter Last gemessen ist.
@@ -709,7 +708,7 @@ Live-Updates:
 - **Lesen ist nicht die Grenze.** Die Anfragen enden bei rund 1.650 je Sekunde, weil die Kerne dann zwischen Server, PostgreSQL und Lastgenerator aufgeteilt sind; mehr Verbindungen zur Datenbank bringen auf dieser Maschine nichts ([Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19)). Bei 100.000 Konten mit 20 bis 30 % täglich aktiven und einer Spitze von 15 bis 35 Besuchen je Sekunde ist das ein Zehntel davon. Am Vortag mit im Schnitt 43 Abos ohne lange Ausreißer waren es 2.050 je Sekunde.
 - **Live-Updates sind die Grenze.** Jedes Ereignis geht an jede offene Verbindung, und jede sieht selbst in der Liste der Konten nach, ob es ihr gilt (`events.rs`). Mit 10 Verbindungen kosteten 800 Änderungen je Sekunde am Vortag 0,3 Kerne; mit 10.000 kosten schon 50 je Sekunde 2,7. Kommt eine Verbindung nicht nach, fällt sie aus dem Puffer und bekommt `resync`, und die Seite lädt alles neu. Bei 100.000 Konten wären 3.000 bis 5.000 Verbindungen und um 150 Ereignisse je Sekunde zu erwarten, mehr als diese Maschine schafft. Paket 5.31.
 - **Ein großes Konto.** Eines der Konten des Generators mit 12.012 Abos brauchte für den Baum 0,34 s (3,6 MB JSON) und für eine Liste über alle Feeds rund 0,3 s; ein Konto darf aber höchstens 2.000 Abos haben. Die Leser des beliebtesten Feeds zu finden, wie es jeder Abruf mit Neuem tut, kostete bei 26.246 Lesern 67 ms.
-- **Kalter Cache.** Nach dem Löschen und Neuanlegen von fünf Millionen Abos, mit `shared_buffers = 128MB`, brauchte eine Seite der ungelesenen Artikel im Median 37 s und die Maschine rechnete fast nichts: Alles kam von der Platte. Was gelesen wird, muss in den Arbeitsspeicher passen. Paket 5.35.
+- **Kalter Cache.** Nach dem Löschen und Neuanlegen von fünf Millionen Abos, mit `shared_buffers = 128MB`, brauchte eine Seite der ungelesenen Artikel im Median 37 s und die Maschine rechnete fast nichts: Alles kam von der Platte. Was gelesen wird, muss in den Arbeitsspeicher passen; wie viel das ist, steht unter [Platz, Arbeitsspeicher und Abos](#platz-arbeitsspeicher-und-abos-vom-2026-11-19).
 - **Nicht gemessen:** Apps über die Google-Reader-API, der Bild-Proxy unter Last, Abrufe gegen echte, langsame Websites und die Suche mit Hunderten Millionen Artikeln.
 
 ### Probelauf vom 2026-11-15
@@ -922,6 +921,83 @@ Paket 5.34: was eine Grenze im Speicher einen Aufruf kostet, mit `rueder bench l
 - **Ein neuer Schlüssel in einer vollen Tabelle sucht nicht mehr.** Bei 100.000 Schlüsseln kostet er 0,4 bis 0,9 µs statt 1,4 bis 1,9 ms, weniger als vorher schon bei 10.000. Vorher durchsuchte jeder neue die ganze Tabelle, unter der Sperre, die jede Anfrage nimmt.
 - **Ein Login mit Passkey sieht die anderen nicht mehr an.** Vorher lief jeder neue durch alle offenen Zeremonien, um die abgelaufenen zu finden, die seines Absenders zu zählen und die älteste zu verdrängen. Bei 10.000 kostete das 0,2 ms unter der Sperre aller Zeremonien, ohne dass es eine Anmeldung brauchte. Jetzt sind es 1,6 µs.
 - **Ganz so billig wie bei 100 ist er nicht.** Eine Tabelle mit 100.000 Schlüsseln passt nicht mehr in den Cache des Prozessors. Jeder Zugriff auf sie, auch auf einen bekannten Schlüssel, kostet deshalb einige Zehntel Mikrosekunden mehr, beim Platzmachen mehrmals. Mit der Zahl der Schlüssel wächst das nicht weiter. Dass das 99. Perzentil mit 100 Schlüsseln höher ist, liegt daran, dass die Tabelle dort noch wächst. Gegen die Millisekunden einer Anfrage (siehe [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19)) fällt beides nicht ins Gewicht.
+
+### Platz, Arbeitsspeicher und Abos vom 2026-11-19
+
+Paket 5.35. Ergebnis:
+
+- Ein neu abgerufener Artikel braucht rund 7,5 KB, nach der Aufbewahrung aus E4 noch 1,2 KB.
+- Den Platz bestimmen die Feeds, nicht die Konten. Ein Feed bringt im Median 57 Artikel im Jahr, im Mittel 4.530, die größten über 100.000. Ein Konto mit 50 Abos braucht rund 7 KB und wächst nur um seine Sterne, Labels und ausgeblendeten Artikel.
+- In den Arbeitsspeicher gehören die Abos, die Zeilen der gelesenen Artikel und die Ausnahmen, von den Texten nur die geöffneten: 1,3 GB für 100.000 Leser mit je 49 Abos.
+- Die Abos lassen ein Zehntel jeder Seite frei (Füllgrad 90, Migration 0030). Damit kommen alle Updates der Lesemarke ohne neuen Indexeintrag aus statt eines Drittels.
+
+**Kennzahlen aus der Produktion.** Fionas Instanz am 2026-11-19, mit lesenden Abfragen, die nur Summen und Verteilungen ausgeben: 2 aktive Konten, 148 abonnierte Feeds, 715.805 Artikel, davon 707.040 aus dem alten rueder (angekommen vom 2021-05-30 bis zum 2022-10-17). Die Datenbank hat 2,2 GB, `shared_buffers = 512MB`, 99,3 % der Lesezugriffe kamen aus dem Speicher; der Cache der Bilder hat 59 MB.
+
+Artikel je Feed und Jahr, 2022 im alten rueder: 119 Feeds in 290 Tagen, aufs Jahr hochgerechnet.
+
+| 10. | 25. | 50. | 75. | 90. | 99. Perzentil | größter | Mittel |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 14 | 57 | 325 | 3.490 | 136.000 | 195.000 | 4.530 |
+
+Die zwei größten Feeds brachten rund 60 % aller Artikel. Seit dem Umstieg kommen rund 900 Artikel am Tag aus 148 Feeds, ohne den ersten Abruf jedes Feeds, der auf einmal bringt, was der Feed gerade zeigt.
+
+**Ein Artikel.** In der Produktion hat ein neu abgerufener Text im Mittel 2.760 Zeichen HTML (Median 865, 99. Perzentil 31.482). Er speichert nach Kompression 1,7 KB HTML, 1,4 KB Wörter der Suche und 0,3 KB Titel und Anriss und hat im Mittel 1,1 Versionen zu je 1,7 KB. Die Gegenprobe:
+
+- **Maschine:** wie unter [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19), Release-Build.
+- **Daten:** `rueder bench generate --accounts 10 --feeds 300 --articles 300000`, die Ankunft über die zehn Jahre verteilt, in denen die Artikel erschienen. Jeder Text besteht aus den Texten von vier Artikeln, im Mittel 2.693 Zeichen, die Versionen tragen den Text als Rohdaten, 1,06 je Artikel. Alles mit `VACUUM FULL` gepackt, die Indizes mitgezählt.
+
+| | Zeile (`articles`) | Text, Wörter, Rest (`article_content`) | Versionen | zusammen |
+|---|---:|---:|---:|---:|
+| erfundene Daten | 0,5 KB | 6,0 KB | 3,4 KB | 9,9 KB |
+| mit den Größen der Produktion | 0,6 KB | 4,5 KB | 2,4 KB | 7,5 KB |
+| nach E4, ohne Text und Versionen | 0,5 KB | 0,7 KB | – | 1,2 KB |
+
+Die erfundenen Texte haben mehr verschiedene Wörter als echte (2,5 statt 1,4 KB) und größere Rohdaten; die zweite Zeile setzt die Größen der Produktion in die gemessenen ein.
+
+**Die Aufbewahrung.** `rueder retention run` mit `--articles 24 --remove text --versions 12 --orphans 90` brauchte für die 300.000 Artikel 57 s: 217.400 Texte gingen, dazu die Versionen von 108 Monaten.
+
+- Die Versionen gehen als ganze Monate, ihr Platz ist sofort wieder auf der Platte: Die Datenbank hatte danach 2,2 statt 3,0 GB.
+- Die Texte nicht. Weil jedes Update eine neue Fassung der Zeile schreibt, wuchs `article_content` erst von 1,8 auf 1,9 GB. `VACUUM` gibt den Platz frei, damit neue Zeilen ihn nutzen, macht die Datei aber nicht kleiner. Erst `VACUUM FULL` gibt ihn der Platte zurück: `article_content` danach 0,65 GB, die Datenbank 0,9 GB.
+- Eine Instanz, die die Aufbewahrung einschaltet, wächst danach nicht mehr um die alten Texte, schrumpft ohne `VACUUM FULL` aber auch nicht.
+
+**Je Feed und Jahr**, mit 7,5 KB je Artikel, 5,1 KB ohne Versionen und 1,2 KB ohne Text:
+
+| Feed | Artikel je Jahr | ohne Aufbewahrung, je Jahr | mit E4, nach zwei Jahren | danach je Jahr dazu |
+|---|---:|---:|---:|---:|
+| Median | 57 | 0,4 MB | 0,7 MB | 0,1 MB |
+| 90. Perzentil | 3.490 | 26 MB | 44 MB | 4 MB |
+| Mittel | 4.530 | 34 MB | 57 MB | 5 MB |
+| 99. Perzentil | 136.000 | 1,0 GB | 1,7 GB | 160 MB |
+
+**Je Konto.** Ein Abo braucht gepackt 137 Byte samt Indizes (`subscriptions` mit 5 Millionen Abos 687 MB), ein Konto mit 50 Abos also rund 7 KB. Eine Ausnahme vom Lesestand, ein Stern oder ein Label kostet rund 110 Byte. Mit den Jahren wächst ein Konto um seine Sterne und Labels und um die Artikel, die seine Filterregeln ausblenden, eine Zeile je Artikel. In der Produktion waren es 389 ausgeblendete in wenigen Tagen.
+
+**Arbeitsspeicher.** Die Daten von [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19): 100.000 Leser mit 5 Millionen Abos, 4,6 GB, `shared_buffers = 2GB`. PostgreSQL neu gestartet und den Cache des Betriebssystems geleert, dann 13 Minuten `load/reading.js` mit 32 Lesern zugleich. Danach lagen 1,3 GB im Cache von PostgreSQL:
+
+| Tabelle | im Cache | ganz |
+|---|---:|---:|
+| `subscriptions` mit Primärschlüssel | 412 MB | 429 MB |
+| `articles` | 436 MB | 465 MB |
+| `article_states` mit Primärschlüssel | 184 MB | 258 MB |
+| `article_content` mit TOAST | 167 MB | 1.545 MB |
+| Konten, Sitzungen und Feeds | 37 MB | 37 MB |
+
+- **Gebraucht werden die Abos und die gelesenen Artikel fast ganz,** von den Texten nur die geöffneten.
+- **Der kalte Start war nach einer halben Minute vorbei:** Im ersten Fenster von 30 s kamen 1.631 Anfragen je Sekunde, im 99. Perzentil 68 ms für die ungelesenen Artikel, danach rund 1.800 und 37 ms wie warm.
+- **Mit weniger als diesem Bestand** kam alles von der Platte, wie mit 128 MB unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15).
+
+**Abos und Füllgrad.** Dieselben Daten, je 20 Minuten `load/reading.js` mit 32 Lesern, vorher `subscriptions` mit `VACUUM FULL` gepackt:
+
+| Füllgrad | Updates der Lesemarke | ohne neuen Indexeintrag | tote Zeilen danach | Tabelle | Indizes |
+|---|---:|---:|---:|---|---|
+| 100, wie bisher | 31.368 | 35 % | 20.326 | 303 MB, 1,3 MB mehr | 351 MB, 0,2 MB mehr |
+| 90 | 35.782 | 100 % | 48 | 337 MB, nicht mehr | 351 MB, nicht mehr |
+
+- **Das Autovacuum lief für `subscriptions` in keinem Lauf.** Mit dem Standard von PostgreSQL wartet es auf 20 % tote Zeilen, bei 5 Millionen Abos auf eine Million; mit dem Füllgrad 90 entstehen kaum welche.
+- **In der Produktion** waren 98 % der Updates ohne neuen Indexeintrag, weil 182 Abos auf wenigen halbleeren Seiten liegen.
+- **`article_states`** wird fast nur eingefügt und gelöscht. Dort lief das Autovacuum zweimal in 20 Minuten; ein Füllgrad hilft nicht.
+- **Am meisten geändert werden in der Produktion die Feeds**: 37.327 Updates, nur 5 % ohne neuen Indexeintrag, 431 Läufe des Autovacuum. Jeder Abruf schreibt die Zeit des nächsten, und die hat einen Index (`feeds_next_fetch`). Dagegen hilft kein Füllgrad; das Autovacuum kam hinterher.
+
+**Nicht gemessen:** wie viele und wie schwere Feeds eine öffentliche Instanz hat. Die Raten stammen aus Fionas 148 Feeds, und schon dort tragen zwei Feeds den größten Teil. Ebenso wenig, wie viel ein Konto mit Filterregeln über ein Jahr ausblendet.
 
 ## Wissen über das Altsystem
 

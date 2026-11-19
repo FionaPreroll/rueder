@@ -522,3 +522,14 @@ async fn the_language_of_an_account_is_a_language_tag(db: PgPool) {
         assert_eq!(constraint, Some("accounts_language_check"), "{tag}");
     }
 }
+
+#[sqlx::test]
+async fn every_page_of_the_subscriptions_keeps_room_for_the_next_mark(db: PgPool) {
+    // So that moving the read mark needs no new entry in the indexes (HOT).
+    let options: Option<Vec<String>> =
+        sqlx::query_scalar("SELECT reloptions FROM pg_class WHERE relname = 'subscriptions'")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(options, Some(vec!["fillfactor=90".to_owned()]));
+}

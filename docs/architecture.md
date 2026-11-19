@@ -161,6 +161,8 @@ Die Operationen:
 - **Alle als gelesen markieren (bis Nummer N):** Die Marke rückt auf N vor, alle Ausnahmen „gelesen“ und „ungelesen gehalten“ bis N entfallen. Die Marke bewegt sich nie zurück.
 - **Verdichten:** Folgen auf die Marke lückenlos gelesene oder ausgeblendete Artikel, rückt sie darüber vor. So bleibt die Zahl der Ausnahmen klein, auch wenn jemand jahrelang Artikel einzeln liest.
 
+Die Tabelle der Abos lässt auf jeder Seite Platz frei (`fillfactor`, Migration 0030). Die Lesemarke steht in keinem Index; findet ihre neue Fassung Platz auf derselben Seite, braucht PostgreSQL keinen neuen Eintrag in den Indizes (HOT) und lässt keine toten Zeilen für das Autovacuum zurück. In einer dicht gepackten Tabelle mit Millionen Abos kam nur ein Drittel der Updates so aus, mit dem freien Platz alle ([Messung](implementation.md#platz-arbeitsspeicher-und-abos-vom-2026-11-19)).
+
 Das maßgebliche Modell mit Tests ist `web/src/lib/unread.ts`. Der Server bildet genau dieses Verhalten nach und wird mit denselben Fällen geprüft, am besten mit Property-Tests gegen ein einfaches Modell („eine Menge gelesener Nummern“).
 
 Der Lesestand hängt an (Konto, Feed, Nummer) und nicht an der ID des Artikels. Die Liste eines Feeds und seine Zählung kommen dadurch ohne Verbund mit der Artikeltabelle aus.

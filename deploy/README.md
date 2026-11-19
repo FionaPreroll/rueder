@@ -297,17 +297,50 @@ costly requests 1 to 64 and fewer than the connections, mails 1 to
 | Sizes | as rueder comes | `MAILS_PER_DAY=10000`; with 8 cores also `DATABASE_CONNECTIONS=20` and `HEAVY_AT_ONCE=6` |
 | Fetching | `FETCH_ROUND=300`, `FETCH_AT_ONCE=32`, `FETCH_EVERY=15`: 72,000 an hour | `FETCH_ROUND=1000`, `FETCH_AT_ONCE=64`, `FETCH_EVERY=10`: 360,000 an hour |
 | Retention | `--articles 24 --remove text --versions 12 --orphans 90`, see [Keeping old articles, or not](#keeping-old-articles-or-not) | the same |
+| Disk | by the feeds, not the accounts: see below | the same |
 
 With 100,000 made-up readers, a machine with 4 cores and 15 GB answered about
 250 visits of a reader a second, each the tree, a page of unread articles,
 three articles opened and marked read and a page of one feed; 100,000
 accounts make 15 to 35 a second at their busiest. Twice the connections
-made no difference there, as its cores were busy. What readers read has to
-fit in memory: with PostgreSQL's 128 MB, a page of unread articles took over
-half a minute, as it came from the disk. The column for 10,000 accounts is worked
-out from these numbers, not measured on its own; how much space accounts and
-feeds take over the years is not measured yet. The numbers are in
-`docs/implementation.md` under "Messung".
+made no difference there, as its cores were busy. The column for 10,000
+accounts is worked out from these numbers, not measured on its own. The
+numbers are in `docs/implementation.md` under "Messung".
+
+**Memory.** What readers read has to fit in memory: their subscriptions, the
+lines of the articles they read and what they marked, about 1.3 GB for
+100,000 readers with 50 subscriptions each; of the texts, only those opened.
+With less, as with PostgreSQL's 128 MB, a page of unread articles took over
+half a minute, as everything came from the disk. The `POSTGRES_SHARED_BUFFERS`
+in the table leave room for that and more. After a restart, reading was as
+fast as before within half a minute.
+
+**Disk.** The space goes with the feeds, not with the accounts. An article
+takes about 7.5 KB with its text, the words to search it by and its
+versions. A feed brings 57 articles a year at the median and 4,500 on
+average, while a few news feeds bring over 100,000; on the instance this was
+measured on, two feeds brought 60 % of all articles. An account with 50
+subscriptions takes about 7 KB, and every star, label or article its filter
+rules hide about 110 bytes more. So 1,000 feeds like those take about 34 GB
+a year. With the retention in the table, an article that is two years old
+keeps about 1.2 KB, its line in the list and the words of its title and
+tags: the
+same 1,000 feeds then hold about 57 GB and grow by about 5 GB a year. The
+image proxy's cache stays within `IMAGE_CACHE_MB`.
+
+Turning the retention on keeps the database from growing by old texts, but
+does not make it smaller: PostgreSQL reuses the space of the texts that went,
+while the versions give theirs back at once. To give back the rest, once:
+
+```sh
+docker compose exec db psql -U rueder -c 'VACUUM FULL article_content'
+```
+
+It locks the table while it runs, about a minute for 300,000 articles, so
+readers wait meanwhile. The same is worth it once for `subscriptions` after an
+update on an instance with many subscriptions: rueder leaves a tenth of every
+page of that table free, so that moving the read mark needs no new entry in
+its indexes, and a table written before gets that room only bit by bit.
 
 ## Commands
 
