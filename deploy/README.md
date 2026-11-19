@@ -223,6 +223,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `IMAGE_CACHE_MB`, `IMAGE_PROXY_KEY` | Size of the image proxy's cache, and its secret if you want to set it yourself. |
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
+| `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (3) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
 | `APP_API` | `off` lets no feed reader app of another maker in. On if not set: readers set up apps such as NetNewsWire and Read You under Settings, Apps, with an app password each, and the apps reach rueder at `https://<your rueder>/greader`. |
 | `CONTENT_REPORTS` | `on` lets readers report a feed or an article to you, with a reason and a short note. The status page lists the reported feeds with their address, never who reported; `rueder feed block` blocks one. Off if not set. |
@@ -270,6 +271,43 @@ machine, so `FETCH_AT_ONCE` is what keeps rounds short: 64 fetches at once of
 sites that take half a second each make about 130 a second. Where many readers
 follow feeds of one large platform, such as a video site, `FETCH_PER_HOST=4`
 fetches four of them at once; ask the platform's terms before you go higher.
+
+For tens of thousands of accounts, the server itself can be set up larger:
+
+- `DATABASE_CONNECTIONS` (10) is how many connections to the database rueder
+  keeps. More help only where PostgreSQL has more cores to use them, about
+  two for each core. PostgreSQL takes 100 as it comes, and rueder's commands,
+  such as `rueder account list`, take a few of their own.
+- `HEAVY_AT_ONCE` (3) is how many costly requests run at once, such as an
+  export, an import or the preview of a filter rule; more wait for their
+  turn. It stays fewer than the connections, so that reading goes on
+  meanwhile.
+- `MAILS_PER_DAY` (1,000) is how many mails rueder sends in a day, of which
+  three in ten may be links to set a new password. Set it to what your relay
+  allows.
+
+The server refuses to start with a value out of bounds (connections 2 to 90,
+costly requests 1 to 64 and fewer than the connections, mails 1 to
+1,000,000). A starting point:
+
+| | 10,000 accounts | 100,000 accounts |
+|---|---|---|
+| Machine | 2 cores, 8 GB | 4 cores, 16 GB |
+| PostgreSQL | `POSTGRES_SHARED_BUFFERS=2GB` | `POSTGRES_SHARED_BUFFERS=4GB` |
+| Sizes | as rueder comes | `MAILS_PER_DAY=10000`; with 8 cores also `DATABASE_CONNECTIONS=20` and `HEAVY_AT_ONCE=6` |
+| Fetching | `FETCH_ROUND=300`, `FETCH_AT_ONCE=32`, `FETCH_EVERY=15`: 72,000 an hour | `FETCH_ROUND=1000`, `FETCH_AT_ONCE=64`, `FETCH_EVERY=10`: 360,000 an hour |
+| Retention | `--articles 24 --remove text --versions 12 --orphans 90`, see [Keeping old articles, or not](#keeping-old-articles-or-not) | the same |
+
+With 100,000 made-up readers, a machine with 4 cores and 15 GB answered about
+250 visits of a reader a second, each the tree, a page of unread articles,
+three articles opened and marked read and a page of one feed; 100,000
+accounts make 15 to 35 a second at their busiest. Twice the connections
+made no difference there, as its cores were busy. What readers read has to
+fit in memory: with PostgreSQL's 128 MB, a page of unread articles took over
+half a minute, as it came from the disk. The column for 10,000 accounts is worked
+out from these numbers, not measured on its own; how much space accounts and
+feeds take over the years is not measured yet. The numbers are in
+`docs/implementation.md` under "Messung".
 
 ## Commands
 
@@ -352,7 +390,8 @@ you set a forgotten password yourself with `rueder account password`.
 `--email off`, the default, asks nobody. A link is good for 24 hours and once;
 an account made with `required` that never opens its link goes after 7 days.
 rueder sends at most 5 mails an hour for an account, 3 to an address and one
-more every two hours, and 1,000 a day in all. Mail goes out in the language the
+more every two hours, and 1,000 a day in all (`MAILS_PER_DAY`), of which three
+in ten may be links to set a new password. Mail goes out in the language the
 account was made in. The status page names no address, and moving an account
 to another rueder takes none along.
 

@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.33 bis 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.34 bis 5.36 |
 
 Was es gibt:
 
@@ -369,9 +369,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.30 Lastmessung für viele Konten.** `rueder bench readers` und die Lasttests in `web/load/`, siehe [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15) und `server/README.md` unter „Measuring“.
 - [x] **5.31 Live-Updates je Konto (A6).** Siehe [Live-Updates](architecture.md#live-updates).
 - [x] **5.32 Abruf je Host über Runden hinweg (A6).** Siehe [Abruf](architecture.md#abruf) und [Gehärteter HTTP-Client](architecture.md#gehärteter-http-client).
-- [ ] **5.33 Größen einstellbar.** Die Verbindungen zur Datenbank (heute fest 10, die gemessene Grenze des Lesens), die schweren Anfragen zugleich (3) und die Mails je Tag (1.000) kommen aus der Umgebung, mit den heutigen Werten als Standard (A16). `deploy/README.md` bekommt eine Tabelle für 10.000 und 100.000 Konten: Maschine, Einstellungen von PostgreSQL, Takt des Abrufs, Aufbewahrung. Fertig, wenn:
-  - Tests die Grenzen der Einstellungen prüfen;
-  - `load/reading.js` mit 10 und mit 20 Verbindungen unter [Messung](#messung) steht.
+- [x] **5.33 Größen einstellbar.** `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE` und `MAILS_PER_DAY`, siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits), [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19) und die Tabelle für 10.000 und 100.000 Konten in [deploy/README.md](../deploy/README.md#a-large-instance).
 - [ ] **5.34 Grenzen im Speicher für viele Schlüssel.** Ist eine Grenze voll (10.000 Schlüssel), durchsucht heute jeder neue Schlüssel die ganze Tabelle unter einer Sperre. Künftig verdrängt sie ohne zu suchen, und die Obergrenzen passen zu 100.000 Konten; ebenso die Login-Grenzen und die benutzten Aufgaben des Captchas. Fertig, wenn:
   - ein Test zeigt, dass die Grenzen beim Verdrängen halten;
   - eine Messung zeigt, dass eine Anfrage bei 100.000 Schlüsseln nicht mehr kostet als bei 100.
@@ -709,7 +707,7 @@ Live-Updates:
 | 5.000 | 23,3 KB | in 71 ms | 1,8 Kerne | 2,6 Kerne | 512 je s, p50 6,0 s, 2.083 `resync` |
 | 10.000 | 22,8 KB | in 141 ms | 2,7 Kerne | 2,7 Kerne | 313 je s, p50 15,6 s, 4.659 `resync` |
 
-- **Lesen ist nicht die Grenze.** Die Anfragen enden bei rund 1.650 je Sekunde, weil der Pool 10 Verbindungen zur Datenbank hat und eine Anfrage dort rund 5 ms braucht; die Kerne sind dann zwischen Server, PostgreSQL und Lastgenerator aufgeteilt. Bei 100.000 Konten mit 20 bis 30 % täglich aktiven und einer Spitze von 15 bis 35 Besuchen je Sekunde ist das ein Zehntel davon. Am Vortag mit im Schnitt 43 Abos ohne lange Ausreißer waren es 2.050 je Sekunde.
+- **Lesen ist nicht die Grenze.** Die Anfragen enden bei rund 1.650 je Sekunde, weil die Kerne dann zwischen Server, PostgreSQL und Lastgenerator aufgeteilt sind; mehr Verbindungen zur Datenbank bringen auf dieser Maschine nichts ([Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19)). Bei 100.000 Konten mit 20 bis 30 % täglich aktiven und einer Spitze von 15 bis 35 Besuchen je Sekunde ist das ein Zehntel davon. Am Vortag mit im Schnitt 43 Abos ohne lange Ausreißer waren es 2.050 je Sekunde.
 - **Live-Updates sind die Grenze.** Jedes Ereignis geht an jede offene Verbindung, und jede sieht selbst in der Liste der Konten nach, ob es ihr gilt (`events.rs`). Mit 10 Verbindungen kosteten 800 Änderungen je Sekunde am Vortag 0,3 Kerne; mit 10.000 kosten schon 50 je Sekunde 2,7. Kommt eine Verbindung nicht nach, fällt sie aus dem Puffer und bekommt `resync`, und die Seite lädt alles neu. Bei 100.000 Konten wären 3.000 bis 5.000 Verbindungen und um 150 Ereignisse je Sekunde zu erwarten, mehr als diese Maschine schafft. Paket 5.31.
 - **Ein großes Konto.** Eines der Konten des Generators mit 12.012 Abos brauchte für den Baum 0,34 s (3,6 MB JSON) und für eine Liste über alle Feeds rund 0,3 s; ein Konto darf aber höchstens 2.000 Abos haben. Die Leser des beliebtesten Feeds zu finden, wie es jeder Abruf mit Neuem tut, kostete bei 26.246 Lesern 67 ms.
 - **Kalter Cache.** Nach dem Löschen und Neuanlegen von fünf Millionen Abos, mit `shared_buffers = 128MB`, brauchte eine Seite der ungelesenen Artikel im Median 37 s und die Maschine rechnete fast nichts: Alles kam von der Platte. Was gelesen wird, muss in den Arbeitsspeicher passen. Paket 5.35.
@@ -874,6 +872,30 @@ Paket 5.42: wie rueder einen Artikel erkennt, dem der Feed bei jedem Abruf eine 
 - **Ohne Index liegt jeder Artikel auf einer eigenen Seite.** Die Artikel aller Feeds treffen gemischt ein. Von den 1.000 neuesten Artikeln eines kleinen Feeds liegt deshalb fast jeder auf einer eigenen Seite, zusammen rund 8 MB, beim größten Feed sind es rund 340 Seiten. Bei vielen Feeds passen diese Seiten nicht mehr in den Cache. Der Index fragt nur nach den Daten der Einträge, die neuesten liegen beieinander.
 - **Schreiben.** 20 neue Artikel zu speichern brauchte mit dem Index 20,7 ms im Median und 84,7 ms im 95. Perzentil, ohne ihn 25,5 und 83,5 ms; der Unterschied geht in der Streuung unter, die der Index der Suche macht. Ohne den Index der Suche waren es 5,7 und 6,0 ms.
 - **Platz und Migration.** Der Index braucht 61 MB für 2 Millionen Artikel, rund 30 Byte je Artikel, und entstand in 1,1 Sekunden.
+
+### Verbindungen zur Datenbank vom 2026-11-19
+
+Paket 5.33: ob mehr Verbindungen zur Datenbank mehr Lesen tragen, mit `load/reading.js` wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15). Ergebnis: Auf vier Kernen nicht. Mit 20 Verbindungen schafft der Server so viel wie mit 10, rund 2.300 Anfragen je Sekunde. Die Grenze sind die Kerne, die sich Server, PostgreSQL und Lastgenerator teilen, nicht der Pool.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,3 GHz), 15 GB Arbeitsspeicher, virtuelle Platte. PostgreSQL 16.15 mit `shared_buffers = 2GB`, Release-Build. Server, Datenbank und Lastgenerator (Node 22) auf derselben Maschine.
+- **Daten:** `rueder bench generate --accounts 10 --feeds 20000 --articles 1000000`, dazu `rueder bench readers --count 100000`: 100.000 Leser mit 4.894.260 Abos, im Schnitt 48,9, höchstens 481, der beliebteste Feed mit 27.129 Lesern. Die Datenbank hat 4,6 GB. Ein Drittel der Artikel vom 2026-11-15, weil die Daten von damals für die Migrationen seither zu wenig Platz auf der Platte ließen.
+- **Messung:** `DATABASE_CONNECTIONS=10`, dann 20, dann noch einmal 10, jeweils nach `VACUUM ANALYZE` und 90 Sekunden zum Aufwärmen, je 30 Sekunden mit 8, 32 und 64 Lesern zugleich; ein Besuch sind 9 Anfragen wie dort.
+
+| Verbindungen | Zugleich | Anfragen je s | Besuche je s | Server | PostgreSQL | Baum p99 | Ungelesen p99 | Artikel p99 | Markieren p99 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 8 | 1.690 | 188 | 0,9 Kerne | 1,8 Kerne | 11 ms | 15 ms | 8 ms | 12 ms |
+| 10 | 32 | 2.297 | 255 | 1,0 | 1,9 | 28 ms | 30 ms | 21 ms | 25 ms |
+| 10 | 64 | 2.263 | 251 | 1,0 | 1,9 | 57 ms | 52 ms | 43 ms | 47 ms |
+| 20 | 8 | 1.684 | 187 | 0,9 | 1,7 | 11 ms | 16 ms | 8 ms | 12 ms |
+| 20 | 32 | 2.231 | 248 | 1,0 | 2,1 | 30 ms | 33 ms | 23 ms | 30 ms |
+| 20 | 64 | 2.323 | 258 | 1,0 | 2,1 | 60 ms | 56 ms | 43 ms | 51 ms |
+| 10, noch einmal | 8 | 1.870 | 208 | 0,9 | 1,7 | 10 ms | 14 ms | 7 ms | 11 ms |
+| 10, noch einmal | 32 | 2.297 | 255 | 1,0 | 1,9 | 27 ms | 29 ms | 21 ms | 24 ms |
+| 10, noch einmal | 64 | 1.858 | 206 | 1,0 | 1,9 | 71 ms | 63 ms | 53 ms | 56 ms |
+
+- **Die Kerne sind die Grenze, nicht der Pool.** Ab 32 Lesern zugleich sind alle vier Kerne belegt: rund einer für den Server, zwei für PostgreSQL und einer für den Lastgenerator. Mehr Verbindungen lassen dann nur mehr Anfragen in PostgreSQL warten, und die Zeiten wachsen mit den Lesern wie mit 10. Die Läufe streuen um rund 10 %, wie die Wiederholung mit 10 Verbindungen zeigt.
+- **Mehr als am 2026-11-15**, 2.300 statt 1.650 Anfragen je Sekunde: Mit einem Drittel der Artikel ist die erste Seite der ungelesenen Artikel billiger, und die Maschine hat 2,3 statt 2,1 GHz. Für den Vergleich der Verbindungen zählt nur, dass alle Läufe auf denselben Daten liefen.
+- **Was daraus folgt.** Mehr Verbindungen lohnen erst mit mehr Kernen für PostgreSQL. Die Tabelle in [deploy/README.md](../deploy/README.md#a-large-instance) nennt 10 für vier Kerne und 20 für acht, das zweite nach der Faustregel aus dem Wiki von PostgreSQL (zwei Verbindungen je Kern, eine je Platte), nicht gemessen. Mit 250 Besuchen je Sekunde trägt diese Maschine die Spitze von 100.000 Konten (15 bis 35 Besuche je Sekunde, siehe dort) gut siebenfach.
 
 ## Wissen über das Altsystem
 

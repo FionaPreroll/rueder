@@ -90,10 +90,12 @@ pub const MAILS_PER_ACCOUNT: Rate = Rate::new(5, Duration::from_secs(60 * 60));
 /// hours, whichever accounts ask for them.
 pub const MAILS_PER_ADDRESS: Rate = Rate::new(3, Duration::from_secs(2 * 60 * 60));
 /// How many mails the whole server sends: 1000 at once, and 1000 more a day.
+/// `MAILS_PER_DAY` sets another number (see `sizes`).
 pub const MAILS_PER_DAY: Rate = Rate::new(1000, Duration::from_millis(86_400));
 /// How many of them may be links to set a new password: 300 at once, and 300
 /// more a day. Anybody can ask for one for any name, so these have a share of
-/// their own, and the rest of the day's mail stays for confirmations.
+/// their own, and the rest of the day's mail stays for confirmations. With
+/// another `MAILS_PER_DAY` the share is three in ten of it (see `sizes`).
 pub const RESET_MAILS_PER_DAY: Rate = Rate::new(300, Duration::from_millis(288_000));
 /// How many registrations one network may try: 5 at once, and 5 more an hour.
 /// A network is an IPv4 /24 or an IPv6 /48, as for wrong passwords, so that
@@ -108,8 +110,9 @@ pub const REGISTRATIONS_PER_NETWORK: Rate = Rate::new(5, Duration::from_secs(12 
 pub const OPEN_REGISTRATIONS: Rate = Rate::new(20, Duration::from_secs(60));
 /// How many addresses and accounts are remembered at most.
 const MAX_KEYS: usize = 10_000;
-/// How many costly requests run at once on the whole server: fewer than the
-/// database has connections, so that reading goes on meanwhile. More wait.
+/// How many costly requests run at once on the whole server, as rueder
+/// comes: fewer than the database has connections, so that reading goes on
+/// meanwhile. More wait. `HEAVY_AT_ONCE` sets another (see `sizes`).
 pub const HEAVY_AT_ONCE: usize = 3;
 /// How many costly requests one account may have under way, waiting or
 /// running. More are refused.
@@ -243,6 +246,8 @@ pub struct Limits {
     pub reset_mails_per_day: Rate,
     pub registrations_per_network: Rate,
     pub open_registrations: Rate,
+    /// How many costly requests run at once ([`Rates::heavy`]).
+    pub heavy_at_once: usize,
 }
 
 impl Default for Limits {
@@ -261,6 +266,7 @@ impl Default for Limits {
             reset_mails_per_day: RESET_MAILS_PER_DAY,
             registrations_per_network: REGISTRATIONS_PER_NETWORK,
             open_registrations: OPEN_REGISTRATIONS,
+            heavy_at_once: HEAVY_AT_ONCE,
         }
     }
 }
@@ -300,7 +306,7 @@ impl Rates {
             registrations_per_network: Limiter::new(limits.registrations_per_network),
             open_registrations: Limiter::new(limits.open_registrations),
             heavy: Heavy {
-                running: Semaphore::new(HEAVY_AT_ONCE),
+                running: Semaphore::new(limits.heavy_at_once),
                 accounts: Mutex::default(),
             },
         }
@@ -594,6 +600,20 @@ mod tests {
         drop(ada);
         drop(others);
         assert!(rates.heavy.accounts.lock().unwrap().len() <= 1);
+    }
+
+    #[tokio::test]
+    async fn the_server_runs_as_many_costly_requests_as_it_is_set_to() {
+        let rates = Rates::new(Limits {
+            heavy_at_once: 5,
+            ..Limits::default()
+        });
+        let mut turns = Vec::new();
+        for account in 1..=5 {
+            turns.push(rates.heavy(account).await.ok().unwrap());
+        }
+        let sixth = tokio::time::timeout(Duration::from_millis(50), rates.heavy(6)).await;
+        assert!(sixth.is_err());
     }
 
     #[test]
