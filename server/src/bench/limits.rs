@@ -1,6 +1,7 @@
 //! What a limit in memory costs one request, with few keys and with a full
 //! table: `rueder bench limits`. Every key has asked a moment ago, so that
-//! none of them could simply be forgotten.
+//! none of them could simply be forgotten. The passkey logins under way count
+//! too: anybody can begin one, without logging in.
 
 use std::{
     fmt::Write,
@@ -10,6 +11,7 @@ use std::{
 
 use crate::{
     login::{self, Key},
+    passkeys::{self, Passkeys},
     rate::{self, Rates},
 };
 
@@ -17,8 +19,10 @@ use crate::{
 const CALLS: usize = 5_000;
 
 /// Times a known and a new key against every request's limit and against the
-/// wrong passwords, with 100 keys and with as many as are kept.
-pub fn run() -> String {
+/// wrong passwords, with 100 keys and with as many as are kept, and the
+/// beginning of a passkey login, with 100 under way and with every place
+/// taken.
+pub fn run() -> anyhow::Result<String> {
     let mut report = format!(
         "{:<16} {:>7}   {:>22}   {:>22}\n",
         "limit", "keys", "known: mean / 99%", "new: mean / 99%"
@@ -34,7 +38,7 @@ pub fn run() -> String {
         let new = timed(|n| {
             let _ = rates.request(sender(keys + n), now);
         });
-        line(&mut report, "requests", keys, known, new);
+        line(&mut report, "requests", keys, Some(known), new);
     }
     for keys in [100, login::MAX_KEYS] {
         let (limiter, now) = (login::Limiter::default(), Instant::now());
@@ -45,9 +49,33 @@ pub fn run() -> String {
             limiter.blocked(&name(n % keys), now);
         });
         let new = timed(|n| limiter.failed(name(keys + n), now));
-        line(&mut report, "wrong passwords", keys, known, new);
+        line(&mut report, "wrong passwords", keys, Some(known), new);
     }
-    report
+    // A ceremony is new whenever it begins, each from another sender. Below
+    // the room each ends again, so that as many stay under way.
+    for keys in [100, passkeys::MAX_CEREMONIES] {
+        let (logins, now) = (Passkeys::new("https://reader.example")?, Instant::now());
+        for n in 0..keys {
+            logins
+                .begin_login(sender(n), now)
+                .map_err(|_| anyhow::anyhow!("passkey login {n} did not begin"))?;
+        }
+        let took = (keys..keys + CALLS)
+            .map(|n| {
+                let start = Instant::now();
+                let begun = logins.begin_login(sender(n), now);
+                let took = start.elapsed();
+                if let Ok((_, id)) = begun
+                    && keys < passkeys::MAX_CEREMONIES
+                {
+                    logins.take(&id, now);
+                }
+                took
+            })
+            .collect();
+        line(&mut report, "passkey logins", keys, None, summary(took));
+    }
+    Ok(report)
 }
 
 fn sender(n: usize) -> IpAddr {
@@ -60,24 +88,35 @@ fn name(n: usize) -> Key {
 
 /// The mean time of a call and the time 99 of 100 calls stay within.
 fn timed(mut call: impl FnMut(usize)) -> [Duration; 2] {
-    let mut took: Vec<Duration> = (0..CALLS)
-        .map(|n| {
-            let start = Instant::now();
-            call(n);
-            start.elapsed()
-        })
-        .collect();
+    summary(
+        (0..CALLS)
+            .map(|n| {
+                let start = Instant::now();
+                call(n);
+                start.elapsed()
+            })
+            .collect(),
+    )
+}
+
+fn summary(mut took: Vec<Duration>) -> [Duration; 2] {
     took.sort();
     let mean = took.iter().sum::<Duration>() / CALLS as u32;
     [mean, took[CALLS * 99 / 100]]
 }
 
-fn line(report: &mut String, limit: &str, keys: usize, known: [Duration; 2], new: [Duration; 2]) {
+fn line(
+    report: &mut String,
+    limit: &str,
+    keys: usize,
+    known: Option<[Duration; 2]>,
+    new: [Duration; 2],
+) {
     let pair = |[mean, most]: [Duration; 2]| format!("{mean:.1?} / {most:.1?}");
+    let known = known.map_or_else(|| "–".to_owned(), pair);
     let _ = writeln!(
         report,
-        "{limit:<16} {keys:>7}   {:>22}   {:>22}",
-        pair(known),
+        "{limit:<16} {keys:>7}   {known:>22}   {:>22}",
         pair(new)
     );
 }

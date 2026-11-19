@@ -898,7 +898,7 @@ Paket 5.33: ob mehr Verbindungen zur Datenbank mehr Lesen tragen, mit `load/read
 
 ### Grenzen im Speicher vom 2026-11-19
 
-Paket 5.34: was eine Grenze im Speicher einen Aufruf kostet, mit `rueder bench limits` (Release-Build, ohne Datenbank). Gemessen sind je 5.000 Aufrufe der Grenze aller Anfragen (`rate`) und der falschen Passwörter (`login`), für einen Schlüssel, den die Tabelle kennt, und für einen neuen. Das geschah einmal mit 100 Schlüsseln und einmal mit einer vollen Tabelle, in der jeder Schlüssel eben gefragt hat, so dass keiner einfach gehen kann. „Vorher“ ist der Stand vor dem Paket, mit seinen 10.000 Schlüsseln und ein zweites Mal mit 100.000.
+Paket 5.34: was eine Grenze im Speicher einen Aufruf kostet, mit `rueder bench limits` (Release-Build, ohne Datenbank). Gemessen sind je 5.000 Aufrufe der Grenze aller Anfragen (`rate`) und der falschen Passwörter (`login`), für einen Schlüssel, den die Tabelle kennt, und für einen neuen. Dazu kommt der Beginn eines Logins mit Passkey, den jeder ohne Anmeldung auslösen kann, jedes Mal von einem anderen Absender: mit 100 Zeremonien, von denen jede neue gleich wieder endet, und mit allen Plätzen belegt (`passkeys::MAX_CEREMONIES`), so dass jede neue die älteste verdrängt. Das geschah einmal mit 100 Schlüsseln und einmal mit einer vollen Tabelle, in der jeder Schlüssel eben gefragt hat, so dass keiner einfach gehen kann. „Vorher“ ist der Stand vor dem Paket, mit seinen 10.000 Schlüsseln und ein zweites Mal mit 100.000.
 
 - **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz). Aus drei Läufen ist der mittlere genommen; die Läufe streuen um bis zu einem Drittel.
 
@@ -914,8 +914,13 @@ Paket 5.34: was eine Grenze im Speicher einen Aufruf kostet, mit `rueder bench l
 | nachher | Anfragen | 100.000 | 206 ns / 367 ns | 413 ns / 808 ns |
 | nachher | Passwörter | 100 | 309 ns / 469 ns | 462 ns / 2,1 µs |
 | nachher | Passwörter | 100.000 | 370 ns / 652 ns | 917 ns / 1,7 µs |
+| vorher | Passkey-Logins | 100 | – | 1,5 µs / 2,3 µs |
+| vorher | Passkey-Logins | 10.000 | – | 211 µs / 291 µs |
+| nachher | Passkey-Logins | 100 | – | 938 ns / 1,4 µs |
+| nachher | Passkey-Logins | 10.000 | – | 1,6 µs / 2,6 µs |
 
 - **Ein neuer Schlüssel in einer vollen Tabelle sucht nicht mehr.** Bei 100.000 Schlüsseln kostet er 0,4 bis 0,9 µs statt 1,4 bis 1,9 ms, weniger als vorher schon bei 10.000. Vorher durchsuchte jeder neue die ganze Tabelle, unter der Sperre, die jede Anfrage nimmt.
+- **Ein Login mit Passkey sieht die anderen nicht mehr an.** Vorher lief jeder neue durch alle offenen Zeremonien, um die abgelaufenen zu finden, die seines Absenders zu zählen und die älteste zu verdrängen. Bei 10.000 kostete das 0,2 ms unter der Sperre aller Zeremonien, ohne dass es eine Anmeldung brauchte. Jetzt sind es 1,6 µs.
 - **Ganz so billig wie bei 100 ist er nicht.** Eine Tabelle mit 100.000 Schlüsseln passt nicht mehr in den Cache des Prozessors. Jeder Zugriff auf sie, auch auf einen bekannten Schlüssel, kostet deshalb einige Zehntel Mikrosekunden mehr, beim Platzmachen mehrmals. Mit der Zahl der Schlüssel wächst das nicht weiter. Dass das 99. Perzentil mit 100 Schlüsseln höher ist, liegt daran, dass die Tabelle dort noch wächst. Gegen die Millisekunden einer Anfrage (siehe [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19)) fällt beides nicht ins Gewicht.
 
 ## Wissen über das Altsystem

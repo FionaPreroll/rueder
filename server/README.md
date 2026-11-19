@@ -393,7 +393,8 @@ shared feed due in the database, so it needs `DATABASE_URL` too.
 
 `bench limits` needs no database. It times one call of the limit on every
 request and of the one on wrong passwords, for a key they know and for a new
-one, with 100 keys and with a full table:
+one, with 100 keys and with a full table, and the beginning of a passkey
+login, with 100 under way and with every place taken:
 
 ```sh
 cargo run --release -- bench limits
