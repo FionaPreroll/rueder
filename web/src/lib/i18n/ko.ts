@@ -864,6 +864,8 @@ const ko: Messages = {
 				`매번 가져올 수 있는 만큼 가져오는데도 기다리는 피드가 있습니다. 지금 속도로는 한 시간에 최대 ${n(most)}번 가져옵니다. FETCH_ROUND, FETCH_AT_ONCE, FETCH_EVERY로 정합니다.`,
 			cacheMisses: (share) =>
 				`데이터베이스가 읽는 것 중 ${share}만 메모리에 있습니다. shared_buffers를 늘리면 도움이 됩니다.`,
+			databaseLarge: (size, warn) =>
+				`데이터베이스가 ${size}까지 커졌습니다. DATABASE_WARN_GB는 ${warn}부터 경고합니다. “rueder retention set”으로 오래된 글이나 그 본문을 지울 수 있습니다.`,
 			longQuery: (took) => `쿼리 하나가 ${took} 동안 실행 중입니다.`,
 			imageCacheFull: (share) => `이미지 캐시가 ${share} 찼습니다.`,
 			errors: (count) => `서버가 지난 1시간 동안 오류 ${n(count)}개를 기록했습니다.`,
@@ -907,6 +909,7 @@ const ko: Messages = {
 			poolValue: (size, idle, max) => `열림 ${n(size)}개, 대기 ${n(idle)}개, 최대 ${n(max)}개`,
 			connections: '모든 연결',
 			size: '크기',
+			sizeWarn: (size, warn) => `${size}, ${warn}부터 경고`,
 			hitRatio: '메모리에서 읽은 비율',
 			deadlocks: '교착 상태',
 			longest: '가장 오래 실행 중인 쿼리',

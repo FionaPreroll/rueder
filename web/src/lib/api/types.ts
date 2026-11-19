@@ -1749,6 +1749,10 @@ export type StatusDatabase = {
 	connections: number,
 	size_bytes: number,
 	/**
+	 * The size from which the status warns, if the operator named one.
+	 */
+	size_warn_bytes: number | null,
+	/**
 	 * The share of blocks found in memory, since the statistics began.
 	 */
 	cache_hit_ratio: number | null,
@@ -1886,6 +1890,11 @@ export type StatusHint =
 	| {
 		"kind": "cache_misses",
 		hit_ratio: number,
+	}
+	| {
+		"kind": "database_large",
+		size_bytes: number,
+		warn_bytes: number,
 	}
 	| {
 		"kind": "long_query",

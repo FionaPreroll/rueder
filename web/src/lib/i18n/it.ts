@@ -907,6 +907,8 @@ const it: Messages = {
 				`Ogni giro prende tutti i feed che può, e alcuni aspettano ancora: il ritmo consente ${n(most)} scaricamenti all’ora. Lo impostano FETCH_ROUND, FETCH_AT_ONCE e FETCH_EVERY.`,
 			cacheMisses: (share) =>
 				`Il database trova in memoria solo il ${share} di quello che legge; più shared_buffers aiuterebbero.`,
+			databaseLarge: (size, warn) =>
+				`Il database è arrivato a ${size}; DATABASE_WARN_GB avvisa a partire da ${warn}. “rueder retention set” elimina gli articoli vecchi o i loro testi.`,
 			longQuery: (took) => `Una query è in esecuzione da ${took}.`,
 			imageCacheFull: (share) => `La cache delle immagini è piena al ${share}.`,
 			errors: (count) =>
@@ -954,6 +956,7 @@ const it: Messages = {
 				`${n(size)} aperte, ${n(idle)} inattive, al massimo ${n(max)}`,
 			connections: 'Tutte le connessioni',
 			size: 'Dimensione',
+			sizeWarn: (size, warn) => `${size}, avviso a partire da ${warn}`,
 			hitRatio: 'Letto dalla memoria',
 			deadlocks: 'Deadlock',
 			longest: 'Query più lunga in esecuzione',

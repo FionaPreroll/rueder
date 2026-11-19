@@ -902,6 +902,8 @@ const nl: Messages = {
 				`Elke ronde neemt zoveel feeds als mag, en toch wachten er feeds: het tempo laat ${n(most)} ophaalacties per uur toe. FETCH_ROUND, FETCH_AT_ONCE en FETCH_EVERY stellen het in.`,
 			cacheMisses: (share) =>
 				`De database vindt maar ${share} van wat hij leest in het geheugen; meer shared_buffers zou helpen.`,
+			databaseLarge: (size, warn) =>
+				`De database is gegroeid tot ${size}; DATABASE_WARN_GB waarschuwt vanaf ${warn}. ‘rueder retention set’ verwijdert oude artikelen of hun teksten.`,
 			longQuery: (took) => `Er loopt al ${took} een query.`,
 			imageCacheFull: (share) => `De afbeeldingscache is voor ${share} vol.`,
 			errors: (count) =>
@@ -948,6 +950,7 @@ const nl: Messages = {
 			poolValue: (size, idle, max) => `${n(size)} open, ${n(idle)} inactief, hoogstens ${n(max)}`,
 			connections: 'Alle verbindingen',
 			size: 'Grootte',
+			sizeWarn: (size, warn) => `${size}, waarschuwing vanaf ${warn}`,
 			hitRatio: 'Uit het geheugen gelezen',
 			deadlocks: 'Deadlocks',
 			longest: 'Langst lopende query',

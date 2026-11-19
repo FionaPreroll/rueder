@@ -169,7 +169,7 @@ Der Lesestand hängt an (Konto, Feed, Nummer) und nicht an der ID des Artikels. 
 
 ## Aufbewahrung
 
-Im Code: `server/src/retention.rs` (A21, E4), die Einstellungen in der Tabelle `retention` mit genau einer Zeile. Was alt ist, darf gehen, wenn der Betreiber es einstellt; als Standard bleibt alles, und der Lauf tut dann nichts. `rueder retention set` stellt ein, `show` zeigt es, `run` räumt sofort alles auf, statt auf den Server zu warten:
+Im Code: `server/src/retention.rs` (A21, E4), die Einstellungen in der Tabelle `retention` mit genau einer Zeile. Was alt ist, darf gehen, wenn der Betreiber es einstellt; als Standard bleibt alles, und der Lauf tut dann nichts. Wird der Platz knapp, warnt die [Statusseite](#status-für-admins) ab der Größe der Datenbank, die `DATABASE_WARN_GB` nennt; gelöscht wird auch dann nichts von selbst. `rueder retention set` stellt ein, `show` zeigt es, `run` räumt sofort alles auf, statt auf den Server zu warten:
 
 | Einstellung | Was geht | Wie |
 |---|---|---|
@@ -808,7 +808,7 @@ Zeiten stehen in Eimern, die um eine Drittel-Oktave wachsen; Median und 95. Perz
 
 **Was dieser Build ist.** Commit, seine Zeit, Branch und Tag aus git, ob etwas nicht eingecheckt war, Ziel, Profil und Optimierung, der CI-Lauf und ob es in einem Container läuft; dieselbe Zeile gibt `rueder --version` aus. `build.rs` schreibt das beim Übersetzen in das Programm. Die Zeit ist die des Commits, nicht die des Baus, so dass derselbe Commit derselbe Build ist. Im Image gibt es kein `.git`; dort reicht die CI die Werte als Build-Argumente herein (`RUEDER_COMMIT` und folgende), und der Smoke-Test prüft, dass das Image den Commit nennt, den die CI gebaut hat.
 
-**Hinweise.** Der Server nennt, was einen Blick wert ist, als Art mit Zahlen, die Worte hat die Seite: Fehler im Log, ein voller Pool, ein stehender oder hinterherhinkender Abruf, eine lange Abfrage, langsame Routen, viele fehlschlagende Feeds, ein voller Bild-Cache, abgewiesene Anfragen. Die Schwellen stehen in `status.rs`.
+**Hinweise.** Der Server nennt, was einen Blick wert ist, als Art mit Zahlen, die Worte hat die Seite: Fehler im Log, ein voller Pool, ein stehender oder hinterherhinkender Abruf, eine lange Abfrage, langsame Routen, viele fehlschlagende Feeds, ein voller Bild-Cache, eine Datenbank, die die Größe aus `DATABASE_WARN_GB` erreicht hat, abgewiesene Anfragen. Die Schwellen stehen in `status.rs`.
 
 Ein eigenes Werkzeug statt Prometheus oder OpenTelemetry, weil es keinen weiteren Dienst neben PostgreSQL braucht; ein Status gilt je Prozess, was passt, solange rueder ein Prozess ist. `pg_stat_statements` bleibt ungenutzt, weil es eine Erweiterung braucht; langsame Abfragen meldet `sqlx` als Warnung.
 

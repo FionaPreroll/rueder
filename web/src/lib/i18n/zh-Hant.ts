@@ -840,6 +840,8 @@ const zhHant: Messages = {
 				`每一輪都盡可能多擷取，但仍有訂閱源在等候：目前的節奏每小時最多擷取 ${n(most)} 次。由 FETCH_ROUND、FETCH_AT_ONCE 和 FETCH_EVERY 設定。`,
 			cacheMisses: (share) =>
 				`資料庫讀取的內容中只有 ${share} 在記憶體中；加大 shared_buffers 會有幫助。`,
+			databaseLarge: (size, warn) =>
+				`資料庫已成長到 ${size}；DATABASE_WARN_GB 從 ${warn} 起發出警告。「rueder retention set」可刪除舊文章或其內文。`,
 			longQuery: (took) => `有一個查詢已經執行了 ${took}。`,
 			imageCacheFull: (share) => `圖片快取已使用 ${share}。`,
 			errors: (count) => `伺服器在最近一小時記錄了 ${n(count)} 個錯誤。`,
@@ -882,6 +884,7 @@ const zhHant: Messages = {
 			poolValue: (size, idle, max) => `開啟 ${n(size)} 條，閒置 ${n(idle)} 條，最多 ${n(max)} 條`,
 			connections: '所有連線',
 			size: '大小',
+			sizeWarn: (size, warn) => `${size}，從 ${warn} 起警告`,
 			hitRatio: '從記憶體讀取',
 			deadlocks: '死結',
 			longest: '執行最久的查詢',

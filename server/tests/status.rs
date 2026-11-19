@@ -223,6 +223,46 @@ async fn the_status_says_how_fast_feeds_are_fetched_and_how_far_behind(db: PgPoo
 }
 
 #[sqlx::test]
+async fn the_status_warns_from_the_size_of_the_database_the_operator_names(db: PgPool) {
+    let root = common::account(&db, "root").await;
+    accounts::set_admin(&db, "root", true).await.unwrap();
+    let admin = common::session(&db, root).await;
+    let large = |body: &Value| {
+        body["hints"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|hint| hint["kind"] == "database_large")
+            .cloned()
+    };
+
+    // As rueder comes, it never warns, however large the database grows.
+    let (_, body) = status(&AppState::new(db.clone()), Some(&admin)).await;
+    assert_eq!(body["database"]["size_warn_bytes"], Value::Null);
+    assert_eq!(large(&body), None);
+    let size = body["database"]["size_bytes"].as_i64().unwrap();
+
+    // Below the size it names, it says the size and does not warn.
+    let roomy = AppState {
+        database_warn_bytes: Some(size * 2),
+        ..AppState::new(db.clone())
+    };
+    let (_, body) = status(&roomy, Some(&admin)).await;
+    assert_eq!(body["database"]["size_warn_bytes"], size * 2);
+    assert_eq!(large(&body), None);
+
+    // From it on, it warns, with both sizes.
+    let full = AppState {
+        database_warn_bytes: Some(size / 2),
+        ..AppState::new(db.clone())
+    };
+    let (_, body) = status(&full, Some(&admin)).await;
+    let hint = large(&body).unwrap();
+    assert_eq!(hint["warn_bytes"], size / 2);
+    assert!(hint["size_bytes"].as_i64().unwrap() >= size / 2, "{hint}");
+}
+
+#[sqlx::test]
 async fn feeds_that_are_not_fetched_are_neither_behind_nor_failing(db: PgPool) {
     let root = common::account(&db, "root").await;
     accounts::set_admin(&db, "root", true).await.unwrap();

@@ -916,6 +916,8 @@ const ru: Messages = {
 				`Каждый круг берёт столько лент, сколько можно, а ленты всё равно ждут: темп позволяет ${counted(most, 'загрузку', 'загрузки', 'загрузок')} в час. Его задают FETCH_ROUND, FETCH_AT_ONCE и FETCH_EVERY.`,
 			cacheMisses: (share) =>
 				`База данных находит в памяти только ${share} того, что читает; больше shared_buffers помогло бы.`,
+			databaseLarge: (size, warn) =>
+				`База данных выросла до ${size}; DATABASE_WARN_GB предупреждает начиная с ${warn}. «rueder retention set» удаляет старые статьи или их тексты.`,
 			longQuery: (took) => `Запрос выполняется уже ${took}.`,
 			imageCacheFull: (share) => `Кэш изображений заполнен на ${share}.`,
 			errors: (count) =>
@@ -963,6 +965,7 @@ const ru: Messages = {
 				`${n(size)} открыто, ${n(idle)} простаивает, не больше ${n(max)}`,
 			connections: 'Все соединения',
 			size: 'Размер',
+			sizeWarn: (size, warn) => `${size}, предупреждение начиная с ${warn}`,
 			hitRatio: 'Прочитано из памяти',
 			deadlocks: 'Взаимоблокировки',
 			longest: 'Самый долгий запрос',

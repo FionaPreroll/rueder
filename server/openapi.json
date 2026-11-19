@@ -8936,6 +8936,14 @@
             "type": "integer",
             "format": "int64"
           },
+          "size_warn_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The size from which the status warns, if the operator named one."
+          },
           "cache_hit_ratio": {
             "type": [
               "number",
@@ -9355,6 +9363,31 @@
                 "type": "string",
                 "enum": [
                   "cache_misses"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The database has grown to the size the operator warns from\n(`DATABASE_WARN_GB`).",
+            "required": [
+              "size_bytes",
+              "warn_bytes",
+              "kind"
+            ],
+            "properties": {
+              "size_bytes": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "warn_bytes": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "database_large"
                 ]
               }
             }

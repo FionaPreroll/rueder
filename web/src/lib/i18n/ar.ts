@@ -920,6 +920,8 @@ const ar: Messages = {
 				`تأخذ كل جولة أكبر عدد مسموح من الخلاصات، ولا تزال خلاصات تنتظر: تسمح الوتيرة بـ ${counted(most, ['عملية جلب واحدة', 'عمليتي جلب', 'عمليات جلب', 'عملية جلب'])} في الساعة. يضبطها FETCH_ROUND و FETCH_AT_ONCE و FETCH_EVERY.`,
 			cacheMisses: (share) =>
 				`لا تجد قاعدة البيانات في الذاكرة إلا ${share} مما تقرؤه؛ وزيادة shared_buffers قد تساعد.`,
+			databaseLarge: (size, warn) =>
+				`بلغ حجم قاعدة البيانات ${size}؛ ويحذّر DATABASE_WARN_GB ابتداءً من ${warn}. يحذف ${iso('rueder retention set')} المقالات القديمة أو نصوصها.`,
 			longQuery: (took) => `يعمل استعلام منذ ${took}.`,
 			imageCacheFull: (share) => `ذاكرة التخزين المؤقت للصور ممتلئة بنسبة ${share}.`,
 			errors: (count) => `أخطاء سجّلها الخادم في الساعة الأخيرة: ${n(count)}.`,
@@ -962,6 +964,7 @@ const ar: Messages = {
 			poolValue: (size, idle, max) => `${n(size)} مفتوحة، ${n(idle)} خاملة، بحد أقصى ${n(max)}`,
 			connections: 'كل الاتصالات',
 			size: 'الحجم',
+			sizeWarn: (size, warn) => `${size}، والتحذير ابتداءً من ${warn}`,
 			hitRatio: 'المقروء من الذاكرة',
 			deadlocks: 'حالات الاستعصاء',
 			longest: 'أطول استعلام قيد التشغيل',

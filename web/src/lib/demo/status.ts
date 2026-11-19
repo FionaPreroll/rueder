@@ -77,6 +77,7 @@ export function demoStatus(now: number): ServerStatus {
 			pool_max: 10,
 			connections: 6,
 			size_bytes: 412 * 1024 * 1024,
+			size_warn_bytes: null,
 			cache_hit_ratio: 0.9987,
 			deadlocks: 0,
 			longest_query_s: 0.004,

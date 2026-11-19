@@ -25,7 +25,7 @@ use rueder::{
     rate::Rates,
     reclean, registration, reports, retention, router, second_factor, sessions,
     sizes::Sizes,
-    transfer, tree, version,
+    status, transfer, tree, version,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -1105,6 +1105,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         tracing::info!("readers may report feeds and articles (CONTENT_REPORTS=on)");
         state.content_reports = true;
     }
+    // DATABASE_WARN_GB names the size of the database from which the status
+    // page warns; rueder itself never lets an article go unless told to.
+    state.database_warn_bytes = status::warn_from(env::var("DATABASE_WARN_GB").ok())?;
     // CLIENT_REPORTS=off takes no reports of errors from browsers, whoever
     // agreed to send them.
     if env::var("CLIENT_REPORTS").is_ok_and(|value| value == "off") {

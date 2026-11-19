@@ -224,6 +224,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (3) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
+| `DATABASE_WARN_GB` | From what size of the database in GB the status page warns, such as `50` on a disk of 64 GB. Off if not set; see [Keeping old articles, or not](#keeping-old-articles-or-not). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
 | `APP_API` | `off` lets no feed reader app of another maker in. On if not set: readers set up apps such as NetNewsWire and Read You under Settings, Apps, with an app password each, and the apps reach rueder at `https://<your rueder>/greader`. |
 | `CONTENT_REPORTS` | `on` lets readers report a feed or an article to you, with a reason and a short note. The status page lists the reported feeds with their address, never who reported; `rueder feed block` blocks one. Off if not set. |
@@ -430,9 +431,15 @@ to another rueder takes none along.
 
 ## Keeping old articles, or not
 
-Out of the box rueder keeps everything for good. A large instance can let old
-things go, each on its own, and the server clears them within the hour, a
-little at a time:
+Out of the box rueder keeps everything for good, and it never lets anything
+go by itself, not even when the disk fills up. So that you hear of it in
+time, `DATABASE_WARN_GB` names a size of the database: from it on, the status
+page warns and says what the database takes. Leave room below the size of the
+disk for what PostgreSQL needs besides, and for `VACUUM FULL`, which writes a
+table anew before it gives back the old one.
+
+A large instance, or one whose disk fills up, can let old things go, each on
+its own, and the server clears them within the hour, a little at a time:
 
 ```sh
 # Articles that arrived more than 24 months ago. Say what goes of them:
