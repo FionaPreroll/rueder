@@ -142,6 +142,7 @@ const tr: Messages = {
 			'Bu rueder’in yöneticisi bu akışı engelledi. Getirilmiyor ve makaleleri gösterilmiyor.',
 		articleActions: 'Makale için diğer işlemler',
 		articleInfo: 'Makale bilgileri …',
+		articleSource: 'Kaynak kodu …',
 		reportArticle: 'Makaleyi bildir …'
 	},
 
@@ -216,6 +217,18 @@ const tr: Messages = {
 		kept: 'Saklanan sürümler',
 		textLabel: 'Metin',
 		textDropped: 'Eski olduğu için artık saklanmıyor',
+		copy: 'Kopyala',
+		copied: 'Kopyalandı',
+		loading: 'Yükleniyor …',
+		unreachable: 'Sunucu yanıt vermedi. Daha sonra yeniden deneyin.'
+	},
+	articleSource: {
+		title: 'Makalenin kaynak kodu',
+		text: 'Makalenin HTML hâli: bu rueder’in temizledikten sonra sakladığı biçimiyle ya da akışın gönderdiği gibi. Bağlantılar ve resimler burada kendi adreslerini korur; böylece kalan bir izleme parametresi görünür.',
+		show: 'Göster',
+		kinds: { cleaned: 'Temizlenmiş', original: 'Akışın gönderdiği gibi' },
+		noText: 'Bu sunucu bu makalenin metnini artık saklamıyor.',
+		noOriginal: 'Bu sunucu akışın gönderdiğini artık saklamıyor.',
 		copy: 'Kopyala',
 		copied: 'Kopyalandı',
 		loading: 'Yükleniyor …',

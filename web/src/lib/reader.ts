@@ -8,9 +8,16 @@ import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
-import type { ArticleInfo, FeedInfo, FetchAgent, ReportKind, ServerStatus } from './api/types.ts';
+import type {
+	ArticleInfo,
+	ArticleSource,
+	FeedInfo,
+	FetchAgent,
+	ReportKind,
+	ServerStatus
+} from './api/types.ts';
 
-export type { ArticleInfo, FeedInfo, FetchAgent, ServerStatus };
+export type { ArticleInfo, ArticleSource, FeedInfo, FetchAgent, ServerStatus };
 
 /** A feed with something unread, for the start page. */
 export interface Fresh {
@@ -347,6 +354,8 @@ export interface Reader {
 	versions(article: Article): Promise<ArticleVersion[]>;
 	/** What the server knows of an article and its versions, for support; null if there was no answer. */
 	articleInfo(article: Article): Promise<ArticleInfo | null>;
+	/** The source of the article, cleaned and as the feed sent it; null if there was no answer. */
+	articleSource(article: Article): Promise<ArticleSource | null>;
 
 	setRead(article: Article, read: boolean): void;
 	/** The article scrolled out at the top of the expanded view. */

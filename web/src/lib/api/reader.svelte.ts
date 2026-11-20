@@ -1206,6 +1206,15 @@ export class ServerReader implements Reader {
 		}
 	}
 
+	async articleSource(article: Article) {
+		try {
+			return await this.api.articleSource(serverId(article.feedId), article.seq);
+		} catch (error) {
+			this.refusal(error);
+			return null;
+		}
+	}
+
 	// Reading
 
 	/**

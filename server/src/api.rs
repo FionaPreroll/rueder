@@ -1,5 +1,5 @@
 //! The API a logged-in reader's interface lives on: the tree of folders and
-//! feeds, the lists of articles, an article, what is known of it and its
+//! feeds, the lists of articles, an article, what is known of it, its source and its
 //! versions, and what was read, and the search.
 //!
 //! Every handler takes a [`Session`] and binds what it asks the database to
@@ -26,7 +26,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState,
-    articles::{self, ArticleInfo, ListItem, Marked, Opened, Page},
+    articles::{self, ArticleInfo, ArticleSource, ListItem, Marked, Opened, Page},
     cleaning::{self, Base, Rules},
     filters,
     images::{Signer, Size},
@@ -46,6 +46,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<List>()
         .add::<Article>()
         .add::<ArticleInfo>()
+        .add::<ArticleSource>()
         .add::<Versions>()
         .add::<StateChange>()
         .add::<Upto>()
@@ -65,6 +66,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(read_feed))
         .routes(routes!(article))
         .routes(routes!(article_info))
+        .routes(routes!(article_source))
         .routes(routes!(versions))
         .routes(routes!(set_state))
         .routes(routes!(folder_articles))
@@ -742,6 +744,26 @@ async fn article_info(
 ) -> Result<Json<ArticleInfo>, AppError> {
     let info = articles::info(&state.db, Some(session.account_id), feed_id, seq).await?;
     Ok(Json(info.ok_or(AppError::NotFound)?))
+}
+
+/// The source of an article's current version: as rueder keeps it after
+/// cleaning it, and as the feed sent it, with the addresses of its links and
+/// pictures as they are, for a reader who looks for what the cleaning missed.
+#[utoipa::path(
+    get,
+    path = "/feeds/{feed_id}/articles/{seq}/source",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."),),
+    security(("session" = [])),
+    responses((status = OK, body = ArticleSource), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such article in a feed of the account.")),
+)]
+async fn article_source(
+    State(state): State<AppState>,
+    session: Session,
+    Path((feed_id, seq)): Path<(i32, i32)>,
+) -> Result<Json<ArticleSource>, AppError> {
+    let source = articles::source(&state.db, Some(session.account_id), feed_id, seq).await?;
+    Ok(Json(source.ok_or(AppError::NotFound)?))
 }
 
 /// One version of an article, cleaned for reading like the current one.

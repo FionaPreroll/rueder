@@ -485,6 +485,22 @@ describe('an open article', () => {
 		expect(screen.queryByRole('dialog')).toBeNull();
 	});
 
+	it('shows its source from its menu', async () => {
+		const reader = new DemoReader(() => now);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		const article = reader.list[0]!;
+		render(ArticleBody, { reader, article, now, onversions: vi.fn() });
+		await userEvent.click(screen.getByRole('button', { name: 'More actions for the article' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Source …' }));
+		const dialog = screen.getByRole('dialog', { name: 'Source of the article' });
+		await within(dialog).findByRole('radio', { name: 'Cleaned' });
+		// The text as text: its tags show, and nothing of it is a link.
+		expect(dialog.querySelector('pre')?.textContent).toContain('<p>');
+		expect(within(dialog).queryAllByRole('link')).toEqual([]);
+		await userEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[0]!);
+		expect(screen.queryByRole('dialog')).toBeNull();
+	});
+
 	it('offers labels when the account has none yet, and makes the first on the spot', async () => {
 		const reader = new DemoReader(() => now);
 		for (const label of [...reader.labels]) reader.removeLabel(label.id);

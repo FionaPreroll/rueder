@@ -23,6 +23,7 @@ import type {
 	NewAppPassword as NewAppPasswordJson,
 	Article,
 	ArticleInfo,
+	ArticleSource,
 	ArticleVersion,
 	ClientReport,
 	ClientReports,
@@ -395,6 +396,9 @@ export const api = {
 
 	articleInfo: (feedId: number, seq: number) =>
 		call<ArticleInfo>('GET', `/feeds/${feedId}/articles/${seq}/info`),
+
+	articleSource: (feedId: number, seq: number) =>
+		call<ArticleSource>('GET', `/feeds/${feedId}/articles/${seq}/source`),
 
 	setState: (feedId: number, seq: number, change: { read?: boolean; starred?: boolean }) =>
 		call<void>('PUT', `/feeds/${feedId}/articles/${seq}/state`, change satisfies StateChange),

@@ -146,6 +146,7 @@ const ptBR: Messages = {
 			'Quem administra este rueder bloqueou este feed. Ele não é buscado e seus artigos não são mostrados.',
 		articleActions: 'Mais ações para o artigo',
 		articleInfo: 'Informações do artigo …',
+		articleSource: 'Código-fonte …',
 		reportArticle: 'Denunciar o artigo …'
 	},
 
@@ -221,6 +222,18 @@ const ptBR: Messages = {
 		kept: 'Versões guardadas',
 		textLabel: 'Texto',
 		textDropped: 'Não é mais guardado, por ser antigo',
+		copy: 'Copiar',
+		copied: 'Copiado',
+		loading: 'Carregando …',
+		unreachable: 'O servidor não respondeu. Tente de novo mais tarde.'
+	},
+	articleSource: {
+		title: 'Código-fonte do artigo',
+		text: 'O artigo em HTML, como este rueder o guarda depois de limpá-lo, ou como o feed o enviou. Links e imagens mantêm aqui seus próprios endereços, então aparece qualquer parâmetro de rastreamento que tenha sobrado.',
+		show: 'Mostrar',
+		kinds: { cleaned: 'Limpo', original: 'Como o feed enviou' },
+		noText: 'Este servidor não guarda mais o texto deste artigo.',
+		noOriginal: 'Este servidor não guarda mais o que o feed enviou.',
 		copy: 'Copiar',
 		copied: 'Copiado',
 		loading: 'Carregando …',

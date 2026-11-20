@@ -129,6 +129,10 @@ What is here:
   (`GET /api/feeds/{id}/articles/{seq}/info`); `rueder article show <feed>
   <number>` prints the same for any article, and with `--versions` every kept
   version as the feed sent it.
+- An article's source, for readers who want to look under it (`src/articles.rs`):
+  its text as kept after cleaning and as the feed sent it, with the addresses
+  of its pictures as they are, under "Source …"
+  (`GET /api/feeds/{id}/articles/{seq}/source`).
 - The status for admins (`src/monitor.rs`, `src/status.rs`): `GET /api/status`
   for the last hour, in memory, and the same numbers for Prometheus under
   `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).

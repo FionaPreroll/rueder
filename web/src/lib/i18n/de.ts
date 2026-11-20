@@ -139,6 +139,7 @@ const de: Messages = {
 			'Der Betreiber dieses rueder hat diesen Feed gesperrt. Er wird nicht abgerufen, und seine Artikel werden nicht gezeigt.',
 		articleActions: 'Weitere Aktionen für den Artikel',
 		articleInfo: 'Artikel-Infos …',
+		articleSource: 'Quelltext …',
 		reportArticle: 'Artikel melden …'
 	},
 
@@ -214,6 +215,18 @@ const de: Messages = {
 		kept: 'Aufbewahrte Versionen',
 		textLabel: 'Text',
 		textDropped: 'Nicht mehr aufbewahrt, weil er alt ist',
+		copy: 'Kopieren',
+		copied: 'Kopiert',
+		loading: 'Wird geladen …',
+		unreachable: 'Der Server hat nicht geantwortet. Versuch es später wieder.'
+	},
+	articleSource: {
+		title: 'Quelltext des Artikels',
+		text: 'Der Artikel als HTML, so wie dieser rueder ihn nach der Bereinigung aufbewahrt, oder so, wie der Feed ihn geschickt hat. Links und Bilder behalten hier ihre eigenen Adressen, so dass sich ein übrig gebliebener Tracking-Parameter zeigt.',
+		show: 'Zeigen',
+		kinds: { cleaned: 'Bereinigt', original: 'Wie vom Feed geschickt' },
+		noText: 'Dieser Server bewahrt den Text dieses Artikels nicht mehr auf.',
+		noOriginal: 'Dieser Server bewahrt nicht mehr auf, was der Feed geschickt hat.',
 		copy: 'Kopieren',
 		copied: 'Kopiert',
 		loading: 'Wird geladen …',

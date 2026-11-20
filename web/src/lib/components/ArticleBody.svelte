@@ -10,6 +10,7 @@
 	import { nextLabelColor, type Article } from '#lib/model.ts';
 	import { ruleText } from '#lib/rule-text.ts';
 	import ArticleInfoDialog from './ArticleInfoDialog.svelte';
+	import ArticleSourceDialog from './ArticleSourceDialog.svelte';
 	import Badge from './Badge.svelte';
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
@@ -55,6 +56,7 @@
 	let name = $state('');
 	let reporting = $state(false);
 	let informing = $state(false);
+	let sourcing = $state(false);
 
 	function addLabel(event: SubmitEvent) {
 		event.preventDefault();
@@ -287,6 +289,9 @@
 				<button type="button" role="menuitem" class="menu-item" onclick={() => (informing = true)}>
 					{m.list.articleInfo}
 				</button>
+				<button type="button" role="menuitem" class="menu-item" onclick={() => (sourcing = true)}>
+					{m.list.articleSource}
+				</button>
 				{#if reader.can.reportContent}
 					<button
 						type="button"
@@ -313,6 +318,9 @@
 	</footer>
 	{#if informing}
 		<ArticleInfoDialog {reader} {article} onclose={() => (informing = false)} />
+	{/if}
+	{#if sourcing}
+		<ArticleSourceDialog {reader} {article} onclose={() => (sourcing = false)} />
 	{/if}
 	{#if reporting}
 		<ReportDialog

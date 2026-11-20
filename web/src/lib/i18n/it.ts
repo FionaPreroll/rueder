@@ -147,6 +147,7 @@ const it: Messages = {
 			'Chi gestisce questo rueder ha bloccato questo feed. Non viene scaricato e i suoi articoli non vengono mostrati.',
 		articleActions: 'Altre azioni per l’articolo',
 		articleInfo: 'Informazioni sull’articolo …',
+		articleSource: 'Codice sorgente …',
 		reportArticle: 'Segnala l’articolo …'
 	},
 
@@ -222,6 +223,18 @@ const it: Messages = {
 		kept: 'Versioni conservate',
 		textLabel: 'Testo',
 		textDropped: 'Non più conservato, perché è vecchio',
+		copy: 'Copia',
+		copied: 'Copiato',
+		loading: 'Caricamento …',
+		unreachable: 'Il server non ha risposto. Riprova più tardi.'
+	},
+	articleSource: {
+		title: 'Codice sorgente dell’articolo',
+		text: 'L’articolo in HTML, come questo rueder lo conserva dopo averlo ripulito, o come l’ha inviato il feed. Link e immagini mantengono qui i loro indirizzi, così si vede se è rimasto un parametro di tracciamento.',
+		show: 'Mostra',
+		kinds: { cleaned: 'Ripulito', original: 'Come l’ha inviato il feed' },
+		noText: 'Questo server non conserva più il testo di questo articolo.',
+		noOriginal: 'Questo server non conserva più quello che ha inviato il feed.',
 		copy: 'Copia',
 		copied: 'Copiato',
 		loading: 'Caricamento …',

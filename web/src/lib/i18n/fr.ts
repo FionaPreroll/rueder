@@ -148,6 +148,7 @@ const fr: Messages = {
 			'L’administrateur de ce rueder a bloqué ce flux. Il n’est pas récupéré, et ses articles ne sont pas affichés.',
 		articleActions: 'Autres actions pour l’article',
 		articleInfo: 'Infos sur l’article …',
+		articleSource: 'Code source …',
 		reportArticle: 'Signaler l’article …'
 	},
 
@@ -223,6 +224,18 @@ const fr: Messages = {
 		kept: 'Versions conservées',
 		textLabel: 'Texte',
 		textDropped: 'N’est plus conservé, car il est ancien',
+		copy: 'Copier',
+		copied: 'Copié',
+		loading: 'Chargement …',
+		unreachable: 'Le serveur n’a pas répondu. Réessayez plus tard.'
+	},
+	articleSource: {
+		title: 'Code source de l’article',
+		text: 'L’article en HTML, tel que ce rueder le conserve après l’avoir nettoyé, ou tel que le flux l’a envoyé. Les liens et les images gardent ici leurs propres adresses, si bien qu’un paramètre de suivi restant apparaît.',
+		show: 'Afficher',
+		kinds: { cleaned: 'Nettoyé', original: 'Tel que le flux l’a envoyé' },
+		noText: 'Ce serveur ne conserve plus le texte de cet article.',
+		noOriginal: 'Ce serveur ne conserve plus ce que le flux a envoyé.',
 		copy: 'Copier',
 		copied: 'Copié',
 		loading: 'Chargement …',
