@@ -681,20 +681,23 @@ fn the_feeds_a_page_names_are_found_within_limits() {
     assert_eq!(found.len(), MAX_FEED_LINKS);
     assert_eq!(found[0], "https://blog.example/feed/0");
     assert_eq!(found[1], "https://blog.example/feed/1");
-    // A page beyond what the parser reads has none, and takes no time.
+    // What a page has beyond what the parser reads is not found, what comes
+    // before is, and neither takes much time.
     let started = Instant::now();
     let huge = format!(
-        "{}{}",
-        "<i></i>".repeat(MAX_NODES),
+        "{}{}{}",
+        link("alternate", rss, "/first"),
+        "<i></i>".repeat(MAX_NODES + 1000),
         link("alternate", rss, "/feed")
     );
-    assert_eq!(urls(&huge), Vec::<String>::new());
+    assert_eq!(urls(&huge), ["https://blog.example/first"]);
     let deep = format!(
-        "{}{}",
+        "{}{}{}",
+        link("alternate", rss, "/first"),
         "<div>".repeat(100_000),
         link("alternate", rss, "/feed")
     );
-    assert_eq!(urls(&deep), Vec::<String>::new());
+    assert_eq!(urls(&deep), ["https://blog.example/first"]);
     assert!(started.elapsed() < Duration::from_secs(20));
 }
 

@@ -613,10 +613,11 @@ impl TreeSink for Counting {
     }
 }
 
-/// Reads a piece of HTML into a tree and returns the element that holds it, or
-/// `None` if the text nests too deep or comes to too much (see [`MAX_DEPTH`]
-/// and [`MAX_NODES`]). Then the parser stops where it is.
-fn read_within_limits(html: &str) -> Option<Handle> {
+/// Reads a piece of HTML into a tree and returns the element that holds it. If
+/// the text nests too deep or comes to too much (see [`MAX_DEPTH`] and
+/// [`MAX_NODES`]), the parser stops where it is, and the tree is `None`, or
+/// with `so_far` what it read until then.
+fn read_within_limits(html: &str, so_far: bool) -> Option<Handle> {
     let sink = Counting {
         dom: RcDom::default(),
         nodes: Cell::new(0),
@@ -632,12 +633,18 @@ fn read_within_limits(html: &str) -> Option<Handle> {
         let (piece, later) = rest.split_at(rest.floor_char_boundary(PIECE));
         parser.process(piece.into());
         if !parser.tokenizer.sink.sink.within_limits() {
-            return None;
+            break;
         }
         rest = later;
     }
-    // What is still open is closed at the end, which can add to the tree.
-    let document = parser.finish()?;
+    let document = if rest.is_empty() {
+        // What is still open is closed at the end, which can add to the tree.
+        parser.finish()?
+    } else if so_far {
+        parser.tokenizer.sink.sink.dom.document.clone()
+    } else {
+        return None;
+    };
     // The tree library empties what is under a node when the node goes, wanted
     // elsewhere or not. So the element leaves the document before that goes.
     let held = std::mem::take(&mut *document.children.borrow_mut());
@@ -648,7 +655,8 @@ fn read_within_limits(html: &str) -> Option<Handle> {
 /// text beyond the limits is taken for what it is, somebody trying something,
 /// and read without its markup.
 fn read(html: &str) -> Handle {
-    let tree = read_within_limits(html).or_else(|| read_within_limits(&without_markup(html)));
+    let tree = read_within_limits(html, false)
+        .or_else(|| read_within_limits(&without_markup(html), false));
     // Text without tags makes a flat tree, so this never comes to the empty one.
     tree.unwrap_or_else(|| Node::new(NodeData::Document))
 }
@@ -952,8 +960,8 @@ pub struct FeedPage {
 }
 
 /// The feeds a web page points to with `<link rel="alternate">`, in the order
-/// of the page and each address once. `base` is where the page came from. A
-/// page beyond the limits of the parser has none.
+/// of the page and each address once. `base` is where the page came from.
+/// What lies beyond the limits of the parser is not read.
 pub fn feed_links(html: &str, base: &Url) -> Vec<FeedLink> {
     feed_page(html, base).links
 }
@@ -974,7 +982,8 @@ pub fn feed_page(html: &str, base: &Url) -> FeedPage {
         "application/feed+json",
         "application/rdf+xml",
     ];
-    let Some(root) = read_within_limits(html) else {
+    // A page may go on far beyond what it says about itself.
+    let Some(root) = read_within_limits(html, true) else {
         return FeedPage::default();
     };
     let mut page = FeedPage::default();
