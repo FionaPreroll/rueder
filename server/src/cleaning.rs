@@ -43,6 +43,10 @@ pub const MAX_DEPTH: u32 = 256;
 /// leaves formatting open makes the parser repeat it in every paragraph that
 /// follows, so a megabyte of text can come to a hundred times as much tree.
 pub const MAX_NODES: usize = 200_000;
+/// How many attributes of one tag are read. The parser looks through those it
+/// has for each new one, so its work grows with the square of their number:
+/// one tag with a megabyte of them kept it busy for 15 seconds.
+pub const MAX_ATTRIBUTES: usize = 256;
 /// The text reaches the parser in pieces of this many bytes, and the limits are
 /// looked at after each.
 const PIECE: usize = 1024;
@@ -565,9 +569,10 @@ impl TreeSink for Counting {
         self.dom.set_quirks_mode(mode);
     }
 
-    fn add_attrs_if_missing(&self, target: &Handle, attrs: Vec<Attribute>) {
-        self.dom.add_attrs_if_missing(target, attrs);
-    }
+    /// The parser gives the attributes of each further `<html>` to the element
+    /// that holds the text, looking for each among those it has: the square
+    /// of their number again. They are never written out, so none are kept.
+    fn add_attrs_if_missing(&self, _target: &Handle, _attrs: Vec<Attribute>) {}
 
     fn associate_with_form(
         &self,
@@ -628,7 +633,8 @@ fn read_within_limits(html: &str, so_far: bool) -> Option<Handle> {
     // The one place that reads HTML from outside; `clippy.toml` forbids it elsewhere.
     #[expect(clippy::disallowed_methods)]
     let mut parser = parse_fragment(sink, ParseOpts::default(), context, Vec::new(), false);
-    let mut rest = html;
+    let html = uncrowded(html);
+    let mut rest = &*html;
     while !rest.is_empty() {
         let (piece, later) = rest.split_at(rest.floor_char_boundary(PIECE));
         parser.process(piece.into());
@@ -649,6 +655,85 @@ fn read_within_limits(html: &str, so_far: bool) -> Option<Handle> {
     // elsewhere or not. So the element leaves the document before that goes.
     let held = std::mem::take(&mut *document.children.borrow_mut());
     held.into_iter().next()
+}
+
+/// The text without the attributes of a tag beyond [`MAX_ATTRIBUTES`]. Tags
+/// are found as the parser finds them, as far as it matters for counting:
+/// where a script or the like holds what looks like a tag, its text may lose
+/// a little, and the cleaning drops it anyway.
+fn uncrowded(html: &str) -> Cow<'_, str> {
+    let bytes = html.as_bytes();
+    let at_byte = |i: usize, test: &dyn Fn(u8) -> bool| bytes.get(i).is_some_and(|&b| test(b));
+    let ends_name = |b: u8| b.is_ascii_whitespace() || b == b'/' || b == b'>';
+    let mut kept = String::new();
+    // Where the text still to be kept begins, and where to look on.
+    let (mut from, mut at) = (0, 0);
+    while let Some(found) = html.get(at..).and_then(|rest| rest.find('<')) {
+        let mut i = at + found + 1;
+        if html.get(i..).is_some_and(|rest| rest.starts_with("!--")) {
+            at = html
+                .get(i..)
+                .and_then(|rest| rest.find("-->"))
+                .map_or(html.len(), |end| i + end);
+            continue;
+        }
+        i += usize::from(at_byte(i, &|b| b == b'/'));
+        if !at_byte(i, &|b| b.is_ascii_alphabetic()) {
+            at = i;
+            continue;
+        }
+        while at_byte(i, &|b| !ends_name(b)) {
+            i += 1;
+        }
+        let mut attributes = 0;
+        loop {
+            while at_byte(i, &|b| b.is_ascii_whitespace() || b == b'/') {
+                i += 1;
+            }
+            if !at_byte(i, &|b| b != b'>') {
+                break;
+            }
+            // A name, with an equals sign at its start, then maybe a value.
+            let start = i;
+            i += 1;
+            while at_byte(i, &|b| !ends_name(b) && b != b'=') {
+                i += 1;
+            }
+            let mut value = i;
+            while at_byte(value, &|b| b.is_ascii_whitespace()) {
+                value += 1;
+            }
+            if at_byte(value, &|b| b == b'=') {
+                value += 1;
+                while at_byte(value, &|b| b.is_ascii_whitespace()) {
+                    value += 1;
+                }
+                i = match bytes.get(value) {
+                    Some(&quote @ (b'"' | b'\'')) => html
+                        .get(value + 1..)
+                        .and_then(|rest| rest.find(char::from(quote)))
+                        .map_or(html.len(), |end| value + end + 2),
+                    _ => {
+                        while at_byte(value, &|b| !b.is_ascii_whitespace() && b != b'>') {
+                            value += 1;
+                        }
+                        value
+                    }
+                };
+            }
+            attributes += 1;
+            if attributes > MAX_ATTRIBUTES {
+                kept.push_str(html.get(from..start).unwrap_or_default());
+                from = i;
+            }
+        }
+        at = i;
+    }
+    if from == 0 {
+        return Cow::Borrowed(html);
+    }
+    kept.push_str(html.get(from..).unwrap_or_default());
+    Cow::Owned(kept)
 }
 
 /// Reads a piece of HTML into a tree and returns the element that holds it. A
