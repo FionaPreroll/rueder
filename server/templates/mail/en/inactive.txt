@@ -1,0 +1,13 @@
+Your rueder account is going to be deleted
+Hello {name},
+
+the account "{name}" on {site} has not been used for a long while. On
+{site}, accounts nobody uses for {months} months are deleted, with their
+subscriptions, folders, starred items, labels and filter rules. This one goes
+on {date}.
+
+To keep it, log in once before then, in a browser or an app:
+{link}
+
+To take only your subscriptions elsewhere, export them first under Settings,
+Import and export.

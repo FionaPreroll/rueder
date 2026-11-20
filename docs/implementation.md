@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz) |
 
 Was es gibt:
 
@@ -381,7 +381,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.42 Duplikate unter neuer Kennung.** Siehe [Abruf](architecture.md#abruf) und [Duplikate vom 2026-11-16](#duplikate-vom-2026-11-16).
 - [x] **5.43 Abruf achtet auf 429 und `Retry-After`.** Siehe [Abruf](architecture.md#abruf).
 - [x] **5.44 Bilder über ein CDN (optional).** Siehe [Bild-Proxy](architecture.md#bild-proxy) und „Images through a CDN“ in [deploy/README.md](../deploy/README.md#images-through-a-cdn).
-- [ ] **E13 Inaktive Konten (A18, E13).** Konten ohne Login seit 12 Monaten werden optional nach zwei Mails gelöscht ([Entscheidungen](plan.md#entscheidungen)). Kann auf 5.4 aufbauen. Noch nicht ausgearbeitet; offen ist unter anderem, was mit Konten ohne bestätigte Adresse geschieht.
+- [x] **E13 Inaktive Konten (A18, E13).** Siehe [Aufbewahrung](architecture.md#aufbewahrung).
 
 ### Nicht mit Fiona abgesprochen
 

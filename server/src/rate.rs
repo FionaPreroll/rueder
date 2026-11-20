@@ -23,7 +23,9 @@
 //!   server, so that nobody uses rueder to fill somebody's inbox, nor the
 //!   relay's allowance. Links to set a new password, which anybody can ask
 //!   for, have a share of the day of their own ([`RESET_MAILS_PER_DAY`]), so
-//!   that asking for many does not use up the mail of everybody else.
+//!   that asking for many does not use up the mail of everybody else, and so
+//!   do the mails to accounts nobody uses ([`INACTIVE_MAILS_PER_DAY`]), which
+//!   may be many at once when the operator turns that on.
 //!
 //! - registrations ([`REGISTRATIONS_PER_NETWORK`], [`OPEN_REGISTRATIONS`]):
 //!   per network, before anything else is looked at, and those without an
@@ -98,6 +100,9 @@ pub const MAILS_PER_DAY: Rate = Rate::new(1000, Duration::from_millis(86_400));
 /// their own, and the rest of the day's mail stays for confirmations. With
 /// another `MAILS_PER_DAY` the share is three in ten of it (see `sizes`).
 pub const RESET_MAILS_PER_DAY: Rate = Rate::new(300, Duration::from_millis(288_000));
+/// How many of them may be mails to accounts nobody uses (see `inactive`), in
+/// the same way: three in ten of the day's.
+pub const INACTIVE_MAILS_PER_DAY: Rate = Rate::new(300, Duration::from_millis(288_000));
 /// How many registrations one network may try: 5 at once, and 5 more an hour.
 /// A network is an IPv4 /24 or an IPv6 /48, as for wrong passwords, so that
 /// many addresses of one network count once; a few tries leave room for a
@@ -238,6 +243,7 @@ pub struct Limits {
     pub mails_per_address: Rate,
     pub mails_per_day: Rate,
     pub reset_mails_per_day: Rate,
+    pub inactive_mails_per_day: Rate,
     pub registrations_per_network: Rate,
     pub open_registrations: Rate,
     /// How many costly requests run at once ([`Rates::heavy`]).
@@ -258,6 +264,7 @@ impl Default for Limits {
             mails_per_address: MAILS_PER_ADDRESS,
             mails_per_day: MAILS_PER_DAY,
             reset_mails_per_day: RESET_MAILS_PER_DAY,
+            inactive_mails_per_day: INACTIVE_MAILS_PER_DAY,
             registrations_per_network: REGISTRATIONS_PER_NETWORK,
             open_registrations: OPEN_REGISTRATIONS,
             heavy_at_once: HEAVY_AT_ONCE,
@@ -278,6 +285,7 @@ pub struct Rates {
     mails_per_address: Limiter<String>,
     mails_per_day: Limiter<()>,
     reset_mails_per_day: Limiter<()>,
+    inactive_mails_per_day: Limiter<()>,
     registrations_per_network: Limiter<IpAddr>,
     open_registrations: Limiter<()>,
     heavy: Heavy,
@@ -297,6 +305,7 @@ impl Rates {
             mails_per_address: Limiter::new(limits.mails_per_address),
             mails_per_day: Limiter::new(limits.mails_per_day),
             reset_mails_per_day: Limiter::new(limits.reset_mails_per_day),
+            inactive_mails_per_day: Limiter::new(limits.inactive_mails_per_day),
             registrations_per_network: Limiter::new(limits.registrations_per_network),
             open_registrations: Limiter::new(limits.open_registrations),
             heavy: Heavy {
@@ -375,6 +384,17 @@ impl Rates {
     /// asks for many uses up that share, not everybody's confirmations.
     pub fn reset_mail(&self, account_id: i32, address: &str, now: Instant) -> Result<(), AppError> {
         self.mails(account_id, address, Some(&self.reset_mails_per_day), now)
+    }
+
+    /// Counts a mail to an account nobody uses like any mail, and against the
+    /// share of the day such mails have.
+    pub fn inactive_mail(
+        &self,
+        account_id: i32,
+        address: &str,
+        now: Instant,
+    ) -> Result<(), AppError> {
+        self.mails(account_id, address, Some(&self.inactive_mails_per_day), now)
     }
 
     /// Counts a mail against the account, the address, a share of the day if

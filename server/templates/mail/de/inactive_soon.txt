@@ -1,0 +1,12 @@
+Erinnerung: Dein rueder-Konto wird gelöscht
+Hallo {name},
+
+das Konto „{name}“ auf {site} wird am {date} gelöscht, mit seinen Abos,
+Ordnern, markierten Artikeln, Labels und Filterregeln, weil Konten gehen, die
+{months} Monate niemand benutzt.
+
+Willst du es behalten, melde dich vorher einmal an, im Browser oder in einer
+App:
+{link}
+
+Das ist die letzte Mail dazu.

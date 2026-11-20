@@ -1,0 +1,13 @@
+Dein rueder-Konto wird gelöscht
+Hallo {name},
+
+das Konto „{name}“ auf {site} wurde lange nicht benutzt. Auf {site} werden
+Konten gelöscht, die {months} Monate niemand benutzt, mit ihren Abos,
+Ordnern, markierten Artikeln, Labels und Filterregeln. Dieses geht am {date}.
+
+Willst du es behalten, melde dich vorher einmal an, im Browser oder in einer
+App:
+{link}
+
+Willst du nur deine Abos mitnehmen, exportiere sie vorher unter
+Einstellungen, Import und Export.

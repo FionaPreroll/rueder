@@ -1,0 +1,13 @@
+Sua conta do rueder vai ser excluída
+Olá, {name},
+
+a conta "{name}" em {site} não é usada há muito tempo. Em {site}, as contas
+que ninguém usa por {months} meses são excluídas, com suas assinaturas,
+pastas, artigos com estrela, marcadores e regras de filtro. Esta será
+excluída em {date}.
+
+Para mantê-la, entre uma vez antes dessa data, no navegador ou em um app:
+{link}
+
+Se quiser levar só suas assinaturas, exporte-as antes em Configurações,
+Importar e exportar.

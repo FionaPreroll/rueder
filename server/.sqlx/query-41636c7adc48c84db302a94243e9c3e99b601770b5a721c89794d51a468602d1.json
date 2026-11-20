@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts\n         SET active_at = now(), inactive_warned_at = NULL, inactive_reminded_at = NULL\n         WHERE id = $1 AND active_at < now() - $2::float8 * interval '1 second'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41636c7adc48c84db302a94243e9c3e99b601770b5a721c89794d51a468602d1"
+}

@@ -1,0 +1,12 @@
+Herinnering: je rueder-account wordt verwijderd
+Hallo {name},
+
+het account "{name}" op {site} wordt op {date} verwijderd, met zijn
+abonnementen, mappen, artikelen met ster, labels en filterregels, omdat
+accounts die {months} maanden niemand gebruikt worden verwijderd.
+
+Wil je het houden, log dan vóór die datum één keer in, in een browser of een
+app:
+{link}
+
+Dit is de laatste mail hierover.

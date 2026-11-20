@@ -1,0 +1,14 @@
+rueder hesabınız silinecek
+Merhaba {name},
+
+{site} üzerindeki "{name}" hesabı uzun süredir kullanılmıyor. {site}
+üzerinde {months} ay boyunca kimsenin kullanmadığı hesaplar; abonelikleri,
+klasörleri, yıldızlı makaleleri, etiketleri ve filtre kurallarıyla birlikte
+silinir. Bu hesap {date} tarihinde silinecek.
+
+Hesabı tutmak istiyorsanız, o tarihten önce bir kez tarayıcıda ya da bir
+uygulamada oturum açın:
+{link}
+
+Yalnızca aboneliklerinizi götürmek istiyorsanız, önce Ayarlar'da İçe ve dışa
+aktar bölümünden dışa aktarın.

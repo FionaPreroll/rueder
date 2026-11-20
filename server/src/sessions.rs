@@ -93,6 +93,7 @@ pub async fn start(db: &PgPool, account_id: i32, second_factor: bool) -> anyhow:
     )
     .execute(db)
     .await?;
+    crate::inactive::used(db, account_id).await?;
     Ok(token)
 }
 
@@ -126,6 +127,7 @@ pub async fn find(db: &PgPool, token: &str) -> anyhow::Result<Option<Session>> {
         )
         .execute(db)
         .await?;
+        crate::inactive::used(db, found.id).await?;
     }
     Ok(Some(Session {
         account_id: found.id,

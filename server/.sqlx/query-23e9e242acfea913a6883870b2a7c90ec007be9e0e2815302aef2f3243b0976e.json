@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET inactive_warned_at = $2\n             WHERE id = $1 AND active_at = $3 AND inactive_warned_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "23e9e242acfea913a6883870b2a7c90ec007be9e0e2815302aef2f3243b0976e"
+}

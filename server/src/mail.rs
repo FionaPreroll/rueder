@@ -159,14 +159,21 @@ pub enum Template {
     Reset,
     /// After a new password was set with that link: `{name}`, `{site}`.
     PasswordChanged,
+    /// The first of the two mails before an account nobody uses goes
+    /// (`inactive`): `{name}`, `{site}`, `{link}`, `{date}`, `{months}`.
+    Inactive,
+    /// The second, a few days before: the same places.
+    InactiveSoon,
 }
 
 impl Template {
-    pub const ALL: [Template; 4] = [
+    pub const ALL: [Template; 6] = [
         Template::Confirm,
         Template::Changed,
         Template::Reset,
         Template::PasswordChanged,
+        Template::Inactive,
+        Template::InactiveSoon,
     ];
 
     /// The file of the mail in this language, as it is built into the program.
@@ -176,6 +183,8 @@ impl Template {
             Self::Changed => in_every_language!("changed"),
             Self::Reset => in_every_language!("reset"),
             Self::PasswordChanged => in_every_language!("password_changed"),
+            Self::Inactive => in_every_language!("inactive"),
+            Self::InactiveSoon => in_every_language!("inactive_soon"),
         };
         texts[language as usize]
     }
@@ -187,6 +196,7 @@ impl Template {
             Self::Changed => &["name", "site", "address"],
             Self::Reset => &["name", "site", "link", "minutes"],
             Self::PasswordChanged => &["name", "site"],
+            Self::Inactive | Self::InactiveSoon => &["name", "site", "link", "date", "months"],
         }
     }
 }
@@ -306,6 +316,15 @@ impl Mailer {
             .append_pair(what, token)
             .finish();
         url.set_fragment(Some(&pair));
+        url.into()
+    }
+
+    /// The address of the site itself, where its readers log in.
+    pub fn home(&self) -> String {
+        let mut url = self.site.clone();
+        url.set_path("/");
+        url.set_query(None);
+        url.set_fragment(None);
         url.into()
     }
 

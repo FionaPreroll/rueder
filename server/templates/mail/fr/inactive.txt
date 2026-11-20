@@ -1,0 +1,14 @@
+Votre compte rueder va être supprimé
+Bonjour {name},
+
+le compte « {name} » sur {site} n'a pas été utilisé depuis longtemps. Sur
+{site}, les comptes que personne n'utilise pendant {months} mois sont
+supprimés, avec leurs abonnements, dossiers, articles favoris, libellés et
+règles de filtrage. Celui-ci le sera le {date}.
+
+Pour le garder, connectez-vous une fois d'ici là, dans un navigateur ou une
+application :
+{link}
+
+Pour n'emporter que vos abonnements, exportez-les d'abord dans Paramètres,
+Importer et exporter.

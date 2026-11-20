@@ -50,6 +50,7 @@ pub mod health;
 pub mod http_client;
 pub mod images;
 pub mod import;
+pub mod inactive;
 pub mod labels;
 pub mod legal;
 pub mod login;

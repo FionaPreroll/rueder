@@ -188,6 +188,7 @@ pub async fn find(db: &PgPool, secret: &str) -> anyhow::Result<Option<AppLogin>>
         )
         .execute(db)
         .await?;
+        crate::inactive::used(db, found.account_id).await?;
     }
     Ok(Some(AppLogin {
         id: found.id,

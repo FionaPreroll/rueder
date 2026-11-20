@@ -1,0 +1,12 @@
+Pengingat: akun rueder Anda akan dihapus
+Halo {name},
+
+akun "{name}" di {site} akan dihapus pada {date} bersama langganan, folder,
+artikel berbintang, label, dan aturan filternya, karena akun yang tidak
+digunakan siapa pun selama {months} bulan dihapus.
+
+Untuk mempertahankannya, masuklah sekali sebelum tanggal itu, di browser atau
+di aplikasi:
+{link}
+
+Ini email terakhir tentang hal ini.
