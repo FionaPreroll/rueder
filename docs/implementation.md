@@ -1025,6 +1025,29 @@ Paket 5.36: ob rueder die Bilder für 100.000 Konten allein ausliefern kann oder
 
 **Nicht gemessen:** echte Fotos als JPEG und wie viele Bilder echte Artikel haben; die Schätzung nimmt drei geöffnete Artikel mit je drei Bildern an.
 
+### Speicher beim Lesen eines Feeds vom 2026-11-20
+
+Was `feeds::parse` höchstens an Speicher belegt, gemessen mit einem zählenden Allokator um den Aufruf (Release-Build, ohne Datenbank). Die Feeds sind ausgedacht: ein Kopf, immer dasselbe Stück und ein Schluss, 5 MiB und 20 MiB groß, so viel, wie ein Abruf annimmt (`http_client::Config::max_body`). „Vorher“ ist der Stand ohne den Vorfilter `feeds::limited`, gemessen mit 5 MiB, weil 20 MiB die Maschine an ihre Grenze gebracht hätten; der Verbrauch wächst dort mit der Größe.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
+
+| Feed | vorher, 5 MiB | nachher, 5 MiB | nachher, 20 MiB |
+|---|---:|---:|---:|
+| RSS aus leeren `<item/>` | 736 MiB, 0,7 s | 0,4 MiB | 0,4 MiB, 0,3 s |
+| Atom aus leeren `<entry/>` | 736 MiB | 0,4 MiB | 0,4 MiB |
+| JSON Feed aus leeren Items `{}` | 2.128 MiB, 1,5 s | 0,5 MiB | 0,5 MiB |
+| JSON Feed, ein Item mit lauter leeren Tags | 240 MiB | 0,2 MiB | 0,2 MiB |
+| RSS, ein Item mit lauter `<enclosure url="a"/>` | 238 MiB | 0 MiB | 0 MiB |
+| RSS, ein Item mit lauter `<media:content>` in `<media:group>` | 209 MiB | 0 MiB | 0 MiB |
+| RSS, ein Item mit lauter verschiedenen Attributen | 84 MiB | 5,5 MiB | 23 MiB |
+| RSS aus kurzen Items mit Titel, Text und ID | 101 MiB | 0,6 MiB | 0,6 MiB |
+| JSON Feed aus kurzen Items mit Text und Tags | 163 MiB | 0,8 MiB | 0,8 MiB |
+
+- **Der Verbrauch hängt nicht mehr an der Länge des Feeds.** Vorher hielt `feed-rs` jeden Eintrag, bevor `MAX_ARTICLES` griff, und jedes Element, aus dem es etwas macht: bis zu 425-mal die Größe des Feeds, 20 MiB leere Items in JSON über 8 GiB. Ein Konto konnte das mit einer Adresse auslösen, die es selbst bedient, beim Suchen, beim Abonnieren und bei jedem Abruf.
+- **Das Teuerste, was bleibt,** ist ein Eintrag knapp unter `MAX_ELEMENTS` aus Enclosures oder `media:content`: rund 22 MiB. Was über die Grenze geht, fällt als ganzer Eintrag weg, deshalb 0 MiB in der Tabelle. Die Attribute eines Elements liest `quick-xml` auf einmal in seinen Puffer, das kostet einmal die Größe des Elements.
+- **Gemessen wie in der CI:** `server/tests/feed_memory.rs` liest elf solcher Feeds zu 20 MiB mit einer Grenze von 64 MiB für den Allokator. Ohne den Vorfilter bricht der Test ab.
+- **Nichts anderes ändert sich:** Alle 1.484 Eingaben des Fuzz-Korpus für Feeds ergeben vorher und nachher dieselbe Zahl von Artikeln und ausgelassenen Einträgen.
+
 ## Wissen über das Altsystem
 
 Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.

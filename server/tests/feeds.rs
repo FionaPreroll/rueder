@@ -6,7 +6,7 @@ mod common;
 use rueder::{
     articles::{self, Page},
     cleaning::Rules,
-    feeds::{self, MAX_ARTICLES, Stored},
+    feeds::{self, MAX_ARTICLES, MAX_ELEMENTS, Stored},
 };
 use sqlx::PgPool;
 use time::{OffsetDateTime, macros::datetime};
@@ -398,6 +398,7 @@ fn limits_hold_and_nonsense_is_an_error() {
         b"hello",
         b"<html><body>not a feed</body></html>",
         b"{\"a\": 1}",
+        b"{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"x\",\"items\":[{},{}",
         &[0xff, 0xfe, 0x00][..],
     ] {
         assert!(
@@ -608,6 +609,63 @@ fn texts_come_out_of_a_feed_cleaned() {
         article.enclosures,
         serde_json::json!([{ "url": "https://feeds.example.net/a.mp3", "type": null, "inline": true }])
     );
+}
+
+#[test]
+fn a_feed_with_too_many_elements_is_cut_short_before_an_entry() {
+    // The entries before stay, the one that goes beyond and all after it do
+    // not: in RSS, Atom and JSON Feed.
+    let many = "<category>x</category>".repeat(MAX_ELEMENTS);
+    let body = format!(
+        "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Example</title>\
+         <item><guid>a</guid><title>A</title></item><item><guid>b</guid><title>B</title></item>\
+         <item><guid>c</guid>{many}</item><item><guid>d</guid><title>D</title></item>\
+         <item><guid>e</guid><title>E</title></item></channel></rss>"
+    );
+    let parsed = parse(body.as_bytes());
+    assert_eq!(parsed.title.as_deref(), Some("Example"));
+    let guids: Vec<&str> = parsed.articles.iter().map(|a| a.guid.as_str()).collect();
+    assert_eq!(guids, ["b", "a"]);
+    assert_eq!(parsed.skipped, 3);
+
+    let many = "<link href=\"https://example.org/\"/>".repeat(MAX_ELEMENTS);
+    let body = format!(
+        "<feed xmlns=\"http://www.w3.org/2005/Atom\"><title>Example</title>\
+         <entry><id>a</id><title>A</title></entry><entry><id>b</id>{many}</entry></feed>"
+    );
+    let parsed = parse(body.as_bytes());
+    assert_eq!(parsed.articles.len(), 1);
+    assert_eq!(parsed.skipped, 1);
+
+    // The feed's own members stay, wherever they stand.
+    let many = vec!["x"; MAX_ELEMENTS];
+    let body = serde_json::json!({
+        "version": "https://jsonfeed.org/version/1.1",
+        "items": [
+            { "id": "a", "title": "A" },
+            { "id": "b", "title": "B", "tags": many },
+            { "id": "c", "title": "C" },
+        ],
+        "title": "Example",
+    });
+    let parsed = parse(body.to_string().as_bytes());
+    assert_eq!(parsed.title.as_deref(), Some("Example"));
+    let guids: Vec<&str> = parsed.articles.iter().map(|a| a.guid.as_str()).collect();
+    assert_eq!(guids, ["a"]);
+    assert_eq!(parsed.skipped, 2);
+
+    let items: Vec<_> = (0..MAX_ARTICLES + 20)
+        .map(|n| serde_json::json!({ "id": format!("id{n}"), "title": format!("Title {n}") }))
+        .collect();
+    let body = serde_json::json!({
+        "version": "https://jsonfeed.org/version/1.1",
+        "title": "Example",
+        "items": items,
+    });
+    let parsed = parse(body.to_string().as_bytes());
+    assert_eq!(parsed.articles.len(), MAX_ARTICLES);
+    assert_eq!(parsed.skipped, 20);
+    assert_eq!(parsed.articles.last().unwrap().guid, "id0");
 }
 
 #[test]

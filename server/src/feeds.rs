@@ -9,16 +9,21 @@
 //! article of the feed has the same title and date; known ones that read
 //! differently get a new version, the rest is left alone.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use anyhow::Context;
 use feed_rs::model::{Entry, Link};
 use quick_xml::{
-    NsReader, Writer, XmlVersion,
+    NsReader, Reader, Writer, XmlVersion,
     escape::{escape, unescape},
     events::{BytesEnd, BytesStart, BytesText, Event},
     name::{Namespace, ResolveResult},
 };
+use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
 use time::OffsetDateTime;
@@ -36,6 +41,10 @@ pub const MAX_CONTENT: usize = 1024 * 1024;
 /// The longest teaser, in characters.
 const TEASER: usize = 300;
 const MAX_TAGS: usize = 20;
+/// How many elements and attributes of a feed in XML, or values of a JSON
+/// Feed, are read. The library makes something of nearly every element it knows, up to a
+/// kilobyte for an enclosure, and holds all of it at once; see [`limited`].
+pub const MAX_ELEMENTS: usize = 50_000;
 
 /// What a feed says about itself and the articles it lists.
 #[derive(Debug)]
@@ -68,11 +77,12 @@ pub fn parse(
         .build();
     let decoded = utf_8(body);
     let body = decoded.as_deref().unwrap_or(body);
-    let written = atom_1(body);
-    let body = written.as_deref().unwrap_or(body);
+    let (body, left_out) = limited(body).context("not a feed that can be read")?;
+    let written = atom_1(&body);
+    let body = written.as_deref().unwrap_or(&body);
     let feed = parser.parse(body).context("not a feed that can be read")?;
 
-    let listed = feed.entries.len();
+    let listed = feed.entries.len() + left_out;
     // Feeds list their newest entries first.
     let mut articles: Vec<NewArticle> = feed
         .entries
@@ -559,6 +569,257 @@ fn utf_8(body: &[u8]) -> Option<Vec<u8>> {
     }
     written.extend_from_slice(text.as_bytes().get(from..)?);
     Some(written)
+}
+
+/// A feed with no more than [`MAX_ARTICLES`] entries and [`MAX_ELEMENTS`]
+/// elements, and how many entries it left out.
+///
+/// The library reads all of a feed before anything can be taken from it, and
+/// a feed of 20 MiB of empty entries made it take several GiB. So entries
+/// beyond the limit are left out before, and once a feed has used up its
+/// elements, the entry being read and everything that begins after it, each
+/// as a whole: what is left reads as before, only shorter. Where the XML
+/// cannot be read on, the rest is left out, as the library cannot read it
+/// either.
+///
+/// It tells JSON from XML as the library does. A JSON Feed is written anew
+/// where something is left out, and one that cannot be read is an error
+/// here already: the library would first hold all that comes before the
+/// error.
+fn limited(body: &[u8]) -> anyhow::Result<(Cow<'_, [u8]>, usize)> {
+    if body.iter().find(|&&b| b == b'<' || b == b'{') != Some(&b'{') {
+        return Ok(xml_limited(body));
+    }
+    let mut kept = Kept::default();
+    let mut written = Vec::new();
+    let mut reader = serde_json::Deserializer::from_slice(body);
+    Copied {
+        out: &mut written,
+        kept: &mut kept,
+        items: false,
+        top: true,
+    }
+    .deserialize(&mut reader)?;
+    reader.end()?;
+    Ok(if kept.changed {
+        (Cow::Owned(written), kept.left_out)
+    } else {
+        (Cow::Borrowed(body), 0)
+    })
+}
+
+fn xml_limited(body: &[u8]) -> (Cow<'_, [u8]>, usize) {
+    let mut reader = Reader::from_reader(body);
+    reader.config_mut().check_end_names = false;
+    let position =
+        |reader: &Reader<&[u8]>| usize::try_from(reader.buffer_position()).unwrap_or(body.len());
+    let mut kept = Vec::new();
+    // Where the bytes still to be kept begin, and where they end.
+    let (mut from, mut rest) = (0, body.len());
+    let (mut depth, mut elements, mut entries, mut left_out) = (0, 0, 0, 0);
+    // The entry being read, and the element being left out: depth and start.
+    let mut entry: Option<(usize, usize)> = None;
+    let mut leaving: Option<(usize, usize)> = None;
+    let mut buf = Vec::new();
+    loop {
+        let start = position(&reader);
+        let event = reader.read_event_into(&mut buf);
+        let end = position(&reader);
+        let closes = match event {
+            Ok(Event::Start(ref element)) | Ok(Event::Empty(ref element)) => {
+                let empty = matches!(event, Ok(Event::Empty(_)));
+                if leaving.is_none() {
+                    // An item of RSS 0.9x, 1.0 and 2.0, an entry of Atom.
+                    let is_entry = entry.is_none()
+                        && depth <= 2
+                        && matches!(element.local_name().into_inner(), "item" | "entry");
+                    // The library holds every attribute, too.
+                    elements += 1 + element.attributes().with_checks(false).count();
+                    entries += usize::from(is_entry);
+                    if elements > MAX_ELEMENTS || (is_entry && entries > MAX_ARTICLES) {
+                        // The element, or the entry it is part of, as a whole.
+                        left_out += usize::from(is_entry || entry.is_some());
+                        leaving = Some(entry.take().unwrap_or((depth, start)));
+                    } else if is_entry && !empty {
+                        entry = Some((depth, start));
+                    }
+                }
+                if !empty {
+                    depth += 1;
+                }
+                empty
+            }
+            Ok(Event::End(_)) => {
+                depth = depth.saturating_sub(1);
+                if entry.is_some_and(|(at, _)| at == depth) {
+                    entry = None;
+                }
+                true
+            }
+            // Further on where it can, as the library may read on, too.
+            Err(_) if end > start => false,
+            Err(_) => {
+                rest = start;
+                break;
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => false,
+        };
+        if let Some((_, cut)) = leaving.filter(|&(at, _)| closes && at == depth) {
+            kept.extend_from_slice(body.get(from..cut).unwrap_or_default());
+            from = end;
+            leaving = None;
+        }
+        buf.clear();
+    }
+    // An element left out that does not end takes the rest with it.
+    let rest = leaving.map_or(rest, |(_, cut)| cut.min(rest));
+    if from == 0 && rest == body.len() {
+        return (Cow::Borrowed(body), 0);
+    }
+    kept.extend_from_slice(body.get(from..rest).unwrap_or_default());
+    (Cow::Owned(kept), left_out)
+}
+
+/// What [`Copied`] has read of a JSON Feed so far.
+#[derive(Default)]
+struct Kept {
+    values: usize,
+    items: usize,
+    left_out: usize,
+    changed: bool,
+}
+
+/// A value of a JSON Feed written to `out` as far as [`limited`] keeps it:
+/// arrays and objects are closed early once the values are used up, and of
+/// the feed's `items` only those read in full, up to [`MAX_ARTICLES`].
+struct Copied<'a> {
+    out: &'a mut Vec<u8>,
+    kept: &'a mut Kept,
+    /// This is the feed's `items`.
+    items: bool,
+    /// This is the feed itself.
+    top: bool,
+}
+
+impl Copied<'_> {
+    fn write<E: de::Error>(self, value: impl serde::Serialize) -> Result<(), E> {
+        serde_json::to_writer(self.out, &value).map_err(E::custom)
+    }
+
+    /// Whether one more value may be read; once not, nothing is anymore.
+    fn may_read(&mut self) -> bool {
+        self.kept.values += 1;
+        let may =
+            self.kept.values <= MAX_ELEMENTS && !(self.items && self.kept.items >= MAX_ARTICLES);
+        self.kept.changed |= !may;
+        may
+    }
+}
+
+impl<'de> DeserializeSeed<'de> for Copied<'_> {
+    type Value = ();
+
+    fn deserialize<D: de::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        deserializer.deserialize_any(self)
+    }
+}
+
+impl<'de> Visitor<'de> for Copied<'_> {
+    type Value = ();
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("JSON")
+    }
+
+    fn visit_bool<E: de::Error>(self, value: bool) -> Result<(), E> {
+        self.write(value)
+    }
+
+    fn visit_i64<E: de::Error>(self, value: i64) -> Result<(), E> {
+        self.write(value)
+    }
+
+    fn visit_u64<E: de::Error>(self, value: u64) -> Result<(), E> {
+        self.write(value)
+    }
+
+    fn visit_f64<E: de::Error>(self, value: f64) -> Result<(), E> {
+        self.write(value)
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> Result<(), E> {
+        self.write(value)
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<(), E> {
+        self.write(())
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(mut self, mut seq: A) -> Result<(), A::Error> {
+        self.out.push(b'[');
+        let mut first = true;
+        loop {
+            if !self.may_read() {
+                while seq.next_element::<IgnoredAny>()?.is_some() {
+                    self.kept.left_out += usize::from(self.items);
+                }
+                break;
+            }
+            let mark = self.out.len();
+            if !first {
+                self.out.push(b',');
+            }
+            let value = Copied {
+                out: self.out,
+                kept: self.kept,
+                items: false,
+                top: false,
+            };
+            if seq.next_element_seed(value)?.is_none() {
+                self.out.truncate(mark);
+                break;
+            }
+            if self.items {
+                // An item that was cut short is left out as a whole.
+                if self.kept.values > MAX_ELEMENTS {
+                    self.out.truncate(mark);
+                    self.kept.left_out += 1;
+                    continue;
+                }
+                self.kept.items += 1;
+            }
+            first = false;
+        }
+        self.out.push(b']');
+        Ok(())
+    }
+
+    fn visit_map<A: MapAccess<'de>>(mut self, mut map: A) -> Result<(), A::Error> {
+        self.out.push(b'{');
+        let mut first = true;
+        while let Some(key) = map.next_key::<String>()? {
+            // The feed's own members stay, its title among them.
+            if !self.top && !self.may_read() {
+                map.next_value::<IgnoredAny>()?;
+                continue;
+            }
+            if !first {
+                self.out.push(b',');
+            }
+            first = false;
+            serde_json::to_writer(&mut *self.out, &key).map_err(de::Error::custom)?;
+            self.out.push(b':');
+            map.next_value_seed(Copied {
+                out: self.out,
+                kept: self.kept,
+                items: self.top && key == "items",
+                top: false,
+            })?;
+        }
+        self.out.push(b'}');
+        Ok(())
+    }
 }
 
 /// A feed in Atom 0.3 written as Atom 1.0: its namespace, the names that
