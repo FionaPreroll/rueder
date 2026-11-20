@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	domainOf,
 	formatAgo,
 	formatBytes,
 	formatDuration,
@@ -105,5 +106,19 @@ describe('formatPercent', () => {
 		expect(formatPercent(1)).toBe('100%');
 		useLanguage('de');
 		expect(formatPercent(0.25)).toBe('25\u00a0%');
+	});
+});
+
+describe('domainOf', () => {
+	it('is the host of a web address, without its www', () => {
+		expect(domainOf('https://www.tagesschau.de/inland/bond-100.html?x=1')).toBe('tagesschau.de');
+		expect(domainOf('http://blog.example:8080/1')).toBe('blog.example');
+		expect(domainOf('https://xn--bcher-kva.example/')).toBe('xn--bcher-kva.example');
+	});
+
+	it('is nothing for what is no web address', () => {
+		expect(domainOf('mailto:desk@example.org')).toBeNull();
+		expect(domainOf('not a link')).toBeNull();
+		expect(domainOf('')).toBeNull();
 	});
 });

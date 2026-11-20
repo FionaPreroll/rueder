@@ -122,6 +122,7 @@ const nl: Messages = {
 		unstar: 'Ster verwijderen',
 		keepUnread: 'Ongelezen houden',
 		openOriginal: 'Origineel openen',
+		showFeed: 'Alle artikelen van deze feed in rueder tonen',
 		from: 'uit',
 		by: (author) => `door ${author}`,
 		updated: 'bijgewerkt',

@@ -119,6 +119,7 @@ const id: Messages = {
 		unstar: 'Hapus bintang',
 		keepUnread: 'Biarkan belum dibaca',
 		openOriginal: 'Buka aslinya',
+		showFeed: 'Tampilkan semua artikel feed ini di rueder',
 		from: 'dari',
 		by: (author) => `oleh ${author}`,
 		updated: 'diperbarui',

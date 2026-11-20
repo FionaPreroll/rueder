@@ -118,6 +118,7 @@ const zhHant: Messages = {
 		unstar: '移除星號',
 		keepUnread: '保持未讀',
 		openOriginal: '開啟原文',
+		showFeed: '在 rueder 中顯示這個訂閱源的所有文章',
 		from: '來自',
 		by: (author) => `作者：${author}`,
 		updated: '已更新',

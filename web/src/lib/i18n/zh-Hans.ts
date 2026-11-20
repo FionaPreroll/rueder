@@ -118,6 +118,7 @@ const zhHans: Messages = {
 		unstar: '取消星标',
 		keepUnread: '保持未读',
 		openOriginal: '打开原文',
+		showFeed: '在 rueder 中显示此订阅源的所有文章',
 		from: '来自',
 		by: (author) => `作者：${author}`,
 		updated: '已更新',

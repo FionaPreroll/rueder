@@ -116,6 +116,7 @@ const de: Messages = {
 		unstar: 'Markierung entfernen',
 		keepUnread: 'Als ungelesen behalten',
 		openOriginal: 'Original öffnen',
+		showFeed: 'Alle Artikel dieses Feeds in rueder anzeigen',
 		from: 'aus',
 		by: (author) => `von ${author}`,
 		updated: 'aktualisiert',

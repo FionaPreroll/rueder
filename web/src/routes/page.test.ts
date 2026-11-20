@@ -94,7 +94,10 @@ describe('an article', () => {
 		const first = within(main).getAllByRole('listitem')[0];
 		await userEvent.click(within(first).getAllByRole('button')[1]);
 		expect(openArticle()).not.toBeNull();
-		const title = within(main).getByRole('heading', { level: 2 }).textContent!.trim();
+		// The heading has the site the title leads to beside it.
+		const heading2 = within(main).getByRole('heading', { level: 2 });
+		const title = within(heading2).getByRole('link').textContent!.trim();
+		expect(heading2).toHaveTextContent(/labnotes-weekly\.example$/);
 		expect(within(main).getByRole('img', { name: title })).toBeInTheDocument();
 		expect(within(main).getByRole('heading', { name: 'Attachments' })).toBeInTheDocument();
 		expect(main.querySelector('audio')).toBeNull();
@@ -349,7 +352,9 @@ describe('the keyboard', () => {
 		const shown = () =>
 			document.querySelector('[data-pane-article]')?.getAttribute('data-pane-article');
 		const first = shown();
-		const title = within(pane()).getByRole('heading', { level: 2 }).textContent;
+		const title = within(within(pane()).getByRole('heading', { level: 2 })).getByRole(
+			'link'
+		).textContent;
 		// The row stays a row: the text is in the pane, not under it.
 		const list = document.querySelector<HTMLElement>('[data-pane="list"]')!;
 		expect(within(list).queryByRole('heading', { level: 2 })).toBeNull();

@@ -125,6 +125,7 @@ const fr: Messages = {
 		unstar: 'Retirer des favoris',
 		keepUnread: 'Garder non lu',
 		openOriginal: 'Ouvrir l’original',
+		showFeed: 'Afficher tous les articles de ce flux dans rueder',
 		from: 'de',
 		by: (author) => `par ${author}`,
 		updated: 'mis à jour',

@@ -132,6 +132,7 @@ const ru: Messages = {
 		unstar: 'Снять звёздочку',
 		keepUnread: 'Оставить непрочитанной',
 		openOriginal: 'Открыть оригинал',
+		showFeed: 'Показать все статьи этой ленты в rueder',
 		from: 'из',
 		by: (author) => `автор: ${author}`,
 		updated: 'обновлено',

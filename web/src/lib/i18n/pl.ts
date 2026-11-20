@@ -129,6 +129,7 @@ const pl: Messages = {
 		unstar: 'Usuń gwiazdkę',
 		keepUnread: 'Zostaw jako nieprzeczytany',
 		openOriginal: 'Otwórz oryginał',
+		showFeed: 'Pokaż wszystkie artykuły tego kanału w rueder',
 		from: 'z',
 		by: (author) => `autor: ${author}`,
 		updated: 'zaktualizowany',

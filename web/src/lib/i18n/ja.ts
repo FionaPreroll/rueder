@@ -120,6 +120,7 @@ const ja: Messages = {
 		unstar: 'スターを外す',
 		keepUnread: '未読のままにする',
 		openOriginal: '元の記事を開く',
+		showFeed: 'このフィードのすべての記事を rueder で表示',
 		from: '出典',
 		by: (author) => `著者: ${author}`,
 		updated: '更新あり',

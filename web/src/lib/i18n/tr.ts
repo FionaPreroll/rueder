@@ -120,6 +120,7 @@ const tr: Messages = {
 		unstar: 'Yıldızı kaldır',
 		keepUnread: 'Okunmamış bırak',
 		openOriginal: 'Aslını aç',
+		showFeed: 'Bu akışın tüm makalelerini rueder’de göster',
 		from: 'kaynak',
 		by: (author) => `yazar: ${author}`,
 		updated: 'güncellendi',

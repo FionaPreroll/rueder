@@ -118,6 +118,7 @@ const ko: Messages = {
 		unstar: '별표 해제',
 		keepUnread: '읽지 않음으로 두기',
 		openOriginal: '원문 열기',
+		showFeed: '이 피드의 모든 글을 rueder에서 보기',
 		from: '출처',
 		by: (author) => `글쓴이: ${author}`,
 		updated: '업데이트됨',

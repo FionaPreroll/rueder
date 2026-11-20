@@ -123,6 +123,7 @@ const ptBR: Messages = {
 		unstar: 'Remover estrela',
 		keepUnread: 'Manter como não lido',
 		openOriginal: 'Abrir o original',
+		showFeed: 'Mostrar todos os artigos deste feed no rueder',
 		from: 'de',
 		by: (author) => `por ${author}`,
 		updated: 'atualizado',

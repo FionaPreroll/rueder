@@ -119,6 +119,8 @@ const en = {
 		unstar: 'Remove star',
 		keepUnread: 'Keep unread',
 		openOriginal: 'Open the original',
+		/** What the feed's name under an article's title does: it stays in rueder. */
+		showFeed: 'Show all articles of this feed in rueder',
 		from: 'from',
 		by: (author: string) => `by ${author}`,
 		updated: 'updated',

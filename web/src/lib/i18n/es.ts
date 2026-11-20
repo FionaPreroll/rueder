@@ -123,6 +123,7 @@ const es: Messages = {
 		unstar: 'Quitar de destacados',
 		keepUnread: 'Mantener sin leer',
 		openOriginal: 'Abrir el original',
+		showFeed: 'Mostrar todos los artículos de este feed en rueder',
 		from: 'de',
 		by: (author) => `por ${author}`,
 		updated: 'actualizado',

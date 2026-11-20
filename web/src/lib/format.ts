@@ -1,4 +1,4 @@
-// Times as the list and the articles show them, in the page's language.
+// Times as the list and the articles show them, in the page's language, and the site a link goes to.
 
 import { localized } from './i18n/intl.ts';
 
@@ -98,3 +98,13 @@ const percent = localized(
 
 /** A share as a percentage: 0.987 is "98.7%". */
 export const formatPercent = (share: number) => percent().format(share);
+
+/** The site a link goes to, as a reader knows it: its host without `www.`; null where it is no web address. */
+export function domainOf(link: string) {
+	try {
+		const { protocol, hostname } = new URL(link);
+		return protocol === 'https:' || protocol === 'http:' ? hostname.replace(/^www\./, '') : null;
+	} catch {
+		return null;
+	}
+}

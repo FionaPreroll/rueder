@@ -162,6 +162,7 @@ const ar: Messages = {
 		unstar: 'إزالة النجمة',
 		keepUnread: 'إبقاؤها غير مقروءة',
 		openOriginal: 'فتح الأصل',
+		showFeed: 'عرض كل مقالات هذه الخلاصة في rueder',
 		from: 'من',
 		by: (author) => `بقلم ${iso(author)}`,
 		updated: 'محدَّثة',
