@@ -33,7 +33,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 2 Backend | Fertig |
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
-| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten), für 100.000 Konten auf einer Maschine 5.36 |
+| 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz), E13 (inaktive Konten) |
 
 Was es gibt:
 
@@ -372,9 +372,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.33 Größen einstellbar.** `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE` und `MAILS_PER_DAY`, siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits), [Verbindungen zur Datenbank](#verbindungen-zur-datenbank-vom-2026-11-19) und die Tabelle für 10.000 und 100.000 Konten in [deploy/README.md](../deploy/README.md#a-large-instance).
 - [x] **5.34 Grenzen im Speicher für viele Schlüssel.** Siehe [Header, Herkunft und Limits](architecture.md#header-herkunft-und-limits) und [Grenzen im Speicher vom 2026-11-19](#grenzen-im-speicher-vom-2026-11-19).
 - [x] **5.35 Platz und Datenbank für große Instanzen.** Die Seiten der Abos lassen Platz für die nächste Lesemarke (Migration 0030), siehe [Lesestand und Ungelesen-Zahlen](architecture.md#lesestand-und-ungelesen-zahlen), [Platz, Arbeitsspeicher und Abos](#platz-arbeitsspeicher-und-abos-vom-2026-11-19) und „A large instance“ in [deploy/README.md](../deploy/README.md#a-large-instance).
-- [ ] **5.36 Bilder vor einem Cache.** Prüfen, ob die Adressen des Bild-Proxys je Konto signiert sind; wo nicht, sagen die Antworten, dass ein Cache vor rueder (ein Reverse-Proxy oder ein CDN unter derselben Domain) sie halten darf, mit einem Beispiel in `deploy/README.md`. Fertig, wenn:
-  - ein Test die Header prüft;
-  - der Bild-Proxy unter Last gemessen ist.
+- [x] **5.36 Bilder ohne geteilten Cache.** Siehe [Bild-Proxy](architecture.md#bild-proxy), [Bild-Proxy unter Last](#bild-proxy-unter-last-vom-2026-11-19) und `web/load/images.js`.
 - [x] **5.37 Messen in der Form des alten Bestands.** Siehe [Suche vom 2026-11-15](#suche-vom-2026-11-15).
 - [x] **5.38 Gespeicherte Wörter für die Suche.** Siehe [Gespeicherte Wörter vom 2026-11-16](#gespeicherte-wörter-vom-2026-11-16).
 - [x] **5.39 Fortschritt langer Läufe.** Migrationen, `import-legacy` und `reclean` sagen im Log regelmäßig, wie weit sie sind (`server/src/progress.rs`).
@@ -998,6 +996,27 @@ Die erfundenen Texte haben mehr verschiedene Wörter als echte (2,5 statt 1,4 KB
 - **Am meisten geändert werden in der Produktion die Feeds**: 37.327 Updates, nur 5 % ohne neuen Indexeintrag, 431 Läufe des Autovacuum. Jeder Abruf schreibt die Zeit des nächsten, und die hat einen Index (`feeds_next_fetch`). Dagegen hilft kein Füllgrad; das Autovacuum kam hinterher.
 
 **Nicht gemessen:** wie viele und wie schwere Feeds eine öffentliche Instanz hat. Die Raten stammen aus Fionas 148 Feeds, und schon dort tragen zwei Feeds den größten Teil. Ebenso wenig, wie viel ein Konto mit Filterregeln über ein Jahr ausblendet.
+
+### Bild-Proxy unter Last vom 2026-11-19
+
+Paket 5.36: ob rueder die Bilder für 100.000 Konten allein ausliefern kann oder einen geteilten Cache davor braucht. Ergebnis: Er kann es. Aus seinem Cache liefert er knapp 9.000 Bilder je Sekunde, gebraucht werden in der Spitze geschätzt 350 bis 2.100. Fiona hat daraufhin entschieden, dass Bilder nur für eingeloggte User bleiben und kein Cache vor rueder sie hält.
+
+- **Maschine** wie unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15), Release-Build, Server, PostgreSQL und Lastgenerator auf denselben vier Kernen.
+- **Daten:** `rueder bench readers --count 100000` in einer leeren Datenbank, 100.000 Leser mit je einer Sitzung, 45 MB. `load/images.js` mit 3.000 Bildern einer erfundenen Seite unter 50 Namen aus 127.0.0.0/8: je ein Vorschaubild, für jedes zweite ein Icon, für jedes vierte das Bild selbst, 5.250 Adressen. Die Quellen sind PNG, Fotos mit 1.600 × 1.000 Pixeln und rund 360 KB, Icons mit 64 × 64. Im Cache lagen danach 357 MB, im Mittel 69 KB, im Median 25 KB je Datei.
+
+| Lauf | Bilder je Sekunde | p50 | p95 | Kerne Server | Kerne PostgreSQL |
+|---|---:|---:|---:|---:|---:|
+| erstes Mal, 32 zugleich | 110 | 298 ms | 337 ms | 2,0 | 0 |
+| aus dem Cache, 8 zugleich | 7.761 | 0,9 ms | 1,8 ms | 1,5 | 0,9 |
+| aus dem Cache, 32 zugleich | 8.928 | 3,2 ms | 6,5 ms | 1,6 | 0,9 |
+| aus dem Cache, 64 zugleich | 8.763 | 6,7 ms | 12,6 ms | 1,7 | 0,9 |
+
+- **Das erste Mal** holt, verkleinert und speichert der Proxy das Bild. Es hängt an den wenigen Bildern, die er zugleich dekodiert (`images::ImageProxy`), daher die zwei Kerne; die anderen warten, auch Icons, die nicht verkleinert werden.
+- **Aus dem Cache** kostet ein Bild rund 0,2 ms im Server und 0,1 ms in PostgreSQL, das ist die Sitzung. Die Grenze sind die Kerne, die sich Server, PostgreSQL und Lastgenerator teilen. Der Server hielt 180 MB, es gab keinen Fehler.
+- **Was 100.000 Konten brauchen**, geschätzt aus der Spitze von 15 bis 35 Besuchen je Sekunde unter [Viele Konten](#viele-konten-vom-2026-11-14-und-2026-11-15): In der Liste, wie die Seite beginnt, lädt ein Besuch die Icons seiner Feeds und die Bilder der geöffneten Artikel, rund 10; im Magazin bis zu 60 mit den Vorschaubildern. Jedes Bild lädt erst, wenn es zu sehen ist, und der Browser behält es ein Jahr. Das sind 350 bis 2.100 Bilder je Sekunde, ein Viertel bis ein Fünfundzwanzigstel dessen, was rueder hier schafft. Neue Bilder kommen mit neuen Artikeln: 20.000 Feeds mit dem Mittel aus der [Produktion](#platz-arbeitsspeicher-und-abos-vom-2026-11-19) bringen rund drei Artikel je Sekunde.
+- **Spürbar wird eher die Leitung.** Zehn Bilder von 69 KB je Besuch sind bei 35 Besuchen je Sekunde rund 24 MB/s, also 200 Mbit/s. Dagegen hülfe nur ein CDN, kein Reverse-Proxy auf derselben Maschine, und das müsste die Bilder auch ohne Sitzung ausliefern.
+
+**Nicht gemessen:** echte Fotos als JPEG und wie viele Bilder echte Artikel haben; die Schätzung nimmt drei geöffnete Artikel mit je drei Bildern an.
 
 ## Wissen über das Altsystem
 

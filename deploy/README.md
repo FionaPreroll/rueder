@@ -329,6 +329,15 @@ tags: the
 same 1,000 feeds then hold about 57 GB and grow by about 5 GB a year. The
 image proxy's cache stays within `IMAGE_CACHE_MB`.
 
+**Images.** rueder serves every image itself, and only to readers who are
+logged in. Do not let a cache in front of it keep them, neither your reverse
+proxy nor a CDN: it would hand them to anyone who has the address. Its answers
+say `private`, which nginx and most CDNs take as "do not keep". It needs no
+such cache: on a machine with 4 cores it served about 9,000 images a second
+from its own cache, while 100,000 accounts need a few hundred to about 2,000
+at their busiest. What a large instance does feel is its bandwidth: ten
+images of 70 KB a visit, at 35 visits a second, are about 200 Mbit/s.
+
 Turning the retention on keeps the database from growing by old texts, but
 does not make it smaller: PostgreSQL reuses the space of the texts that went,
 while the versions give theirs back at once. To give back the rest, once:
