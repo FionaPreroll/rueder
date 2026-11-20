@@ -459,6 +459,7 @@ const id: Messages = {
 		markup: 'Kata, gambar, dan tautan sama; hanya susunan teks yang berubah.',
 		pictures: 'Gambar yang berubah',
 		noPicture: 'Tidak ada',
+		address: 'Alamat gambar',
 		links: 'Tautan yang berubah'
 	},
 

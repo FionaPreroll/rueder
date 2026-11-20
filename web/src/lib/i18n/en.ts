@@ -465,6 +465,7 @@ const en = {
 		markup: 'The words, pictures and links are the same; only how the text is laid out changed.',
 		pictures: 'Pictures that changed',
 		noPicture: 'None',
+		address: 'Address of the picture',
 		links: 'Links that changed'
 	},
 

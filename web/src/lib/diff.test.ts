@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diffMedia, diffWords } from '#lib/diff.ts';
+import { diffMedia, diffWords, sourceOf, splitOff } from '#lib/diff.ts';
 
 const joined = (parts: ReturnType<typeof diffWords>, without: 'added' | 'removed') =>
 	parts
@@ -52,15 +52,13 @@ describe('diffMedia', () => {
 	it('finds a picture swapped for another, and a new text for a picture', () => {
 		const before = `<p>Bond</p>${picture(118, 'Garfitt/AP')}${picture(7, 'Map')}`;
 		const after = `<p>Bond</p>${picture(122, 'Buitendijk/PA')}${picture(7, 'Map of London')}`;
+		const shown = (n: number, title: string) => ({ url: `/img/sig/image/${n}`, title });
 		expect(diffMedia(before, after).pictures).toEqual({
-			removed: [
-				{ url: '/img/sig/image/118', title: 'Garfitt/AP' },
-				{ url: '/img/sig/image/7', title: 'Map' }
-			],
-			added: [
-				{ url: '/img/sig/image/122', title: 'Buitendijk/PA' },
-				{ url: '/img/sig/image/7', title: 'Map of London' }
-			]
+			removed: [shown(118, 'Garfitt/AP'), shown(7, 'Map')].map((p) => ({ ...p, source: p.url })),
+			added: [shown(122, 'Buitendijk/PA'), shown(7, 'Map of London')].map((p) => ({
+				...p,
+				source: p.url
+			}))
 		});
 	});
 
@@ -83,5 +81,66 @@ describe('diffMedia', () => {
 			pictures: { removed: [], added: [] },
 			links: { removed: [], added: [] }
 		});
+	});
+});
+
+describe('sourceOf', () => {
+	/** The proxy's address of a picture, as `images.rs` makes it. */
+	const proxied = (source: string) =>
+		`/img/c2lnbmF0dXJl/image/${Buffer.from(source).toString('base64url')}`;
+
+	it('reads the source out of the image proxy’s address', () => {
+		const source = 'https://images.example/bond/pattinson-122~_v-original.jpg?w=1080';
+		expect(sourceOf(proxied(source))).toBe(source);
+		expect(sourceOf(proxied('https://bilder.example/Größe.png'))).toBe(
+			'https://bilder.example/Größe.png'
+		);
+	});
+
+	it('keeps any other address as it is', () => {
+		for (const url of [
+			'https://images.example/a.png',
+			'/demo/picture.svg',
+			'/img/sig/image/118',
+			'/img/sig/image/not+base64',
+			''
+		]) {
+			expect(sourceOf(url)).toBe(url);
+		}
+	});
+});
+
+describe('splitOff', () => {
+	it('marks the whole number that changed in an address', () => {
+		const before = 'https://images.example/bond/pattinson-118~_v-original.jpg';
+		const after = 'https://images.example/bond/pattinson-122~_v-original.jpg';
+		expect(splitOff(before, after)).toEqual([
+			'https://images.example/bond/pattinson-',
+			'118',
+			'~_v-original.jpg'
+		]);
+		expect(splitOff(after, before)[1]).toBe('122');
+	});
+
+	it('marks a part that came or went, and nothing where they are the same', () => {
+		const plain = 'https://images.example/a.jpg';
+		const sized = 'https://images.example/a.jpg?w=1080';
+		expect(splitOff(sized, plain)).toEqual([plain, '?w=1080', '']);
+		expect(splitOff(plain, sized)).toEqual([plain, '', '']);
+		expect(splitOff(plain, plain)).toEqual([plain, '', '']);
+		expect(splitOff('x/abc/y', 'x/abd/y')).toEqual(['x/', 'abc', '/y']);
+	});
+
+	it('gives back the text, whatever the other', () => {
+		for (const [text, other] of [
+			['aaa', 'aa'],
+			['aa', 'aaa'],
+			['ab-ab', 'ab'],
+			['', 'x'],
+			['x', ''],
+			['Größe', 'Grüße']
+		]) {
+			expect(splitOff(text, other).join('')).toBe(text);
+		}
 	});
 });

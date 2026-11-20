@@ -438,6 +438,7 @@ const zhHans: Messages = {
 		markup: '文字、图片和链接都相同；只有正文的结构变了。',
 		pictures: '有变化的图片',
 		noPicture: '无',
+		address: '图片地址',
 		links: '有变化的链接'
 	},
 

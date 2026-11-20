@@ -448,6 +448,7 @@ const ko: Messages = {
 		markup: '단어, 이미지, 링크는 같습니다. 본문의 구성만 바뀌었습니다.',
 		pictures: '바뀐 이미지',
 		noPicture: '없음',
+		address: '이미지 주소',
 		links: '바뀐 링크'
 	},
 

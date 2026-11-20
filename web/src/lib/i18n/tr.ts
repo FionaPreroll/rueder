@@ -460,6 +460,7 @@ const tr: Messages = {
 		markup: 'Sözcükler, resimler ve bağlantılar aynı; yalnızca metnin düzeni değişti.',
 		pictures: 'Değişen resimler',
 		noPicture: 'Yok',
+		address: 'Resmin adresi',
 		links: 'Değişen bağlantılar'
 	},
 

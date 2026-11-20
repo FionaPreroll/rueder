@@ -468,6 +468,7 @@ const pl: Messages = {
 		markup: 'Słowa, obrazy i linki są te same; zmienił się tylko układ tekstu.',
 		pictures: 'Zmienione obrazy',
 		noPicture: 'Brak',
+		address: 'Adres obrazu',
 		links: 'Zmienione linki'
 	},
 

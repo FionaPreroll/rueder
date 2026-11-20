@@ -458,6 +458,7 @@ const ja: Messages = {
 		markup: '言葉、画像、リンクは同じです。本文の構成だけが変わりました。',
 		pictures: '変わった画像',
 		noPicture: 'なし',
+		address: '画像のアドレス',
 		links: '変わったリンク'
 	},
 

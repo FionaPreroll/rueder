@@ -11,6 +11,7 @@ import {
 	node,
 	rueder,
 	site,
+	SITE,
 	subscribe
 } from './harness/helpers.ts';
 
@@ -100,8 +101,14 @@ test('a swapped picture shows in the compare, in the article info and in its sou
 	const versions = page.getByRole('dialog', { name: 'Versions of this article' });
 	await expect(versions).toContainText('The words are the same; pictures or links changed.');
 	const pictures = versions.getByRole('figure');
-	await expect(pictures).toHaveText(['The ferry', 'The ferry in port']);
+	await expect(pictures).toHaveCount(2);
+	await expect(pictures.first()).toContainText('The ferry');
+	await expect(pictures.last()).toContainText('The ferry in port');
 	await expect(pictures.last().getByRole('img')).toHaveAttribute('src', /^\/img\//);
+	// Where each came from, as the feed named it, with what changed marked.
+	await expect(pictures.first()).toContainText(`${SITE}/pic.png`);
+	await expect(pictures.last()).toContainText(`${SITE}/pic.png?in-port`);
+	await expect(pictures.last().locator('mark')).toHaveText('?in-port');
 	await versions.getByRole('button', { name: 'Close' }).last().click();
 
 	await page.getByRole('button', { name: 'More actions for the article' }).click();

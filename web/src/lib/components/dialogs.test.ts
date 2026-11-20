@@ -187,8 +187,10 @@ describe('VersionCompare', () => {
 		return render(VersionCompare, { article, versions, onclose: () => {} });
 	}
 
-	it('shows a picture swapped for another beside it, with their texts', () => {
-		const picture = (n: number, alt: string) => `<img src="/img/s/image/${n}" alt="${alt}">`;
+	it('shows a picture swapped for another beside it, with their texts and addresses', () => {
+		const source = (n: number) => `https://images.example/bond/pattinson-${n}~_v-original.jpg`;
+		const proxied = (n: number) => `/img/s/image/${Buffer.from(source(n)).toString('base64url')}`;
+		const picture = (n: number, alt: string) => `<img src="${proxied(n)}" alt="${alt}">`;
 		compare(
 			`<p>Bond</p>${picture(122, 'Buitendijk/PA')}<p>More</p>`,
 			`<p>Bond</p>${picture(118, 'Garfitt/AP')}<p>More</p>`
@@ -198,11 +200,16 @@ describe('VersionCompare', () => {
 		).toBeInTheDocument();
 		expect(screen.getByText('Pictures that changed')).toBeInTheDocument();
 		const [before, after] = screen.getAllByRole('figure');
-		expect(within(before).getByRole('img')).toHaveAttribute('src', '/img/s/image/118');
+		expect(within(before).getByRole('img')).toHaveAttribute('src', proxied(118));
 		expect(before).toHaveTextContent('Garfitt/AP');
 		expect(before.parentElement).toHaveTextContent(/^Version 1/);
 		expect(within(after).getByRole('img', { name: 'Buitendijk/PA' })).toBeInTheDocument();
 		expect(after.parentElement).toHaveTextContent(/^Current version/);
+		// Where each came from, as it is and not at the proxy, with the number that changed marked.
+		expect(before).toHaveTextContent(`Address of the picture ${source(118)}`);
+		expect(after).toHaveTextContent(`Address of the picture ${source(122)}`);
+		expect(before.querySelector('mark')).toHaveTextContent(/^118$/);
+		expect(after.querySelector('mark')).toHaveTextContent(/^122$/);
 		expect(screen.queryByText('Links that changed')).toBeNull();
 	});
 
