@@ -851,7 +851,7 @@ async fn no_shared_cache_keeps_an_image_for_others(db: PgPool) {
     .unwrap();
     let for_app = images
         .signer()
-        .app_address(app, Size::Image, &source)
+        .app_address(Some(app), Size::Image, &source)
         .unwrap();
     let (status, headers, body) = get_path_as(state, &for_app, None).await;
     assert_eq!((status, body), (StatusCode::OK, small));
@@ -859,4 +859,59 @@ async fn no_shared_cache_keeps_an_image_for_others(db: PgPool) {
         headers[header::CACHE_CONTROL],
         "private, max-age=31536000, immutable"
     );
+}
+
+#[sqlx::test]
+async fn with_images_public_a_cache_in_front_may_keep_them_for_a_week(db: PgPool) {
+    let small = picture(40, 30, ImageFormat::Png);
+    let (at, _) = site(&[("a.png", StatusCode::OK, "image/png", small.clone())]).await;
+    let images = proxy("images-public", true);
+    let public = AppState {
+        images: Some(images.clone()),
+        images_public: true,
+        ..AppState::new(db.clone())
+    };
+    let source = format!("{at}/a.png");
+    let said = |headers: &HeaderMap, name: header::HeaderName| headers[name].to_owned();
+
+    // The page's address comes without a session, and still only to pages of
+    // this server: no other site shows it.
+    let page = images.signer().address(Size::Image, &source).unwrap();
+    let (status, headers, body) = get_path_as(public.clone(), &page, None).await;
+    assert_eq!((status, body), (StatusCode::OK, small.clone()));
+    assert_eq!(
+        said(&headers, header::CACHE_CONTROL),
+        "public, max-age=31536000, s-maxage=604800, immutable"
+    );
+    assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
+
+    // Apps get one address for all of them, which the cache keeps once.
+    let shared = images
+        .signer()
+        .app_address(None, Size::Image, &source)
+        .unwrap();
+    assert!(shared.starts_with("/greader/images/"), "{shared}");
+    let (status, headers, body) = get_path_as(public.clone(), &shared, None).await;
+    assert_eq!((status, body), (StatusCode::OK, small.clone()));
+    assert_eq!(
+        said(&headers, header::CACHE_CONTROL),
+        "public, max-age=31536000, s-maxage=604800, immutable"
+    );
+    assert_eq!(headers["cross-origin-resource-policy"], "cross-origin");
+    // A changed address is none, as on the page's route; a blocked feed's
+    // image is refused there as well, as both ask the proxy alike.
+    let forged = shared.replacen("/image/", "/icon/", 1);
+    let (status, _, _) = get_path_as(public, &forged, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Without the setting there are no such addresses, and the page's need a
+    // session again.
+    let private = AppState {
+        images: Some(images),
+        ..AppState::new(db)
+    };
+    let (status, _, _) = get_path_as(private.clone(), &shared, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _, _) = get_path_as(private, &page, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

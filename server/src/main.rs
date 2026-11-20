@@ -1108,6 +1108,12 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
     // DATABASE_WARN_GB names the size of the database from which the status
     // page warns; rueder itself never lets an article go unless told to.
     state.database_warn_bytes = status::warn_from(env::var("DATABASE_WARN_GB").ok())?;
+    // IMAGES_PUBLIC=on lets a cache in front of rueder, such as a CDN, keep
+    // images, which then come without a session too.
+    if env::var("IMAGES_PUBLIC").is_ok_and(|value| value == "on") {
+        tracing::info!("a cache in front of rueder may keep images (IMAGES_PUBLIC=on)");
+        state.images_public = true;
+    }
     // CLIENT_REPORTS=off takes no reports of errors from browsers, whoever
     // agreed to send them.
     if env::var("CLIENT_REPORTS").is_ok_and(|value| value == "off") {

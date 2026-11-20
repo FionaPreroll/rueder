@@ -17,7 +17,10 @@
 //!   open tabs as an event, by its address (see `events::changed`).
 //! - **Images** come through the proxy at addresses made for the app
 //!   password (`Signer::app_address`), which load without a session as long
-//!   as the app password counts.
+//!   as the app password counts. Where a cache in front of rueder may keep
+//!   images (`IMAGES_PUBLIC=on`), apps get addresses that are the same for
+//!   all of them instead, under `/greader/images/`; the ones made for an app
+//!   password keep counting as long as it does.
 
 mod described;
 pub mod parse;
@@ -43,6 +46,7 @@ use crate::{
     AppError, AppState, MAX_BODY,
     app_passwords::{self, AppLogin},
     events::{self, ServerEvent},
+    images::{self, Picture},
     login::{Key, Sender},
 };
 use parse::Params;
@@ -73,6 +77,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(write::rename_tag))
         .routes(routes!(write::disable_tag))
         .routes(routes!(image))
+        .routes(routes!(shared_image))
 }
 
 /// What goes around the API: whatever else an app asks of it answers `[]`,
@@ -362,31 +367,64 @@ async fn image(
         Err(err) => return AppError::Internal(err).into_response(),
     }
     match images.get_for_app(app, &signature, &size, &address).await {
-        Ok(picture) => (
-            [
-                (header::CONTENT_TYPE, picture.format.mime()),
-                (
-                    header::CACHE_CONTROL,
-                    "private, max-age=31536000, immutable",
-                ),
-                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-                (
-                    header::CONTENT_SECURITY_POLICY,
-                    "default-src 'none'; sandbox",
-                ),
-                // Apps show texts in pages of their own, from no origin of
-                // this server.
-                (
-                    HeaderName::from_static("cross-origin-resource-policy"),
-                    "cross-origin",
-                ),
-            ],
-            picture.bytes,
-        )
-            .into_response(),
+        // Only the app may keep it: a cache in front of rueder would keep
+        // giving it out after the app password was revoked.
+        Ok(picture) => for_apps(picture, images::KEPT_BY_ITS_READER),
         Err(refused) => {
             tracing::debug!("image for an app refused: {refused}");
             refused.into_response()
         }
     }
+}
+
+/// An image through the proxy for every app alike, where the operator lets a
+/// cache in front of rueder keep images (`IMAGES_PUBLIC=on`): no session and
+/// no app password, the address proves that the server made it, as the
+/// page's does. Without the setting there is no such image.
+#[utoipa::path(
+    get,
+    path = "/images/{signature}/{size}/{address}",
+    operation_id = "shared_app_image",
+    tag = "Google Reader API",
+    params(("signature" = String, Path, description = "Proves that the server made the address."), ("size" = String, Path, description = "`icon`, `thumbnail` or `image`."), ("address" = String, Path, description = "The image's own address, encoded.")),
+    responses((status = OK, description = "The image.", content_type = "image/*"), (status = NOT_FOUND, description = "No such image, an address the server did not make, no image proxy, or no `IMAGES_PUBLIC` on this server."), (status = BAD_GATEWAY, description = "The image's own server did not deliver it, or not as an image.")),
+)]
+async fn shared_image(
+    State(state): State<AppState>,
+    Path((signature, size, address)): Path<(String, String, String)>,
+) -> Response {
+    let public = state.images_public;
+    let Some(images) = state.images.filter(|_| public) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    match images.get(&signature, &size, &address).await {
+        Ok(picture) => for_apps(picture, images::KEPT_BY_ANY_CACHE),
+        Err(refused) => {
+            tracing::debug!("image for the apps refused: {refused}");
+            refused.into_response()
+        }
+    }
+}
+
+/// An image as apps get it, kept as `cache_control` says.
+fn for_apps(picture: Picture, cache_control: &'static str) -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, picture.format.mime()),
+            (header::CACHE_CONTROL, cache_control),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "default-src 'none'; sandbox",
+            ),
+            // Apps show texts in pages of their own, from no origin of this
+            // server.
+            (
+                HeaderName::from_static("cross-origin-resource-policy"),
+                "cross-origin",
+            ),
+        ],
+        picture.bytes,
+    )
+        .into_response()
 }

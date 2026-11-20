@@ -224,6 +224,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (3) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
+| `IMAGES_PUBLIC` | `on` lets a CDN in front of your reverse proxy keep images, which then come without a session too. Off if not set; see [Images through a CDN](#images-through-a-cdn). |
 | `DATABASE_WARN_GB` | From what size of the database in GB the status page warns, such as `50` on a disk of 64 GB. Off if not set; see [Keeping old articles, or not](#keeping-old-articles-or-not). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
 | `APP_API` | `off` lets no feed reader app of another maker in. On if not set: readers set up apps such as NetNewsWire and Read You under Settings, Apps, with an app password each, and the apps reach rueder at `https://<your rueder>/greader`. |
@@ -329,14 +330,80 @@ tags: the
 same 1,000 feeds then hold about 57 GB and grow by about 5 GB a year. The
 image proxy's cache stays within `IMAGE_CACHE_MB`.
 
-**Images.** rueder serves every image itself, and only to readers who are
-logged in. Do not let a cache in front of it keep them, neither your reverse
-proxy nor a CDN: it would hand them to anyone who has the address. Its answers
-say `private`, which nginx and most CDNs take as "do not keep". It needs no
-such cache: on a machine with 4 cores it served about 9,000 images a second
-from its own cache, while 100,000 accounts need a few hundred to about 2,000
-at their busiest. What a large instance does feel is its bandwidth: ten
-images of 70 KB a visit, at 35 visits a second, are about 200 Mbit/s.
+**Images.** rueder serves every image itself, and as it comes only to readers
+who are logged in. Do not let a cache in front of it keep them, neither your
+reverse proxy nor a CDN: it would hand them to anyone who has the address. Its
+answers say `private`, which nginx and most CDNs take as "do not keep". It
+needs no such cache: on a machine with 4 cores it served about 9,000 images a
+second from its own cache, while 100,000 accounts need a few hundred to about
+2,000 at their busiest. What a large instance does feel is its bandwidth: ten
+images of 70 KB a visit, at 35 visits a second, are about 200 Mbit/s. A CDN
+takes that off your line, with the price below.
+
+### Images through a CDN
+
+With `IMAGES_PUBLIC=on` a CDN may keep the images:
+
+- The page's images (`/img/`) come without a session too, and say `public`:
+  browsers keep them for a year, a cache in front of rueder for a week. After
+  the week it asks rueder again, which is how it learns of a feed you blocked
+  meanwhile.
+- Apps get addresses that are the same for all of them (`/greader/images/`),
+  so that the CDN keeps each image once. The addresses an app got before,
+  made for its app password, keep working as long as that does, and stay
+  `private`.
+
+What it costs: anybody who has the address of an image gets it without
+logging in. Other sites cannot show the page's images, but they can show the
+apps', as apps need that. Revoking an app password no longer ends the
+addresses of its images. A feed you block leaves the CDN within the week; for
+anything that must go at once, purge the CDN's cache (with Cloudflare, Purge
+Everything).
+
+**Only one way in.** Put the CDN in front of your reverse proxy, for the
+whole name, and never let it reach rueder directly. rueder believes
+`CLIENT_IP_HEADER` from anybody who connects to it; anybody who reached it
+directly could name any address in it, get around the limits on requests and
+have wrong passwords counted against somebody else. Your reverse proxy takes
+the reader's address from the CDN only when the request comes from the CDN's
+addresses, and passes it on in `X-Forwarded-For` as before. With Cloudflare
+and nginx, in the `http` block:
+
+```nginx
+# Cloudflare's addresses, from https://www.cloudflare.com/ips/, a line each.
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 2400:cb00::/32;
+real_ip_header CF-Connecting-IP;
+```
+
+The `proxy_set_header X-Forwarded-For $remote_addr;` of the example above
+then carries the reader's address, and a request that does not come from
+Cloudflare keeps its own. With Caddy, in the global options and the site:
+
+```caddyfile
+{
+	servers {
+		trusted_proxies static 173.245.48.0/20 2400:cb00::/32
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+reader.example {
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Forwarded-For {http.vars.client_ip}
+	}
+}
+```
+
+Cloudflare's addresses change now and then; look again when you update. If
+everything goes through Cloudflare, a firewall that lets only those addresses
+reach your proxy keeps the rest out.
+
+In Cloudflare, a Cache Rule makes the images eligible for cache, as
+Cloudflare keeps only what ends in a known file extension by itself: for a
+path that starts with `/img/` or `/greader/images/`. Leave its edge TTL to
+the origin's `Cache-Control`, without a TTL of its own, or a blocked feed
+stays in the cache for as long as that says.
 
 Turning the retention on keeps the database from growing by old texts, but
 does not make it smaller: PostgreSQL reuses the space of the texts that went,
