@@ -97,6 +97,27 @@ function freshFeeds() {
 				)
 			)
 		},
+		// One article tagged with many and long categories, as some sites do.
+		tagged: {
+			title: 'Tagged Times',
+			name: 'Tagged',
+			articles: [
+				{
+					...article('Tagged', 1, 'An article about nearly everything.'),
+					tags: [
+						'International Congress of Mathematicians',
+						'Artificial intelligence in mathematics',
+						'Millennium Prize Problems',
+						'Poincaré conjecture',
+						'Fourth dimension',
+						'Rainforest regeneration',
+						'Ice caves and climate history',
+						'Nobel Prizes',
+						'Donaudampfschifffahrtsgesellschaftskapitänsmützenabzeichen'
+					]
+				}
+			]
+		},
 		// For the filter rules: some of its titles are advertising.
 		market: {
 			title: 'Market Courier',
@@ -120,13 +141,13 @@ function rss(path, feed) {
 	const items = [...feed.articles]
 		.reverse()
 		.map(
-			({ n, title, text, picture }) => `<item>
+			({ n, title, text, picture, tags = [path] }) => `<item>
 <title>${escape(title)}</title>
 <link>${SITE}/${path}/${n}</link>
 <guid>${path}-${n}</guid>
 <pubDate>${new Date(START + n * 3_600_000).toUTCString()}</pubDate>
 <author>desk@example.org (Ada Desk)</author>
-<category>${path}</category>
+${tags.map((tag) => `<category>${escape(tag)}</category>`).join('\n')}
 <description>${escape(`<p>${text}</p>${extras(n, picture)}`)}</description>
 </item>`
 		)
