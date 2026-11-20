@@ -124,6 +124,7 @@ const it: Messages = {
 		unstar: 'Rimuovi stella',
 		keepUnread: 'Lascia da leggere',
 		openOriginal: 'Apri l’originale',
+		showFeed: 'Mostra tutti gli articoli di questo feed in rueder',
 		from: 'da',
 		by: (author) => `di ${author}`,
 		updated: 'aggiornato',

@@ -5,7 +5,7 @@
 	// so can be closed, the row ends with a button that closes it (`closable`): read
 	// to its end, the reader need not go back up to its line for that.
 	import type { Reader } from '#lib/reader.ts';
-	import { formatAgo, formatFull } from '#lib/format.ts';
+	import { domainOf, formatAgo, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { nextLabelColor, type Article } from '#lib/model.ts';
 	import { ruleText } from '#lib/rule-text.ts';
@@ -41,6 +41,9 @@
 			? reader.filters.hidingRule(article)
 			: null
 	);
+
+	// Where the title leads, so the reader knows the site before going there.
+	const domain = $derived(article.link ? domainOf(article.link) : null);
 
 	// The picture a feed gives beside the text is shown where the text has none of its own.
 	const lead = $derived(
@@ -81,11 +84,15 @@
 				<a
 					class="reach text-ink hover:underline"
 					href={article.link}
+					title={m.list.openOriginal}
 					target="_blank"
 					rel="noopener noreferrer"
 				>
 					<Marked text={article.title} query={reader.query} />
 				</a>
+				{#if domain}
+					<span class="ms-1 text-sm font-normal text-soft"><bdi>{domain}</bdi></span>
+				{/if}
 			{:else}
 				<Marked text={article.title} query={reader.query} />
 			{/if}
@@ -96,6 +103,7 @@
 				<button
 					type="button"
 					class="reach cursor-pointer text-link hover:underline"
+					title={m.list.showFeed}
 					onclick={() => reader.show({ kind: 'feed', id: article.feedId })}
 				>
 					{feed?.title}
@@ -165,134 +173,143 @@
 		{/if}
 	{/if}
 
-	<footer
-		class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-sm text-soft"
-	>
-		<button
-			type="button"
-			class={[
-				'inline-flex cursor-pointer items-center gap-1 hover:text-ink',
-				starred && 'text-star'
-			]}
-			aria-pressed={starred}
-			onclick={() => reader.toggleStar(article)}
-		>
-			<Icon name="star" filled={starred} />
-			<span class="text-soft">{starred ? m.list.unstar : m.list.star}</span>
-		</button>
-		<label class="inline-flex cursor-pointer items-center gap-1.5 hover:text-ink">
-			<input
-				type="checkbox"
-				class="rounded text-accent"
-				checked={!read}
-				onchange={(event) => reader.setRead(article, !event.currentTarget.checked)}
-			/>
-			{m.list.keepUnread}
-		</label>
-		<Menu class="inline-flex cursor-pointer items-center gap-1 hover:text-ink">
-			{#snippet button()}
-				<Icon name="tag" />
-				{m.labels.forArticle}
-			{/snippet}
-			{#each reader.labels as label (label.id)}
+	<!-- What is done with the article wraps; its menu and the close stay together at the end of the first line. -->
+	<footer class="mt-4 flex items-start gap-x-4 border-t border-line pt-3 text-sm text-soft">
+		<div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+			<button
+				type="button"
+				class={[
+					'inline-flex cursor-pointer items-center gap-1 hover:text-ink',
+					starred && 'text-star'
+				]}
+				aria-pressed={starred}
+				onclick={() => reader.toggleStar(article)}
+			>
+				<Icon name="star" filled={starred} />
+				<span class="text-soft">{starred ? m.list.unstar : m.list.star}</span>
+			</button>
+			<label class="inline-flex cursor-pointer items-center gap-1.5 hover:text-ink">
+				<input
+					type="checkbox"
+					class="rounded text-accent"
+					checked={!read}
+					onchange={(event) => reader.setRead(article, !event.currentTarget.checked)}
+				/>
+				{m.list.keepUnread}
+			</label>
+			<Menu class="inline-flex cursor-pointer items-center gap-1 hover:text-ink">
+				{#snippet button()}
+					<Icon name="tag" />
+					{m.labels.forArticle}
+				{/snippet}
+				{#each reader.labels as label (label.id)}
+					<button
+						type="button"
+						role="menuitemcheckbox"
+						aria-checked={labelled.has(label.id)}
+						class="menu-item flex items-center gap-2"
+						onclick={() => reader.setLabel(article, label.id, !labelled.has(label.id))}
+					>
+						<span class="size-2.5 rounded-full" style:background-color={label.color}></span>
+						<span class="flex-1">{label.title}</span>
+						{#if labelled.has(label.id)}<Icon name="check" class="size-4" />{/if}
+					</button>
+				{/each}
+				{#if reader.labels.length > 0}<hr class="my-1 border-line" />{/if}
 				<button
 					type="button"
-					role="menuitemcheckbox"
-					aria-checked={labelled.has(label.id)}
+					role="menuitem"
 					class="menu-item flex items-center gap-2"
-					onclick={() => reader.setLabel(article, label.id, !labelled.has(label.id))}
+					onclick={() => (naming = true)}
 				>
-					<span class="size-2.5 rounded-full" style:background-color={label.color}></span>
-					<span class="flex-1">{label.title}</span>
-					{#if labelled.has(label.id)}<Icon name="check" class="size-4" />{/if}
+					<Icon name="plus" class="size-4" />
+					{m.labels.add}
 				</button>
+			</Menu>
+			{#if naming}
+				<form onsubmit={addLabel}>
+					<input
+						class="w-40 rounded px-2 py-0 text-sm"
+						placeholder={m.labels.name}
+						aria-label={m.labels.name}
+						bind:value={name}
+						use:focus
+						onblur={() => (naming = false)}
+						onkeydown={(event) => {
+							if (event.key !== 'Escape') return;
+							event.stopPropagation();
+							naming = false;
+						}}
+					/>
+				</form>
+			{/if}
+			{#each reader.labels.filter((label) => labelled.has(label.id)) as label (label.id)}
+				<Badge kind="label" color={label.color} label={m.labels.set(label.title)}>
+					{label.title}
+				</Badge>
 			{/each}
-			{#if reader.labels.length > 0}<hr class="my-1 border-line" />{/if}
-			<button
-				type="button"
-				role="menuitem"
-				class="menu-item flex items-center gap-2"
-				onclick={() => (naming = true)}
-			>
-				<Icon name="plus" class="size-4" />
-				{m.labels.add}
-			</button>
-		</Menu>
-		{#if naming}
-			<form onsubmit={addLabel}>
-				<input
-					class="w-40 rounded px-2 py-0 text-sm"
-					placeholder={m.labels.name}
-					aria-label={m.labels.name}
-					bind:value={name}
-					use:focus
-					onblur={() => (naming = false)}
-					onkeydown={(event) => {
-						if (event.key !== 'Escape') return;
-						event.stopPropagation();
-						naming = false;
-					}}
-				/>
-			</form>
-		{/if}
-		{#each reader.labels.filter((label) => labelled.has(label.id)) as label (label.id)}
-			<Badge kind="label" color={label.color} label={m.labels.set(label.title)}>
-				{label.title}
-			</Badge>
-		{/each}
-		{#if article.changes > 0}
-			<button
-				type="button"
-				class="inline-flex cursor-pointer items-center gap-1 hover:text-ink"
-				onclick={() => onversions(article)}
-			>
-				<Icon name="versions" />
-				{m.list.compare}
-			</button>
-		{/if}
-		{#if article.link}
-			<a
-				class="inline-flex items-center gap-1 hover:text-ink pointer-coarse:min-h-11"
-				href={article.link}
-				target="_blank"
-				rel="noopener noreferrer"
-			>
-				<Icon name="external" />
-				{m.list.openOriginal}
-			</a>
-		{/if}
-		<span class="ms-auto flex gap-1">
-			{#each article.tags as tag (tag)}
-				<Badge kind="tag">{tag}</Badge>
-			{/each}
-		</span>
-		<Menu
-			class="inline-flex cursor-pointer items-center hover:text-ink"
-			align="end"
-			label={m.list.articleActions}
-		>
-			{#snippet button()}
-				<Icon name="more" />
-			{/snippet}
-			<button type="button" role="menuitem" class="menu-item" onclick={() => (informing = true)}>
-				{m.list.articleInfo}
-			</button>
-			{#if reader.can.reportContent}
-				<button type="button" role="menuitem" class="menu-item" onclick={() => (reporting = true)}>
-					{m.list.reportArticle}
+			{#if article.changes > 0}
+				<button
+					type="button"
+					class="inline-flex cursor-pointer items-center gap-1 hover:text-ink"
+					onclick={() => onversions(article)}
+				>
+					<Icon name="versions" />
+					{m.list.compare}
 				</button>
 			{/if}
-		</Menu>
-		{#if closable}
-			<button
-				type="button"
-				class="inline-flex cursor-pointer items-center gap-1 hover:text-ink"
-				onclick={close}
+			{#if article.link}
+				<a
+					class="inline-flex items-center gap-1 hover:text-ink pointer-coarse:min-h-11"
+					href={article.link}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					<Icon name="external" />
+					{m.list.openOriginal}
+				</a>
+			{/if}
+			<span class="ms-auto flex gap-1">
+				{#each article.tags as tag (tag)}
+					<Badge kind="tag">{tag}</Badge>
+				{/each}
+			</span>
+		</div>
+		<div class="flex shrink-0 items-center gap-x-4">
+			<Menu
+				class="inline-flex cursor-pointer items-center hover:text-ink"
+				align="end"
+				label={m.list.articleActions}
 			>
-				<Icon name="close" />
-				{m.common.close}
-			</button>
-		{/if}
+				{#snippet button()}
+					<Icon name="more" />
+				{/snippet}
+				<button type="button" role="menuitem" class="menu-item" onclick={() => (informing = true)}>
+					{m.list.articleInfo}
+				</button>
+				{#if reader.can.reportContent}
+					<button
+						type="button"
+						role="menuitem"
+						class="menu-item"
+						onclick={() => (reporting = true)}
+					>
+						{m.list.reportArticle}
+					</button>
+				{/if}
+			</Menu>
+			{#if closable}
+				<button
+					type="button"
+					class="inline-flex cursor-pointer items-center gap-1 hover:text-ink"
+					onclick={close}
+				>
+					<Icon name="close" />
+					<!-- On a phone the cross alone, so that it fits beside the menu. -->
+					<span class="max-sm:sr-only">{m.common.close}</span>
+				</button>
+			{/if}
+		</div>
 	</footer>
 	{#if informing}
 		<ArticleInfoDialog {reader} {article} onclose={() => (informing = false)} />

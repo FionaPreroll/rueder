@@ -455,6 +455,23 @@ describe('an open article', () => {
 		);
 	});
 
+	it('names the site its title leads to, and keeps its menu beside the close', () => {
+		const reader = new DemoReader(() => now);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		const article = { ...reader.list[0]!, link: 'https://www.tagesbote.example/1' };
+		render(ArticleBody, { reader, article, now, onversions: vi.fn(), closable: true });
+		const heading = screen.getByRole('heading', { level: 2 });
+		expect(heading).toHaveTextContent(/tagesbote\.example$/);
+		expect(within(heading).getByRole('link')).toHaveAttribute('title', 'Open the original');
+		const feed = screen.getByRole('button', { name: reader.feeds[article.feedId]!.title });
+		expect(feed).toHaveAttribute('title', 'Show all articles of this feed in rueder');
+		// The close is named, though a phone shows only its cross.
+		const close = screen.getByRole('button', { name: 'Close' });
+		const menu = screen.getByRole('button', { name: 'More actions for the article' });
+		expect(close.parentElement!.contains(menu)).toBe(true);
+		expect(close.parentElement!.contains(screen.getByRole('button', { name: /star/ }))).toBe(false);
+	});
+
 	it('tells from its menu what is known of it', async () => {
 		const reader = new DemoReader(() => now);
 		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
