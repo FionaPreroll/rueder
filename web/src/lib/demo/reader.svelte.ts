@@ -10,6 +10,7 @@ import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from '#li
 import type {
 	Abilities,
 	ArticleInfo,
+	ArticleSource,
 	FeedInfo,
 	FetchAgent,
 	Found,
@@ -401,6 +402,12 @@ export class DemoReader implements Reader {
 	versions(article: Article): Promise<ArticleVersion[]> {
 		const mine = this.articles[article.feedId]?.find((a) => a.id === article.id);
 		return Promise.resolve(mine?.versions ?? []);
+	}
+
+	/** The made-up text is all there is: nothing cleaned it, so it is both. */
+	async articleSource(article: Article): Promise<ArticleSource | null> {
+		const mine = this.articles[article.feedId]?.find((a) => a.id === article.id);
+		return mine ? { cleaned: mine.html, original: mine.html } : null;
 	}
 
 	/** Made up from the article: the draft fetches nothing, so it arrived when it was published. */

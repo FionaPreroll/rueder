@@ -83,7 +83,7 @@ test('a headline that was rewritten says so, and the text is left alone', async 
 	await expect(versions).toContainText('The text of this version is the same as the current one.');
 });
 
-test('a picture swapped for another shows in the compare, and the article info counts it', async ({
+test('a swapped picture shows in the compare, in the article info and in its source', async ({
 	page
 }) => {
 	await logIn(page, 'live');
@@ -121,6 +121,20 @@ test('a picture swapped for another shows in the compare, and the article info c
 	expect(shown).toContain('Version:       4, 4 kept');
 	expect(shown).toContain('alt="The ferry in port"');
 	expect(shown).toMatch(/^Version 1, fetched .*: Wire news 3$/m);
+
+	// Its source: as kept, with the picture's own address and without what the cleaning took out;
+	// as the feed sent it, with all of that.
+	await info.getByRole('button', { name: 'Close' }).last().click();
+	await page.getByRole('button', { name: 'More actions for the article' }).click();
+	await page.getByRole('menuitem', { name: 'Source …' }).click();
+	const source = page.getByRole('dialog', { name: 'Source of the article' }).locator('pre');
+	await expect(source).toContainText('alt="The ferry in port"');
+	await expect(source).not.toContainText('/img/');
+	await expect(source).not.toContainText('utm_source');
+	await expect(source).not.toContainText('<script>');
+	await page.locator('label', { hasText: 'As the feed sent it' }).click();
+	await expect(source).toContainText('utm_source=feed');
+	await expect(source).toContainText('<script>');
 });
 
 test('what is read in one tab is read in the other', async ({ page, context }) => {

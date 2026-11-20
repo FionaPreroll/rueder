@@ -145,6 +145,7 @@ const nl: Messages = {
 			'De beheerder van deze rueder heeft deze feed geblokkeerd. Hij wordt niet opgehaald en de artikelen worden niet getoond.',
 		articleActions: 'Meer acties voor het artikel',
 		articleInfo: 'Artikelinformatie …',
+		articleSource: 'Broncode …',
 		reportArticle: 'Artikel melden …'
 	},
 
@@ -219,6 +220,18 @@ const nl: Messages = {
 		kept: 'Bewaarde versies',
 		textLabel: 'Tekst',
 		textDropped: 'Niet meer bewaard, omdat hij oud is',
+		copy: 'Kopiëren',
+		copied: 'Gekopieerd',
+		loading: 'Laden …',
+		unreachable: 'De server antwoordde niet. Probeer het later opnieuw.'
+	},
+	articleSource: {
+		title: 'Broncode van het artikel',
+		text: 'Het artikel als HTML, zoals deze rueder het na het opschonen bewaart, of zoals de feed het stuurde. Links en afbeeldingen houden hier hun eigen adressen, zodat je ziet of er nog een trackingparameter over is.',
+		show: 'Tonen',
+		kinds: { cleaned: 'Opgeschoond', original: 'Zoals de feed het stuurde' },
+		noText: 'Deze server bewaart de tekst van dit artikel niet meer.',
+		noOriginal: 'Deze server bewaart niet meer wat de feed stuurde.',
 		copy: 'Kopiëren',
 		copied: 'Gekopieerd',
 		loading: 'Laden …',

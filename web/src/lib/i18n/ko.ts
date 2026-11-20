@@ -140,6 +140,7 @@ const ko: Messages = {
 			'이 rueder의 운영자가 이 피드를 차단했습니다. 가져오지 않으며 글도 보여 주지 않습니다.',
 		articleActions: '글에 대한 다른 작업',
 		articleInfo: '글 정보 …',
+		articleSource: '소스 …',
 		reportArticle: '글 신고 …'
 	},
 
@@ -214,6 +215,18 @@ const ko: Messages = {
 		kept: '보관 중인 버전',
 		textLabel: '본문',
 		textDropped: '오래되어 더 이상 보관하지 않습니다',
+		copy: '복사',
+		copied: '복사했습니다',
+		loading: '불러오는 중 …',
+		unreachable: '서버가 응답하지 않았습니다. 나중에 다시 시도하세요.'
+	},
+	articleSource: {
+		title: '글의 소스',
+		text: '이 글의 HTML입니다. 이 rueder가 정리한 뒤 보관하는 형태나 피드가 보낸 그대로를 보여 줍니다. 여기서는 링크와 이미지가 원래 주소를 그대로 가지므로 남아 있는 추적 매개변수를 볼 수 있습니다.',
+		show: '보기',
+		kinds: { cleaned: '정리된 형태', original: '피드가 보낸 그대로' },
+		noText: '이 서버는 이 글의 본문을 더 이상 보관하지 않습니다.',
+		noOriginal: '이 서버는 피드가 보낸 내용을 더 이상 보관하지 않습니다.',
 		copy: '복사',
 		copied: '복사했습니다',
 		loading: '불러오는 중 …',

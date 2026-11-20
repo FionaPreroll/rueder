@@ -14,6 +14,7 @@ import { defaults, settings } from '#lib/settings.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
 import type { Article } from '#lib/model.ts';
 import ArticleInfoDialog from './ArticleInfoDialog.svelte';
+import ArticleSourceDialog from './ArticleSourceDialog.svelte';
 import FeedInfoDialog from './FeedInfoDialog.svelte';
 import ReportDialog from './ReportDialog.svelte';
 import TopBar from './TopBar.svelte';
@@ -1536,6 +1537,107 @@ describe('ArticleInfoDialog', () => {
 		expect(await screen.findByText('Kennung im Feed')).toBeInTheDocument();
 		expect(screen.getByRole('dialog', { name: 'Artikel-Infos' })).toBeInTheDocument();
 		expect(line('Aufbewahrte Versionen')).toHaveTextContent(String(changed.versions.length + 1));
+	});
+});
+
+describe('ArticleSourceDialog', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	/** The dialog for the article of that number, as the page knows it. */
+	function open(feedId: number, seq: number) {
+		const article: Article = {
+			id: `feed-${feedId}-${seq}`,
+			feedId: `feed-${feedId}`,
+			seq,
+			title: 'Morning news',
+			teaser: '',
+			author: '',
+			tags: [],
+			link: '',
+			publishedAt: now,
+			html: null,
+			enclosures: [],
+			image: null,
+			changes: 0,
+			updatedAt: null
+		};
+		const reader = new ServerReader({ name: 'fiona', admin: false }, session);
+		render(ArticleSourceDialog, { reader, article, onclose: () => {} });
+	}
+
+	it('shows the text cleaned or as the feed sent it, and copies it as it is', async () => {
+		const id = server.addFeed('Tagesbote');
+		const sent = '<p>Text <a href="https://tagesbote.example/1?utm_source=feed">more</a></p>';
+		server.addArticles(id, 1, {
+			html: '<p>Text <a href="https://tagesbote.example/1">more</a></p>',
+			versions: [
+				{
+					version: 1,
+					fetched_at: '2026-11-10T13:00:00Z',
+					title: 'Morning news',
+					html: sent,
+					authors: [],
+					tags: [],
+					url: null
+				}
+			]
+		});
+		open(id, 1);
+		const dialog = screen.getByRole('dialog', { name: 'Source of the article' });
+		expect(dialog).toHaveTextContent('Loading …');
+		const shown = () => dialog.querySelector('pre');
+		expect(await screen.findByRole('radio', { name: 'Cleaned' })).toBeChecked();
+		// Each tag where one follows another on a line of its own.
+		expect(shown()).toHaveTextContent('href="https://tagesbote.example/1">more</a>');
+		expect(shown()?.textContent).toContain('</a>\n</p>');
+
+		await userEvent.click(screen.getByRole('radio', { name: 'As the feed sent it' }));
+		expect(shown()).toHaveTextContent('utm_source=feed');
+		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+		await userEvent.click(screen.getByRole('button', { name: 'Copy' }));
+		expect(writeText).toHaveBeenLastCalledWith(sent);
+		expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+		// What was copied is said only for the kind that was.
+		await userEvent.click(screen.getByRole('radio', { name: 'Cleaned' }));
+		expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+	});
+
+	it('says what the server no longer keeps', async () => {
+		const id = server.addFeed('Tagesbote');
+		server.addArticles(id, 1, { html: '', versions: [] });
+		open(id, 1);
+		expect(await screen.findByText(/no longer keeps the text/)).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument();
+		await userEvent.click(screen.getByRole('radio', { name: 'As the feed sent it' }));
+		expect(screen.getByText('This server no longer keeps what the feed sent.')).toBeInTheDocument();
+	});
+
+	it('says when the server does not answer', async () => {
+		open(999, 1);
+		expect(await screen.findByRole('alert')).toHaveTextContent('The server did not answer.');
+	});
+
+	it('is there with made-up data too, in German', async () => {
+		useLanguage('de');
+		const reader = new DemoReader(() => now);
+		const article = reader.articles['feed-ferris'][0];
+		render(ArticleSourceDialog, { reader, article, onclose: () => {} });
+		expect(
+			await screen.findByRole('radio', { name: 'Wie vom Feed geschickt' })
+		).toBeInTheDocument();
+		expect(screen.getByRole('dialog', { name: 'Quelltext des Artikels' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Kopieren' })).toBeInTheDocument();
 	});
 });
 

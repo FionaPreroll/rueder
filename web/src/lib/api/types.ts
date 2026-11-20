@@ -1060,6 +1060,25 @@ export type ArticleInfo = {
 };
 
 /**
+ * The source of an article's current version, for a reader who wants to see
+ * what the cleaning kept, such as a tracking parameter it does not know yet.
+ *
+ * `GET /api/feeds/{id}/articles/{seq}/source` answers with it. Its addresses are
+ * as stored, not at the image proxy: the page shows it as text, never as HTML.
+ */
+export type ArticleSource = {
+	/**
+	 * The text as rueder keeps it after cleaning it; empty where the retention
+	 * took it.
+	 */
+	cleaned: string,
+	/**
+	 * The text as the feed sent it; null where no version is kept.
+	 */
+	original: string | null,
+};
+
+/**
  * What `GET /api/feeds/{id}/articles/{seq}/versions` answers: the versions of
  * the article that are kept, oldest first.
  */

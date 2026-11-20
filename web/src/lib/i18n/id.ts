@@ -141,6 +141,7 @@ const id: Messages = {
 			'Pengelola rueder ini memblokir feed ini. Feed ini tidak diambil, dan artikelnya tidak ditampilkan.',
 		articleActions: 'Tindakan lain untuk artikel',
 		articleInfo: 'Info artikel …',
+		articleSource: 'Kode sumber …',
 		reportArticle: 'Laporkan artikel …'
 	},
 
@@ -215,6 +216,18 @@ const id: Messages = {
 		kept: 'Versi yang disimpan',
 		textLabel: 'Teks',
 		textDropped: 'Tidak disimpan lagi karena sudah lama',
+		copy: 'Salin',
+		copied: 'Disalin',
+		loading: 'Memuat …',
+		unreachable: 'Server tidak menjawab. Coba lagi nanti.'
+	},
+	articleSource: {
+		title: 'Kode sumber artikel',
+		text: 'Artikel sebagai HTML, seperti yang disimpan rueder ini setelah dibersihkan, atau seperti yang dikirim feed. Tautan dan gambar tetap memakai alamatnya sendiri di sini, jadi parameter pelacakan yang tersisa akan terlihat.',
+		show: 'Tampilkan',
+		kinds: { cleaned: 'Sudah dibersihkan', original: 'Seperti yang dikirim feed' },
+		noText: 'Server ini tidak lagi menyimpan teks artikel ini.',
+		noOriginal: 'Server ini tidak lagi menyimpan yang dikirim feed.',
 		copy: 'Salin',
 		copied: 'Disalin',
 		loading: 'Memuat …',

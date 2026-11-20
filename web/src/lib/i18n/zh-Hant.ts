@@ -138,6 +138,7 @@ const zhHant: Messages = {
 		blockedFeed: '這個 rueder 的營運者封鎖了這個訂閱源。它不會被擷取，文章也不會顯示。',
 		articleActions: '文章的其他動作',
 		articleInfo: '文章資訊⋯',
+		articleSource: '原始碼⋯',
 		reportArticle: '檢舉文章⋯'
 	},
 
@@ -212,6 +213,18 @@ const zhHant: Messages = {
 		kept: '保留的版本',
 		textLabel: '內文',
 		textDropped: '因為時間較久，已不再保留',
+		copy: '複製',
+		copied: '已複製',
+		loading: '正在載入⋯',
+		unreachable: '伺服器沒有回應。請稍後再試。'
+	},
+	articleSource: {
+		title: '文章的原始碼',
+		text: '文章的 HTML：可以看這個 rueder 清理後保存的樣子，也可以看訂閱源送來的原樣。連結和圖片在這裡保留各自的原始位址，所以看得出是否還剩下追蹤參數。',
+		show: '顯示',
+		kinds: { cleaned: '清理後', original: '訂閱源送來的原樣' },
+		noText: '這個伺服器已不再保存這篇文章的內文。',
+		noOriginal: '這個伺服器已不再保存訂閱源送來的內容。',
 		copy: '複製',
 		copied: '已複製',
 		loading: '正在載入⋯',

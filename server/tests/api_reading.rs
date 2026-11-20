@@ -77,6 +77,7 @@ async fn nothing_is_answered_without_a_session(db: PgPool) {
             format!("/api/feeds/{feed}/articles/1/versions"),
         ),
         (Method::GET, format!("/api/feeds/{feed}/articles/1/info")),
+        (Method::GET, format!("/api/feeds/{feed}/articles/1/source")),
         (Method::PUT, format!("/api/feeds/{feed}/articles/1/state")),
         (Method::GET, "/api/folders/1/articles".to_owned()),
         (Method::POST, "/api/folders/1/read".to_owned()),
@@ -360,6 +361,7 @@ async fn lists_go_back_page_by_page(db: PgPool) {
         format!("/api/feeds/{news}/articles/1"),
         format!("/api/feeds/{news}/articles/1/versions"),
         format!("/api/feeds/{news}/articles/1/info"),
+        format!("/api/feeds/{news}/articles/1/source"),
     ] {
         assert_eq!(
             get(&state, &path, &grace_cookie).await.0,
@@ -564,6 +566,67 @@ async fn an_article_tells_what_is_known_of_it(db: PgPool) {
     let kept = articles::versions(&db, None, feed, 1).await.unwrap();
     assert_eq!(kept.len(), 2);
     assert!(articles::info(&db, None, feed, 3).await.unwrap().is_none());
+}
+
+#[sqlx::test]
+async fn an_article_shows_its_source_cleaned_and_as_it_came(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 0).await;
+    let mut tx = db.begin().await.unwrap();
+    articles::insert(&mut tx, feed, &[with_pictures(1, "first")])
+        .await
+        .unwrap();
+    articles::add_version(&mut tx, feed, 1, &with_pictures(1, "second"))
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let (grace, _) = common::reader(&db, "grace", 1).await;
+    // With an image proxy, which the source passes by: it is shown as text.
+    let state = with_images(&db, "source");
+    let cookie = common::session(&db, ada).await;
+
+    let path = format!("/api/feeds/{feed}/articles/1/source");
+    let (status, source) = get(&state, &path, &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        source,
+        json!({
+            "cleaned": "<p>second</p><img src=\"https://pics.example/1.png\">",
+            "original": "<p onclick=\"x()\">second</p><script>track()</script><img src=\"https://pics.example/1.png\">",
+        })
+    );
+
+    // Without a kept version, and without a text, there is less to show.
+    sqlx::query("DELETE FROM article_versions WHERE feed_id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE article_content SET html = '', text_dropped = true WHERE feed_id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    let (_, source) = get(&state, &path, &cookie).await;
+    assert_eq!(source, json!({ "cleaned": "", "original": null }));
+
+    // What is not there, what is another's, and a blocked feed.
+    let missing = format!("/api/feeds/{feed}/articles/2/source");
+    assert_eq!(
+        get(&state, &missing, &cookie).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let grace_cookie = common::session(&db, grace).await;
+    let (status, body) = get(&state, &path, &grace_cookie).await;
+    assert_eq!((status, body), (StatusCode::NOT_FOUND, Value::Null));
+    sqlx::query("UPDATE feeds SET blocked_at = now() WHERE id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(get(&state, &path, &cookie).await.0, StatusCode::NOT_FOUND);
+    // The operator sees it still.
+    let source = articles::source(&db, None, feed, 1).await.unwrap().unwrap();
+    assert_eq!(source.original, None);
 }
 
 /// The files of an article are stored as they came, from a feed, from a text

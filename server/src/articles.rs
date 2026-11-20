@@ -997,3 +997,53 @@ pub async fn info(
     .fetch_optional(db)
     .await
 }
+
+/// The source of an article's current version, for a reader who wants to see
+/// what the cleaning kept, such as a tracking parameter it does not know yet.
+///
+/// `GET /api/feeds/{id}/articles/{seq}/source` answers with it. Its addresses are
+/// as stored, not at the image proxy: the page shows it as text, never as HTML.
+#[derive(Debug, Serialize, TS, ToSchema)]
+pub struct ArticleSource {
+    /// The text as rueder keeps it after cleaning it; empty where the retention
+    /// took it.
+    pub cleaned: String,
+    /// The text as the feed sent it; null where no version is kept.
+    pub original: Option<String>,
+}
+
+/// The source of an article for its subscriber (`Some`), or for the operator
+/// (`None`); none for an article of a blocked feed, as for one that is not there.
+pub async fn source(
+    db: &PgPool,
+    reader: Option<i32>,
+    feed_id: i32,
+    seq: i32,
+) -> anyhow::Result<Option<ArticleSource>> {
+    let row = sqlx::query!(
+        "SELECT c.html,
+                (SELECT v.raw FROM article_versions v
+                 WHERE v.feed_id = c.feed_id AND v.seq = c.seq
+                 ORDER BY v.version DESC LIMIT 1) AS raw
+         FROM article_content c
+         JOIN feeds f ON f.id = c.feed_id
+         WHERE c.feed_id = $2 AND c.seq = $3 AND ($1::integer IS NULL OR (
+             f.blocked_at IS NULL AND EXISTS (
+                 SELECT 1 FROM subscriptions s
+                 WHERE s.account_id = $1 AND s.feed_id = c.feed_id)))",
+        reader,
+        feed_id,
+        seq,
+    )
+    .fetch_optional(db)
+    .await?;
+    let Some(row) = row else { return Ok(None) };
+    let original = match row.raw {
+        Some(raw) => Some(Original::decompress(&raw)?.content),
+        None => None,
+    };
+    Ok(Some(ArticleSource {
+        cleaned: row.html,
+        original,
+    }))
+}

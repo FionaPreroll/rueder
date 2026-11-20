@@ -689,7 +689,7 @@ export class FakeServer {
 			return json({ articles: this.list(scope, feeds, query) });
 		}
 
-		const one = /^\/feeds\/(\d+)\/articles\/(\d+)(\/versions|\/state|\/info)?$/.exec(path);
+		const one = /^\/feeds\/(\d+)\/articles\/(\d+)(\/versions|\/state|\/info|\/source)?$/.exec(path);
 		if (one) {
 			const article = this.article(Number(one[1]), Number(one[2]));
 			if (!article) return refused(404);
@@ -711,6 +711,10 @@ export class FakeServer {
 			}
 			if (method === 'GET' && one[3] === '/versions') return json({ versions: article.versions });
 			if (method === 'GET' && one[3] === '/info') return json(this.articleInfo(article));
+			if (method === 'GET' && one[3] === '/source') {
+				const original = article.versions.at(-1)?.html ?? null;
+				return json({ cleaned: article.html, original });
+			}
 			if (method === 'PUT' && one[3] === '/state') {
 				this.stateChanges.push({ seq: article.seq, ...data });
 				if (typeof data.read === 'boolean') article.read = data.read;

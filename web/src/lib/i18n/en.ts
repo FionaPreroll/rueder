@@ -145,6 +145,7 @@ const en = {
 			'The operator of this rueder blocked this feed. It is not fetched, and its articles are not shown.',
 		articleActions: 'More actions for the article',
 		articleInfo: 'Article info …',
+		articleSource: 'Source …',
 		reportArticle: 'Report the article …'
 	},
 
@@ -220,6 +221,18 @@ const en = {
 		kept: 'Versions kept',
 		textLabel: 'Text',
 		textDropped: 'No longer kept, as it is old',
+		copy: 'Copy',
+		copied: 'Copied',
+		loading: 'Loading …',
+		unreachable: 'The server did not answer. Try again later.'
+	},
+	articleSource: {
+		title: 'Source of the article',
+		text: 'The article as HTML, as this rueder keeps it after cleaning it, or as the feed sent it. Links and pictures keep their own addresses here, so a tracking parameter that is left shows.',
+		show: 'Show',
+		kinds: { cleaned: 'Cleaned', original: 'As the feed sent it' },
+		noText: 'This server no longer keeps the text of this article.',
+		noOriginal: 'This server no longer keeps what the feed sent.',
 		copy: 'Copy',
 		copied: 'Copied',
 		loading: 'Loading …',

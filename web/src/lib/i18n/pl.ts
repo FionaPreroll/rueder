@@ -151,6 +151,7 @@ const pl: Messages = {
 			'Operator tego rueder zablokował ten kanał. Nie jest pobierany, a jego artykuły nie są pokazywane.',
 		articleActions: 'Więcej działań dla artykułu',
 		articleInfo: 'Informacje o artykule …',
+		articleSource: 'Źródło …',
 		reportArticle: 'Zgłoś artykuł …'
 	},
 
@@ -225,6 +226,18 @@ const pl: Messages = {
 		kept: 'Przechowywane wersje',
 		textLabel: 'Tekst',
 		textDropped: 'Już nieprzechowywany, bo jest stary',
+		copy: 'Kopiuj',
+		copied: 'Skopiowano',
+		loading: 'Wczytywanie …',
+		unreachable: 'Serwer nie odpowiedział. Spróbuj ponownie później.'
+	},
+	articleSource: {
+		title: 'Źródło artykułu',
+		text: 'Artykuł jako HTML: tak, jak ten rueder go przechowuje po oczyszczeniu, albo tak, jak przysłał go kanał. Linki i obrazy mają tu swoje własne adresy, więc widać, czy został jakiś parametr śledzący.',
+		show: 'Pokaż',
+		kinds: { cleaned: 'Oczyszczony', original: 'Tak, jak przysłał kanał' },
+		noText: 'Ten serwer nie przechowuje już tekstu tego artykułu.',
+		noOriginal: 'Ten serwer nie przechowuje już tego, co przysłał kanał.',
 		copy: 'Kopiuj',
 		copied: 'Skopiowano',
 		loading: 'Wczytywanie …',

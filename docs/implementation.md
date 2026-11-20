@@ -384,6 +384,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.45 Artikel-Infos.** Siehe [Artikelspeicher und Versionen](architecture.md#artikelspeicher-und-versionen).
 - [x] **5.46 Bilder und Links im Vergleich der Versionen.** Siehe [Artikelspeicher und Versionen](architecture.md#artikelspeicher-und-versionen).
 - [x] **5.47 Artikelseite: wohin die Links führen.** Neben dem Titel steht leise die Domain, auf die er verlinkt; Titel und Name des Feeds sagen beim Überfahren, ob sie zum Original führen oder in rueder bleiben. Das Menü „…“ und „Schließen“ stehen zusammen am Ende der ersten Zeile unter dem Text (`ArticleBody.svelte`).
+- [x] **5.48 Quelltext des Artikels.** Siehe [Artikelspeicher und Versionen](architecture.md#artikelspeicher-und-versionen).
 - [x] **E13 Inaktive Konten (A18, E13).** Siehe [Aufbewahrung](architecture.md#aufbewahrung).
 
 ### Nicht mit Fiona abgesprochen
@@ -401,6 +402,7 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **Lastmessung (5.30):** Die Lasttests sind Node ohne Pakete in `web/load/`, neben den Werkzeugen der Tests im Browser, statt ein zweites Programm in Rust. `rueder bench readers` schreibt die Tokens der Sitzungen in eine Datei, damit ein Lasttest nicht für jeden Leser ein Passwort hashen lässt, und lehnt jede Datenbank mit einem Konto ab, das keine erfundenen Daten gemacht haben.
 - **Duplikate (5.42):** Ein Eintrag ohne Titel wird nur an seiner Kennung erkannt, auch mit Datum.
 - **Artikel-Infos (5.45):** Der Feed steht mit dem Namen, den er sich gibt, nicht mit dem, den ihm der Leser gab, damit der Betreiber ihn wiederfindet. „Zuerst abgerufen“ ist bei importierten Artikeln, wann der alte rueder sie zuerst sah. Das Menü unter dem Artikel ist immer da, „Artikel melden …“ darin nur, wo der Server Meldungen nimmt.
+- **Quelltext (5.48):** Er zeigt die neueste aufbewahrte Version, wie der Feed sie schickte, nicht jede; ältere zeigt der Vergleich der Versionen. Wo ein Tag auf einen anderen folgt, beginnt eine neue Zeile, damit sich der Text lesen lässt; kopiert wird er unverändert.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später

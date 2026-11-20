@@ -138,6 +138,7 @@ const zhHans: Messages = {
 		blockedFeed: '此 rueder 的运营者屏蔽了这个订阅源。它不会被获取，其文章也不会显示。',
 		articleActions: '文章的更多操作',
 		articleInfo: '文章信息…',
+		articleSource: '源代码…',
 		reportArticle: '举报文章…'
 	},
 
@@ -211,6 +212,18 @@ const zhHans: Messages = {
 		kept: '保留的版本',
 		textLabel: '正文',
 		textDropped: '因时间较久，已不再保留',
+		copy: '复制',
+		copied: '已复制',
+		loading: '正在加载…',
+		unreachable: '服务器没有响应。请稍后再试。'
+	},
+	articleSource: {
+		title: '文章的源代码',
+		text: '文章的 HTML：可以看此 rueder 清理后保存的样子，也可以看订阅源发来的原样。链接和图片在这里保留各自的原始地址，所以能看出是否还剩下跟踪参数。',
+		show: '显示',
+		kinds: { cleaned: '清理后', original: '订阅源发来的原样' },
+		noText: '此服务器已不再保存这篇文章的正文。',
+		noOriginal: '此服务器已不再保存订阅源发来的内容。',
 		copy: '复制',
 		copied: '已复制',
 		loading: '正在加载…',

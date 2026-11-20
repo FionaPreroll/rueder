@@ -954,6 +954,60 @@
         ]
       }
     },
+    "/api/feeds/{feed_id}/articles/{seq}/source": {
+      "get": {
+        "tags": [
+          "Reading"
+        ],
+        "summary": "The source of an article's current version: as rueder keeps it after cleaning it, and as the feed sent it, with the addresses of its links and pictures as they are, for a reader who looks for what the cleaning missed.",
+        "operationId": "article_source",
+        "parameters": [
+          {
+            "name": "feed_id",
+            "in": "path",
+            "description": "The feed.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "seq",
+            "in": "path",
+            "description": "The article's number in its feed.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleSource"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          },
+          "404": {
+            "description": "No such article in a feed of the account."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/feeds/{feed_id}/articles/{seq}/versions": {
       "get": {
         "tags": [
@@ -5973,6 +6027,26 @@
           },
           "published_at": {
             "type": "string"
+          }
+        }
+      },
+      "ArticleSource": {
+        "type": "object",
+        "description": "The source of an article's current version, for a reader who wants to see\nwhat the cleaning kept, such as a tracking parameter it does not know yet.\n\n`GET /api/feeds/{id}/articles/{seq}/source` answers with it. Its addresses are\nas stored, not at the image proxy: the page shows it as text, never as HTML.",
+        "required": [
+          "cleaned"
+        ],
+        "properties": {
+          "cleaned": {
+            "type": "string",
+            "description": "The text as rueder keeps it after cleaning it; empty where the retention\ntook it."
+          },
+          "original": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The text as the feed sent it; null where no version is kept."
           }
         }
       },

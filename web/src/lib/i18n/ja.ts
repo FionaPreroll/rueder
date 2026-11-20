@@ -142,6 +142,7 @@ const ja: Messages = {
 			'この rueder の運営者がこのフィードをブロックしました。取得されず、記事も表示されません。',
 		articleActions: '記事のその他の操作',
 		articleInfo: '記事の情報…',
+		articleSource: 'ソース…',
 		reportArticle: '記事を報告…'
 	},
 
@@ -216,6 +217,18 @@ const ja: Messages = {
 		kept: '保存されている版',
 		textLabel: '本文',
 		textDropped: '古いため、保存されていません',
+		copy: 'コピー',
+		copied: 'コピーしました',
+		loading: '読み込み中…',
+		unreachable: 'サーバが応答しませんでした。しばらくしてからもう一度お試しください。'
+	},
+	articleSource: {
+		title: '記事のソース',
+		text: 'この記事の HTML です。この rueder がクリーニング後に保存しているもの、またはフィードが送ったままのものを表示します。リンクと画像はここでは元のアドレスのままなので、残っているトラッキングパラメータがわかります。',
+		show: '表示',
+		kinds: { cleaned: 'クリーニング後', original: 'フィードが送ったまま' },
+		noText: 'このサーバはこの記事の本文をもう保存していません。',
+		noOriginal: 'このサーバはフィードが送った内容をもう保存していません。',
 		copy: 'コピー',
 		copied: 'コピーしました',
 		loading: '読み込み中…',
