@@ -136,6 +136,7 @@ const zhHans: Messages = {
 		closeArticle: '关闭文章',
 		blockedFeed: '此 rueder 的运营者屏蔽了这个订阅源。它不会被获取，其文章也不会显示。',
 		articleActions: '文章的更多操作',
+		articleInfo: '文章信息…',
 		reportArticle: '举报文章…'
 	},
 
@@ -183,6 +184,32 @@ const zhHans: Messages = {
 		fetchAs: '获取时的身份',
 		fetchAsHint: '对所有阅读此订阅源的人生效。对拒绝 rueder 的网站，请选“浏览器”。会立即重新获取。',
 		notSwitched: '没有成功。请稍后再试。',
+		copy: '复制',
+		copied: '已复制',
+		loading: '正在加载…',
+		unreachable: '服务器没有响应。请稍后再试。'
+	},
+	articleInfo: {
+		title: '文章信息',
+		text: (title) =>
+			`此 rueder 对“${title}”及其版本所知的信息。如果有不对的地方，请把这些复制到你发给运营者的消息里。`,
+		feed: '订阅源',
+		feedNumber: '订阅源编号',
+		number: '在订阅源中的编号',
+		name: '标题',
+		id: '在订阅源中的标识',
+		link: '链接',
+		noLink: '无',
+		published: '发布',
+		fetched: '首次获取',
+		changed: '上次更改',
+		never: '从未',
+		changedAt: (when, what) => `${when}（${what}）`,
+		what: { title: '标题', text: '正文', both: '标题和正文' },
+		version: '版本',
+		kept: '保留的版本',
+		textLabel: '正文',
+		textDropped: '因时间较久，已不再保留',
 		copy: '复制',
 		copied: '已复制',
 		loading: '正在加载…',
@@ -392,7 +419,12 @@ const zhHans: Messages = {
 		legendAdded: '新增',
 		legendRemoved: '删除',
 		titleWas: '原标题：',
-		same: '此版本的正文与当前版本相同。'
+		same: '此版本的正文与当前版本相同。',
+		sameWords: '文字相同；图片或链接有变化。',
+		markup: '文字、图片和链接都相同；只有正文的结构变了。',
+		pictures: '有变化的图片',
+		noPicture: '无',
+		links: '有变化的链接'
 	},
 
 	account: {

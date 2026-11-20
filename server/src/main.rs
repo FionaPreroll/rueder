@@ -83,6 +83,10 @@ enum Command {
     /// cache.
     #[command(subcommand)]
     Feed(FeedCommand),
+    /// Show what the server knows of an article, and its versions as the feed
+    /// sent them.
+    #[command(subcommand)]
+    Article(ArticleCommand),
     /// Say whether readers can make accounts for themselves or invite others,
     /// and how many. Nothing is open until it is said here.
     #[command(subcommand)]
@@ -320,6 +324,19 @@ enum FeedCommand {
 }
 
 #[derive(Subcommand)]
+enum ArticleCommand {
+    /// Show what a reader's "Article info" shows, for the article with this
+    /// number in the feed with this number.
+    Show {
+        feed: i32,
+        seq: i32,
+        /// Also print every version that is kept, as the feed sent it.
+        #[arg(long)]
+        versions: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum BenchCommand {
     /// Make up accounts, feeds, articles and what the accounts have read.
     Generate {
@@ -433,6 +450,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Account(command) => account(&db, command).await,
         Command::Admin(command) => admin(&db, command).await,
         Command::Feed(command) => feed(&db, command).await,
+        Command::Article(command) => article(&db, command).await,
         Command::Registration(command) => registering(&db, command).await,
         Command::Retention(command) => retaining(&db, command).await,
         Command::Reclean { feed } => {
@@ -879,6 +897,58 @@ async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
                 "Feed {} is fetched as {agent} from now on, the first time at once.",
                 numbers.join(", ")
             );
+        }
+    }
+    Ok(())
+}
+
+async fn article(db: &PgPool, command: ArticleCommand) -> anyhow::Result<()> {
+    let ArticleCommand::Show {
+        feed,
+        seq,
+        versions,
+    } = command;
+    let info = articles::info(db, None, feed, seq)
+        .await?
+        .with_context(|| format!("there is no article {seq} in feed {feed}"))?;
+    let what = match info.updated_what {
+        Some(articles::Changed::Title) => " (title)",
+        Some(articles::Changed::Text) => " (text)",
+        Some(articles::Changed::Both) => " (title and text)",
+        None => "",
+    };
+    let changed = match info.updated_at {
+        Some(at) => format!("{}{what}", when(Some(at))),
+        None => "never".to_owned(),
+    };
+    println!(
+        "Article {} of feed {} ({})",
+        info.seq, info.feed_id, info.feed_title
+    );
+    println!("  Title:         {}", info.title);
+    println!("  Id:            {}", info.guid);
+    println!("  Link:          {}", info.url.as_deref().unwrap_or("-"));
+    println!("  Published:     {}", when(Some(info.published_at)));
+    println!("  First fetched: {}", when(Some(info.first_fetched_at)));
+    println!("  Changed:       {changed}");
+    println!(
+        "  Version:       {}, {} kept",
+        info.version, info.versions_kept
+    );
+    if info.text_dropped {
+        println!("  Text:          dropped by the retention");
+    }
+    if versions {
+        for version in articles::versions(db, None, feed, seq).await? {
+            let original = version.original;
+            println!();
+            println!(
+                "Version {}, fetched {}: {}",
+                version.version,
+                when(Some(version.fetched_at)),
+                original.title
+            );
+            println!("{}", original.content);
         }
     }
     Ok(())

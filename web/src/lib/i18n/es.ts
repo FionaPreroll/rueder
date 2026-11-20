@@ -144,6 +144,7 @@ const es: Messages = {
 		blockedFeed:
 			'Quien administra este rueder bloqueó este feed. No se descarga y sus artículos no se muestran.',
 		articleActions: 'Más acciones para el artículo',
+		articleInfo: 'Información del artículo …',
 		reportArticle: 'Denunciar el artículo …'
 	},
 
@@ -193,6 +194,32 @@ const es: Messages = {
 		fetchAsHint:
 			'Para todos los que leen el feed. Como navegador, para los sitios que rechazan a rueder. Se vuelve a descargar enseguida.',
 		notSwitched: 'No funcionó. Inténtalo de nuevo más tarde.',
+		copy: 'Copiar',
+		copied: 'Copiado',
+		loading: 'Cargando …',
+		unreachable: 'El servidor no respondió. Inténtalo de nuevo más tarde.'
+	},
+	articleInfo: {
+		title: 'Información del artículo',
+		text: (title) =>
+			`Lo que este rueder sabe de “${title}” y de sus versiones. Si algo no parece correcto, cópialo en tu mensaje a quien lo administra.`,
+		feed: 'Feed',
+		feedNumber: 'Número del feed',
+		number: 'Número en el feed',
+		name: 'Título',
+		id: 'Identificador en el feed',
+		link: 'Enlace',
+		noLink: 'Ninguno',
+		published: 'Publicado',
+		fetched: 'Primera descarga',
+		changed: 'Último cambio',
+		never: 'Nunca',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'el título', text: 'el texto', both: 'el título y el texto' },
+		version: 'Versión',
+		kept: 'Versiones guardadas',
+		textLabel: 'Texto',
+		textDropped: 'Ya no se guarda, porque es antiguo',
 		copy: 'Copiar',
 		copied: 'Copiado',
 		loading: 'Cargando …',
@@ -420,7 +447,13 @@ const es: Messages = {
 		legendAdded: 'añadido',
 		legendRemoved: 'quitado',
 		titleWas: 'El título era:',
-		same: 'El texto de esta versión es igual al actual.'
+		same: 'El texto de esta versión es igual al actual.',
+		sameWords: 'Las palabras son las mismas; cambiaron imágenes o enlaces.',
+		markup:
+			'Las palabras, las imágenes y los enlaces son los mismos; solo cambió cómo está organizado el texto.',
+		pictures: 'Imágenes que cambiaron',
+		noPicture: 'Ninguna',
+		links: 'Enlaces que cambiaron'
 	},
 
 	account: {

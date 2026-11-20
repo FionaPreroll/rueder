@@ -123,6 +123,12 @@ What is here:
   readers. Only an admin who reads a feed says as what it is fetched, for all
   who read it (`PUT /api/feeds/{id}/agent`), and the operator for any feed with
   `rueder feed agent <number or address> browser|rueder`.
+- What is known of an article, for support (`src/articles.rs`): its readers see
+  its feed, its number and id there, its link, when it was published, first
+  fetched and changed, and how many versions are kept under "Article info …"
+  (`GET /api/feeds/{id}/articles/{seq}/info`); `rueder article show <feed>
+  <number>` prints the same for any article, and with `--versions` every kept
+  version as the feed sent it.
 - The status for admins (`src/monitor.rs`, `src/status.rs`): `GET /api/status`
   for the last hour, in memory, and the same numbers for Prometheus under
   `/metrics` with `METRICS_TOKEN` (`src/metrics.rs`).
@@ -220,6 +226,7 @@ cargo run -- account second-factor-off ada   # ada lost the app and the recovery
 cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
 cargo run -- feed show 130              # what is known of a feed, by number or address
 cargo run -- feed agent 130 browser     # fetch it as a browser, for all who read it; or rueder
+cargo run -- article show 130 359 --versions   # what is known of article 359 of feed 130, and every version
 ```
 
 Admins see the status of the server in the account menu of the page

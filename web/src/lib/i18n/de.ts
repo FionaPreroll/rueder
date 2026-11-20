@@ -137,6 +137,7 @@ const de: Messages = {
 		blockedFeed:
 			'Der Betreiber dieses rueder hat diesen Feed gesperrt. Er wird nicht abgerufen, und seine Artikel werden nicht gezeigt.',
 		articleActions: 'Weitere Aktionen für den Artikel',
+		articleInfo: 'Artikel-Infos …',
 		reportArticle: 'Artikel melden …'
 	},
 
@@ -185,6 +186,33 @@ const de: Messages = {
 		fetchAsHint:
 			'Für alle, die den Feed lesen. Als Browser für Websites, die rueder abweisen. Er wird gleich neu abgerufen.',
 		notSwitched: 'Das ging nicht. Versuch es später wieder.',
+		copy: 'Kopieren',
+		copied: 'Kopiert',
+		loading: 'Wird geladen …',
+		unreachable: 'Der Server hat nicht geantwortet. Versuch es später wieder.'
+	},
+
+	articleInfo: {
+		title: 'Artikel-Infos',
+		text: (title) =>
+			`Was dieser rueder über „${title}“ und seine Versionen weiß. Wenn daran etwas falsch aussieht, kopier das in deine Nachricht an den Betreiber.`,
+		feed: 'Feed',
+		feedNumber: 'Feed-Nummer',
+		number: 'Nummer im Feed',
+		name: 'Titel',
+		id: 'Kennung im Feed',
+		link: 'Link',
+		noLink: 'Keiner',
+		published: 'Veröffentlicht',
+		fetched: 'Zuerst abgerufen',
+		changed: 'Zuletzt geändert',
+		never: 'Nie',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'der Titel', text: 'der Text', both: 'Titel und Text' },
+		version: 'Version',
+		kept: 'Aufbewahrte Versionen',
+		textLabel: 'Text',
+		textDropped: 'Nicht mehr aufbewahrt, weil er alt ist',
 		copy: 'Kopieren',
 		copied: 'Kopiert',
 		loading: 'Wird geladen …',
@@ -418,7 +446,12 @@ const de: Messages = {
 		legendAdded: 'hinzugefügt',
 		legendRemoved: 'entfernt',
 		titleWas: 'Der Titel lautete:',
-		same: 'Der Text dieser Version ist derselbe wie der aktuelle.'
+		same: 'Der Text dieser Version ist derselbe wie der aktuelle.',
+		sameWords: 'Die Wörter sind dieselben; Bilder oder Links haben sich geändert.',
+		markup: 'Wörter, Bilder und Links sind dieselben; nur der Aufbau des Textes hat sich geändert.',
+		pictures: 'Geänderte Bilder',
+		noPicture: 'Keines',
+		links: 'Geänderte Links'
 	},
 
 	account: {

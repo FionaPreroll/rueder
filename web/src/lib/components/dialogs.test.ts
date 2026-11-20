@@ -12,6 +12,8 @@ import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { MAX_OPML, type Reader } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
 import { ancestorIds } from '#lib/tree.ts';
+import type { Article } from '#lib/model.ts';
+import ArticleInfoDialog from './ArticleInfoDialog.svelte';
 import FeedInfoDialog from './FeedInfoDialog.svelte';
 import ReportDialog from './ReportDialog.svelte';
 import TopBar from './TopBar.svelte';
@@ -172,6 +174,54 @@ describe('VersionCompare', () => {
 			screen.getByText('The text of this version is the same as the current one.')
 		).toBeInTheDocument();
 		expect(screen.queryByText('The title was:')).toBeNull();
+		expect(screen.queryByText('Pictures that changed')).toBeNull();
+	});
+
+	/** The current text and an earlier one, as version 1. */
+	function compare(now: string, then: string) {
+		const article = { ...original, html: now };
+		const versions = [
+			{ rev: 1, fetchedAt: Date.parse('2026-11-09T10:00:00Z'), title: original.title, html: then }
+		];
+		return render(VersionCompare, { article, versions, onclose: () => {} });
+	}
+
+	it('shows a picture swapped for another beside it, with their texts', () => {
+		const picture = (n: number, alt: string) => `<img src="/img/s/image/${n}" alt="${alt}">`;
+		compare(
+			`<p>Bond</p>${picture(122, 'Buitendijk/PA')}<p>More</p>`,
+			`<p>Bond</p>${picture(118, 'Garfitt/AP')}<p>More</p>`
+		);
+		expect(
+			screen.getByText('The words are the same; pictures or links changed.')
+		).toBeInTheDocument();
+		expect(screen.getByText('Pictures that changed')).toBeInTheDocument();
+		const [before, after] = screen.getAllByRole('figure');
+		expect(within(before).getByRole('img')).toHaveAttribute('src', '/img/s/image/118');
+		expect(before).toHaveTextContent('Garfitt/AP');
+		expect(before.parentElement).toHaveTextContent(/^Version 1/);
+		expect(within(after).getByRole('img', { name: 'Buitendijk/PA' })).toBeInTheDocument();
+		expect(after.parentElement).toHaveTextContent(/^Current version/);
+		expect(screen.queryByText('Links that changed')).toBeNull();
+	});
+
+	it('shows a picture that came, and links that changed, next to the words', () => {
+		const { container } = compare(
+			'<p>Read <a href="https://new.example/">on</a> here.</p><img src="/img/s/image/1" alt="">',
+			'<p>Read <a href="https://old.example/">on</a>.</p>'
+		);
+		expect(container.querySelector('.article-body ins')).toHaveTextContent('here.');
+		const [before, after] = screen.getByText('Pictures that changed').nextElementSibling!.children;
+		expect(before).toHaveTextContent('None');
+		expect(after.querySelectorAll('img')).toHaveLength(1);
+		const links = screen.getByText('Links that changed').nextElementSibling!;
+		expect(links.querySelector('del')).toHaveTextContent('https://old.example/');
+		expect(links.querySelector('ins')).toHaveTextContent('https://new.example/');
+	});
+
+	it('says when only the layout changed', () => {
+		compare('<p>One <strong>two</strong></p>', '<p>One two</p>');
+		expect(screen.getByText(/only how the text is laid out changed/)).toBeInTheDocument();
 	});
 });
 
@@ -1393,6 +1443,99 @@ describe('FeedInfoDialog', () => {
 		expect(line('Abgerufen als')).toHaveTextContent('rueder');
 		await userEvent.click(screen.getByRole('radio', { name: 'Browser' }));
 		expect(await reader.feedInfo('feed-tagesbote')).toMatchObject({ fetch_agent: 'browser' });
+	});
+});
+
+describe('ArticleInfoDialog', () => {
+	let server: FakeServer;
+	const session = { signOut: () => {}, expired: () => {} };
+
+	beforeEach(() => {
+		server = new FakeServer();
+		vi.stubGlobal('fetch', server.fetch);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	const line = (label: string) => screen.getByText(label).nextElementSibling;
+
+	/** The dialog for the article of that number, as the page knows it. */
+	function open(reader: Reader, feedId: string, seq: number) {
+		const article: Article = {
+			id: `${feedId}-${seq}`,
+			feedId,
+			seq,
+			title: 'Morning news',
+			teaser: '',
+			author: '',
+			tags: [],
+			link: '',
+			publishedAt: now,
+			html: null,
+			enclosures: [],
+			image: null,
+			changes: 0,
+			updatedAt: null
+		};
+		render(ArticleInfoDialog, { reader, article, onclose: () => {} });
+	}
+
+	it('says what the server knows of an article, and copies it for the operator', async () => {
+		const id = server.addFeed('Tagesbote');
+		server.addArticles(id, 1);
+		server.addArticles(id, 1, {
+			updated_at: '2026-11-10T15:00:00Z',
+			updated_what: 'title',
+			version: 3,
+			versions: [1, 2, 3].map((version) => ({
+				version,
+				fetched_at: '2026-11-10T13:00:00Z',
+				title: `Title ${version}`,
+				html: '<p>Text</p>',
+				authors: [],
+				tags: [],
+				url: null
+			})),
+			text_dropped: true
+		});
+		open(new ServerReader({ name: 'fiona', admin: false }, session), `feed-${id}`, 2);
+		expect(screen.getByRole('dialog', { name: 'Article info' })).toHaveTextContent('Loading …');
+		expect(await screen.findByText(`https://feed-${id}.example/2`)).toBeInTheDocument();
+		expect(screen.getByText(/knows of “Morning news”/)).toBeInTheDocument();
+		expect(line('Feed')).toHaveTextContent('Tagesbote');
+		expect(line('Feed number')).toHaveTextContent(String(id));
+		expect(line('Number in the feed')).toHaveTextContent('2');
+		expect(line('Last changed')).toHaveTextContent(/\(the title\)$/);
+		expect(line('Version')).toHaveTextContent('3');
+		expect(line('Versions kept')).toHaveTextContent('3');
+		expect(line('Text')).toHaveTextContent('No longer kept');
+
+		const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+		await userEvent.click(screen.getByRole('button', { name: 'Copy' }));
+		const copied = writeText.mock.lastCall?.[0] ?? '';
+		expect(copied).toMatch(
+			/^Article info\nFeed: Tagesbote\nFeed number: \d+\nNumber in the feed: 2\n/
+		);
+		expect(copied).toContain('Last changed: 2026-11-10T15:00:00Z (the title)\n');
+		expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+	});
+
+	it('says when the server does not answer', async () => {
+		open(new ServerReader({ name: 'fiona', admin: false }, session), 'feed-999', 1);
+		expect(await screen.findByRole('alert')).toHaveTextContent('The server did not answer.');
+	});
+
+	it('is there with made-up data too, in German', async () => {
+		useLanguage('de');
+		const reader = new DemoReader(() => now);
+		const changed = reader.articles['feed-ferris'].find((article) => article.versions.length)!;
+		render(ArticleInfoDialog, { reader, article: changed, onclose: () => {} });
+		expect(await screen.findByText('Kennung im Feed')).toBeInTheDocument();
+		expect(screen.getByRole('dialog', { name: 'Artikel-Infos' })).toBeInTheDocument();
+		expect(line('Aufbewahrte Versionen')).toHaveTextContent(String(changed.versions.length + 1));
 	});
 });
 

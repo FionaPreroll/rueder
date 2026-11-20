@@ -145,6 +145,7 @@ const it: Messages = {
 		blockedFeed:
 			'Chi gestisce questo rueder ha bloccato questo feed. Non viene scaricato e i suoi articoli non vengono mostrati.',
 		articleActions: 'Altre azioni per l’articolo',
+		articleInfo: 'Informazioni sull’articolo …',
 		reportArticle: 'Segnala l’articolo …'
 	},
 
@@ -194,6 +195,32 @@ const it: Messages = {
 		fetchAsHint:
 			'Per tutti quelli che leggono il feed. Come browser, per i siti che respingono rueder. Viene scaricato di nuovo subito.',
 		notSwitched: 'Non ha funzionato. Riprova più tardi.',
+		copy: 'Copia',
+		copied: 'Copiato',
+		loading: 'Caricamento …',
+		unreachable: 'Il server non ha risposto. Riprova più tardi.'
+	},
+	articleInfo: {
+		title: 'Informazioni sull’articolo',
+		text: (title) =>
+			`Quello che questo rueder sa di “${title}” e delle sue versioni. Se qualcosa non ti sembra giusto, copialo nel tuo messaggio a chi lo gestisce.`,
+		feed: 'Feed',
+		feedNumber: 'Numero del feed',
+		number: 'Numero nel feed',
+		name: 'Titolo',
+		id: 'Identificativo nel feed',
+		link: 'Link',
+		noLink: 'Nessuno',
+		published: 'Pubblicato',
+		fetched: 'Primo scaricamento',
+		changed: 'Ultima modifica',
+		never: 'Mai',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'il titolo', text: 'il testo', both: 'il titolo e il testo' },
+		version: 'Versione',
+		kept: 'Versioni conservate',
+		textLabel: 'Testo',
+		textDropped: 'Non più conservato, perché è vecchio',
 		copy: 'Copia',
 		copied: 'Copiato',
 		loading: 'Caricamento …',
@@ -425,7 +452,12 @@ const it: Messages = {
 		legendAdded: 'aggiunto',
 		legendRemoved: 'rimosso',
 		titleWas: 'Il titolo era:',
-		same: 'Il testo di questa versione è uguale a quello attuale.'
+		same: 'Il testo di questa versione è uguale a quello attuale.',
+		sameWords: 'Le parole sono le stesse; sono cambiate immagini o link.',
+		markup: 'Parole, immagini e link sono gli stessi; è cambiata solo la struttura del testo.',
+		pictures: 'Immagini cambiate',
+		noPicture: 'Nessuna',
+		links: 'Link cambiati'
 	},
 
 	account: {

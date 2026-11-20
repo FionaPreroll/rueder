@@ -22,6 +22,7 @@ import type {
 	CreatedAppPassword,
 	NewAppPassword as NewAppPasswordJson,
 	Article,
+	ArticleInfo,
 	ArticleVersion,
 	ClientReport,
 	ClientReports,
@@ -391,6 +392,9 @@ export const api = {
 		const kept = await call<Versions>('GET', `/feeds/${feedId}/articles/${seq}/versions`);
 		return kept.versions;
 	},
+
+	articleInfo: (feedId: number, seq: number) =>
+		call<ArticleInfo>('GET', `/feeds/${feedId}/articles/${seq}/info`),
 
 	setState: (feedId: number, seq: number, change: { read?: boolean; starred?: boolean }) =>
 		call<void>('PUT', `/feeds/${feedId}/articles/${seq}/state`, change satisfies StateChange),

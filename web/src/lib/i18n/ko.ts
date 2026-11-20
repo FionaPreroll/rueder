@@ -138,6 +138,7 @@ const ko: Messages = {
 		blockedFeed:
 			'이 rueder의 운영자가 이 피드를 차단했습니다. 가져오지 않으며 글도 보여 주지 않습니다.',
 		articleActions: '글에 대한 다른 작업',
+		articleInfo: '글 정보 …',
 		reportArticle: '글 신고 …'
 	},
 
@@ -186,6 +187,32 @@ const ko: Messages = {
 		fetchAsHint:
 			'이 피드를 읽는 모두에게 적용됩니다. rueder를 거부하는 사이트에는 브라우저를 고르세요. 바로 다시 가져옵니다.',
 		notSwitched: '실패했습니다. 나중에 다시 시도하세요.',
+		copy: '복사',
+		copied: '복사했습니다',
+		loading: '불러오는 중 …',
+		unreachable: '서버가 응답하지 않았습니다. 나중에 다시 시도하세요.'
+	},
+	articleInfo: {
+		title: '글 정보',
+		text: (title) =>
+			`이 rueder가 ‘${title}’ 글과 그 버전에 대해 아는 내용입니다. 잘못된 점이 보이면 운영자에게 보낼 메시지에 이 내용을 복사하세요.`,
+		feed: '피드',
+		feedNumber: '피드 번호',
+		number: '피드 안의 번호',
+		name: '제목',
+		id: '피드 안의 ID',
+		link: '링크',
+		noLink: '없음',
+		published: '게시',
+		fetched: '처음 가져온 때',
+		changed: '마지막 변경',
+		never: '없음',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: '제목', text: '본문', both: '제목과 본문' },
+		version: '버전',
+		kept: '보관 중인 버전',
+		textLabel: '본문',
+		textDropped: '오래되어 더 이상 보관하지 않습니다',
 		copy: '복사',
 		copied: '복사했습니다',
 		loading: '불러오는 중 …',
@@ -402,7 +429,12 @@ const ko: Messages = {
 		legendAdded: '추가됨',
 		legendRemoved: '삭제됨',
 		titleWas: '이전 제목:',
-		same: '이 버전의 본문은 현재 버전과 같습니다.'
+		same: '이 버전의 본문은 현재 버전과 같습니다.',
+		sameWords: '단어는 같습니다. 이미지나 링크가 바뀌었습니다.',
+		markup: '단어, 이미지, 링크는 같습니다. 본문의 구성만 바뀌었습니다.',
+		pictures: '바뀐 이미지',
+		noPicture: '없음',
+		links: '바뀐 링크'
 	},
 
 	account: {

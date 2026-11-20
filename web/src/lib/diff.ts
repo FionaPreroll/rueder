@@ -1,4 +1,6 @@
-// What changed between two versions of an article, word by word.
+// What changed between two versions of an article: its words, its pictures and its links.
+
+import type { Picture } from './model.ts';
 
 export interface DiffPart {
 	kind: 'same' | 'added' | 'removed';
@@ -44,4 +46,45 @@ export function diffWords(before: string, after: string): DiffPart[] {
 	while (i < a.length) push('removed', a[i++]);
 	while (j < b.length) push('added', b[j++]);
 	return parts;
+}
+
+/** The pictures and links one version has and the other lacks. */
+export interface MediaChanges {
+	pictures: { removed: Picture[]; added: Picture[] };
+	links: { removed: string[]; added: string[] };
+}
+
+/** What `before` has and `after` lacks, and the other way round, repeats counted. */
+function difference<T>(before: T[], after: T[], key: (item: T) => string) {
+	const added = [...after];
+	const removed = before.filter((item) => {
+		const at = added.findIndex((other) => key(other) === key(item));
+		if (at >= 0) added.splice(at, 1);
+		return at < 0;
+	});
+	return { removed, added };
+}
+
+/** The pictures, with their texts, and the link addresses of a cleaned text. */
+function media(html: string) {
+	const body = new DOMParser().parseFromString(html, 'text/html').body;
+	return {
+		pictures: [...body.querySelectorAll('img')].map((img) => ({
+			url: img.getAttribute('src') ?? '',
+			title: img.getAttribute('alt') ?? ''
+		})),
+		links: [...body.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
+	};
+}
+
+/**
+ * The pictures and links that changed between two versions, which a diff of
+ * the words does not show: a feed may swap a picture and keep every word.
+ */
+export function diffMedia(before: string, after: string): MediaChanges {
+	const [was, is] = [media(before), media(after)];
+	return {
+		pictures: difference(was.pictures, is.pictures, (picture) => `${picture.url} ${picture.title}`),
+		links: difference(was.links, is.links, (link) => link)
+	};
 }

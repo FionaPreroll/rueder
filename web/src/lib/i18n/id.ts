@@ -139,6 +139,7 @@ const id: Messages = {
 		blockedFeed:
 			'Pengelola rueder ini memblokir feed ini. Feed ini tidak diambil, dan artikelnya tidak ditampilkan.',
 		articleActions: 'Tindakan lain untuk artikel',
+		articleInfo: 'Info artikel …',
 		reportArticle: 'Laporkan artikel …'
 	},
 
@@ -187,6 +188,32 @@ const id: Messages = {
 		fetchAsHint:
 			'Berlaku untuk semua yang membaca feed ini. Pilih browser untuk situs yang menolak rueder. Feed langsung diambil lagi.',
 		notSwitched: 'Tidak berhasil. Coba lagi nanti.',
+		copy: 'Salin',
+		copied: 'Disalin',
+		loading: 'Memuat …',
+		unreachable: 'Server tidak menjawab. Coba lagi nanti.'
+	},
+	articleInfo: {
+		title: 'Info artikel',
+		text: (title) =>
+			`Yang diketahui rueder ini tentang “${title}” dan versinya. Jika ada yang tampak salah, salin ini ke pesan Anda untuk pengelola.`,
+		feed: 'Feed',
+		feedNumber: 'Nomor feed',
+		number: 'Nomor di feed',
+		name: 'Judul',
+		id: 'ID di feed',
+		link: 'Tautan',
+		noLink: 'Tidak ada',
+		published: 'Diterbitkan',
+		fetched: 'Pertama diambil',
+		changed: 'Terakhir diubah',
+		never: 'Belum pernah',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'judul', text: 'teks', both: 'judul dan teks' },
+		version: 'Versi',
+		kept: 'Versi yang disimpan',
+		textLabel: 'Teks',
+		textDropped: 'Tidak disimpan lagi karena sudah lama',
 		copy: 'Salin',
 		copied: 'Disalin',
 		loading: 'Memuat …',
@@ -413,7 +440,12 @@ const id: Messages = {
 		legendAdded: 'ditambahkan',
 		legendRemoved: 'dihapus',
 		titleWas: 'Judul sebelumnya:',
-		same: 'Teks versi ini sama dengan versi saat ini.'
+		same: 'Teks versi ini sama dengan versi saat ini.',
+		sameWords: 'Kata-katanya sama; gambar atau tautan berubah.',
+		markup: 'Kata, gambar, dan tautan sama; hanya susunan teks yang berubah.',
+		pictures: 'Gambar yang berubah',
+		noPicture: 'Tidak ada',
+		links: 'Tautan yang berubah'
 	},
 
 	account: {

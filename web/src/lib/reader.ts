@@ -8,9 +8,9 @@ import type { FilterRule } from './filters.ts';
 import type { Settings } from './settings.svelte.ts';
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from './model.ts';
 import type { DropPosition, NudgeDirection } from './tree.ts';
-import type { FeedInfo, FetchAgent, ReportKind, ServerStatus } from './api/types.ts';
+import type { ArticleInfo, FeedInfo, FetchAgent, ReportKind, ServerStatus } from './api/types.ts';
 
-export type { FeedInfo, FetchAgent, ServerStatus };
+export type { ArticleInfo, FeedInfo, FetchAgent, ServerStatus };
 
 /** A feed with something unread, for the start page. */
 export interface Fresh {
@@ -345,6 +345,8 @@ export interface Reader {
 	load(article: Article): void;
 	/** The article's earlier versions, oldest first. */
 	versions(article: Article): Promise<ArticleVersion[]>;
+	/** What the server knows of an article and its versions, for support; null if there was no answer. */
+	articleInfo(article: Article): Promise<ArticleInfo | null>;
 
 	setRead(article: Article, read: boolean): void;
 	/** The article scrolled out at the top of the expanded view. */

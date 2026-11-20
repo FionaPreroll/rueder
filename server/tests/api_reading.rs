@@ -76,6 +76,7 @@ async fn nothing_is_answered_without_a_session(db: PgPool) {
             Method::GET,
             format!("/api/feeds/{feed}/articles/1/versions"),
         ),
+        (Method::GET, format!("/api/feeds/{feed}/articles/1/info")),
         (Method::PUT, format!("/api/feeds/{feed}/articles/1/state")),
         (Method::GET, "/api/folders/1/articles".to_owned()),
         (Method::POST, "/api/folders/1/read".to_owned()),
@@ -358,6 +359,7 @@ async fn lists_go_back_page_by_page(db: PgPool) {
         format!("/api/folders/{rust}/articles"),
         format!("/api/feeds/{news}/articles/1"),
         format!("/api/feeds/{news}/articles/1/versions"),
+        format!("/api/feeds/{news}/articles/1/info"),
     ] {
         assert_eq!(
             get(&state, &path, &grace_cookie).await.0,
@@ -480,6 +482,88 @@ async fn an_article_goes_out_with_its_pictures_at_the_proxy(db: PgPool) {
             "{path}"
         );
     }
+}
+
+#[sqlx::test]
+async fn an_article_tells_what_is_known_of_it(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 2).await;
+    let mut changed = common::article(1);
+    changed.html = "<p>Another text.</p>".into();
+    changed.fetched_at = common::START + time::Duration::hours(1);
+    let mut tx = db.begin().await.unwrap();
+    articles::add_version(&mut tx, feed, 1, &changed)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let (grace, _) = common::reader(&db, "grace", 1).await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+
+    let path = format!("/api/feeds/{feed}/articles/1/info");
+    let (status, info) = get(&state, &path, &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        info,
+        json!({
+            "feed_id": feed,
+            "feed_title": "ada",
+            "seq": 1,
+            "title": "Article 1",
+            "guid": "guid-1",
+            "url": "https://blog.example/1",
+            "published_at": "2026-03-01T12:01:00Z",
+            "first_fetched_at": "2026-03-01T12:06:00Z",
+            "updated_at": "2026-03-01T13:00:00Z",
+            "updated_what": "text",
+            "version": 2,
+            "versions_kept": 2,
+            "text_dropped": false,
+        })
+    );
+    // An article that never changed.
+    let (_, info) = get(
+        &state,
+        &format!("/api/feeds/{feed}/articles/2/info"),
+        &cookie,
+    )
+    .await;
+    assert_eq!(
+        (
+            &info["version"],
+            &info["versions_kept"],
+            &info["updated_what"]
+        ),
+        (&json!(1), &json!(1), &Value::Null)
+    );
+
+    // What is not there, what is another's, and a blocked feed.
+    for path in [
+        format!("/api/feeds/{feed}/articles/3/info"),
+        "/api/feeds/999999/articles/1/info".to_owned(),
+    ] {
+        assert_eq!(get(&state, &path, &cookie).await.0, StatusCode::NOT_FOUND);
+    }
+    let grace_cookie = common::session(&db, grace).await;
+    let (status, body) = get(&state, &path, &grace_cookie).await;
+    assert_eq!((status, body), (StatusCode::NOT_FOUND, Value::Null));
+    sqlx::query("UPDATE feeds SET blocked_at = now() WHERE id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(get(&state, &path, &cookie).await.0, StatusCode::NOT_FOUND);
+    let versions = format!("/api/feeds/{feed}/articles/1/versions");
+    assert_eq!(
+        get(&state, &versions, &cookie).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    // The operator sees every article, of a blocked feed too.
+    let info = articles::info(&db, None, feed, 1).await.unwrap().unwrap();
+    assert_eq!((info.guid.as_str(), info.versions_kept), ("guid-1", 2));
+    let kept = articles::versions(&db, None, feed, 1).await.unwrap();
+    assert_eq!(kept.len(), 2);
+    assert!(articles::info(&db, None, feed, 3).await.unwrap().is_none());
 }
 
 /// The files of an article are stored as they came, from a feed, from a text

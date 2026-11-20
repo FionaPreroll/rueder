@@ -106,7 +106,7 @@ async fn articles_are_cleaned_again_from_their_versions(db: PgPool) {
 
     // Nothing but the text for reading changed: no new version, nothing unread.
     assert_eq!(
-        articles::versions(&db, account, feed, 1)
+        articles::versions(&db, Some(account), feed, 1)
             .await
             .unwrap()
             .len(),

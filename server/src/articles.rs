@@ -891,22 +891,24 @@ pub struct Version {
     pub original: Original,
 }
 
-/// The versions of an article that are kept, oldest first, if the account
-/// subscribes to its feed. This is the only reader of the cold table.
+/// The versions of an article that are kept, oldest first: with `reader`, only
+/// if that account subscribes to its feed and the feed is not blocked; without,
+/// of any article, for the operator. This is the only reader of the raw
+/// versions in the cold table.
 pub async fn versions(
     db: &PgPool,
-    account_id: i32,
+    reader: Option<i32>,
     feed_id: i32,
     seq: i32,
 ) -> anyhow::Result<Vec<Version>> {
     let rows = sqlx::query!(
         "SELECT v.version, v.fetched_at, v.raw
-         FROM subscriptions s
-         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL
-         JOIN article_versions v ON v.feed_id = s.feed_id
-         WHERE s.account_id = $1 AND s.feed_id = $2 AND v.seq = $3
+         FROM article_versions v
+         WHERE v.feed_id = $2 AND v.seq = $3 AND ($1::integer IS NULL OR EXISTS (
+             SELECT 1 FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+             WHERE s.account_id = $1 AND s.feed_id = $2 AND f.blocked_at IS NULL))
          ORDER BY v.version",
-        account_id,
+        reader,
         feed_id,
         seq,
     )
@@ -921,4 +923,77 @@ pub async fn versions(
             })
         })
         .collect()
+}
+
+/// What the server knows of an article and its versions, for a reader to pass
+/// on to whoever helps with it.
+///
+/// `GET /api/feeds/{id}/articles/{seq}/info` answers with it; `rueder article
+/// show` prints it.
+#[derive(Debug, Serialize, TS, ToSchema)]
+pub struct ArticleInfo {
+    pub feed_id: i32,
+    /// The feed's own name.
+    pub feed_title: String,
+    pub seq: i32,
+    pub title: String,
+    /// What the fetch knows the article by: its id in the feed (GUID), else
+    /// its link.
+    pub guid: String,
+    pub url: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
+    #[schema(value_type = String)]
+    pub published_at: OffsetDateTime,
+    /// When rueder first had it: when it was fetched, or for an import when the
+    /// old rueder fetched it.
+    #[serde(with = "time::serde::rfc3339")]
+    #[ts(type = "string")]
+    #[schema(value_type = String)]
+    pub first_fetched_at: OffsetDateTime,
+    /// When the current version replaced the one before, if it ever did.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
+    pub updated_at: Option<OffsetDateTime>,
+    /// What was different then; null for a change from before rueder noted it.
+    pub updated_what: Option<Changed>,
+    /// The number of the current version.
+    pub version: i16,
+    /// How many versions are kept, the current one with them.
+    pub versions_kept: i64,
+    /// The retention took its text.
+    pub text_dropped: bool,
+}
+
+/// What the server knows of an article: with `reader`, only if that account
+/// subscribes to its feed and the feed is not blocked; without, of any
+/// article, for the operator.
+pub async fn info(
+    db: &PgPool,
+    reader: Option<i32>,
+    feed_id: i32,
+    seq: i32,
+) -> sqlx::Result<Option<ArticleInfo>> {
+    sqlx::query_as!(
+        ArticleInfo,
+        r#"SELECT a.feed_id, f.title AS feed_title, a.seq, a.title, c.guid, a.url,
+                  a.published_at, a.arrived_at AS first_fetched_at, a.updated_at,
+                  a.updated_what AS "updated_what: Changed", a.version,
+                  (SELECT count(*) FROM article_versions v
+                   WHERE v.feed_id = a.feed_id AND v.seq = a.seq) AS "versions_kept!",
+                  c.text_dropped
+           FROM articles a
+           JOIN feeds f ON f.id = a.feed_id
+           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
+           WHERE a.feed_id = $2 AND a.seq = $3 AND ($1::integer IS NULL OR (
+               f.blocked_at IS NULL AND EXISTS (
+                   SELECT 1 FROM subscriptions s
+                   WHERE s.account_id = $1 AND s.feed_id = a.feed_id)))"#,
+        reader,
+        feed_id,
+        seq,
+    )
+    .fetch_optional(db)
+    .await
 }

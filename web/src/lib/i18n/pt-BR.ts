@@ -144,6 +144,7 @@ const ptBR: Messages = {
 		blockedFeed:
 			'Quem administra este rueder bloqueou este feed. Ele não é buscado e seus artigos não são mostrados.',
 		articleActions: 'Mais ações para o artigo',
+		articleInfo: 'Informações do artigo …',
 		reportArticle: 'Denunciar o artigo …'
 	},
 
@@ -193,6 +194,32 @@ const ptBR: Messages = {
 		fetchAsHint:
 			'Para todos que leem o feed. Como navegador, para sites que recusam o rueder. Ele é buscado de novo na hora.',
 		notSwitched: 'Não funcionou. Tente de novo mais tarde.',
+		copy: 'Copiar',
+		copied: 'Copiado',
+		loading: 'Carregando …',
+		unreachable: 'O servidor não respondeu. Tente de novo mais tarde.'
+	},
+	articleInfo: {
+		title: 'Informações do artigo',
+		text: (title) =>
+			`O que este rueder sabe sobre “${title}” e suas versões. Se algo parecer errado, copie isto na sua mensagem para quem administra.`,
+		feed: 'Feed',
+		feedNumber: 'Número do feed',
+		number: 'Número no feed',
+		name: 'Título',
+		id: 'Identificador no feed',
+		link: 'Link',
+		noLink: 'Nenhum',
+		published: 'Publicado',
+		fetched: 'Primeira busca',
+		changed: 'Última alteração',
+		never: 'Nunca',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'o título', text: 'o texto', both: 'o título e o texto' },
+		version: 'Versão',
+		kept: 'Versões guardadas',
+		textLabel: 'Texto',
+		textDropped: 'Não é mais guardado, por ser antigo',
 		copy: 'Copiar',
 		copied: 'Copiado',
 		loading: 'Carregando …',
@@ -422,7 +449,12 @@ const ptBR: Messages = {
 		legendAdded: 'adicionado',
 		legendRemoved: 'removido',
 		titleWas: 'O título era:',
-		same: 'O texto desta versão é igual ao atual.'
+		same: 'O texto desta versão é igual ao atual.',
+		sameWords: 'As palavras são as mesmas; mudaram imagens ou links.',
+		markup: 'As palavras, as imagens e os links são os mesmos; só mudou a organização do texto.',
+		pictures: 'Imagens que mudaram',
+		noPicture: 'Nenhuma',
+		links: 'Links que mudaram'
 	},
 
 	account: {

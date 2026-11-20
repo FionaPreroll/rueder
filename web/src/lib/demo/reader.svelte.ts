@@ -9,6 +9,7 @@ import { compile, ruleMatches, type FilterRule, type RuleScope } from '#lib/filt
 import type { Article, ArticleVersion, Feed, Label, Stream, TreeNode } from '#lib/model.ts';
 import type {
 	Abilities,
+	ArticleInfo,
 	FeedInfo,
 	FetchAgent,
 	Found,
@@ -400,6 +401,29 @@ export class DemoReader implements Reader {
 	versions(article: Article): Promise<ArticleVersion[]> {
 		const mine = this.articles[article.feedId]?.find((a) => a.id === article.id);
 		return Promise.resolve(mine?.versions ?? []);
+	}
+
+	/** Made up from the article: the draft fetches nothing, so it arrived when it was published. */
+	async articleInfo(article: Article): Promise<ArticleInfo | null> {
+		const feed = this.feeds[article.feedId];
+		const mine = this.articles[article.feedId]?.find((a) => a.id === article.id);
+		if (!feed || !mine) return null;
+		const at = (time: number) => new Date(time).toISOString();
+		return {
+			feed_id: Object.keys(this.feeds).indexOf(article.feedId) + 1,
+			feed_title: feed.title,
+			seq: mine.seq,
+			title: mine.title,
+			guid: mine.link || `${feed.siteUrl}/${mine.seq}`,
+			url: mine.link || null,
+			published_at: at(mine.publishedAt),
+			first_fetched_at: at(mine.versions[0]?.fetchedAt ?? mine.publishedAt),
+			updated_at: mine.updatedAt === null ? null : at(mine.updatedAt),
+			updated_what: mine.changed ?? null,
+			version: mine.versions.length + 1,
+			versions_kept: mine.versions.length + 1,
+			text_dropped: mine.textDropped ?? false
+		};
 	}
 
 	// Reading

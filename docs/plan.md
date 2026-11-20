@@ -88,6 +88,7 @@ Von Fiona am 2026-11-10 entschieden.
 | Login | Heute loginsrv mit htpasswd. Künftig lokale Konten mit Argon2id, OpenID Connect muss möglich sein. | Bestimmt, wie bestehende Konten umziehen. |
 | Ordner | Verschachtelt, höchstens 5 Ebenen. | Datenmodell und Drag & Drop. |
 | Versionen | Höchstens 20 Versionen je Artikel. Ein aktualisierter Artikel bleibt gelesen und bekommt den Hinweis „aktualisiert“. | Speicherbedarf und Ungelesen-Zahlen. |
+| Bilder und Links in Versionen (2026-11-16) | Ein ausgetauschtes Bild, ein anderer Bildtext oder ein anderer Link ist eine neue Version wie jede andere Änderung am bereinigten Text, weil das für Leser interessant ist. Der Vergleich zeigt sie. Tracking-Parameter zählen weiter nicht, die Bereinigung nimmt sie vorher heraus. | Paket 5.46, [Artikelspeicher und Versionen](architecture.md#artikelspeicher-und-versionen). |
 | Bild-Proxy | Selbst in Rust: prüfen, cachen, verkleinern mit dem `image`-Crate. Kein imgproxy mehr. Die Adresse des Proxy kommt erst beim Ausliefern in den Text, nicht schon beim Bereinigen. | Ein Dienst weniger, dafür eigener Code an einer Angriffsfläche. |
 | User-Agent beim Abruf | Ehrlich als „rueder“, je Feed umstellbar. | Manche Seiten sperren unbekannte Clients. |
 | Oberfläche | Der klickbare Entwurf in `web/` ist abgenommen („sieht perfekt aus“). | Schritt 3 baut ihn aus, statt neu zu entwerfen. |

@@ -140,6 +140,7 @@ const tr: Messages = {
 		blockedFeed:
 			'Bu rueder’in yöneticisi bu akışı engelledi. Getirilmiyor ve makaleleri gösterilmiyor.',
 		articleActions: 'Makale için diğer işlemler',
+		articleInfo: 'Makale bilgileri …',
 		reportArticle: 'Makaleyi bildir …'
 	},
 
@@ -188,6 +189,32 @@ const tr: Messages = {
 		fetchAsHint:
 			'Akışı okuyan herkes için geçerlidir. rueder’i geri çeviren siteler için tarayıcıyı seçin. Akış hemen yeniden getirilir.',
 		notSwitched: 'Olmadı. Daha sonra yeniden deneyin.',
+		copy: 'Kopyala',
+		copied: 'Kopyalandı',
+		loading: 'Yükleniyor …',
+		unreachable: 'Sunucu yanıt vermedi. Daha sonra yeniden deneyin.'
+	},
+	articleInfo: {
+		title: 'Makale bilgileri',
+		text: (title) =>
+			`Bu rueder’in “${title}” ve sürümleri hakkında bildikleri. Bir şey yanlış görünüyorsa bunu yöneticiye yazdığınız mesaja kopyalayın.`,
+		feed: 'Akış',
+		feedNumber: 'Akış numarası',
+		number: 'Akıştaki numara',
+		name: 'Başlık',
+		id: 'Akıştaki kimlik',
+		link: 'Bağlantı',
+		noLink: 'Yok',
+		published: 'Yayımlanma',
+		fetched: 'İlk getirme',
+		changed: 'Son değişiklik',
+		never: 'Hiç',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'başlık', text: 'metin', both: 'başlık ve metin' },
+		version: 'Sürüm',
+		kept: 'Saklanan sürümler',
+		textLabel: 'Metin',
+		textDropped: 'Eski olduğu için artık saklanmıyor',
 		copy: 'Kopyala',
 		copied: 'Kopyalandı',
 		loading: 'Yükleniyor …',
@@ -414,7 +441,12 @@ const tr: Messages = {
 		legendAdded: 'eklendi',
 		legendRemoved: 'çıkarıldı',
 		titleWas: 'Başlık şuydu:',
-		same: 'Bu sürümün metni geçerli sürümle aynı.'
+		same: 'Bu sürümün metni geçerli sürümle aynı.',
+		sameWords: 'Sözcükler aynı; resimler ya da bağlantılar değişti.',
+		markup: 'Sözcükler, resimler ve bağlantılar aynı; yalnızca metnin düzeni değişti.',
+		pictures: 'Değişen resimler',
+		noPicture: 'Yok',
+		links: 'Değişen bağlantılar'
 	},
 
 	account: {

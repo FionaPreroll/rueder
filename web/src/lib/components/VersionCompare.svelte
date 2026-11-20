@@ -1,8 +1,9 @@
 <script lang="ts">
 	// What changed in an article since an earlier fetch: the words taken out and the
-	// words put in, between the picked earlier version and the current one.
+	// words put in, between the picked earlier version and the current one, and the
+	// pictures and links, which the words do not show.
 	import { untrack } from 'svelte';
-	import { diffWords } from '#lib/diff.ts';
+	import { diffMedia, diffWords } from '#lib/diff.ts';
 	import { textOf } from '#lib/filters.ts';
 	import { formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -28,6 +29,22 @@
 		earlier ? diffWords(textOf(earlier.html), textOf(article.html ?? '')) : []
 	);
 	const changed = $derived(parts.some((part) => part.kind !== 'same'));
+	const media = $derived(earlier ? diffMedia(earlier.html, article.html ?? '') : null);
+	const pictures = $derived(
+		media && media.pictures.removed.length + media.pictures.added.length > 0 ? media.pictures : null
+	);
+	const links = $derived(
+		media && media.links.removed.length + media.links.added.length > 0 ? media.links : null
+	);
+	// The pictures only the earlier version has beside those only the current one has.
+	const sides = $derived(
+		pictures && earlier
+			? [
+					{ label: m.versions.version(earlier.rev), shown: pictures.removed, tone: 'bg-removed' },
+					{ label: m.versions.current, shown: pictures.added, tone: 'bg-added' }
+				]
+			: []
+	);
 </script>
 
 <Dialog title={m.versions.title} wide {onclose}>
@@ -72,8 +89,47 @@
 					{/if}
 				{/each}
 			</p>
+		{:else if pictures || links}
+			<p class="mt-2 text-sm text-soft">{m.versions.sameWords}</p>
+		{:else if earlier.html !== article.html}
+			<p class="mt-2 text-sm text-soft">{m.versions.markup}</p>
 		{:else}
 			<p class="mt-2 text-sm text-soft">{m.versions.same}</p>
+		{/if}
+
+		{#if pictures}
+			<h4 class="mt-4 text-sm font-medium">{m.versions.pictures}</h4>
+			<div class="mt-2 grid grid-cols-2 gap-3 text-xs">
+				{#each sides as side (side.tone)}
+					<div class="min-w-0">
+						<p class="text-soft">{side.label}</p>
+						{#each side.shown as picture, index (index)}
+							<figure class={['mt-1 rounded p-1', side.tone]}>
+								<img class="max-h-48 w-full object-contain" src={picture.url} alt={picture.title} />
+								{#if picture.title}
+									<figcaption class="mt-1 break-words text-ink" dir="auto">
+										{picture.title}
+									</figcaption>
+								{/if}
+							</figure>
+						{:else}
+							<p class="mt-1 text-soft">{m.versions.noPicture}</p>
+						{/each}
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+		{#if links}
+			<h4 class="mt-4 text-sm font-medium">{m.versions.links}</h4>
+			<ul class="mt-1 space-y-1 text-sm break-all">
+				{#each links.removed as link, index ('removed' + index)}
+					<li dir="auto"><del class="rounded bg-removed px-1">{link}</del></li>
+				{/each}
+				{#each links.added as link, index ('added' + index)}
+					<li dir="auto"><ins class="rounded bg-added px-1 no-underline">{link}</ins></li>
+				{/each}
+			</ul>
 		{/if}
 	{/if}
 </Dialog>

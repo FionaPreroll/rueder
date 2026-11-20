@@ -9,6 +9,7 @@ import {
 	fetchSoon,
 	logIn,
 	node,
+	rueder,
 	site,
 	subscribe
 } from './harness/helpers.ts';
@@ -80,6 +81,46 @@ test('a headline that was rewritten says so, and the text is left alone', async 
 	// The first `del` is the old headline; the one after it is the legend.
 	await expect(versions.locator('del').first()).toHaveText('Wire news 3');
 	await expect(versions).toContainText('The text of this version is the same as the current one.');
+});
+
+test('a picture swapped for another shows in the compare, and the article info counts it', async ({
+	page
+}) => {
+	await logIn(page, 'live');
+	await node(page, 'Live Wire').click();
+	await site('picture', 'live', 'The ferry in port');
+	fetchSoon();
+	const row = article(page, 'Wire news 3, corrected');
+	await expect(row.getByRole('img', { name: /^Changed since/ })).toBeVisible({
+		timeout: AFTER_FETCH
+	});
+
+	await row.getByRole('button', { name: /Wire news 3, corrected/ }).click();
+	await page.getByRole('button', { name: 'Compare versions' }).click();
+	const versions = page.getByRole('dialog', { name: 'Versions of this article' });
+	await expect(versions).toContainText('The words are the same; pictures or links changed.');
+	const pictures = versions.getByRole('figure');
+	await expect(pictures).toHaveText(['The ferry', 'The ferry in port']);
+	await expect(pictures.last().getByRole('img')).toHaveAttribute('src', /^\/img\//);
+	await versions.getByRole('button', { name: 'Close' }).last().click();
+
+	await page.getByRole('button', { name: 'More actions for the article' }).click();
+	await page.getByRole('menuitem', { name: 'Article info …' }).click();
+	const info = page.getByRole('dialog', { name: 'Article info' });
+	const line = (label: string) =>
+		info.locator('dt', { hasText: new RegExp(`^${label}$`) }).locator('+ dd');
+	await expect(line('Id in the feed')).toHaveText('live-3');
+	await expect(line('Number in the feed')).toHaveText('3');
+	await expect(line('Version')).toHaveText('4');
+	await expect(line('Last changed')).toContainText('(the text)');
+
+	// The operator sees the same, and every version as the feed sent it.
+	const feed = (await line('Feed number').textContent()) ?? '';
+	const shown = rueder('article', 'show', feed, '3', '--versions');
+	expect(shown).toContain('Id:            live-3');
+	expect(shown).toContain('Version:       4, 4 kept');
+	expect(shown).toContain('alt="The ferry in port"');
+	expect(shown).toMatch(/^Version 1, fetched .*: Wire news 3$/m);
 });
 
 test('what is read in one tab is read in the other', async ({ page, context }) => {

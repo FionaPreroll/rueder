@@ -381,6 +381,8 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 - [x] **5.42 Duplikate unter neuer Kennung.** Siehe [Abruf](architecture.md#abruf) und [Duplikate vom 2026-11-16](#duplikate-vom-2026-11-16).
 - [x] **5.43 Abruf achtet auf 429 und `Retry-After`.** Siehe [Abruf](architecture.md#abruf).
 - [x] **5.44 Bilder über ein CDN (optional).** Siehe [Bild-Proxy](architecture.md#bild-proxy) und „Images through a CDN“ in [deploy/README.md](../deploy/README.md#images-through-a-cdn).
+- [x] **5.45 Artikel-Infos.** Siehe [Artikelspeicher und Versionen](architecture.md#artikelspeicher-und-versionen).
+- [x] **5.46 Bilder und Links im Vergleich der Versionen.** Siehe [Artikelspeicher und Versionen](architecture.md#artikelspeicher-und-versionen).
 - [x] **E13 Inaktive Konten (A18, E13).** Siehe [Aufbewahrung](architecture.md#aufbewahrung).
 
 ### Nicht mit Fiona abgesprochen
@@ -397,6 +399,7 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **Captcha (5.28):** Die Höchstzahl ist 100.000 und eine Aufgabe gilt fünf Minuten; im Speicher stehen höchstens 100.000 benutzte. Die Seite rechnet in einem Strang, ohne Worker, und der Knopf sagt derweil „Dieser Browser wird geprüft …“. Zählt eine Lösung nicht, etwa nach einem Neustart des Servers mitten im Rechnen, bittet die Seite, es noch einmal zu versuchen, statt selbst eine neue Aufgabe zu holen. Das Wort der Ablehnung ist `captcha`, wie der Schalter.
 - **Lastmessung (5.30):** Die Lasttests sind Node ohne Pakete in `web/load/`, neben den Werkzeugen der Tests im Browser, statt ein zweites Programm in Rust. `rueder bench readers` schreibt die Tokens der Sitzungen in eine Datei, damit ein Lasttest nicht für jeden Leser ein Passwort hashen lässt, und lehnt jede Datenbank mit einem Konto ab, das keine erfundenen Daten gemacht haben.
 - **Duplikate (5.42):** Ein Eintrag ohne Titel wird nur an seiner Kennung erkannt, auch mit Datum.
+- **Artikel-Infos (5.45):** Der Feed steht mit dem Namen, den er sich gibt, nicht mit dem, den ihm der Leser gab, damit der Betreiber ihn wiederfindet. „Zuerst abgerufen“ ist bei importierten Artikeln, wann der alte rueder sie zuerst sah. Das Menü unter dem Artikel ist immer da, „Artikel melden …“ darin nur, wo der Server Meldungen nimmt.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später

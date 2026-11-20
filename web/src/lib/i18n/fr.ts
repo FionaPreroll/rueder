@@ -146,6 +146,7 @@ const fr: Messages = {
 		blockedFeed:
 			'L’administrateur de ce rueder a bloqué ce flux. Il n’est pas récupéré, et ses articles ne sont pas affichés.',
 		articleActions: 'Autres actions pour l’article',
+		articleInfo: 'Infos sur l’article …',
 		reportArticle: 'Signaler l’article …'
 	},
 
@@ -195,6 +196,32 @@ const fr: Messages = {
 		fetchAsHint:
 			'Pour tous ceux qui lisent le flux. En tant que navigateur pour les sites qui refusent rueder. Il est récupéré de nouveau tout de suite.',
 		notSwitched: 'Cela n’a pas fonctionné. Réessayez plus tard.',
+		copy: 'Copier',
+		copied: 'Copié',
+		loading: 'Chargement …',
+		unreachable: 'Le serveur n’a pas répondu. Réessayez plus tard.'
+	},
+	articleInfo: {
+		title: 'Infos sur l’article',
+		text: (title) =>
+			`Ce que ce rueder sait de « ${title} » et de ses versions. Si quelque chose vous semble faux, copiez ceci dans votre message à l’administrateur.`,
+		feed: 'Flux',
+		feedNumber: 'Numéro du flux',
+		number: 'Numéro dans le flux',
+		name: 'Titre',
+		id: 'Identifiant dans le flux',
+		link: 'Lien',
+		noLink: 'Aucun',
+		published: 'Publié',
+		fetched: 'Première récupération',
+		changed: 'Dernière modification',
+		never: 'Jamais',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'le titre', text: 'le texte', both: 'le titre et le texte' },
+		version: 'Version',
+		kept: 'Versions conservées',
+		textLabel: 'Texte',
+		textDropped: 'N’est plus conservé, car il est ancien',
 		copy: 'Copier',
 		copied: 'Copié',
 		loading: 'Chargement …',
@@ -427,7 +454,13 @@ const fr: Messages = {
 		legendAdded: 'ajouté',
 		legendRemoved: 'supprimé',
 		titleWas: 'Le titre était :',
-		same: 'Le texte de cette version est identique à celui de la version actuelle.'
+		same: 'Le texte de cette version est identique à celui de la version actuelle.',
+		sameWords: 'Les mots sont les mêmes ; des images ou des liens ont changé.',
+		markup:
+			'Les mots, les images et les liens sont les mêmes ; seule la mise en forme du texte a changé.',
+		pictures: 'Images modifiées',
+		noPicture: 'Aucune',
+		links: 'Liens modifiés'
 	},
 
 	account: {

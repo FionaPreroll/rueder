@@ -435,6 +435,7 @@ docker compose exec rueder rueder account remove mallory   # deletes the account
 docker compose exec rueder rueder feed block https://spam.example/feed.xml   # not fetched, hidden for all, its images gone; `unblock` undoes it
 docker compose exec rueder rueder feed show 130            # what is known of a feed a reader asks about, by number or address
 docker compose exec rueder rueder feed agent 130 browser   # fetch it as a browser for a site that turns rueder away; `rueder` undoes it
+docker compose exec rueder rueder article show 130 359     # what is known of article 359 of feed 130; `--versions` adds each version as the feed sent it
 docker compose exec rueder rueder reclean                  # after the cleaning's rules changed
 docker compose exec rueder rueder retention show           # how long what is kept, see below
 docker compose exec -T rueder rueder account export fiona > fiona.json            # move an account away

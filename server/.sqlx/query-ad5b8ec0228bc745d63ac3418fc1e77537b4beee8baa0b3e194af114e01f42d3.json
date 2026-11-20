@@ -1,0 +1,169 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.feed_id, f.title AS feed_title, a.seq, a.title, c.guid, a.url,\n                  a.published_at, a.arrived_at AS first_fetched_at, a.updated_at,\n                  a.updated_what AS \"updated_what: Changed\", a.version,\n                  (SELECT count(*) FROM article_versions v\n                   WHERE v.feed_id = a.feed_id AND v.seq = a.seq) AS \"versions_kept!\",\n                  c.text_dropped\n           FROM articles a\n           JOIN feeds f ON f.id = a.feed_id\n           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           WHERE a.feed_id = $2 AND a.seq = $3 AND ($1::integer IS NULL OR (\n               f.blocked_at IS NULL AND EXISTS (\n                   SELECT 1 FROM subscriptions s\n                   WHERE s.account_id = $1 AND s.feed_id = a.feed_id)))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed_id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "feed_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "feed_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "guid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "guid"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "first_fetched_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "arrived_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_what: Changed",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "updated_what"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "version",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "articles",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "versions_kept!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "text_dropped",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "article_content",
+            "name": "text_dropped"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "ad5b8ec0228bc745d63ac3418fc1e77537b4beee8baa0b3e194af114e01f42d3"
+}
