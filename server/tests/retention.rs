@@ -620,7 +620,7 @@ async fn months_of_versions_go_whole(db: PgPool) {
     let swept = retention::sweep(&db, None, now, None).await.unwrap();
     assert_eq!(swept.months, ["2026_03", "2026_04"]);
     for (seq, versions) in [(1, 0), (2, 0), (3, 1)] {
-        let kept = articles::versions(&db, account_id, feed_id, seq)
+        let kept = articles::versions(&db, Some(account_id), feed_id, seq)
             .await
             .unwrap();
         assert_eq!(kept.len(), versions, "versions of {seq}");

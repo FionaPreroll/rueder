@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT v.version, v.fetched_at, v.raw\n         FROM subscriptions s\n         JOIN feeds f ON f.id = s.feed_id AND f.blocked_at IS NULL\n         JOIN article_versions v ON v.feed_id = s.feed_id\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND v.seq = $3\n         ORDER BY v.version",
+  "query": "SELECT v.version, v.fetched_at, v.raw\n         FROM article_versions v\n         WHERE v.feed_id = $2 AND v.seq = $3 AND ($1::integer IS NULL OR EXISTS (\n             SELECT 1 FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n             WHERE s.account_id = $1 AND s.feed_id = $2 AND f.blocked_at IS NULL))\n         ORDER BY v.version",
   "describe": {
     "columns": [
       {
@@ -50,5 +50,5 @@
       false
     ]
   },
-  "hash": "6237537b7ac4a005b7b8a037fef2a67dfcf2ade7fab7a19ff501d67b5d30794d"
+  "hash": "38e9b309191202b2b3e1a2a7ae36cdbcd17eec82fd892b53910cbec322e24e9a"
 }

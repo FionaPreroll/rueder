@@ -71,10 +71,10 @@ export async function accountSettings(page: Page, tab: string) {
 
 /**
  * Changes what the made-up site serves: `publish` a new article, `revise` the
- * newest, `rename` its headline, `reset`.
+ * newest, `rename` its headline, give it another `picture`, `reset`.
  */
 export async function site(
-	change: 'publish' | 'revise' | 'rename' | 'reset',
+	change: 'publish' | 'revise' | 'rename' | 'picture' | 'reset',
 	feed = '',
 	text = ''
 ) {

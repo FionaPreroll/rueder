@@ -498,7 +498,9 @@ async fn a_changed_text_is_a_new_version_and_a_reflowed_one_is_not(db: PgPool) {
         .unwrap()
         .unwrap();
     assert_eq!(opened.html, "<p>The corrected text.</p>");
-    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    let versions = articles::versions(&db, Some(account), feed, 1)
+        .await
+        .unwrap();
     assert_eq!(versions.len(), 2);
 
     // The title counts too.
@@ -651,13 +653,17 @@ async fn a_tracking_token_that_changes_is_no_new_version(db: PgPool) {
     // Sent differently on every fetch, read the same: nothing happens.
     assert_eq!(store("second", "Text.").await, Stored::default());
     assert_eq!(store("third", "Text.").await, Stored::default());
-    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    let versions = articles::versions(&db, Some(account), feed, 1)
+        .await
+        .unwrap();
     assert_eq!(versions.len(), 1);
     assert!(versions[0].original.content.contains("utm_source=first"));
 
     // A real change is still one, and its version keeps the text as it came.
     assert_eq!(store("fourth", "Corrected text.").await.updated, 1);
-    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    let versions = articles::versions(&db, Some(account), feed, 1)
+        .await
+        .unwrap();
     assert_eq!(versions.len(), 2);
     assert!(versions[1].original.content.contains("utm_source=fourth"));
     let opened = articles::open(&db, account, feed, 1)
@@ -701,7 +707,7 @@ async fn other_rules_are_no_new_version(db: PgPool) {
          rel=\"nofollow noopener noreferrer\">more</a></p>"
     );
     assert_eq!(
-        articles::versions(&db, account, feed, 1)
+        articles::versions(&db, Some(account), feed, 1)
             .await
             .unwrap()
             .len(),
@@ -850,7 +856,9 @@ async fn an_article_under_a_new_id_is_not_new_again(db: PgPool) {
     assert_eq!(store(&[("d1", "", monday), ("d2", "", monday)]).await, 2);
 
     // The copies left the first one as it was: no new version.
-    let versions = articles::versions(&db, account, feed, 1).await.unwrap();
+    let versions = articles::versions(&db, Some(account), feed, 1)
+        .await
+        .unwrap();
     assert_eq!(versions.len(), 1);
     assert!(versions[0].original.content.contains("news.example/a1"));
 }

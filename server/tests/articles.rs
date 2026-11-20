@@ -136,7 +136,7 @@ async fn nobody_reads_feeds_of_others(db: PgPool) {
         None
     );
     assert!(
-        articles::versions(&db, stranger, feed_id, 1)
+        articles::versions(&db, Some(stranger), feed_id, 1)
             .await
             .unwrap()
             .is_empty()
@@ -224,7 +224,7 @@ async fn a_changed_article_gets_a_version_and_stays_read(db: PgPool) {
         .unwrap();
     assert_eq!(opened.html, "<p>Corrected text.</p>");
 
-    let versions = articles::versions(&db, account_id, feed_id, 2)
+    let versions = articles::versions(&db, Some(account_id), feed_id, 2)
         .await
         .unwrap();
     assert_eq!(versions.len(), 2);
@@ -315,7 +315,7 @@ async fn an_article_keeps_its_first_and_its_newest_versions(db: PgPool) {
     }
     tx.commit().await.unwrap();
 
-    let versions = articles::versions(&db, account_id, feed_id, 1)
+    let versions = articles::versions(&db, Some(account_id), feed_id, 1)
         .await
         .unwrap();
     let kept: Vec<_> = versions.iter().map(|v| v.version).collect();

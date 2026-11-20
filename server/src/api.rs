@@ -1,6 +1,6 @@
 //! The API a logged-in reader's interface lives on: the tree of folders and
-//! feeds, the lists of articles, an article and its versions, and what was
-//! read, and the search.
+//! feeds, the lists of articles, an article, what is known of it and its
+//! versions, and what was read, and the search.
 //!
 //! Every handler takes a [`Session`] and binds what it asks the database to
 //! that account: a feed nobody of this account subscribes to, or a folder of
@@ -26,7 +26,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     AppError, AppState,
-    articles::{self, ListItem, Marked, Opened, Page},
+    articles::{self, ArticleInfo, ListItem, Marked, Opened, Page},
     cleaning::{self, Base, Rules},
     filters,
     images::{Signer, Size},
@@ -45,6 +45,7 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<ListQuery>()
         .add::<List>()
         .add::<Article>()
+        .add::<ArticleInfo>()
         .add::<Versions>()
         .add::<StateChange>()
         .add::<Upto>()
@@ -63,6 +64,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(feed_articles))
         .routes(routes!(read_feed))
         .routes(routes!(article))
+        .routes(routes!(article_info))
         .routes(routes!(versions))
         .routes(routes!(set_state))
         .routes(routes!(folder_articles))
@@ -722,6 +724,26 @@ async fn article(
     }))
 }
 
+/// What the server knows of an article and its versions: its feed, its number
+/// and id there, its link, when it was published, fetched and changed, and how
+/// many versions are kept, for a message to support.
+#[utoipa::path(
+    get,
+    path = "/feeds/{feed_id}/articles/{seq}/info",
+    tag = "Reading",
+    params(("feed_id" = i32, Path, description = "The feed."), ("seq" = i32, Path, description = "The article's number in its feed."),),
+    security(("session" = [])),
+    responses((status = OK, body = ArticleInfo), crate::openapi::NeedsSession, (status = NOT_FOUND, description = "No such article in a feed of the account.")),
+)]
+async fn article_info(
+    State(state): State<AppState>,
+    session: Session,
+    Path((feed_id, seq)): Path<(i32, i32)>,
+) -> Result<Json<ArticleInfo>, AppError> {
+    let info = articles::info(&state.db, Some(session.account_id), feed_id, seq).await?;
+    Ok(Json(info.ok_or(AppError::NotFound)?))
+}
+
 /// One version of an article, cleaned for reading like the current one.
 #[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "ArticleVersion")]
@@ -763,7 +785,7 @@ async fn versions(
 ) -> Result<Json<Versions>, AppError> {
     // Cleans up to all its versions: one of only a few at a time (see `rate`).
     let _turn = state.rates.heavy(session.account_id).await?;
-    let kept = articles::versions(&state.db, session.account_id, feed_id, seq).await?;
+    let kept = articles::versions(&state.db, Some(session.account_id), feed_id, seq).await?;
     if kept.is_empty() {
         return Err(AppError::NotFound);
     }

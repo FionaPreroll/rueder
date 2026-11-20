@@ -9,6 +9,7 @@
 	import { m } from '#lib/i18n/index.ts';
 	import { nextLabelColor, type Article } from '#lib/model.ts';
 	import { ruleText } from '#lib/rule-text.ts';
+	import ArticleInfoDialog from './ArticleInfoDialog.svelte';
 	import Badge from './Badge.svelte';
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
@@ -50,6 +51,7 @@
 	let naming = $state(false);
 	let name = $state('');
 	let reporting = $state(false);
+	let informing = $state(false);
 
 	function addLabel(event: SubmitEvent) {
 		event.preventDefault();
@@ -264,20 +266,23 @@
 				<Badge kind="tag">{tag}</Badge>
 			{/each}
 		</span>
-		{#if reader.can.reportContent}
-			<Menu
-				class="inline-flex cursor-pointer items-center hover:text-ink"
-				align="end"
-				label={m.list.articleActions}
-			>
-				{#snippet button()}
-					<Icon name="more" />
-				{/snippet}
+		<Menu
+			class="inline-flex cursor-pointer items-center hover:text-ink"
+			align="end"
+			label={m.list.articleActions}
+		>
+			{#snippet button()}
+				<Icon name="more" />
+			{/snippet}
+			<button type="button" role="menuitem" class="menu-item" onclick={() => (informing = true)}>
+				{m.list.articleInfo}
+			</button>
+			{#if reader.can.reportContent}
 				<button type="button" role="menuitem" class="menu-item" onclick={() => (reporting = true)}>
 					{m.list.reportArticle}
 				</button>
-			</Menu>
-		{/if}
+			{/if}
+		</Menu>
 		{#if closable}
 			<button
 				type="button"
@@ -289,6 +294,9 @@
 			</button>
 		{/if}
 	</footer>
+	{#if informing}
+		<ArticleInfoDialog {reader} {article} onclose={() => (informing = false)} />
+	{/if}
 	{#if reporting}
 		<ReportDialog
 			{reader}

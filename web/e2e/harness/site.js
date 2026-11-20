@@ -52,8 +52,8 @@ const picture = png(320, 120, [200, 64, 46]);
 const START = Date.parse('2026-11-01T08:00:00Z');
 
 /** What an article says besides its own words: a picture, and what the cleaning has to take out. */
-const extras = (n) =>
-	`<p><img src="/pic.png" alt="The ferry"><img src="${SITE}/pixel.gif" width="1" height="1"></p>` +
+const extras = (n, picture = { src: '/pic.png', alt: 'The ferry' }) =>
+	`<p><img src="${picture.src}" alt="${picture.alt}"><img src="${SITE}/pixel.gif" width="1" height="1"></p>` +
 	`<script>window.tracked = true</script>` +
 	`<p><a href="${SITE}/harbour/more?utm_source=feed&id=${n}" onclick="track()">Read more</a></p>`;
 
@@ -120,14 +120,14 @@ function rss(path, feed) {
 	const items = [...feed.articles]
 		.reverse()
 		.map(
-			({ n, title, text }) => `<item>
+			({ n, title, text, picture }) => `<item>
 <title>${escape(title)}</title>
 <link>${SITE}/${path}/${n}</link>
 <guid>${path}-${n}</guid>
 <pubDate>${new Date(START + n * 3_600_000).toUTCString()}</pubDate>
 <author>desk@example.org (Ada Desk)</author>
 <category>${path}</category>
-<description>${escape(`<p>${text}</p>${extras(n)}`)}</description>
+<description>${escape(`<p>${text}</p>${extras(n, picture)}`)}</description>
 </item>`
 		)
 		.join('\n');
@@ -160,6 +160,10 @@ const controls = {
 	rename: (feed, _path, text) => {
 		const newest = feed.articles.at(-1);
 		newest.title = text || `${newest.title}, corrected`;
+	},
+	/** The newest article gets another picture; its words stay as they are. */
+	picture: (feed, _path, text) => {
+		feed.articles.at(-1).picture = { src: '/pic.png?in-port', alt: text || 'The ferry in port' };
 	}
 };
 

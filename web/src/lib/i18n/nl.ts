@@ -143,6 +143,7 @@ const nl: Messages = {
 		blockedFeed:
 			'De beheerder van deze rueder heeft deze feed geblokkeerd. Hij wordt niet opgehaald en de artikelen worden niet getoond.',
 		articleActions: 'Meer acties voor het artikel',
+		articleInfo: 'Artikelinformatie …',
 		reportArticle: 'Artikel melden …'
 	},
 
@@ -191,6 +192,32 @@ const nl: Messages = {
 		fetchAsHint:
 			'Voor iedereen die de feed leest. Als browser voor sites die rueder weigeren. Hij wordt meteen opnieuw opgehaald.',
 		notSwitched: 'Dat lukte niet. Probeer het later opnieuw.',
+		copy: 'Kopiëren',
+		copied: 'Gekopieerd',
+		loading: 'Laden …',
+		unreachable: 'De server antwoordde niet. Probeer het later opnieuw.'
+	},
+	articleInfo: {
+		title: 'Artikelinformatie',
+		text: (title) =>
+			`Wat deze rueder van ‘${title}’ en de versies ervan weet. Lijkt er iets niet te kloppen, kopieer dit dan in je bericht aan de beheerder.`,
+		feed: 'Feed',
+		feedNumber: 'Feednummer',
+		number: 'Nummer in de feed',
+		name: 'Titel',
+		id: 'Kenmerk in de feed',
+		link: 'Link',
+		noLink: 'Geen',
+		published: 'Gepubliceerd',
+		fetched: 'Eerst opgehaald',
+		changed: 'Laatst gewijzigd',
+		never: 'Nooit',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'de titel', text: 'de tekst', both: 'de titel en de tekst' },
+		version: 'Versie',
+		kept: 'Bewaarde versies',
+		textLabel: 'Tekst',
+		textDropped: 'Niet meer bewaard, omdat hij oud is',
 		copy: 'Kopiëren',
 		copied: 'Gekopieerd',
 		loading: 'Laden …',
@@ -423,7 +450,13 @@ const nl: Messages = {
 		legendAdded: 'toegevoegd',
 		legendRemoved: 'verwijderd',
 		titleWas: 'De titel was:',
-		same: 'De tekst van deze versie is gelijk aan de huidige.'
+		same: 'De tekst van deze versie is gelijk aan de huidige.',
+		sameWords: 'De woorden zijn gelijk; afbeeldingen of links zijn veranderd.',
+		markup:
+			'Woorden, afbeeldingen en links zijn gelijk; alleen de opbouw van de tekst is veranderd.',
+		pictures: 'Veranderde afbeeldingen',
+		noPicture: 'Geen',
+		links: 'Veranderde links'
 	},
 
 	account: {

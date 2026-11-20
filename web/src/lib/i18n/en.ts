@@ -142,6 +142,7 @@ const en = {
 		blockedFeed:
 			'The operator of this rueder blocked this feed. It is not fetched, and its articles are not shown.',
 		articleActions: 'More actions for the article',
+		articleInfo: 'Article info …',
 		reportArticle: 'Report the article …'
 	},
 
@@ -190,6 +191,33 @@ const en = {
 		fetchAsHint:
 			'For everyone who reads the feed. As a browser for sites that turn rueder away. It is fetched again at once.',
 		notSwitched: 'That did not work. Try again later.',
+		copy: 'Copy',
+		copied: 'Copied',
+		loading: 'Loading …',
+		unreachable: 'The server did not answer. Try again later.'
+	},
+
+	articleInfo: {
+		title: 'Article info',
+		text: (title: string) =>
+			`What this rueder knows of “${title}” and its versions. If something about it looks wrong, copy it into your message to the operator.`,
+		feed: 'Feed',
+		feedNumber: 'Feed number',
+		number: 'Number in the feed',
+		name: 'Title',
+		id: 'Id in the feed',
+		link: 'Link',
+		noLink: 'None',
+		published: 'Published',
+		fetched: 'First fetched',
+		changed: 'Last changed',
+		never: 'Never',
+		changedAt: (when: string, what: string) => `${when} (${what})`,
+		what: { title: 'the title', text: 'the text', both: 'the title and the text' },
+		version: 'Version',
+		kept: 'Versions kept',
+		textLabel: 'Text',
+		textDropped: 'No longer kept, as it is old',
 		copy: 'Copy',
 		copied: 'Copied',
 		loading: 'Loading …',
@@ -417,7 +445,12 @@ const en = {
 		legendAdded: 'added',
 		legendRemoved: 'removed',
 		titleWas: 'The title was:',
-		same: 'The text of this version is the same as the current one.'
+		same: 'The text of this version is the same as the current one.',
+		sameWords: 'The words are the same; pictures or links changed.',
+		markup: 'The words, pictures and links are the same; only how the text is laid out changed.',
+		pictures: 'Pictures that changed',
+		noPicture: 'None',
+		links: 'Links that changed'
 	},
 
 	/** The account itself: how it logs in, what it holds, and ending it. */

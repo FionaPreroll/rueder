@@ -136,6 +136,7 @@ const zhHant: Messages = {
 		closeArticle: '關閉文章',
 		blockedFeed: '這個 rueder 的營運者封鎖了這個訂閱源。它不會被擷取，文章也不會顯示。',
 		articleActions: '文章的其他動作',
+		articleInfo: '文章資訊⋯',
 		reportArticle: '檢舉文章⋯'
 	},
 
@@ -184,6 +185,32 @@ const zhHant: Messages = {
 		fetchAsHint:
 			'對所有閱讀這個訂閱源的人生效。網站拒絕 rueder 時，請選「瀏覽器」。會立即重新擷取。',
 		notSwitched: '沒有成功。請稍後再試。',
+		copy: '複製',
+		copied: '已複製',
+		loading: '正在載入⋯',
+		unreachable: '伺服器沒有回應。請稍後再試。'
+	},
+	articleInfo: {
+		title: '文章資訊',
+		text: (title) =>
+			`這個 rueder 對「${title}」及其版本所知的資訊。如果有不對的地方，請把這些複製到你給營運者的訊息裡。`,
+		feed: '訂閱源',
+		feedNumber: '訂閱源編號',
+		number: '在訂閱源中的編號',
+		name: '標題',
+		id: '在訂閱源中的識別碼',
+		link: '連結',
+		noLink: '無',
+		published: '發布',
+		fetched: '首次擷取',
+		changed: '上次變更',
+		never: '從未',
+		changedAt: (when, what) => `${when}（${what}）`,
+		what: { title: '標題', text: '內文', both: '標題和內文' },
+		version: '版本',
+		kept: '保留的版本',
+		textLabel: '內文',
+		textDropped: '因為時間較久，已不再保留',
 		copy: '複製',
 		copied: '已複製',
 		loading: '正在載入⋯',
@@ -394,7 +421,12 @@ const zhHant: Messages = {
 		legendAdded: '新增',
 		legendRemoved: '刪除',
 		titleWas: '原標題：',
-		same: '這個版本的內文與目前版本相同。'
+		same: '這個版本的內文與目前版本相同。',
+		sameWords: '文字相同；圖片或連結有變動。',
+		markup: '文字、圖片和連結都相同；只有內文的結構變了。',
+		pictures: '有變動的圖片',
+		noPicture: '無',
+		links: '有變動的連結'
 	},
 
 	account: {

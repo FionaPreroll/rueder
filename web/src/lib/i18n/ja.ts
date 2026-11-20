@@ -140,6 +140,7 @@ const ja: Messages = {
 		blockedFeed:
 			'この rueder の運営者がこのフィードをブロックしました。取得されず、記事も表示されません。',
 		articleActions: '記事のその他の操作',
+		articleInfo: '記事の情報…',
 		reportArticle: '記事を報告…'
 	},
 
@@ -188,6 +189,32 @@ const ja: Messages = {
 		fetchAsHint:
 			'このフィードを読む全員に適用されます。rueder を拒むサイトには「ブラウザ」を使います。すぐに取得し直します。',
 		notSwitched: 'うまくいきませんでした。しばらくしてからもう一度お試しください。',
+		copy: 'コピー',
+		copied: 'コピーしました',
+		loading: '読み込み中…',
+		unreachable: 'サーバが応答しませんでした。しばらくしてからもう一度お試しください。'
+	},
+	articleInfo: {
+		title: '記事の情報',
+		text: (title) =>
+			`この rueder が「${title}」とその版について知っていることです。おかしな点がある場合は、運営者へのメッセージにこれをコピーしてください。`,
+		feed: 'フィード',
+		feedNumber: 'フィードの番号',
+		number: 'フィード内の番号',
+		name: 'タイトル',
+		id: 'フィード内の ID',
+		link: 'リンク',
+		noLink: 'なし',
+		published: '公開',
+		fetched: '最初の取得',
+		changed: '最後の変更',
+		never: 'なし',
+		changedAt: (when, what) => `${when}（${what}）`,
+		what: { title: 'タイトル', text: '本文', both: 'タイトルと本文' },
+		version: '版',
+		kept: '保存されている版',
+		textLabel: '本文',
+		textDropped: '古いため、保存されていません',
 		copy: 'コピー',
 		copied: 'コピーしました',
 		loading: '読み込み中…',
@@ -412,7 +439,12 @@ const ja: Messages = {
 		legendAdded: '追加',
 		legendRemoved: '削除',
 		titleWas: '以前のタイトル:',
-		same: 'この版の本文は現在の版と同じです。'
+		same: 'この版の本文は現在の版と同じです。',
+		sameWords: '言葉は同じです。画像かリンクが変わりました。',
+		markup: '言葉、画像、リンクは同じです。本文の構成だけが変わりました。',
+		pictures: '変わった画像',
+		noPicture: 'なし',
+		links: '変わったリンク'
 	},
 
 	account: {

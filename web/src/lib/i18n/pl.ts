@@ -149,6 +149,7 @@ const pl: Messages = {
 		blockedFeed:
 			'Operator tego rueder zablokował ten kanał. Nie jest pobierany, a jego artykuły nie są pokazywane.',
 		articleActions: 'Więcej działań dla artykułu',
+		articleInfo: 'Informacje o artykule …',
 		reportArticle: 'Zgłoś artykuł …'
 	},
 
@@ -197,6 +198,32 @@ const pl: Messages = {
 		fetchAsHint:
 			'Dla wszystkich, którzy czytają ten kanał. Jako przeglądarka dla stron, które odrzucają rueder. Kanał zostanie od razu pobrany ponownie.',
 		notSwitched: 'Nie udało się. Spróbuj ponownie później.',
+		copy: 'Kopiuj',
+		copied: 'Skopiowano',
+		loading: 'Wczytywanie …',
+		unreachable: 'Serwer nie odpowiedział. Spróbuj ponownie później.'
+	},
+	articleInfo: {
+		title: 'Informacje o artykule',
+		text: (title) =>
+			`Co ten rueder wie o „${title}” i jego wersjach. Jeśli coś wygląda źle, skopiuj to do wiadomości do operatora.`,
+		feed: 'Kanał',
+		feedNumber: 'Numer kanału',
+		number: 'Numer w kanale',
+		name: 'Tytuł',
+		id: 'Identyfikator w kanale',
+		link: 'Link',
+		noLink: 'Brak',
+		published: 'Opublikowano',
+		fetched: 'Pierwsze pobranie',
+		changed: 'Ostatnia zmiana',
+		never: 'Nigdy',
+		changedAt: (when, what) => `${when} (${what})`,
+		what: { title: 'tytuł', text: 'tekst', both: 'tytuł i tekst' },
+		version: 'Wersja',
+		kept: 'Przechowywane wersje',
+		textLabel: 'Tekst',
+		textDropped: 'Już nieprzechowywany, bo jest stary',
 		copy: 'Kopiuj',
 		copied: 'Skopiowano',
 		loading: 'Wczytywanie …',
@@ -422,7 +449,12 @@ const pl: Messages = {
 		legendAdded: 'dodano',
 		legendRemoved: 'usunięto',
 		titleWas: 'Tytuł brzmiał:',
-		same: 'Tekst tej wersji jest taki sam jak obecny.'
+		same: 'Tekst tej wersji jest taki sam jak obecny.',
+		sameWords: 'Słowa są te same; zmieniły się obrazy lub linki.',
+		markup: 'Słowa, obrazy i linki są te same; zmienił się tylko układ tekstu.',
+		pictures: 'Zmienione obrazy',
+		noPicture: 'Brak',
+		links: 'Zmienione linki'
 	},
 
 	account: {

@@ -1011,6 +1011,55 @@ export type Enclosure = {
 };
 
 /**
+ * What the server knows of an article and its versions, for a reader to pass
+ * on to whoever helps with it.
+ *
+ * `GET /api/feeds/{id}/articles/{seq}/info` answers with it; `rueder article
+ * show` prints it.
+ */
+export type ArticleInfo = {
+	feed_id: number,
+	/**
+	 * The feed's own name.
+	 */
+	feed_title: string,
+	seq: number,
+	title: string,
+	/**
+	 * What the fetch knows the article by: its id in the feed (GUID), else
+	 * its link.
+	 */
+	guid: string,
+	url: string | null,
+	published_at: string,
+	/**
+	 * When rueder first had it: when it was fetched, or for an import when the
+	 * old rueder fetched it.
+	 */
+	first_fetched_at: string,
+	/**
+	 * When the current version replaced the one before, if it ever did.
+	 */
+	updated_at: string | null,
+	/**
+	 * What was different then; null for a change from before rueder noted it.
+	 */
+	updated_what: Changed | null,
+	/**
+	 * The number of the current version.
+	 */
+	version: number,
+	/**
+	 * How many versions are kept, the current one with them.
+	 */
+	versions_kept: number,
+	/**
+	 * The retention took its text.
+	 */
+	text_dropped: boolean,
+};
+
+/**
  * What `GET /api/feeds/{id}/articles/{seq}/versions` answers: the versions of
  * the article that are kept, oldest first.
  */

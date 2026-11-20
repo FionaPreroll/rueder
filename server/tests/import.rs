@@ -496,7 +496,7 @@ async fn brings_over_feeds_articles_accounts_folders_and_subscriptions(db: PgPoo
     assert_eq!(opened.image_title.as_deref(), Some("Picture of a-1"));
 
     // What the old rueder has is the article's first version.
-    let versions = articles::versions(&db, alice, a, 1).await.unwrap();
+    let versions = articles::versions(&db, Some(alice), a, 1).await.unwrap();
     assert_eq!(versions.len(), 1);
     assert_eq!(versions[0].version, 1);
     assert_eq!(versions[0].fetched_at, datetime!(2022-01-01 01:00 UTC));
@@ -1242,7 +1242,7 @@ async fn texts_are_cleaned_on_the_way_in(db: PgPool) {
         Some("https://blog.example/a-1.jpg")
     );
     // The version keeps the text as the old rueder had it.
-    let versions = articles::versions(&db, alice, feed, 1).await.unwrap();
+    let versions = articles::versions(&db, Some(alice), feed, 1).await.unwrap();
     assert!(
         versions[0]
             .original

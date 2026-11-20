@@ -182,6 +182,7 @@ const ar: Messages = {
 		closeArticle: 'إغلاق المقالة',
 		blockedFeed: 'حظر مشغّل rueder هذا هذه الخلاصة. لا تُجلب، ولا تُعرض مقالاتها.',
 		articleActions: 'إجراءات أخرى للمقالة',
+		articleInfo: 'معلومات المقالة…',
 		reportArticle: 'الإبلاغ عن المقالة…'
 	},
 
@@ -230,6 +231,32 @@ const ar: Messages = {
 		fetchAsHint:
 			'لكل من يقرأ الخلاصة. صفة المتصفح للمواقع التي ترفض rueder. تُجلب الخلاصة من جديد فورًا.',
 		notSwitched: 'لم ينجح ذلك. يُرجى المحاولة لاحقًا.',
+		copy: 'نسخ',
+		copied: 'تم النسخ',
+		loading: 'جارٍ التحميل…',
+		unreachable: 'لم يستجب الخادم. يُرجى المحاولة لاحقًا.'
+	},
+	articleInfo: {
+		title: 'معلومات المقالة',
+		text: (title) =>
+			`ما يعرفه rueder هذا عن «${iso(title)}» وعن نسخها. إن بدا شيء غير صحيح، يمكن نسخ هذه المعلومات في رسالة إلى المشغّل.`,
+		feed: 'الخلاصة',
+		feedNumber: 'رقم الخلاصة',
+		number: 'الرقم في الخلاصة',
+		name: 'العنوان',
+		id: 'المعرّف في الخلاصة',
+		link: 'الرابط',
+		noLink: 'لا يوجد',
+		published: 'النشر',
+		fetched: 'أول جلب',
+		changed: 'آخر تغيير',
+		never: 'أبدًا',
+		changedAt: (when, what) => `${iso(when)} (${what})`,
+		what: { title: 'العنوان', text: 'النص', both: 'العنوان والنص' },
+		version: 'النسخة',
+		kept: 'النسخ المحفوظة',
+		textLabel: 'النص',
+		textDropped: 'لم يعد محفوظًا لقِدمه',
 		copy: 'نسخ',
 		copied: 'تم النسخ',
 		loading: 'جارٍ التحميل…',
@@ -453,7 +480,12 @@ const ar: Messages = {
 		legendAdded: 'مضاف',
 		legendRemoved: 'محذوف',
 		titleWas: 'كان العنوان:',
-		same: 'نص هذه النسخة مطابق للنسخة الحالية.'
+		same: 'نص هذه النسخة مطابق للنسخة الحالية.',
+		sameWords: 'الكلمات نفسها؛ تغيّرت صور أو روابط.',
+		markup: 'الكلمات والصور والروابط نفسها؛ تغيّر ترتيب النص فقط.',
+		pictures: 'الصور التي تغيّرت',
+		noPicture: 'لا توجد',
+		links: 'الروابط التي تغيّرت'
 	},
 
 	account: {

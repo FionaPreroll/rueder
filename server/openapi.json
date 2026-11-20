@@ -900,6 +900,60 @@
         ]
       }
     },
+    "/api/feeds/{feed_id}/articles/{seq}/info": {
+      "get": {
+        "tags": [
+          "Reading"
+        ],
+        "summary": "What the server knows of an article and its versions: its feed, its number and id there, its link, when it was published, fetched and changed, and how many versions are kept, for a message to support.",
+        "operationId": "article_info",
+        "parameters": [
+          {
+            "name": "feed_id",
+            "in": "path",
+            "description": "The feed.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "seq",
+            "in": "path",
+            "description": "The article's number in its feed.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          },
+          "404": {
+            "description": "No such article in a feed of the account."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/feeds/{feed_id}/articles/{seq}/versions": {
       "get": {
         "tags": [
@@ -5809,6 +5863,88 @@
           }
         ],
         "description": "An article for reading, with the labels the reader gave it.\n\n`GET /api/feeds/{id}/articles/{seq}` answers with it."
+      },
+      "ArticleInfo": {
+        "type": "object",
+        "description": "What the server knows of an article and its versions, for a reader to pass\non to whoever helps with it.\n\n`GET /api/feeds/{id}/articles/{seq}/info` answers with it; `rueder article\nshow` prints it.",
+        "required": [
+          "feed_id",
+          "feed_title",
+          "seq",
+          "title",
+          "guid",
+          "published_at",
+          "first_fetched_at",
+          "version",
+          "versions_kept",
+          "text_dropped"
+        ],
+        "properties": {
+          "feed_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "feed_title": {
+            "type": "string",
+            "description": "The feed's own name."
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "guid": {
+            "type": "string",
+            "description": "What the fetch knows the article by: its id in the feed (GUID), else\nits link."
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_at": {
+            "type": "string"
+          },
+          "first_fetched_at": {
+            "type": "string",
+            "description": "When rueder first had it: when it was fetched, or for an import when the\nold rueder fetched it."
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the current version replaced the one before, if it ever did."
+          },
+          "updated_what": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Changed",
+                "description": "What was different then; null for a change from before rueder noted it."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The number of the current version."
+          },
+          "versions_kept": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many versions are kept, the current one with them."
+          },
+          "text_dropped": {
+            "type": "boolean",
+            "description": "The retention took its text."
+          }
+        }
       },
       "ArticleRef": {
         "type": "object",

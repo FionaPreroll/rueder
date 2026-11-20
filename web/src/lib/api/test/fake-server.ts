@@ -15,7 +15,7 @@ import type {
 	ApiVersion
 } from '#lib/api/client.ts';
 import type { EventStream } from '#lib/api/client.ts';
-import type { CaptchaChallenge, FeedInfo, ServerEvent } from '#lib/api/types.ts';
+import type { ArticleInfo, CaptchaChallenge, FeedInfo, ServerEvent } from '#lib/api/types.ts';
 import { demoStatus } from '#lib/demo/status.ts';
 import { compile, ruleMatches } from '#lib/filters.ts';
 
@@ -689,7 +689,7 @@ export class FakeServer {
 			return json({ articles: this.list(scope, feeds, query) });
 		}
 
-		const one = /^\/feeds\/(\d+)\/articles\/(\d+)(\/versions|\/state)?$/.exec(path);
+		const one = /^\/feeds\/(\d+)\/articles\/(\d+)(\/versions|\/state|\/info)?$/.exec(path);
 		if (one) {
 			const article = this.article(Number(one[1]), Number(one[2]));
 			if (!article) return refused(404);
@@ -710,6 +710,7 @@ export class FakeServer {
 				});
 			}
 			if (method === 'GET' && one[3] === '/versions') return json({ versions: article.versions });
+			if (method === 'GET' && one[3] === '/info') return json(this.articleInfo(article));
 			if (method === 'PUT' && one[3] === '/state') {
 				this.stateChanges.push({ seq: article.seq, ...data });
 				if (typeof data.read === 'boolean') article.read = data.read;
@@ -1208,6 +1209,25 @@ export class FakeServer {
 			next_fetch_at: '2026-11-10T15:00:00Z',
 			last_seq: this.articles.filter((a) => a.feed_id === feed.id).length,
 			blocked: feed.blocked ?? false
+		};
+	}
+
+	/** What `GET /feeds/{id}/articles/{seq}/info` says: the article arrived when it was published. */
+	private articleInfo(article: FakeArticle): ArticleInfo {
+		return {
+			feed_id: article.feed_id,
+			feed_title: this.feeds.find((feed) => feed.id === article.feed_id)?.title ?? '',
+			seq: article.seq,
+			title: article.title,
+			guid: `guid-${article.id}`,
+			url: article.url,
+			published_at: article.published_at,
+			first_fetched_at: article.published_at,
+			updated_at: article.updated_at,
+			updated_what: article.updated_what,
+			version: article.version,
+			versions_kept: Math.max(article.versions.length, 1),
+			text_dropped: article.text_dropped
 		};
 	}
 

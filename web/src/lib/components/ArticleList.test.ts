@@ -435,7 +435,9 @@ describe('an open article', () => {
 		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
 		const article = reader.list[0]!;
 		const { unmount } = render(ArticleBody, { reader, article, now, onversions: vi.fn() });
-		expect(screen.queryByRole('button', { name: 'More actions for the article' })).toBeNull();
+		await userEvent.click(screen.getByRole('button', { name: 'More actions for the article' }));
+		expect(screen.getByRole('menuitem', { name: 'Article info …' })).toBeInTheDocument();
+		expect(screen.queryByRole('menuitem', { name: 'Report the article …' })).toBeNull();
 		unmount();
 
 		Object.assign(reader.can, { reportContent: true });
@@ -451,6 +453,19 @@ describe('an open article', () => {
 			'spam',
 			'Ads'
 		);
+	});
+
+	it('tells from its menu what is known of it', async () => {
+		const reader = new DemoReader(() => now);
+		reader.show({ kind: 'feed', id: 'feed-tagesbote' });
+		const article = reader.list[0]!;
+		render(ArticleBody, { reader, article, now, onversions: vi.fn() });
+		await userEvent.click(screen.getByRole('button', { name: 'More actions for the article' }));
+		await userEvent.click(screen.getByRole('menuitem', { name: 'Article info …' }));
+		const dialog = screen.getByRole('dialog', { name: 'Article info' });
+		expect(await within(dialog).findAllByText(article.link)).not.toEqual([]);
+		await userEvent.click(within(dialog).getAllByRole('button', { name: 'Close' })[0]!);
+		expect(screen.queryByRole('dialog')).toBeNull();
 	});
 
 	it('offers labels when the account has none yet, and makes the first on the spot', async () => {
