@@ -32,7 +32,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 use ts_rs::TS;
@@ -67,6 +67,12 @@ pub const MAX_FILE: usize = 32 * 1024 * 1024;
 pub const MAX_ARTICLES: usize = 50_000;
 /// The longest id of an article in its feed, in bytes.
 const MAX_GUID: usize = 2000;
+/// How many folders and feeds the tree of a file can list.
+const MAX_NODES: usize = (tree::MAX_FOLDERS + tree::MAX_FEEDS) as usize;
+/// A path never names more folders than an account can have.
+const MAX_PATH: usize = tree::MAX_FOLDERS as usize;
+const MAX_LABELS: usize = labels::MAX_LABELS as usize;
+const MAX_RULES: usize = filters::MAX_RULES as usize;
 
 /// The types this module sends and reads, for the frontend.
 pub(crate) fn types(types: &mut crate::typescript::Types) {
@@ -94,24 +100,24 @@ pub struct Export {
     #[schema(value_type = String)]
     pub exported_at: OffsetDateTime,
     /// The settings of the interface, as `GET /api/settings` gives them.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "small_settings")]
     #[ts(type = "Record<string, unknown>")]
     #[schema(value_type = Object)]
     pub settings: serde_json::Value,
     /// Folders and feeds from the top down, in their order: a folder before
     /// what is in it.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_NODES>")]
     pub tree: Vec<Node>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_LABELS>")]
     pub labels: Vec<ExportedLabel>,
     /// The filter rules in their order.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_RULES>")]
     pub rules: Vec<ExportedRule>,
 }
 
 /// A folder or a feed of the tree.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
-#[serde(tag = "kind", rename_all = "lowercase")]
+#[serde(tag = "kind", rename_all = "lowercase", try_from = "FlatNode")]
 #[ts(rename = "ExportedNode")]
 #[schema(as = ExportedNode)]
 pub enum Node {
@@ -121,6 +127,65 @@ pub enum Node {
         path: Vec<String>,
     },
     Feed(Box<ExportedFeed>),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Kind {
+    All,
+    Folder,
+    Feed,
+}
+
+/// A node as it is read. Serde reads a tagged enum by holding all of it in
+/// between, in many times the room of its text, before the lists in it are
+/// held to their limits; this is read straight. What a node lacks is left
+/// out as `plan` does with what is wrong.
+#[derive(Deserialize)]
+struct FlatNode {
+    kind: Kind,
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_PATH>")]
+    path: Vec<String>,
+    #[serde(default)]
+    id: i32,
+    #[serde(default)]
+    url: String,
+    site_url: Option<String>,
+    #[serde(default)]
+    title: String,
+    own_title: Option<String>,
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_PATH>")]
+    folder: Vec<String>,
+    #[serde(default = "rueder")]
+    agent: Agent,
+    #[serde(default)]
+    last_seq: i32,
+    read_upto: Option<ArticleRef>,
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_ARTICLES>")]
+    articles: Vec<ExportedArticle>,
+}
+
+impl TryFrom<FlatNode> for Node {
+    type Error = &'static str;
+    fn try_from(node: FlatNode) -> Result<Node, Self::Error> {
+        let feed = match node.kind {
+            Kind::All => return Err("a node is a folder or a feed"),
+            Kind::Folder => return Ok(Node::Folder { path: node.path }),
+            Kind::Feed => ExportedFeed {
+                id: node.id,
+                url: node.url,
+                site_url: node.site_url,
+                title: node.title,
+                own_title: node.own_title,
+                folder: node.folder,
+                agent: node.agent,
+                last_seq: node.last_seq,
+                read_upto: node.read_upto,
+                articles: node.articles,
+            },
+        };
+        Ok(Node::Feed(Box::new(feed)))
+    }
 }
 
 /// Who a feed is fetched as.
@@ -134,7 +199,7 @@ pub enum Agent {
 }
 
 /// A subscription, with what the reader did in it.
-#[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
+#[derive(Debug, Clone, Serialize, TS, ToSchema)]
 pub struct ExportedFeed {
     /// The feed's number on the server the file comes from.
     pub id: i32,
@@ -202,7 +267,7 @@ pub struct ExportedArticle {
     #[serde(default)]
     pub starred: bool,
     /// The names of its labels.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_LABELS>")]
     pub labels: Vec<String>,
 }
 
@@ -225,11 +290,72 @@ pub struct ExportedRule {
 
 /// Where a rule holds: a folder by its path, a feed by its address.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, ToSchema)]
-#[serde(tag = "kind", rename_all = "lowercase")]
+#[serde(tag = "kind", rename_all = "lowercase", from = "FlatScope")]
 pub enum ExportedScope {
     All,
     Folder { path: Vec<String> },
     Feed { url: String },
+}
+
+/// A scope as it is read, straight as a [`FlatNode`].
+#[derive(Deserialize)]
+struct FlatScope {
+    kind: Kind,
+    #[serde(default, deserialize_with = "at_most::<_, _, MAX_PATH>")]
+    path: Vec<String>,
+    #[serde(default)]
+    url: String,
+}
+
+impl From<FlatScope> for ExportedScope {
+    fn from(scope: FlatScope) -> ExportedScope {
+        match scope.kind {
+            Kind::All => ExportedScope::All,
+            Kind::Folder => ExportedScope::Folder { path: scope.path },
+            Kind::Feed => ExportedScope::Feed { url: scope.url },
+        }
+    }
+}
+
+/// A list of at most `MAX` entries. A file is read in full before it is
+/// checked, so a list is refused while it is read: a long one of small
+/// entries would take many times the room of the file.
+fn at_most<'de, D, T, const MAX: usize>(from: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct List<T, const MAX: usize>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>, const MAX: usize> de::Visitor<'de> for List<T, MAX> {
+        type Value = Vec<T>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "at most {MAX} entries")
+        }
+        fn visit_seq<S: de::SeqAccess<'de>>(self, mut seq: S) -> Result<Vec<T>, S::Error> {
+            let mut list = Vec::new();
+            while let Some(entry) = seq.next_element()? {
+                if list.len() == MAX {
+                    return Err(de::Error::invalid_length(MAX + 1, &self));
+                }
+                list.push(entry);
+            }
+            list.shrink_to_fit();
+            Ok(list)
+        }
+    }
+    from.deserialize_seq(List::<T, MAX>(std::marker::PhantomData))
+}
+
+/// The settings, refused before they are read if they are far too large: as
+/// a `Value` they take many times the room of their text. Written out with
+/// room, as the export does, they take a few times what they take compact;
+/// `plan` holds them to [`tree::MAX_SETTINGS`] compact.
+fn small_settings<'de, D: Deserializer<'de>>(from: D) -> Result<serde_json::Value, D::Error> {
+    let text = Box::<serde_json::value::RawValue>::deserialize(from)?;
+    if text.get().len() > 4 * tree::MAX_SETTINGS {
+        return Err(de::Error::custom("the settings are too large"));
+    }
+    serde_json::from_str(text.get()).map_err(de::Error::custom)
 }
 
 /// What an import did. `POST /api/import` answers with it.
@@ -627,12 +753,6 @@ fn plan(file: Export, rules: &Rules) -> Result<Plan, AppError> {
         }
         _ => return Err(bad("settings are an object")),
     };
-    if file.labels.len() as i64 > labels::MAX_LABELS {
-        return Err(bad("this file has too many labels"));
-    }
-    if file.rules.len() as i64 > filters::MAX_RULES {
-        return Err(bad("this file has too many rules"));
-    }
     let mut skipped = 0;
     let mut outline = Outline::default();
     let mut feeds = Vec::new();
@@ -751,7 +871,7 @@ async fn import_file(
     let read = tokio::task::spawn_blocking(move || serde_json::from_slice::<Export>(&body));
     let file = read
         .await?
-        .map_err(|_| bad("this is not a file of a rueder account"))?;
+        .map_err(|error| bad(&format!("this is not a file of a rueder account: {error}")))?;
     let rules = match &state.rules {
         Some(rules) => rules.clone(),
         None => std::sync::Arc::new(Rules::built_in()?),
