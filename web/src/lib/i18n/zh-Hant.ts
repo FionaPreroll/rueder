@@ -440,6 +440,7 @@ const zhHant: Messages = {
 		markup: '文字、圖片和連結都相同；只有內文的結構變了。',
 		pictures: '有變動的圖片',
 		noPicture: '無',
+		address: '圖片位址',
 		links: '有變動的連結'
 	},
 

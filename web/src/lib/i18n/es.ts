@@ -467,6 +467,7 @@ const es: Messages = {
 			'Las palabras, las imágenes y los enlaces son los mismos; solo cambió cómo está organizado el texto.',
 		pictures: 'Imágenes que cambiaron',
 		noPicture: 'Ninguna',
+		address: 'Dirección de la imagen',
 		links: 'Enlaces que cambiaron'
 	},
 

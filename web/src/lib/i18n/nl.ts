@@ -470,6 +470,7 @@ const nl: Messages = {
 			'Woorden, afbeeldingen en links zijn gelijk; alleen de opbouw van de tekst is veranderd.',
 		pictures: 'Veranderde afbeeldingen',
 		noPicture: 'Geen',
+		address: 'Adres van de afbeelding',
 		links: 'Veranderde links'
 	},
 

@@ -3,7 +3,7 @@
 	// words put in, between the picked earlier version and the current one, and the
 	// pictures and links, which the words do not show.
 	import { untrack } from 'svelte';
-	import { diffMedia, diffWords } from '#lib/diff.ts';
+	import { diffMedia, diffWords, splitOff } from '#lib/diff.ts';
 	import { textOf } from '#lib/filters.ts';
 	import { formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -36,12 +36,23 @@
 	const links = $derived(
 		media && media.links.removed.length + media.links.added.length > 0 ? media.links : null
 	);
-	// The pictures only the earlier version has beside those only the current one has.
+	// The pictures only the earlier version has beside those only the current one has,
+	// each against the one in its place on the other side, for what changed in its address.
 	const sides = $derived(
 		pictures && earlier
 			? [
-					{ label: m.versions.version(earlier.rev), shown: pictures.removed, tone: 'bg-removed' },
-					{ label: m.versions.current, shown: pictures.added, tone: 'bg-added' }
+					{
+						label: m.versions.version(earlier.rev),
+						shown: pictures.removed,
+						others: pictures.added,
+						tone: 'bg-removed'
+					},
+					{
+						label: m.versions.current,
+						shown: pictures.added,
+						others: pictures.removed,
+						tone: 'bg-added'
+					}
 				]
 			: []
 	);
@@ -104,13 +115,24 @@
 					<div class="min-w-0">
 						<p class="text-soft">{side.label}</p>
 						{#each side.shown as picture, index (index)}
+							{@const [same, own, end] = splitOff(
+								picture.source,
+								side.others[index]?.source ?? picture.source
+							)}
 							<figure class={['mt-1 rounded p-1', side.tone]}>
 								<img class="max-h-48 w-full object-contain" src={picture.url} alt={picture.title} />
-								{#if picture.title}
-									<figcaption class="mt-1 break-words text-ink" dir="auto">
-										{picture.title}
-									</figcaption>
-								{/if}
+								<figcaption class="text-ink">
+									{#if picture.title}
+										<p class="mt-1 break-words" dir="auto">{picture.title}</p>
+									{/if}
+									<!-- Where it came from, with what differs from the picture in its place on the other side marked. -->
+									<p class="mt-1 font-mono wrap-anywhere" dir="ltr">
+										<span class="sr-only">{m.versions.address}</span>
+										{same}{#if own}<mark class="rounded bg-paper px-0.5 font-semibold text-ink"
+												>{own}</mark
+											>{/if}{end}
+									</p>
+								</figcaption>
 							</figure>
 						{:else}
 							<p class="mt-1 text-soft">{m.versions.noPicture}</p>

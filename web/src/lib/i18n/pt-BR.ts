@@ -468,6 +468,7 @@ const ptBR: Messages = {
 		markup: 'As palavras, as imagens e os links são os mesmos; só mudou a organização do texto.',
 		pictures: 'Imagens que mudaram',
 		noPicture: 'Nenhuma',
+		address: 'Endereço da imagem',
 		links: 'Links que mudaram'
 	},
 

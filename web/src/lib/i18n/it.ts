@@ -471,6 +471,7 @@ const it: Messages = {
 		markup: 'Parole, immagini e link sono gli stessi; è cambiata solo la struttura del testo.',
 		pictures: 'Immagini cambiate',
 		noPicture: 'Nessuna',
+		address: 'Indirizzo dell’immagine',
 		links: 'Link cambiati'
 	},
 

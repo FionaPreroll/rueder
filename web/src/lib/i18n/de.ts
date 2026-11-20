@@ -465,6 +465,7 @@ const de: Messages = {
 		markup: 'Wörter, Bilder und Links sind dieselben; nur der Aufbau des Textes hat sich geändert.',
 		pictures: 'Geänderte Bilder',
 		noPicture: 'Keines',
+		address: 'Adresse des Bildes',
 		links: 'Geänderte Links'
 	},
 

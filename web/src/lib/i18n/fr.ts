@@ -474,6 +474,7 @@ const fr: Messages = {
 			'Les mots, les images et les liens sont les mêmes ; seule la mise en forme du texte a changé.',
 		pictures: 'Images modifiées',
 		noPicture: 'Aucune',
+		address: 'Adresse de l’image',
 		links: 'Liens modifiés'
 	},
 

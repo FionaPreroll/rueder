@@ -48,9 +48,14 @@ export function diffWords(before: string, after: string): DiffPart[] {
 	return parts;
 }
 
+/** A picture of a text, with the address it was fetched from. */
+export interface SourcedPicture extends Picture {
+	source: string;
+}
+
 /** The pictures and links one version has and the other lacks. */
 export interface MediaChanges {
-	pictures: { removed: Picture[]; added: Picture[] };
+	pictures: { removed: SourcedPicture[]; added: SourcedPicture[] };
 	links: { removed: string[]; added: string[] };
 }
 
@@ -65,14 +70,55 @@ function difference<T>(before: T[], after: T[], key: (item: T) => string) {
 	return { removed, added };
 }
 
-/** The pictures, with their texts, and the link addresses of a cleaned text. */
+/**
+ * The address a picture was fetched from. The image proxy's address holds it in
+ * Base64 after the signature and the size (`/img/<signature>/<size>/<source>`,
+ * `server/src/images.rs`); any other address is its own.
+ */
+export function sourceOf(url: string) {
+	const encoded = /^\/img\/[\w-]+\/\w+\/([\w-]+)$/.exec(url)?.[1];
+	if (!encoded) return url;
+	try {
+		const bytes = atob(encoded.replaceAll('-', '+').replaceAll('_', '/'));
+		const decoder = new TextDecoder('utf-8', { fatal: true });
+		return decoder.decode(Uint8Array.from(bytes, (byte) => byte.charCodeAt(0)));
+	} catch {
+		return url;
+	}
+}
+
+/** Letters and digits: a changed part of an address is widened to whole words of them. */
+const wordy = /[\p{L}\p{N}]/u;
+
+/**
+ * `text` in three: what it and `other` begin with, what is its own, and what
+ * they end with. The own part is widened to whole words, so that a picture's
+ * `-118` that became `-122` shows as `118`, not `18`.
+ */
+export function splitOff(text: string, other: string): [string, string, string] {
+	let start = 0;
+	while (start < text.length && text[start] === other[start]) start++;
+	let end = text.length;
+	let otherEnd = other.length;
+	while (end > start && otherEnd > start && text[end - 1] === other[otherEnd - 1]) {
+		end--;
+		otherEnd--;
+	}
+	const inWord = (at: number) =>
+		at > 0 && at < text.length && wordy.test(text[at - 1]) && wordy.test(text[at]);
+	while (inWord(start)) start--;
+	while (inWord(end)) end++;
+	return [text.slice(0, start), text.slice(start, end), text.slice(end)];
+}
+
+/** The pictures, with their texts and sources, and the link addresses of a cleaned text. */
 function media(html: string) {
 	const body = new DOMParser().parseFromString(html, 'text/html').body;
 	return {
-		pictures: [...body.querySelectorAll('img')].map((img) => ({
-			url: img.getAttribute('src') ?? '',
-			title: img.getAttribute('alt') ?? ''
-		})),
+		pictures: [...body.querySelectorAll('img')].map((img) => {
+			const url = img.getAttribute('src') ?? '';
+			return { url, title: img.getAttribute('alt') ?? '', source: sourceOf(url) };
+		}),
 		links: [...body.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
 	};
 }
