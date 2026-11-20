@@ -67,5 +67,6 @@ export const ACCOUNTS = [
 	'addressee',
 	'forgetful',
 	'support',
-	'helper'
+	'helper',
+	'tags'
 ];

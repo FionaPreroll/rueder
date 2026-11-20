@@ -271,7 +271,8 @@
 					{m.list.openOriginal}
 				</a>
 			{/if}
-			<span class="ms-auto flex gap-1">
+			<!-- A long list of tags wraps in its own lines rather than widening the article. -->
+			<span class="ms-auto flex min-w-0 flex-wrap gap-1">
 				{#each article.tags as tag (tag)}
 					<Badge kind="tag">{tag}</Badge>
 				{/each}

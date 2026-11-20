@@ -23,7 +23,7 @@
 	} = $props();
 
 	const look = $derived([
-		'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs',
+		'inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs wrap-anywhere',
 		kind === 'tag' ? 'bg-panel text-soft' : 'border border-line',
 		kind === 'label' && 'text-ink',
 		kind === 'hint' && 'text-soft',
