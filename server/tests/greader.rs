@@ -14,7 +14,7 @@ use http_body_util::BodyExt;
 use rueder::{
     AppState, http_client,
     http_client::HttpClient,
-    images::{Config, ImageProxy},
+    images::{Config, ImageProxy, Size},
     rate::{Limits, Rate, Rates},
 };
 use serde_json::{Value, json};
@@ -879,4 +879,48 @@ async fn images_go_through_the_proxy_for_the_app_password(db: PgPool) {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (status, _, _) = ask(&state, Method::GET, path, None, "").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn where_images_are_public_every_app_gets_the_same_addresses(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 1).await;
+    sqlx::query(
+        "UPDATE article_content SET html = '<p><img src=\"https://blog.example/a.png\"></p>'",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE feeds SET icon_url = 'https://blog.example/icon.png'")
+        .execute(&db)
+        .await
+        .unwrap();
+    let state = AppState {
+        images_public: true,
+        ..with_images(&db)
+    };
+    let token = logged_in(&state, ada, "ada").await;
+    let signer = state.images.as_ref().unwrap().signer();
+    let shared = |size, url| {
+        let address = signer.app_address(None, size, url).unwrap();
+        format!("https://{HOST}{address}")
+    };
+
+    // Not made for this app password, so that a cache in front of rueder
+    // keeps each image once for all apps.
+    let page = get(
+        &state,
+        &format!("/reader/api/0/stream/contents/feed/{feed}"),
+        &token,
+    )
+    .await;
+    let html = page["items"][0]["summary"]["content"].as_str().unwrap();
+    assert!(
+        html.contains(&shared(Size::Image, "https://blog.example/a.png")),
+        "{html}"
+    );
+    let list = get(&state, "/reader/api/0/subscription/list", &token).await;
+    assert_eq!(
+        list["subscriptions"][0]["iconUrl"],
+        shared(Size::Icon, "https://blog.example/icon.png")
+    );
 }

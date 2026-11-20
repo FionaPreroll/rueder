@@ -123,7 +123,11 @@ fn every_operation_is_described_in_full() {
         let logins = logins(operation);
         assert!(logins.iter().all(|name| schemes.contains(name.as_str())));
         if path.starts_with("/greader/") {
-            let open = ["/greader/accounts/ClientLogin", "/greader/img/"];
+            let open = [
+                "/greader/accounts/ClientLogin",
+                "/greader/img/",
+                "/greader/images/",
+            ];
             if open.iter().any(|start| path.starts_with(start)) {
                 assert!(logins.is_empty(), "{what}: for anybody");
             } else {

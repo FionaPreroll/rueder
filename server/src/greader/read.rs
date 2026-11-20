@@ -524,6 +524,7 @@ async fn items(
     let keys: Vec<(i32, i32)> = opened.iter().map(|o| (o.feed_id, o.seq)).collect();
     let mut labelled = api::labels_of(state, &login.session, &keys).await?;
     let signer = state.images.as_ref().map(|images| images.signer());
+    let app = (!state.images_public).then_some(login.id);
     Ok(opened
         .into_iter()
         .filter_map(|article| {
@@ -549,9 +550,7 @@ async fn items(
                 }
             }
             let html = match (signer, origin) {
-                (Some(signer), Some(origin)) => {
-                    signer.in_html_for_app(login.id, origin, &article.html)
-                }
+                (Some(signer), Some(origin)) => signer.in_html_for_app(app, origin, &article.html),
                 _ => crate::cleaning::with_images(&article.html, |_| None),
             };
             let link: Vec<Value> = article
@@ -734,6 +733,7 @@ pub(super) async fn subscriptions(
     .await?;
     let origin = super::origin(&headers);
     let signer = state.images.as_ref().map(|images| images.signer());
+    let app = (!state.images_public).then_some(login.id);
     let subscriptions: Vec<Value> = rows
         .into_iter()
         .enumerate()
@@ -746,7 +746,7 @@ pub(super) async fn subscriptions(
                 .collect();
             let icon = match (signer, &origin, &row.icon_url) {
                 (Some(signer), Some(origin), Some(icon)) => signer
-                    .app_address(login.id, Size::Icon, icon)
+                    .app_address(app, Size::Icon, icon)
                     .map(|address| format!("{origin}{address}")),
                 _ => None,
             };

@@ -54,6 +54,14 @@ use crate::{
 pub const MAX_PIXELS: u64 = 30_000_000;
 /// The longest address the proxy takes.
 const MAX_ADDRESS: usize = 2000;
+
+/// How an image is kept where only its reader may keep it: its address says
+/// what it is, so it never changes.
+pub const KEPT_BY_ITS_READER: &str = "private, max-age=31536000, immutable";
+/// How an image is kept where a cache in front of rueder may keep it too
+/// (`IMAGES_PUBLIC`): the reader for as long, the cache for a week, after
+/// which it asks again and learns of a feed that was blocked meanwhile.
+pub const KEPT_BY_ANY_CACHE: &str = "public, max-age=31536000, s-maxage=604800, immutable";
 /// How many sources are asked at a time, and how many images are decoded.
 const FETCHES_AT_ONCE: usize = 8;
 const DECODES_AT_ONCE: usize = 2;
@@ -177,10 +185,17 @@ impl Signer {
     }
 
     /// The address under which the proxy serves the image at `url` to an app
-    /// of another maker, which loads it without a session: `/greader/img/`,
-    /// then the number of the app password, the signature, the size and the
-    /// source. `None` if `url` is no web address.
-    pub fn app_address(&self, app: i32, size: Size, url: &str) -> Option<String> {
+    /// of another maker, which loads it without a session. Made for an app
+    /// password (`Some`): `/greader/img/`, then its number, the signature,
+    /// the size and the source. Where a cache in front of rueder may keep
+    /// images (`IMAGES_PUBLIC`, `None`): the page's address under
+    /// `/greader/images/`, the same for every app, so that the cache keeps an
+    /// image once for all of them. `None` if `url` is no web address.
+    pub fn app_address(&self, app: Option<i32>, size: Size, url: &str) -> Option<String> {
+        let Some(app) = app else {
+            let address = self.address(size, url)?;
+            return Some(address.replacen("/img/", "/greader/images/", 1));
+        };
         if url.len() > MAX_ADDRESS || !is_web(url) {
             return None;
         }
@@ -216,8 +231,8 @@ impl Signer {
 
     /// A cleaned text as an app gets it: every image points to the proxy, at
     /// the full address of this server (`origin`), as apps show texts in a
-    /// page of their own.
-    pub fn in_html_for_app(&self, app: i32, origin: &str, html: &str) -> String {
+    /// page of their own; `app` as for [`Self::app_address`].
+    pub fn in_html_for_app(&self, app: Option<i32>, origin: &str, html: &str) -> String {
         cleaning::with_images(html, |source| {
             let address = self.app_address(app, Size::Image, source)?;
             Some(format!("{origin}{address}"))

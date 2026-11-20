@@ -161,6 +161,10 @@ pub struct AppState {
     /// The key of the captcha of open registration and the solutions that
     /// were used.
     pub captcha: Arc<captcha::Captcha>,
+    /// Whether a cache in front of rueder, such as a CDN, may keep images
+    /// (`IMAGES_PUBLIC=on`): they come without a session then, and apps get
+    /// addresses that are the same for all of them.
+    pub images_public: bool,
     /// The size of the database in bytes from which the status page warns
     /// (`DATABASE_WARN_GB`); none without it.
     pub database_warn_bytes: Option<i64>,
@@ -191,6 +195,7 @@ impl AppState {
             mail: None,
             metrics: None,
             captcha: Arc::default(),
+            images_public: false,
             database_warn_bytes: None,
         }
     }
@@ -389,8 +394,10 @@ async fn health(State(state): State<AppState>) -> Result<Json<Health>, AppError>
     }))
 }
 
-/// An image through the proxy, for logged-in readers only. The address says
-/// which one and proves that the server itself asked for it; see [`images`].
+/// An image through the proxy, for logged-in readers only, unless the
+/// operator lets a cache in front of rueder keep images (`IMAGES_PUBLIC=on`).
+/// The address says which one and proves that the server itself asked for
+/// it; see [`images`].
 ///
 /// The page never makes such an address: it comes in what the API sends.
 /// The answer is the image in a format the browser shows, made smaller where
@@ -415,9 +422,14 @@ async fn health(State(state): State<AppState>) -> Result<Json<Health>, AppError>
 )]
 async fn image(
     State(state): State<AppState>,
-    _session: Session,
+    session: Result<Session, AppError>,
     UrlPath((signature, size, address)): UrlPath<(String, String, String)>,
 ) -> Response {
+    if let Err(refused) = session
+        && !state.images_public
+    {
+        return refused.into_response();
+    }
     let Some(images) = state.images else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -425,11 +437,13 @@ async fn image(
         Ok(picture) => (
             [
                 (header::CONTENT_TYPE, picture.format.mime()),
-                // The address says what the image is, so it never changes. It
-                // is the reader's own to keep, not a shared cache's.
                 (
                     header::CACHE_CONTROL,
-                    "private, max-age=31536000, immutable",
+                    if state.images_public {
+                        images::KEPT_BY_ANY_CACHE
+                    } else {
+                        images::KEPT_BY_ITS_READER
+                    },
                 ),
                 // Whatever the bytes are, the browser shows them as this image
                 // or not at all, and nothing in them runs.

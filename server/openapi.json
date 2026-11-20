@@ -5318,12 +5318,64 @@
         }
       }
     },
+    "/greader/images/{signature}/{size}/{address}": {
+      "get": {
+        "tags": [
+          "Google Reader API"
+        ],
+        "summary": "An image through the proxy for every app alike, where the operator lets a cache in front of rueder keep images (`IMAGES_PUBLIC=on`): no session and no app password, the address proves that the server made it, as the page's does. Without the setting there is no such image.",
+        "operationId": "shared_app_image",
+        "parameters": [
+          {
+            "name": "signature",
+            "in": "path",
+            "description": "Proves that the server made the address.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "path",
+            "description": "`icon`, `thumbnail` or `image`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "address",
+            "in": "path",
+            "description": "The image's own address, encoded.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image.",
+            "content": {
+              "image/*": {}
+            }
+          },
+          "404": {
+            "description": "No such image, an address the server did not make, no image proxy, or no `IMAGES_PUBLIC` on this server."
+          },
+          "502": {
+            "description": "The image's own server did not deliver it, or not as an image."
+          }
+        }
+      }
+    },
     "/img/{signature}/{size}/{address}": {
       "get": {
         "tags": [
           "Images"
         ],
-        "summary": "An image through the proxy, for logged-in readers only. The address says which one and proves that the server itself asked for it; see [`images`].",
+        "summary": "An image through the proxy, for logged-in readers only, unless the operator lets a cache in front of rueder keep images (`IMAGES_PUBLIC=on`). The address says which one and proves that the server itself asked for it; see [`images`].",
         "description": "The page never makes such an address: it comes in what the API sends.\nThe answer is the image in a format the browser shows, made smaller where\nthe size asks for it, never anything that runs.",
         "operationId": "image",
         "parameters": [
