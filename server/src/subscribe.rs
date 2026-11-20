@@ -52,8 +52,9 @@ pub const MAX_OPML_FEEDS: usize = 2000;
 /// newest articles unread, and the rest read.
 pub const NEWEST_UNREAD: i32 = 10;
 /// How much of a web page the search for feeds reads, in bytes. The links to
-/// feeds are in the head of a page.
-pub const MAX_PAGE: usize = 512 * 1024;
+/// feeds are near the start of a page, but YouTube puts most of a megabyte of
+/// scripts before its `og:url`. The limits of the parser hold for all of it.
+pub const MAX_PAGE: usize = 4 * 1024 * 1024;
 /// The largest OPML file, in bytes.
 pub const MAX_OPML: usize = 1024 * 1024;
 /// How deep the outlines of an OPML file may nest. Folders nest less deep;
@@ -1031,9 +1032,36 @@ mod tests {
             page(&channel, "<html></html>"),
             [(feed_of(CHANNEL), String::new())]
         );
-        // Nor does a page beyond the limits of the parser.
-        let huge = format!("{}{}", "<i></i>".repeat(cleaning::MAX_NODES), og(&channel));
+        // An og:url beyond the limits of the parser is not read.
+        let huge = format!(
+            "{}{}",
+            "<i></i>".repeat(cleaning::MAX_NODES + 1000),
+            og(&channel)
+        );
         assert_eq!(page(at, &huge), []);
+
+        // YouTube puts its og:url behind most of a megabyte of scripts, and
+        // what they say is not the page's word.
+        let other = format!("https://www.youtube.com/channel/UC{}", "z".repeat(22));
+        let scripts = format!(
+            "<script>var data = '{}{}';</script>",
+            og(&other),
+            "x".repeat(1024 * 1024)
+        );
+        assert_eq!(
+            page(at, &format!("{scripts}{}", og(&channel))),
+            [(feed_of(CHANNEL), "Made & Up".to_owned())]
+        );
+        // What lies after the limits of the parser does not hide what came before.
+        let long = format!(
+            "{}{}",
+            og(&channel),
+            "<i></i>".repeat(cleaning::MAX_NODES + 1000)
+        );
+        assert_eq!(
+            page(at, &long),
+            [(feed_of(CHANNEL), "Made & Up".to_owned())]
+        );
     }
 
     #[test]
