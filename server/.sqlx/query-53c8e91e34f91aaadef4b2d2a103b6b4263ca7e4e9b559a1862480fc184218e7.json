@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT inactive_months FROM retention",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inactive_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "retention",
+            "name": "inactive_months"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "53c8e91e34f91aaadef4b2d2a103b6b4263ca7e4e9b559a1862480fc184218e7"
+}

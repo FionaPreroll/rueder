@@ -1,0 +1,11 @@
+Lembrete: sua conta do rueder vai ser excluída
+Olá, {name},
+
+a conta "{name}" em {site} será excluída em {date}, com suas assinaturas,
+pastas, artigos com estrela, marcadores e regras de filtro, porque as contas
+que ninguém usa por {months} meses são excluídas.
+
+Para mantê-la, entre uma vez antes dessa data, no navegador ou em um app:
+{link}
+
+Este é o último e-mail sobre o assunto.

@@ -1,0 +1,12 @@
+Rappel : votre compte rueder va être supprimé
+Bonjour {name},
+
+le compte « {name} » sur {site} sera supprimé le {date}, avec ses
+abonnements, dossiers, articles favoris, libellés et règles de filtrage, car
+les comptes que personne n'utilise pendant {months} mois sont supprimés.
+
+Pour le garder, connectez-vous une fois d'ici là, dans un navigateur ou une
+application :
+{link}
+
+C'est le dernier e-mail à ce sujet.

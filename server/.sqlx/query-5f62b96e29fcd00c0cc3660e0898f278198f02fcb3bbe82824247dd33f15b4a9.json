@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FILTER (WHERE inactive_warned_at IS NOT NULL) AS \"warned!\",\n                  count(*) FILTER (WHERE email IS NULL AND NOT is_admin AND disabled_at IS NULL\n                                     AND active_at + make_interval(months => $2) <= $1)\n                      AS \"without_address!\"\n           FROM accounts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "warned!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "without_address!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "5f62b96e29fcd00c0cc3660e0898f278198f02fcb3bbe82824247dd33f15b4a9"
+}

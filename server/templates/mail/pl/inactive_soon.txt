@@ -1,0 +1,12 @@
+Przypomnienie: twoje konto rueder zostanie usunięte
+Cześć {name},
+
+konto „{name}” w {site} zostanie usunięte {date} razem z subskrypcjami,
+folderami, artykułami z gwiazdką, etykietami i regułami filtrów, bo konta,
+których nikt nie używa przez {months} miesięcy, są usuwane.
+
+Jeśli chcesz je zachować, zaloguj się przed tym dniem choć raz, w
+przeglądarce lub w aplikacji:
+{link}
+
+To ostatnia wiadomość w tej sprawie.

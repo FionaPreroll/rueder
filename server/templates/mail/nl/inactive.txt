@@ -1,0 +1,14 @@
+Je rueder-account wordt verwijderd
+Hallo {name},
+
+het account "{name}" op {site} is lang niet gebruikt. Op {site} worden
+accounts die {months} maanden niemand gebruikt verwijderd, met hun
+abonnementen, mappen, artikelen met ster, labels en filterregels. Dit account
+gaat op {date}.
+
+Wil je het houden, log dan vóór die datum één keer in, in een browser of een
+app:
+{link}
+
+Wil je alleen je abonnementen meenemen, exporteer ze dan eerst onder
+Instellingen, Importeren en exporteren.

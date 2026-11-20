@@ -17,7 +17,7 @@ use rueder::{
     fetch, health,
     http_client::{self, HttpClient},
     images::{self, ImageProxy},
-    import, mail, moderation,
+    import, inactive, mail, moderation,
     monitor::{Monitor, Problems},
     oidc,
     oidc::Oidc,
@@ -261,6 +261,11 @@ enum RetentionCommand {
         /// articles; `never` keeps it. A blocked feed keeps its block.
         #[arg(long, value_name = "DAYS|never")]
         orphans: Option<Keep>,
+        /// After how many months nobody used it an account goes, with all it
+        /// has, after two mails to its address; `never` keeps it. Accounts
+        /// without a confirmed address, admins and disabled ones stay.
+        #[arg(long, value_name = "MONTHS|never")]
+        inactive: Option<Keep>,
     },
     /// Clear now all that is old of the articles, instead of waiting for the
     /// server's hourly runs. Open tabs see it when they next load.
@@ -697,6 +702,7 @@ async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()>
             remove,
             versions,
             orphans,
+            inactive,
         } => {
             if let Some(Keep(months)) = articles {
                 settings.articles_months = months;
@@ -714,6 +720,15 @@ async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()>
                 settings.orphans_days = days;
             }
             retention::set_articles(db, &settings).await?;
+            if let Some(Keep(months)) = inactive {
+                inactive::set_months(db, months).await?;
+                let mode = email::mode(&mut *db.acquire().await?).await?;
+                if months.is_some() && mode == email::Mode::Off {
+                    println!(
+                        "Note: accounts have no address while `rueder registration set --email` is off, so none goes."
+                    );
+                }
+            }
         }
         RetentionCommand::Run => {
             let swept = retention::sweep(db, None, OffsetDateTime::now_utc(), None).await?;
@@ -755,6 +770,15 @@ async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()>
         after(settings.orphans_days, "days")
     );
     println!("Starred and labelled articles stay.");
+    let inactive_months = inactive::months(db).await?;
+    println!(
+        "Accounts nobody uses go: {}",
+        inactive_months.map_or("never".to_owned(), |months| format!(
+            "after {months} months, after a mail {} and {} days before, by the running server",
+            inactive::FIRST_DAYS,
+            inactive::SECOND_DAYS
+        ))
+    );
     let kept = retention::kept(db).await?;
     println!();
     println!(
@@ -768,6 +792,14 @@ async fn retaining(db: &PgPool, command: RetentionCommand) -> anyhow::Result<()>
         _ => "none".to_owned(),
     };
     println!("Months of versions: {months}");
+    if let Some(months) = inactive_months {
+        let standing = inactive::standing(db, months, OffsetDateTime::now_utc()).await?;
+        println!("Accounts that had the first mail: {}", standing.warned);
+        println!(
+            "Accounts nobody used for {months} months that stay, without a confirmed address: {}",
+            standing.without_address
+        );
+    }
     Ok(())
 }
 
@@ -1155,7 +1187,28 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
     match mail::Mailer::from_env()? {
         Some(mailer) => {
             tracing::info!("mail goes through the relay in SMTP_URL");
-            state.mail = Some(Arc::new(mailer));
+            let mailer = Arc::new(mailer);
+            state.mail = Some(mailer.clone());
+            // Once an hour, the accounts nobody uses get their mails, and go
+            // when their time is over, where the retention says so (E13).
+            let (db, rates) = (state.db.clone(), state.rates.clone());
+            tokio::spawn(async move {
+                let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
+                loop {
+                    every.tick().await;
+                    match inactive::sweep(&db, &mailer, &rates, OffsetDateTime::now_utc()).await {
+                        Ok(swept) if !swept.is_empty() => tracing::info!(
+                            warned = swept.warned,
+                            reminded = swept.reminded,
+                            removed = swept.removed,
+                            waiting = swept.waiting,
+                            "accounts nobody uses"
+                        ),
+                        Ok(_) => {}
+                        Err(err) => tracing::error!("looking after accounts nobody uses: {err:#}"),
+                    }
+                }
+            });
         }
         None => {
             let mode = rueder::email::mode(&mut *state.db.acquire().await?).await?;

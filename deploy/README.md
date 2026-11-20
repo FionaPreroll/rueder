@@ -533,7 +533,25 @@ docker compose exec rueder rueder retention run
 
 Articles a reader starred or labelled stay, with their text. `never` keeps
 something for good again (`--articles never`), and `retention show` says what
-is set. Age counts from when rueder first fetched an article, not from the date
+is set.
+
+Accounts nobody uses can go too, with everything they have:
+
+```sh
+# Accounts nobody used for 12 months: a login, a page with a session or an
+# app all count. They get a mail a month and a week before they go.
+docker compose exec rueder rueder retention set --inactive 12
+```
+
+Only an account with a confirmed address goes, as it can be told; admins and
+disabled accounts stay as well, and `retention show` counts those without an
+address that stay. It needs mail (see
+[Letting people register](#letting-people-register)), and the running server
+sends the mails, once an hour, within a share of `MAILS_PER_DAY` of their own:
+on a large instance the first ones may take days, and each account goes only
+the full time after its mails actually went. Every account counts as used on
+the day you update to this version, so none goes sooner than the months after
+that. Age counts from when rueder first fetched an article, not from the date
 its feed gives it. A blocked feed nobody reads loses its articles but keeps its
 block. If you bring over read state and labels from the old rueder's browsers,
 do that first: the takeover finds the old articles, which the retention may

@@ -1,0 +1,14 @@
+Akun rueder Anda akan dihapus
+Halo {name},
+
+akun "{name}" di {site} sudah lama tidak digunakan. Di {site}, akun yang
+tidak digunakan siapa pun selama {months} bulan dihapus bersama langganan,
+folder, artikel berbintang, label, dan aturan filternya. Akun ini akan
+dihapus pada {date}.
+
+Untuk mempertahankannya, masuklah sekali sebelum tanggal itu, di browser atau
+di aplikasi:
+{link}
+
+Jika Anda hanya ingin membawa langganan Anda, ekspor dulu di Pengaturan,
+Impor dan ekspor.

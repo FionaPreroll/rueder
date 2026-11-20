@@ -1,0 +1,12 @@
+Hatırlatma: rueder hesabınız silinecek
+Merhaba {name},
+
+{site} üzerindeki "{name}" hesabı {months} ay boyunca kimse tarafından
+kullanılmadığı için {date} tarihinde abonelikleri, klasörleri, yıldızlı
+makaleleri, etiketleri ve filtre kurallarıyla birlikte silinecek.
+
+Hesabı tutmak istiyorsanız, o tarihten önce bir kez tarayıcıda ya da bir
+uygulamada oturum açın:
+{link}
+
+Bu konudaki son e-posta budur.

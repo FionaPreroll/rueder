@@ -1,0 +1,14 @@
+Tu cuenta de rueder se va a borrar
+Hola, {name}:
+
+la cuenta "{name}" en {site} lleva mucho tiempo sin usarse. En {site} se
+borran las cuentas que nadie usa durante {months} meses, con sus
+suscripciones, carpetas, artículos destacados, etiquetas y reglas de filtro.
+Esta se borrará el {date}.
+
+Para conservarla, inicia sesión una vez antes de esa fecha, en un navegador o
+en una app:
+{link}
+
+Si solo quieres llevarte tus suscripciones, expórtalas antes en Ajustes,
+Importar y exportar.

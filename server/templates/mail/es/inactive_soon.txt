@@ -1,0 +1,12 @@
+Recordatorio: tu cuenta de rueder se va a borrar
+Hola, {name}:
+
+la cuenta "{name}" en {site} se borrará el {date}, con sus suscripciones,
+carpetas, artículos destacados, etiquetas y reglas de filtro, porque se
+borran las cuentas que nadie usa durante {months} meses.
+
+Para conservarla, inicia sesión una vez antes de esa fecha, en un navegador o
+en una app:
+{link}
+
+Este es el último correo sobre el tema.

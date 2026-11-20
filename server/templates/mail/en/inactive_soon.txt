@@ -1,0 +1,11 @@
+Reminder: your rueder account is going to be deleted
+Hello {name},
+
+the account "{name}" on {site} will be deleted on {date}, with its
+subscriptions, folders, starred items, labels and filter rules, as accounts
+nobody uses for {months} months go.
+
+To keep it, log in once before then, in a browser or an app:
+{link}
+
+This is the last mail about it.

@@ -1,0 +1,11 @@
+Promemoria: il tuo account rueder sta per essere eliminato
+Ciao {name},
+
+l'account "{name}" su {site} sarà eliminato il {date}, con iscrizioni,
+cartelle, articoli con stella, etichette e regole di filtro, perché gli
+account che nessuno usa per {months} mesi vengono eliminati.
+
+Per tenerlo, accedi una volta prima di allora, nel browser o in un'app:
+{link}
+
+Questa è l'ultima email su questo argomento.

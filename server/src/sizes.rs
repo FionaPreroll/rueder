@@ -82,6 +82,7 @@ impl Sizes {
             heavy_at_once: self.heavy_at_once,
             mails_per_day: per_day(self.mails_per_day),
             reset_mails_per_day: per_day((self.mails_per_day * 3 / 10).max(1)),
+            inactive_mails_per_day: per_day((self.mails_per_day * 3 / 10).max(1)),
             ..Limits::default()
         }
     }

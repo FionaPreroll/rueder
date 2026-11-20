@@ -1,0 +1,14 @@
+Twoje konto rueder zostanie usunięte
+Cześć {name},
+
+konto „{name}” w {site} od dawna nie było używane. W {site} konta, których
+nikt nie używa przez {months} miesięcy, są usuwane razem z subskrypcjami,
+folderami, artykułami z gwiazdką, etykietami i regułami filtrów. To konto
+zostanie usunięte {date}.
+
+Jeśli chcesz je zachować, zaloguj się przed tym dniem choć raz, w
+przeglądarce lub w aplikacji:
+{link}
+
+Jeśli chcesz zabrać tylko subskrypcje, wyeksportuj je wcześniej w
+Ustawieniach, Import i eksport.

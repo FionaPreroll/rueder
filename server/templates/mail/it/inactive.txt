@@ -1,0 +1,13 @@
+Il tuo account rueder sta per essere eliminato
+Ciao {name},
+
+l'account "{name}" su {site} non viene usato da molto tempo. Su {site} gli
+account che nessuno usa per {months} mesi vengono eliminati, con iscrizioni,
+cartelle, articoli con stella, etichette e regole di filtro. Questo sarà
+eliminato il {date}.
+
+Per tenerlo, accedi una volta prima di allora, nel browser o in un'app:
+{link}
+
+Se vuoi portare via solo le tue iscrizioni, esportale prima in Impostazioni,
+Importa ed esporta.

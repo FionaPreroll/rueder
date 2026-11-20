@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE retention SET inactive_months = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0f78a94c49819517d26ccbeff71d4f8711be31d1a35089fd9e35e83b94c8ee9f"
+}
