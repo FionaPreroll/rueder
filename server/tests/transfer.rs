@@ -689,6 +689,29 @@ async fn a_file_that_breaks_the_rules_is_refused(db: PgPool) {
     let mut file = good.clone();
     file["tree"] = json!(deep);
     wrong.push(file);
+    // Lists of small entries are refused while they are read, before they
+    // take many times the room of the file.
+    let names = json!(vec![""; 101]);
+    let mut file = good.clone();
+    file["tree"] = json!([{ "kind": "folder", "path": names }]);
+    wrong.push(file);
+    let mut labelled = article(1);
+    labelled["labels"] = names.clone();
+    let mut file = good.clone();
+    file["tree"] = json!([feed(1, json!([labelled]))]);
+    wrong.push(file);
+    let mut file = good.clone();
+    file["tree"] = json!(vec![json!({ "kind": "folder", "path": [] }); 2101]);
+    wrong.push(file);
+    let mut file = good.clone();
+    file["settings"] = json!({ "zeros": vec![0; 40_000] });
+    wrong.push(file);
+    let mut file = good.clone();
+    file["rules"] = json!([{ "enabled": true, "scope": { "kind": "folder", "path": names }, "field": "any", "match": "contains", "pattern": "x", "action": "hide" }]);
+    wrong.push(file);
+    let mut file = good.clone();
+    file["tree"] = json!([{ "kind": "all" }]);
+    wrong.push(file);
     for file in wrong {
         let (status, answer) = import(&state, &cookie, &file).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");

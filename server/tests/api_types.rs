@@ -90,11 +90,16 @@ fn the_types_stand_in_a_fixed_order() {
 /// old database holds, what an OpenID provider says and what the Google Reader
 /// API answers apps. Everything else that is written or read as JSON has to
 /// be in the file.
-const NOT_THE_API: [(&str, &str); 6] = [
+const NOT_THE_API: [(&str, &str); 9] = [
     ("articles.rs", "Original"),
     ("articles.rs", "Version"),
     ("import.rs", "*"),
     ("oidc.rs", "*"),
+    // How the file of an account is read; `ExportedNode` and `ExportedScope`
+    // say what is in it.
+    ("transfer.rs", "Kind"),
+    ("transfer.rs", "FlatNode"),
+    ("transfer.rs", "FlatScope"),
     // The Google Reader API (`greader/`) answers apps of other makers, never
     // the page.
     ("mod.rs", "Tokens"),
