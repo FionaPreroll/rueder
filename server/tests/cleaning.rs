@@ -559,6 +559,21 @@ fn deep_and_long_texts_do_not_hang() {
         ),
         ("many breaks", "<br>".repeat(megabyte / 4)),
         ("many comments", "<!---->".repeat(megabyte / 7)),
+        (
+            "one tag with many attributes",
+            format!(
+                "<p{}>x</p>",
+                (0..megabyte / 8)
+                    .map(|n| format!(" a{n:x}"))
+                    .collect::<String>()
+            ),
+        ),
+        (
+            "many roots with attributes",
+            (0..megabyte / 10)
+                .map(|n| format!("<html a{n:x}>"))
+                .collect(),
+        ),
         ("one long word", "x".repeat(megabyte)),
     ] {
         let started = Instant::now();
@@ -624,6 +639,28 @@ fn the_lists_are_read_from_files() {
         "https://a.example/?utm_source=y"
     );
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn a_tag_keeps_only_its_first_attributes() {
+    use rueder::cleaning::MAX_ATTRIBUTES;
+    let many =
+        |count: usize| -> String { (0..count).map(|n| format!(" data-{n}=\"a > b\"")).collect() };
+    let link = |before: usize| {
+        format!(
+            "<p><a{} href=\"https://example.com/\" {}>words</a></p>",
+            many(before),
+            many(MAX_ATTRIBUTES)
+        )
+    };
+    // Values in quotes hold what would end the tag elsewhere.
+    assert!(html(&link(MAX_ATTRIBUTES - 1), BASE).contains("href=\"https://example.com/\""));
+    let late = html(&link(MAX_ATTRIBUTES), BASE);
+    assert!(!late.contains("href"), "{late}");
+    assert!(late.contains("words"));
+    // Comments are passed by, the text after a tag stays.
+    let commented = format!("<!-- <b{} --><p>after</p>", many(MAX_ATTRIBUTES + 1));
+    assert_eq!(html(&commented, BASE), "<p>after</p>");
 }
 
 #[test]

@@ -1049,6 +1049,22 @@ Was `feeds::parse` höchstens an Speicher belegt, gemessen mit einem zählenden 
 - **Gemessen wie in der CI:** `server/tests/feed_memory.rs` liest elf solcher Feeds zu 20 MiB mit einer Grenze von 64 MiB für den Allokator. Ohne den Vorfilter bricht der Test ab.
 - **Nichts anderes ändert sich:** Alle 1.484 Eingaben des Fuzz-Korpus für Feeds ergeben vorher und nachher dieselbe Zahl von Artikeln und ausgelassenen Einträgen.
 
+### Attribute in HTML vom 2026-11-20
+
+Was die Bereinigung (`cleaning::clean`) und die Suche nach Feeds auf einer Seite (`cleaning::feed_page`) an Zeit brauchen, wenn ein Text aus Attributen besteht (Release-Build, ohne Datenbank, ausgedachte Texte). „Vorher“ ist der Stand ohne `cleaning::MAX_ATTRIBUTES` und mit den Attributen jedes weiteren `<html>`.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
+
+| Text | vorher | nachher |
+|---|---:|---:|
+| ein Tag mit lauter verschiedenen Attributen, 0,25 / 0,5 / 1 MiB, Bereinigung | 0,3 s / 2,4 s / 15,3 s | 0,00 s (1 MiB) |
+| `<html a…>` immer wieder, 0,125 / 0,25 MiB, Bereinigung | 1,6 s / 7,0 s | 0,03 s (1 MiB) |
+| dasselbe als Seite für die Feedsuche, 4 MiB | über eine halbe Stunde (hochgerechnet) | 0,12 s |
+| Tags mit je `MAX_ATTRIBUTES` Attributen, 1 MiB Bereinigung / 4 MiB Seite | – | 0,08 s / 0,15 s |
+
+- **Die Zeit wuchs mit dem Quadrat.** Ein Feed mit 20 solcher Artikel zu 1 MiB hätte bei jedem Abruf fünf Minuten gerechnet, und eine Seite von 4 MiB hätte eine Suche nach Feeds eine halbe Stunde beschäftigt.
+- Der Speicher blieb dabei klein, unter dem Zehnfachen des Texts.
+
 ## Wissen über das Altsystem
 
 Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.
