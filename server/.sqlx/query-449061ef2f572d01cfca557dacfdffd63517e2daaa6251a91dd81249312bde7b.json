@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.feed_id, a.seq, a.published_at, a.updated_at, a.title, a.author, a.url,\n                  c.html, c.enclosures,\n                  CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                       ELSE coalesce(st.read, false) END AS \"read!\",\n                  coalesce(st.starred, false) AS \"starred!\",\n                  a.seq <= s.read_upto AND coalesce(st.kept_unread, false) AS \"kept_unread!\"\n           FROM unnest($2::int4[], $3::int4[]) WITH ORDINALITY AS k (feed_id, seq, ord)\n           JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id\n           JOIN feeds f ON f.id = k.feed_id AND f.blocked_at IS NULL\n           JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq\n           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           LEFT JOIN article_states st\n               ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n           WHERE NOT coalesce(st.hidden, false)\n           ORDER BY k.ord",
+  "query": "SELECT o.feed_id AS \"feed_id!\", o.seq AS \"seq!\", o.published_at AS \"published_at!\",\n                  o.updated_at, o.title AS \"title!\", o.author AS \"author!\", o.url,\n                  o.html AS \"html!\", o.enclosures AS \"enclosures!\", o.read AS \"read!\",\n                  o.starred AS \"starred!\", o.kept_unread AS \"kept_unread!\", o.ord AS \"ord!\",\n                  o.found AS \"found!\"\n           FROM (\n               SELECT a.feed_id, a.seq, a.published_at, a.updated_at, a.title, a.author, a.url,\n                      c.html, c.enclosures,\n                      CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                           ELSE coalesce(st.read, false) END AS read,\n                      coalesce(st.starred, false) AS starred,\n                      a.seq <= s.read_upto AND coalesce(st.kept_unread, false) AS kept_unread,\n                      k.ord,\n                      sum(octet_length(c.html)) OVER (ORDER BY k.ord)\n                          - octet_length(c.html) AS before,\n                      count(*) OVER () AS found\n               FROM unnest($2::int4[], $3::int4[]) WITH ORDINALITY AS k (feed_id, seq, ord)\n               JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id\n               JOIN feeds f ON f.id = k.feed_id AND f.blocked_at IS NULL\n               JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq\n               JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n               LEFT JOIN article_states st\n                   ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq\n               WHERE NOT coalesce(st.hidden, false)\n           ) o\n           WHERE o.before < $4\n           ORDER BY o.ord",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "feed_id",
+        "name": "feed_id!",
         "type_info": "Int4",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "seq",
+        "name": "seq!",
         "type_info": "Int4",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "published_at",
+        "name": "published_at!",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
@@ -49,7 +49,7 @@
       },
       {
         "ordinal": 4,
-        "name": "title",
+        "name": "title!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -60,7 +60,7 @@
       },
       {
         "ordinal": 5,
-        "name": "author",
+        "name": "author!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -82,7 +82,7 @@
       },
       {
         "ordinal": 7,
-        "name": "html",
+        "name": "html!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -93,7 +93,7 @@
       },
       {
         "ordinal": 8,
-        "name": "enclosures",
+        "name": "enclosures!",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -119,13 +119,26 @@
         "name": "kept_unread!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "ord!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "found!",
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
         "Int4",
         "Int4Array",
-        "Int4Array"
+        "Int4Array",
+        "Int8"
       ]
     },
     "nullable": [
@@ -140,8 +153,10 @@
       false,
       null,
       null,
+      null,
+      null,
       null
     ]
   },
-  "hash": "c9c45161e4a4689b31a41b97cbf9efba19b01b788e26c6b90075e9ff8e936284"
+  "hash": "449061ef2f572d01cfca557dacfdffd63517e2daaa6251a91dd81249312bde7b"
 }

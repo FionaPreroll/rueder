@@ -802,6 +802,62 @@ async fn changes_have_limits(db: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
+#[sqlx::test]
+async fn an_answer_with_texts_ends_before_too_many_bytes(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 3).await;
+    // Each text more than half of what an answer holds.
+    let long = usize::try_from(rueder::greader::MAX_TEXTS).unwrap() / 2 + 1;
+    sqlx::query("UPDATE article_content SET html = repeat('x', $1) WHERE feed_id = $2")
+        .bind(i32::try_from(long).unwrap())
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    let state = AppState::new(db.clone());
+    let token = logged_in(&state, ada, "ada").await;
+    let texts = |answer: &Value| -> Vec<usize> {
+        answer["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["summary"]["content"].as_str().unwrap().len())
+            .collect()
+    };
+    let titles = |answer: &Value| -> Vec<String> {
+        answer["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["title"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    let path = format!("/reader/api/0/stream/contents/feed/{feed}?n=3");
+    let first = get(&state, &path, &token).await;
+    assert_eq!(texts(&first), [long, long]);
+    assert_eq!(titles(&first), ["Article 3", "Article 2"]);
+    let c = first["continuation"].as_str().unwrap();
+    let rest = get(&state, &format!("{path}&c={c}"), &token).await;
+    assert_eq!(titles(&rest), ["Article 1"]);
+    assert!(rest.get("continuation").is_none());
+    // Oldest first, the same.
+    let oldest = get(&state, &format!("{path}&r=o"), &token).await;
+    assert_eq!(titles(&oldest), ["Article 1", "Article 2"]);
+    assert!(oldest["continuation"].is_string());
+
+    let all = get(&state, "/reader/api/0/stream/items/ids?output=json", &token).await;
+    let (status, body) = post(
+        &state,
+        "/reader/api/0/stream/items/contents",
+        &token,
+        &form_of_ids(&ids(&all)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let contents: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(titles(&contents), ["Article 3", "Article 2"]);
+}
+
 /// A state with an image proxy, which these tests never let fetch anything.
 fn with_images(db: &PgPool) -> AppState {
     let dir = std::env::temp_dir().join(format!("rueder-greader-{}", std::process::id()));

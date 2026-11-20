@@ -1065,6 +1065,14 @@ Was die Bereinigung (`cleaning::clean`) und die Suche nach Feeds auf einer Seite
 - **Die Zeit wuchs mit dem Quadrat.** Ein Feed mit 20 solcher Artikel zu 1 MiB hätte bei jedem Abruf fünf Minuten gerechnet, und eine Seite von 4 MiB hätte eine Suche nach Feeds eine halbe Stunde beschäftigt.
 - Der Speicher blieb dabei klein, unter dem Zehnfachen des Texts.
 
+### Offen gelassene Formatierung und Antworten an Apps vom 2026-11-20
+
+Release-Build, ohne Datenbank, ausgedachte Texte.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
+- **Offen gelassene Formatierung** (`<b><i><u><s><em>` vor jedem Absatz, nie geschlossen): Der Parser öffnet sie in jedem folgenden Absatz neu, ein Text kommt so auf mehr als einen Knoten je Byte, echte Artikel auf höchstens einen je 18 Byte. Ein Feed aus 500 solcher Artikel, jeder knapp unter `cleaning::MAX_NODES`, brauchte zum Bereinigen 41 s, mit `cleaning::BYTES_PER_NODE` 4,2 s. Alle Eingaben des Fuzz-Korpus für die Bereinigung ergeben vorher und nachher dasselbe.
+- **Antworten an Apps mit Texten:** Die Bilder eines bereinigten Texts auf den Proxy umzuschreiben (`cleaning::with_images`) kostet rund 40 ms je MiB; ein Text aus lauter Bildern oder Links wird beim Bereinigen fast doppelt so lang, aus `feeds::MAX_CONTENT` werden so 2 MiB. 250 solcher Artikel in einer Antwort von `stream/contents` wären (gerechnet) rund 500 MiB JSON gewesen und zehn Sekunden Rechnen im Thread, der auch andere Anfragen bedient. Mit `greader::MAX_TEXTS` sind es höchstens so viele Byte und ein Text mehr, umgeschrieben in einem eigenen Thread.
+
 ## Wissen über das Altsystem
 
 Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.
