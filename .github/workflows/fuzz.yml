@@ -14,6 +14,8 @@ on:
       - "server/src/feeds.rs"
       - "server/src/images.rs"
       - "server/src/greader/**"
+      - "server/src/subscribe.rs"
+      - "server/src/transfer.rs"
       - ".github/workflows/fuzz.yml"
   # Mondays at 03:41 UTC.
   schedule:
@@ -38,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [greader, cleaning, feed, image]
+        target: [greader, cleaning, feed, image, opml, account]
     defaults:
       run:
         working-directory: server

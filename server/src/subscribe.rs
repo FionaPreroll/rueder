@@ -61,7 +61,7 @@ pub const MAX_OPML: usize = 1024 * 1024;
 /// what is deeper than they go lands in the deepest folder.
 const MAX_OPML_DEPTH: usize = 32;
 /// How deep folders nest; the database has the last word.
-const MAX_FOLDER_DEPTH: usize = 5;
+pub const MAX_FOLDER_DEPTH: usize = 5;
 
 const ACCEPT: &str = "application/atom+xml, application/rss+xml, application/feed+json, \
                       application/xml;q=0.9, text/html;q=0.8, */*;q=0.5";

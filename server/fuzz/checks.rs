@@ -11,8 +11,13 @@ use image::{ImageFormat, ImageReader};
 use rueder::{
     cleaning::{self, Base, Rules},
     feeds::{self, MAX_ARTICLES, MAX_CONTENT},
+    filters,
     greader::parse::{self, FeedRef, Params, Stream},
     images::{self, Format, MAX_PIXELS, Refused, Signer, Size},
+    labels,
+    subscribe::{self, MAX_FOLDER_DEPTH, MAX_OPML_FEEDS, Step},
+    transfer::{self, Export, Node},
+    tree,
 };
 use time::{OffsetDateTime, macros::datetime};
 
@@ -178,6 +183,83 @@ fn greader_value(value: &str) {
     let _ = parse::time(value);
     let n = parse::count(Some(value), 20, 1000);
     assert!((1..=1000).contains(&n));
+}
+
+/// Reading an OPML file, with any text: the limits for feeds and folders
+/// hold, folders nest no deeper than the tree, every name fits the tree,
+/// every feed has a web address, is there once and lies in a folder of the
+/// file, and the order names every folder and feed once, a folder after the
+/// one it is in.
+pub fn opml(data: &[u8]) {
+    let Ok(outline) = subscribe::outline(&String::from_utf8_lossy(data)) else {
+        return;
+    };
+    assert!(outline.feeds.len() <= MAX_OPML_FEEDS);
+    assert!(outline.folders.len() <= usize::try_from(tree::MAX_FOLDERS).unwrap_or(0));
+    for (at, path) in outline.folders.iter().enumerate() {
+        assert!((1..=MAX_FOLDER_DEPTH).contains(&path.len()), "{path:?}");
+        path.iter().for_each(|name| assert_name(name));
+        let parent = &path[..path.len() - 1];
+        assert!(parent.is_empty() || outline.folders[..at].iter().any(|f| f == parent));
+        assert!(!outline.folders[..at].contains(path), "{path:?} twice");
+    }
+    let mut seen = std::collections::HashSet::new();
+    for (path, url, title) in &outline.feeds {
+        assert!(
+            path.is_empty() || outline.folders.contains(path),
+            "{path:?}"
+        );
+        assert!(is_web(url.as_str()), "{url}");
+        assert!(seen.insert(url), "{url} twice");
+        title.iter().for_each(|name| assert_name(name));
+    }
+    let mut folders: Vec<usize> = Vec::new();
+    let mut feeds: Vec<usize> = Vec::new();
+    for step in &outline.order {
+        match *step {
+            Step::Folder(at) => folders.push(at),
+            Step::Feed(at) => feeds.push(at),
+        }
+    }
+    assert_eq!(folders, (0..outline.folders.len()).collect::<Vec<_>>());
+    assert_eq!(feeds, (0..outline.feeds.len()).collect::<Vec<_>>());
+}
+
+/// A name as the tree takes it.
+fn assert_name(name: &str) {
+    assert!(!name.trim().is_empty() && name.trim() == name, "{name:?}");
+    assert!(name.chars().count() <= tree::MAX_TITLE, "{name:?}");
+    assert!(!name.chars().any(char::is_control), "{name:?}");
+}
+
+/// Reading the file of an account, with any bytes: the limits of its lists
+/// hold while it is read, and what is read comes back as itself once it is
+/// written and read again. The settings are left out of that: a number in
+/// them may be written longer than it came.
+pub fn account(data: &[u8]) {
+    let Ok(mut file) = serde_json::from_slice::<Export>(data) else {
+        return;
+    };
+    let nodes = tree::MAX_FOLDERS + tree::MAX_FEEDS;
+    assert!(file.tree.len() <= usize::try_from(nodes).unwrap_or(0));
+    assert!(file.labels.len() <= usize::try_from(labels::MAX_LABELS).unwrap_or(0));
+    assert!(file.rules.len() <= usize::try_from(filters::MAX_RULES).unwrap_or(0));
+    for node in &file.tree {
+        if let Node::Feed(feed) = node {
+            assert!(feed.articles.len() <= transfer::MAX_ARTICLES);
+            for article in &feed.articles {
+                assert!(article.labels.len() <= usize::try_from(labels::MAX_LABELS).unwrap_or(0));
+            }
+        }
+    }
+    file.settings = serde_json::Value::Null;
+    let written = serde_json::to_vec(&file).expect("a file that was read is written");
+    let again: Export = serde_json::from_slice(&written).expect("what was written is read again");
+    assert_eq!(
+        serde_json::to_value(&again).expect("written"),
+        serde_json::to_value(&file).expect("written"),
+        "read again, the file is another"
+    );
 }
 
 /// The width and height the head of an image says it has.

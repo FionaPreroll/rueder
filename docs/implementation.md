@@ -57,7 +57,7 @@ Was es gibt:
 | `server/openapi.json` | Die Beschreibung der Schnittstelle (OpenAPI 3.1), erzeugt und nicht von Hand zu ändern: `UPDATE_API_TYPES=1 cargo test --test api_types` schreibt sie mit `types.ts` neu. |
 | `server/.sqlx/` | Cache der geprüften Abfragen, damit das Programm ohne Datenbank baut (`cargo sqlx prepare`). |
 | `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/` im Commit `0b36a96`. `tests/data/` hält Feeds, wie die Tests des alten rueder sie aufgezeichnet haben. `fuzz_corpus.rs` spielt den Korpus der Fuzz-Targets ab, `soak.rs` ist der Soak-Test. |
-| `server/fuzz/` | Fuzz-Targets für Bereinigung, Feed-Verarbeitung, Bild-Proxy und die Anfragen der Google-Reader-API (`fuzz_targets/`), was sie prüfen (`checks.rs`) und ihr Korpus (`corpus/`). Eine eigene Crate, weil `cargo-fuzz` Nightly-Rust braucht. |
+| `server/fuzz/` | Fuzz-Targets für Bereinigung, Feed-Verarbeitung, Bild-Proxy, die Anfragen der Google-Reader-API, OPML-Dateien und die Datei eines Kontos (`fuzz_targets/`), was sie prüfen (`checks.rs`) und ihr Korpus (`corpus/`). Eine eigene Crate, weil `cargo-fuzz` Nightly-Rust braucht. |
 | `web/` | SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
 | `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`). `reader.ts` ist die Naht: was die Seite von ihrer Datenquelle braucht. `api/` erfüllt sie mit dem Server (`types.ts` die Typen der API, erzeugt und nicht von Hand zu ändern, `client.ts` die Endpunkte, `reader.svelte.ts` der Reader, `session.svelte.ts` Login und Sitzung), `demo/` mit erfundenen Daten. |
 | `web/e2e/` | End-to-End-Tests mit Playwright: die Specs je Weg, in `harness/` der Start des Servers mit eigener Datenbank (`server.js`), die erfundene Website mit ihren Feeds (`site.js`) und gemeinsame Helfer. |
@@ -158,7 +158,7 @@ cargo run --release -- bench generate   # 10 Konten, 300 Feeds, 10 Millionen Art
 cargo run --release -- bench measure    # misst die Abfragen und gibt die Tabellen aus
 
 SOAK_SECONDS=3600 cargo test --release --test soak -- --nocapture   # Soak-Test eine Stunde, mit Tabelle
-cd fuzz && cargo +nightly fuzz run -O feed -- -max_total_time=1800 -timeout=10 -max_len=131072   # ebenso cleaning, image und greader; auf GitHub läuft das in fuzz.yml
+cd fuzz && cargo +nightly fuzz run -O feed -- -max_total_time=1800 -timeout=10 -max_len=131072   # ebenso cleaning, image, greader, opml und account; auf GitHub läuft das in fuzz.yml
 ```
 
 Fuzzen braucht Nightly-Rust und `cargo install cargo-fuzz`; wie der Korpus danach klein bleibt, steht in [server/README.md](../server/README.md#fuzzing).
@@ -420,7 +420,6 @@ Von Fiona notiert, noch keinem Schritt zugeordnet:
   7. Metriken und Statusseite je Prozess, zusammengeführt in Prometheus.
   8. Für die Ausfallsicherheit eine PostgreSQL in Bereitschaft und Backups mit Wiederherstellung auf einen Zeitpunkt.
 
-- **Ein Fuzz-Target für die Datei eines Kontos** (`transfer.rs`), die jedes Konto über `POST /api/import` hochladen kann. Das Parsen macht serde; das Target prüfte vor allem die eigenen Grenzen und Abgleiche.
 - **Offline lesen.** Pro Gerät die neuesten, etwa 200 ungelesenen Artikel mit Texten und Bildern im Browser halten. Zurückgestellt, weil es mit der Regel bricht, dass im Browser nichts liegt, was einem Konto gehört (siehe [Frontend](architecture.md#frontend)), und weil der Reader dann die Zahlen ohne Server schätzen müsste. Offline lesen geht heute mit den Apps über die Google-Reader-API.
 - **Eine Desktop-App** mit Tauri, als Hülle wie die Android-App. Zurückgestellt, weil sie wenig über die installierte PWA (5.21) hinaus brächte. Dagegen stehen: unter Linux keine Passkeys (WebKitGTK kann kein WebAuthn), Kosten für das Signieren unter macOS und Windows, und drei Betriebssysteme in der CI.
 
@@ -1094,6 +1093,14 @@ Wie lange ein Zug eines Feeds in einen Ordner (`POST /api/tree/move`) dauert, we
 - **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
 - **Vorher:** 1,2 s, denn jeder Zug bewertete alle Feeds des Kontos neu; bei `tree::MAX_FEEDS` Feeds wären es hochgerechnet rund 24 s gewesen. Das lief ohne Grenze für teure Anfragen, also hätte ein Konto mit einigen Zügen zugleich alle Verbindungen zur Datenbank belegt.
 - **Nachher:** 28 ms, denn bewertet wird nur der Feed, der zog, und der Zug wartet als teure Anfrage auf seinen Platz.
+
+### Dateien zum Hochladen vom 2026-11-21
+
+Was eine OPML-Datei (`subscribe::opml`) und die Datei eines Kontos (`transfer::Export`, `POST /api/import`) beim Lesen an Zeit und Speicher brauchen, mit ausgedachten Dateien in der größten erlaubten Größe, gezählt von einem Allokator, der jede Belegung mitschreibt; Release-Build.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
+- **OPML:** linear in der Größe, auch mit sehr vielen Attributen: eine Datei von 256 KiB mit 29.611 Attributen in 10,6 ms.
+- **Datei eines Kontos:** im Speicher das 2,0-Fache der Datei, mit 100 Labels an jedem Artikel das 6,9-Fache (221 MiB für 32 MiB). Das ist hingenommen: Ein Import ist eine teure Anfrage (`rate::Rates::heavy`), also laufen nur wenige zugleich, und er ist je Konto gedrosselt.
 
 ## Wissen über das Altsystem
 
