@@ -223,7 +223,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `IMAGE_CACHE_MB`, `IMAGE_PROXY_KEY` | Size of the image proxy's cache, and its secret if you want to set it yourself. |
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
-| `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (3) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
+| `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (4) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
 | `IMAGES_PUBLIC` | `on` lets a CDN in front of your reverse proxy keep images, which then come without a session too. Off if not set; see [Images through a CDN](#images-through-a-cdn). |
 | `DATABASE_WARN_GB` | From what size of the database in GB the status page warns, such as `50` on a disk of 64 GB. Off if not set; see [Keeping old articles, or not](#keeping-old-articles-or-not). |
 | `CLIENT_REPORTS` | `off` takes no reports of errors from browsers, even of readers who agreed to send them. |
@@ -280,7 +280,7 @@ For tens of thousands of accounts, the server itself can be set up larger:
   keeps. More help only where PostgreSQL has more cores to use them, about
   two for each core. PostgreSQL takes 100 as it comes, and rueder's commands,
   such as `rueder account list`, take a few of their own.
-- `HEAVY_AT_ONCE` (3) is how many costly requests run at once, such as an
+- `HEAVY_AT_ONCE` (4) is how many costly requests run at once, such as an
   export, an import or the preview of a filter rule; more wait for their
   turn. It stays fewer than the connections, so that reading goes on
   meanwhile.

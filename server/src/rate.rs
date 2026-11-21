@@ -126,7 +126,7 @@ pub const MAX_KEYS: usize = 100_000;
 /// How many costly requests run at once on the whole server, as rueder
 /// comes: fewer than the database has connections, so that reading goes on
 /// meanwhile. More wait. `HEAVY_AT_ONCE` sets another (see `sizes`).
-pub const HEAVY_AT_ONCE: usize = 3;
+pub const HEAVY_AT_ONCE: usize = 4;
 /// How many costly requests one account may have under way, waiting or
 /// running. More are refused.
 pub const HEAVY_PER_ACCOUNT: usize = 2;
