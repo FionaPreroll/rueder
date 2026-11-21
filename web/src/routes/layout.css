@@ -194,6 +194,27 @@
 		}
 	}
 
+	/* A phone draws the scrollbar over the text and only while it moves, so a long
+	   article, the list or a menu did not show how far one is in it. On a touch
+	   screen every area that scrolls keeps a thin bar of its own, in Chromium (the
+	   Android app, Chrome) and Safari. Firefox knows only `scrollbar-color` and
+	   `scrollbar-width`, which leave the bar to the system there; setting them would
+	   switch these rules off in Chromium. */
+	@media (pointer: coarse) {
+		::-webkit-scrollbar {
+			width: 0.375rem;
+			height: 0.375rem;
+		}
+		::-webkit-scrollbar-thumb {
+			border-radius: 0.1875rem;
+			background-color: var(--color-field);
+		}
+		::-webkit-scrollbar-track,
+		::-webkit-scrollbar-corner {
+			background-color: transparent;
+		}
+	}
+
 	kbd {
 		@apply rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-xs text-ink;
 	}
