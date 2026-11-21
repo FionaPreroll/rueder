@@ -1073,6 +1073,20 @@ Release-Build, ohne Datenbank, ausgedachte Texte.
 - **Offen gelassene Formatierung** (`<b><i><u><s><em>` vor jedem Absatz, nie geschlossen): Der Parser öffnet sie in jedem folgenden Absatz neu, ein Text kommt so auf mehr als einen Knoten je Byte, echte Artikel auf höchstens einen je 18 Byte. Ein Feed aus 500 solcher Artikel, jeder knapp unter `cleaning::MAX_NODES`, brauchte zum Bereinigen 41 s, mit `cleaning::BYTES_PER_NODE` 4,2 s. Alle Eingaben des Fuzz-Korpus für die Bereinigung ergeben vorher und nachher dasselbe.
 - **Antworten an Apps mit Texten:** Die Bilder eines bereinigten Texts auf den Proxy umzuschreiben (`cleaning::with_images`) kostet rund 40 ms je MiB; ein Text aus lauter Bildern oder Links wird beim Bereinigen fast doppelt so lang, aus `feeds::MAX_CONTENT` werden so 2 MiB. 250 solcher Artikel in einer Antwort von `stream/contents` wären (gerechnet) rund 500 MiB JSON gewesen und zehn Sekunden Rechnen im Thread, der auch andere Anfragen bedient. Mit `greader::MAX_TEXTS` sind es höchstens so viele Byte und ein Text mehr, umgeschrieben in einem eigenen Thread.
 
+### Neubewertung durch Filterregeln vom 2026-11-21
+
+Was eine neue Regel (`POST /api/rules`, danach `filters::reapply`) an Speicher belegt, wenn alle Artikel eines Feeds ausgeblendet sind: ausgedachte Artikel mit Texten zu 11 KB, Release-Build mit PostgreSQL 16 auf derselben Maschine, der Speicher alle 0,2 ms abgelesen.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
+
+| ausgeblendete Artikel | vorher | nachher |
+|---:|---:|---:|
+| 20.000 | 226 MiB, 3,8 s | 2 MiB, 4,2 s |
+| 60.000 | – | 2 MiB, 12,8 s |
+
+- **Der Speicher wuchs mit der Zahl der ausgeblendeten Artikel**, weil alle mit ihrem Text auf einmal gelesen wurden; bei Hunderttausenden in einem großen Feed wären es Gigabytes gewesen, bei jeder Änderung an Regeln oder Baum. Jetzt liest jede Abfrage `filters::CHUNK` Artikel ab dem letzten. Damit jede Abfrage beim letzten Artikel einsetzt und nicht den Feed von vorn liest, nennen auch die Verbindungen zu Text und Lesestand die Untergrenze der Nummer; ohne das dauerte es mit 20.000 Artikeln 5,3 s.
+- Die Zeit wächst weiter mit der Zahl, aber linear.
+
 ## Wissen über das Altsystem
 
 Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.
