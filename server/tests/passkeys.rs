@@ -938,8 +938,11 @@ async fn a_right_proof_forgets_the_wrong_ones(db: PgPool) {
             assert_eq!(app_password(&state, &cookie, shown).await, wrong_passkey());
         }
         let shown = proof(&state, &cookie, &mut device).await;
-        let (status, made) = app_password(&state, &cookie, shown).await;
-        assert_eq!(status, StatusCode::CREATED, "{made}");
+        // What a created app password answers is not printed, not even here.
+        assert_eq!(
+            app_password(&state, &cookie, shown).await.0,
+            StatusCode::CREATED
+        );
     }
     assert_eq!(app_passwords(&state, &cookie).await, 2);
 }
