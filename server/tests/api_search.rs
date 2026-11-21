@@ -170,3 +170,25 @@ async fn refuses_what_cannot_be_searched_for(db: PgPool) {
         );
     }
 }
+
+#[sqlx::test]
+async fn an_account_searches_only_so_often_at_once(db: PgPool) {
+    let (ada, _) = common::reader(&db, "ada", 3).await;
+    let (grace, _) = common::reader(&db, "grace", 3).await;
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let held: Vec<_> = (0..rueder::rate::LONG_READS_PER_ACCOUNT)
+        .map(|_| state.rates.long_read(ada).ok().unwrap())
+        .collect();
+    let (status, _) = get(&state, "/api/search?q=article", &cookie).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    // Another account is not held up.
+    let (status, _) = get(&state, "/api/search?q=article", &grace_cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    drop(held);
+    let (status, _) = get(&state, "/api/search?q=article", &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+}

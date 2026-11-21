@@ -652,7 +652,7 @@ fn contents(id: &str, items: Vec<Value>, next: Option<i64>) -> Json<Value> {
     tag = "Google Reader API",
     params(("i" = Vec<String>, Query, description = "The ID of an item, long or short; once per item.")),
     security(("app_password" = [])),
-    responses((status = OK, description = "`items`: each with `id`, `title`, `published`, `author`, `canonical`, `alternate`, `summary.content` (the cleaned text), `categories` (read, starred, labels) and `origin` (its feed).", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+    responses((status = OK, description = "`items`: each with `id`, `title`, `published`, `author`, `canonical`, `alternate`, `summary.content` (the cleaned text), `categories` (read, starred, labels) and `origin` (its feed).", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword, (status = TOO_MANY_REQUESTS, description = "The account asks for too many texts at once; see `Retry-After`.")),
 )]
 pub(super) async fn item_contents(
     State(state): State<AppState>,
@@ -660,6 +660,8 @@ pub(super) async fn item_contents(
     App(login): App,
     Fields(params): Fields,
 ) -> Result<Json<Value>, AppError> {
+    // Up to MAX_TEXTS of texts: only a few of an account at once.
+    let _turn = state.rates.long_read(login.session.account_id)?;
     let keys: Vec<(i32, i32)> = params.all("i").filter_map(parse::item).collect();
     if keys.len() > MAX_ITEMS {
         let message = format!("at most {MAX_ITEMS} items at a time");
@@ -683,7 +685,7 @@ pub(super) async fn item_contents(
     tag = "Google Reader API",
     params(("*stream" = String, Path, description = "The stream, slashes included."), described::StreamPage),
     security(("app_password" = [])),
-    responses((status = OK, description = "As `stream/contents` answers.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+    responses((status = OK, description = "As `stream/contents` answers.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword, (status = TOO_MANY_REQUESTS, description = "The account asks for too many texts at once; see `Retry-After`.")),
 )]
 pub(super) async fn stream_contents_of(
     State(state): State<AppState>,
@@ -705,7 +707,7 @@ pub(super) async fn stream_contents_of(
     tag = "Google Reader API",
     params(described::StreamPage),
     security(("app_password" = [])),
-    responses((status = OK, description = "`items` as `stream/items/contents` has them, and, if there is more, `continuation`.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword),
+    responses((status = OK, description = "`items` as `stream/items/contents` has them, and, if there is more, `continuation`.", body = serde_json::Value), (status = BAD_REQUEST, description = "A parameter the server cannot use, such as an unknown stream."), crate::openapi::NeedsAppPassword, (status = TOO_MANY_REQUESTS, description = "The account asks for too many texts at once; see `Retry-After`.")),
 )]
 pub(super) async fn stream_contents(
     State(state): State<AppState>,
@@ -729,6 +731,8 @@ async fn contents_of(
 ) -> Result<Json<Value>, AppError> {
     let stream =
         parse::stream(stream_id).ok_or_else(|| AppError::BadRequest("unknown stream".into()))?;
+    // Up to MAX_TEXTS of texts: only a few of an account at once.
+    let _turn = state.rates.long_read(login.session.account_id)?;
     let source = source(state, &login.session, &stream).await?;
     let ask = Ask::of(state, &stream, params, MAX_ITEMS).await?;
     let scanned = scan(state, &login.session, &source, &ask).await?;

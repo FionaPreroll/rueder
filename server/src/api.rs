@@ -601,13 +601,15 @@ struct SearchHits {
     tag = "Reading",
     params(SearchQuery),
     security(("session" = [])),
-    responses((status = OK, body = SearchHits), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No words, or `feed` and `folder` together.")),
+    responses((status = OK, body = SearchHits), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "No words, or `feed` and `folder` together."), (status = TOO_MANY_REQUESTS, description = "The account searches too much at once; see `Retry-After`.")),
 )]
 async fn search_articles(
     State(state): State<AppState>,
     session: Session,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<SearchHits>, AppError> {
+    // Holds a connection for a while: only a few of an account at once.
+    let _turn = state.rates.long_read(session.account_id)?;
     let feeds = match (query.feed, query.folder) {
         (Some(_), Some(_)) => return Err(AppError::BadRequest("give feed or folder".into())),
         (Some(feed_id), None) => subscribed(&state, &session, feed_id).await?,
