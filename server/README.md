@@ -17,7 +17,7 @@ What is here:
 - The import of the old rueder's database (`src/import.rs`): feeds, articles,
   accounts, folders and subscriptions. It only adds what is missing, so it can
   run more than once.
-- The hardened HTTP client (`src/http_client.rs`), the one way out to the
+- The hardened HTTP client (`../hardened-http`, named for rueder in `src/http_client.rs`), the one way out to the
   internet: only http and https, no address inside the own network however it is
   written or reached, limits for time, redirects and size.
 - Fetching (`src/feeds.rs`, `src/fetch.rs`): `serve` fetches the feeds that are

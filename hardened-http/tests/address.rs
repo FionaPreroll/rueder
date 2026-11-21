@@ -6,8 +6,8 @@ use std::{
     sync::LazyLock,
 };
 
+use hardened_http::{Config, Error, HttpClient, Net, address::internal};
 use proptest::prelude::*;
-use rueder::http_client::{Config, Error, HttpClient, Net, address::internal};
 
 static CLIENT: LazyLock<HttpClient> = LazyLock::new(|| HttpClient::new(Config::default()).unwrap());
 

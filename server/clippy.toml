@@ -1,10 +1,10 @@
-# Only the hardened client in src/http_client.rs reaches out to the internet.
+# Only the hardened client of ../hardened-http reaches out to the internet.
 # Building another one would go around its rules against SSRF.
 disallowed-methods = [
-    { path = "reqwest::Client::new", reason = "use rueder::http_client::HttpClient" },
-    { path = "reqwest::Client::builder", reason = "use rueder::http_client::HttpClient" },
-    { path = "reqwest::ClientBuilder::new", reason = "use rueder::http_client::HttpClient" },
-    { path = "reqwest::get", reason = "use rueder::http_client::HttpClient" },
+    { path = "reqwest::Client::new", reason = "use hardened_http::HttpClient" },
+    { path = "reqwest::Client::builder", reason = "use hardened_http::HttpClient" },
+    { path = "reqwest::ClientBuilder::new", reason = "use hardened_http::HttpClient" },
+    { path = "reqwest::get", reason = "use hardened_http::HttpClient" },
     # Only src/cleaning.rs reads HTML that somebody else wrote. Its parser is kept
     # within limits for the depth and the size of the tree; without them a text of
     # a megabyte can keep the server busy for minutes or fill its memory.

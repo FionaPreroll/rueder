@@ -23,7 +23,7 @@ use rueder::{
     events::Events,
     feeds::Stored,
     fetch::{self, MAX_INTERVAL, MIN_INTERVAL, Outcome},
-    http_client::{Config, HttpClient},
+    http_client::{self, Config, HttpClient},
     monitor::Monitor,
 };
 use sqlx::{PgPool, Row};
@@ -110,6 +110,7 @@ async fn site(entries: &[(&str, &str, &str)]) -> (String, Shared) {
 /// A client that may reach the site on this machine and nothing else inside.
 fn client() -> HttpClient {
     let config = Config {
+        agent: http_client::AGENT.to_owned(),
         allow: vec!["127.0.0.1".parse().unwrap()],
         ..Config::default()
     };
@@ -698,6 +699,7 @@ async fn feeds_at(db: &PgPool, urls: &[String]) -> Vec<i32> {
 /// A client for sites anywhere on this machine.
 fn loopback_client() -> HttpClient {
     let config = Config {
+        agent: http_client::AGENT.to_owned(),
         allow: vec!["127.0.0.0/8".parse().unwrap()],
         ..Config::default()
     };

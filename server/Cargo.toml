@@ -18,6 +18,8 @@ encoding_rs = "0.8.44"
 feed-rs = "3.0.0"
 futures-util = "0.3.34"
 getrandom = "0.4.3"
+# The client for everything that goes out to the internet, see src/http_client.rs.
+hardened-http = { path = "../hardened-http" }
 hmac = "0.13.0"
 # The parser ammonia uses, and a document tree for it, for rueder's own rules.
 html5ever = "0.40.1"

@@ -1072,6 +1072,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     let client = HttpClient::new(http_client::Config {
+        agent: http_client::AGENT.to_owned(),
         allow,
         ..Default::default()
     })?;

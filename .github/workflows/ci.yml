@@ -72,6 +72,35 @@ jobs:
           files: server/lcov.info
           flags: server
 
+  # The hardened HTTP client in hardened-http/, which the server and RSSifier
+  # take by their path, and RSSifier in rssifier/, which makes feeds of web
+  # pages; each with its own lockfile, so that it can move to a repository
+  # of its own.
+  rssifier:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate: [hardened-http, rssifier]
+    defaults:
+      run:
+        working-directory: ${{ matrix.crate }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # As in the job server.
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # branch master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: ${{ matrix.crate }}
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
   # What the server is built from: no dependency with a known vulnerability,
   # only licenses, sources and crates that server/deny.toml allows.
   dependencies:
@@ -91,6 +120,12 @@ jobs:
       - run: cargo audit
       # Reads what is really built: advisories again, licenses, banned crates, sources.
       - run: cargo deny check
+      # The same for RSSifier, whose lockfile holds hardened-http's too; its
+      # exceptions are in rssifier/deny.toml.
+      - run: cargo audit
+        working-directory: rssifier
+      - run: cargo deny check
+        working-directory: rssifier
 
   # What a pull request adds to everything else rueder is built from: npm in
   # web/ and app/, the actions, and Cargo again. A new or raised dependency

@@ -1,9 +1,12 @@
-# The image is built from server/ and web/ and nothing else.
+# The image is built from server/, the client it takes from hardened-http/
+# and web/, and nothing else.
 *
 !server
+!hardened-http
 !web
 
 server/target
+hardened-http/target
 server/image-cache
 server/fuzz/target
 web/node_modules

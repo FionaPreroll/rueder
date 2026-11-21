@@ -1,0 +1,8 @@
+# Only HttpClient::with_lookup builds a reqwest client. Building another one
+# would go around the rules against SSRF.
+disallowed-methods = [
+    { path = "reqwest::Client::new", reason = "use HttpClient" },
+    { path = "reqwest::Client::builder", reason = "use HttpClient" },
+    { path = "reqwest::ClientBuilder::new", reason = "use HttpClient" },
+    { path = "reqwest::get", reason = "use HttpClient" },
+]

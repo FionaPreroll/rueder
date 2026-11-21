@@ -1,7 +1,7 @@
-//! Which addresses rueder fetches from.
+//! Which addresses the client fetches from.
 //!
 //! Users enter addresses, and feeds and web pages redirect to others. None of
-//! them may lead into the network rueder itself runs in: to the machine itself,
+//! them may lead into the network the client itself runs in: to the machine itself,
 //! to private networks, or to the metadata service of a cloud provider. This
 //! module decides that for one IP address; the client applies it to every address
 //! it is about to connect to.
@@ -15,7 +15,7 @@ use std::{
     str::FromStr,
 };
 
-/// Says why rueder does not fetch from the address, or `None` for an address of
+/// Says why the client does not fetch from the address, or `None` for an address of
 /// the public internet.
 pub fn internal(ip: IpAddr) -> Option<&'static str> {
     match ip {

@@ -22,7 +22,7 @@ RUN pnpm run build
 FROM rust:1-trixie@sha256:8a4e90c7946b74626488b1446f712c0fe0ed1a596cbd3d871684bc9c5433ae07 AS server
 WORKDIR /src/server
 # Which commit this image is of, for the status page: the build context holds
-# server/ and web/ and no git directory, so whoever builds passes it in. CI
+# server/, hardened-http/ and web/ and no git directory, so whoever builds passes it in. CI
 # does (see .github/workflows/ci.yml); a build by hand may leave it out, and
 # the status then says it does not know.
 ARG RUEDER_COMMIT=""
@@ -38,6 +38,7 @@ ENV SQLX_OFFLINE=true \
     RUEDER_TAG=$RUEDER_TAG \
     RUEDER_DIRTY=$RUEDER_DIRTY \
     RUEDER_CI_RUN=$RUEDER_CI_RUN
+COPY hardened-http/ /src/hardened-http/
 COPY server/ ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/server/target \

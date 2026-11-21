@@ -162,6 +162,8 @@ it asks for the address of your rueder at its first start.
 | [`server/`](server/README.md) | The server in Rust (axum, tokio, sqlx): API, fetching, cleaning, image proxy, accounts and the command line, in one program. |
 | [`web/`](web/README.md) | The web page: SvelteKit as a single-page app, Svelte 5, Tailwind CSS and TypeScript. The server serves it. |
 | [`app/`](app/README.md) | The Android app, Capacitor around a start page that opens your rueder. |
+| [`rssifier/`](rssifier/README.md) | RSSifier, a program of its own that makes feeds of web pages without one; rueder is to use it from its feed search. |
+| [`hardened-http/`](hardened-http/README.md) | The HTTP client the server and RSSifier share, with the rules against reaching into their own network. |
 | [`deploy/`](deploy/README.md), `Dockerfile` | The container image, the compose file with PostgreSQL, and how to install it. |
 | [`pages/`](pages/README.md) | The site on GitHub Pages: an overview, the demo and the documentation, put together from what the other parts build. |
 | [`docs/`](docs/implementation.md) | Plan, architecture and state of the work, in German. |

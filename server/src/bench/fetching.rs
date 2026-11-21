@@ -336,6 +336,7 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
     let mut servers = serve(&options, &source).await?;
 
     let client = HttpClient::new(http_client::Config {
+        agent: http_client::AGENT.to_owned(),
         allow: vec![
             "127.0.0.0/8"
                 .parse()
