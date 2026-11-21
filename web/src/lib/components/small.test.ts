@@ -105,7 +105,7 @@ describe('Menu', () => {
 		expect(screen.queryByRole('menu')).toBeNull();
 	});
 
-	it('stays within the window, sideways and at the bottom', async () => {
+	it('stays within the window, sideways and at the bottom, and scrolls where it is longer', async () => {
 		vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(360);
 		vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(640);
 		vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(360);
@@ -125,6 +125,9 @@ describe('Menu', () => {
 		let menu = screen.getByRole('menu');
 		expect(menu.style.translate).toBe('158px 0');
 		expect(menu).toHaveClass('mt-1');
+		// It ends 8 pixels above the bottom of the window and scrolls the rest.
+		expect(menu.style.maxHeight).toBe('532px');
+		expect(menu).toHaveClass('overflow-y-auto');
 
 		await userEvent.click(button);
 		under = { left: 300, right: 340, top: 460, bottom: 492 };
@@ -132,13 +135,38 @@ describe('Menu', () => {
 		await userEvent.click(button);
 		menu = screen.getByRole('menu');
 		expect(menu.style.translate).toBe('-156px 0');
-		// No room below, more above: it opens upward.
+		// No room below, more above: it opens upward, as high as the room up there.
 		expect(menu).toHaveClass('bottom-full');
+		expect(menu.style.maxHeight).toBe('452px');
 
 		await userEvent.click(button);
 		drawn = { left: 10, right: 218, top: 100, bottom: 200 };
 		await userEvent.click(button);
 		expect(screen.getByRole('menu').style.translate).toBe('');
+		vi.restoreAllMocks();
+	});
+
+	it('stays within the area that scrolls it', async () => {
+		vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(640);
+		const { container } = render(MenuHarness, { onpick: () => {} });
+		// A list from 200 pixels down to the bottom of the window, which hides what reaches
+		// out of it, with the button near its bottom and a long menu under it.
+		container.style.overflowY = 'auto';
+		vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+			this: HTMLElement
+		) {
+			if (this === container) return { top: 200, bottom: 640 } as DOMRect;
+			if (this.getAttribute('role') === 'menu') {
+				return { left: 10, right: 218, top: 600, bottom: 1400 } as DOMRect;
+			}
+			return { left: 10, right: 50, top: 560, bottom: 592 } as DOMRect;
+		});
+
+		await userEvent.click(screen.getByRole('button', { name: 'More' }));
+		const menu = screen.getByRole('menu');
+		// 32 pixels below, 352 above within the list rather than 552 within the window.
+		expect(menu).toHaveClass('bottom-full');
+		expect(menu.style.maxHeight).toBe('352px');
 		vi.restoreAllMocks();
 	});
 

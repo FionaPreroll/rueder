@@ -2,7 +2,8 @@
 	// A button that opens a small menu under it. A click on an entry, a click
 	// elsewhere and Escape close it. Where the menu would leave the window, as on a
 	// narrow phone, it moves sideways into it, and above its button if there is no
-	// room below.
+	// room below. A menu longer than the room it has, like the labels of an article,
+	// scrolls in itself.
 	import type { Snippet } from 'svelte';
 
 	let {
@@ -31,29 +32,50 @@
 	/** How far the menu moved sideways to stay in the window, in pixels. */
 	let shift = $state(0);
 	let above = $state(false);
+	/** How high the menu may be to stay within sight, in pixels; 0 before it is measured. */
+	let room = $state(0);
 
 	// Measured once the menu is drawn where its alignment puts it.
 	$effect(() => {
 		if (!open || !menu) return;
-		const place = fit(menu.getBoundingClientRect(), root?.getBoundingClientRect());
+		const place = fit(menu.getBoundingClientRect(), root?.getBoundingClientRect(), seen(root));
 		shift = place.shift;
 		above = place.above;
+		room = place.room;
 		return () => {
 			shift = 0;
 			above = false;
+			room = 0;
 		};
 	});
 
-	/** Where a menu drawn at `rect` under its button at `button` fits into the window. */
-	function fit(rect: DOMRect, button: DOMRect | undefined) {
+	/**
+	 * Where a menu drawn at `rect` under its button at `button` fits into the window,
+	 * and between the top and the bottom of what can be seen of it.
+	 */
+	function fit(rect: DOMRect, button: DOMRect | undefined, view: { top: number; bottom: number }) {
 		const width = document.documentElement.clientWidth || window.innerWidth;
-		const height = window.innerHeight;
 		let shift = 0;
 		if (rect.right > width - EDGE) shift = width - EDGE - rect.right;
 		if (rect.left + shift < EDGE) shift = EDGE - rect.left;
-		const roomAbove = (button?.top ?? 0) - EDGE;
-		const above = rect.bottom > height - EDGE && roomAbove > height - EDGE - rect.top;
-		return { shift, above };
+		const roomAbove = (button?.top ?? 0) - view.top - EDGE;
+		const roomBelow = view.bottom - EDGE - rect.top;
+		const above = rect.bottom > view.bottom - EDGE && roomAbove > roomBelow;
+		return { shift, above, room: above ? roomAbove : roomBelow };
+	}
+
+	/**
+	 * The top and bottom of what can be seen of a menu in `element`: the window, cut to
+	 * the area around it that scrolls, like the list, which hides what reaches out of it.
+	 */
+	function seen(element: HTMLElement | undefined) {
+		const height = window.innerHeight;
+		for (let at = element?.parentElement; at; at = at.parentElement) {
+			if (!/auto|scroll|hidden|clip/.test(getComputedStyle(at).overflowY)) continue;
+			const box = at.getBoundingClientRect();
+			return { top: Math.max(box.top, 0), bottom: Math.min(box.bottom, height) };
+		}
+		return { top: 0, bottom: height };
 	}
 
 	function outside(event: MouseEvent) {
@@ -89,11 +111,12 @@
 			tabindex="-1"
 			bind:this={menu}
 			class={[
-				'absolute z-30 max-w-[calc(100vw-1rem)] min-w-52 rounded-md border border-line bg-paper py-1 shadow-lg',
+				'absolute z-30 max-w-[calc(100vw-1rem)] min-w-52 overflow-y-auto rounded-md border border-line bg-paper py-1 shadow-lg',
 				align === 'end' ? 'inset-e-0' : 'inset-s-0',
 				above ? 'bottom-full mb-1' : 'mt-1'
 			]}
 			style:translate={shift ? `${shift}px 0` : undefined}
+			style:max-height={room > 0 ? `${room}px` : undefined}
 			onclick={() => (open = false)}
 			onkeydown={keydown}
 		>
