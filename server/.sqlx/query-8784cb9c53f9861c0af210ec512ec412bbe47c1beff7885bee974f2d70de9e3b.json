@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.seq, a.title, a.author, c.html, c.tags,\n                  coalesce(st.hidden, false) AS \"hidden!\",\n                  CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                       ELSE coalesce(st.read, false) END AS \"read!\"\n           FROM subscriptions s\n           JOIN articles a ON a.feed_id = s.feed_id\n           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           LEFT JOIN article_states st\n               ON st.account_id = s.account_id AND st.feed_id = a.feed_id AND st.seq = a.seq\n           WHERE s.account_id = $1 AND s.feed_id = $2\n             AND (a.seq >= $3 OR ($4 AND a.seq IN (\n                 SELECT x.seq FROM article_states x\n                 WHERE x.account_id = $1 AND x.feed_id = $2 AND x.hidden)))\n           ORDER BY a.seq",
+  "query": "SELECT a.seq, a.title, a.author, c.html, c.tags,\n                  coalesce(st.hidden, false) AS \"hidden!\",\n                  CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)\n                       ELSE coalesce(st.read, false) END AS \"read!\"\n           FROM subscriptions s\n           JOIN articles a ON a.feed_id = s.feed_id\n           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq AND c.seq > $5\n           LEFT JOIN article_states st\n               ON st.account_id = s.account_id AND st.feed_id = a.feed_id AND st.seq = a.seq\n                  AND st.seq > $5\n           WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq > $5\n             AND (a.seq >= $3 OR ($4 AND coalesce(st.hidden, false)))\n           ORDER BY a.seq\n           LIMIT $6",
   "describe": {
     "columns": [
       {
@@ -76,7 +76,9 @@
         "Int4",
         "Int4",
         "Int4",
-        "Bool"
+        "Bool",
+        "Int4",
+        "Int8"
       ]
     },
     "nullable": [
@@ -89,5 +91,5 @@
       null
     ]
   },
-  "hash": "98186aad8711b026225c10538827c307413ac269c152ec8479ba1f8e3824ee97"
+  "hash": "8784cb9c53f9861c0af210ec512ec412bbe47c1beff7885bee974f2d70de9e3b"
 }

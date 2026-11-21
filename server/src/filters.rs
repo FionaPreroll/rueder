@@ -34,6 +34,9 @@ pub const MAX_PATTERN: usize = 200;
 /// How many of a feed's newest articles a changed rule looks at. Older ones
 /// stay as they are, except hidden ones, which are always looked at again.
 pub const RECENT: i32 = 200;
+/// How many articles the rules read at a time: a feed can have hundreds of
+/// thousands hidden, and each comes with its text.
+const CHUNK: i64 = 50;
 /// How large a compiled pattern may get, in bytes.
 const MAX_PROGRAM: usize = 1024 * 1024;
 
@@ -407,13 +410,14 @@ struct Verdict {
 }
 
 /// The articles of a feed that rules look at: from number `from` on, and,
-/// with `and_hidden`, the ones hidden for the account wherever they are.
+/// with `and_hidden`, the ones hidden for the account wherever they are. The
+/// next [`CHUNK`] of them after number `after`, or fewer at the end.
 async fn candidates(
     conn: &mut PgConnection,
     account_id: i32,
     feed_id: i32,
-    from: i32,
-    and_hidden: bool,
+    (from, and_hidden): (i32, bool),
+    after: i32,
 ) -> anyhow::Result<Vec<Candidate>> {
     let rows = sqlx::query!(
         r#"SELECT a.seq, a.title, a.author, c.html, c.tags,
@@ -422,18 +426,20 @@ async fn candidates(
                        ELSE coalesce(st.read, false) END AS "read!"
            FROM subscriptions s
            JOIN articles a ON a.feed_id = s.feed_id
-           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
+           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq AND c.seq > $5
            LEFT JOIN article_states st
                ON st.account_id = s.account_id AND st.feed_id = a.feed_id AND st.seq = a.seq
-           WHERE s.account_id = $1 AND s.feed_id = $2
-             AND (a.seq >= $3 OR ($4 AND a.seq IN (
-                 SELECT x.seq FROM article_states x
-                 WHERE x.account_id = $1 AND x.feed_id = $2 AND x.hidden)))
-           ORDER BY a.seq"#,
+                  AND st.seq > $5
+           WHERE s.account_id = $1 AND s.feed_id = $2 AND a.seq > $5
+             AND (a.seq >= $3 OR ($4 AND coalesce(st.hidden, false)))
+           ORDER BY a.seq
+           LIMIT $6"#,
         account_id,
         feed_id,
         from,
         and_hidden,
+        after,
+        CHUNK,
     )
     .fetch_all(conn)
     .await?;
@@ -497,22 +503,32 @@ async fn settle(
     and_hidden: bool,
     changed: &mut Changed,
 ) -> anyhow::Result<()> {
-    let articles = candidates(conn, account_id, feed_id, from, and_hidden).await?;
-    for article in verdicts(tests, articles).await? {
-        if article.hide != article.hidden {
-            reading::set_hidden_on(conn, account_id, feed_id, article.seq, article.hide).await?;
-            if article.hide {
-                changed.hidden += 1;
-            } else {
-                changed.shown += 1;
+    let mut after = 0;
+    loop {
+        let articles = candidates(conn, account_id, feed_id, (from, and_hidden), after).await?;
+        let (Some(last), whole) = (articles.last(), articles.len() == CHUNK as usize) else {
+            return Ok(());
+        };
+        after = last.seq;
+        for article in verdicts(tests.clone(), articles).await? {
+            if article.hide != article.hidden {
+                reading::set_hidden_on(conn, account_id, feed_id, article.seq, article.hide)
+                    .await?;
+                if article.hide {
+                    changed.hidden += 1;
+                } else {
+                    changed.shown += 1;
+                }
+            }
+            if article.mark_read && !article.read {
+                reading::set_read_on(conn, account_id, feed_id, article.seq, true).await?;
+                changed.read += 1;
             }
         }
-        if article.mark_read && !article.read {
-            reading::set_read_on(conn, account_id, feed_id, article.seq, true).await?;
-            changed.read += 1;
+        if !whole {
+            return Ok(());
         }
     }
-    Ok(())
 }
 
 /// The rules look at articles that just arrived in a feed, numbers `first` and
@@ -1008,12 +1024,23 @@ async fn preview(
         if !in_scope(rule.scope, feed.feed_id, folders) {
             continue;
         }
-        let from = feed.last_seq - RECENT + 1;
-        let articles = candidates(&mut conn, session.account_id, feed.feed_id, from, false).await?;
-        preview.of += articles.len();
-        let verdicts = verdicts(vec![test.clone()], articles).await?;
-        let matching = verdicts.iter().filter(|v| v.hide || v.mark_read);
-        preview.matches += matching.count();
+        let mut after = feed.last_seq - RECENT;
+        loop {
+            let account_id = session.account_id;
+            let articles =
+                candidates(&mut conn, account_id, feed.feed_id, (0, false), after).await?;
+            let (Some(last), whole) = (articles.last(), articles.len() == CHUNK as usize) else {
+                break;
+            };
+            after = last.seq;
+            preview.of += articles.len();
+            let verdicts = verdicts(vec![test.clone()], articles).await?;
+            let matching = verdicts.iter().filter(|v| v.hide || v.mark_read);
+            preview.matches += matching.count();
+            if !whole {
+                break;
+            }
+        }
     }
     Ok(Json(preview))
 }
@@ -1085,33 +1112,45 @@ async fn hits(State(state): State<AppState>, session: Session) -> Result<Json<Al
         if tests.is_empty() {
             continue;
         }
-        let from = feed.last_seq - RECENT + 1;
-        let articles = candidates(&mut conn, session.account_id, feed.feed_id, from, false).await?;
-        let looked_at = articles.len();
-        let found = tokio::task::spawn_blocking(move || {
-            let mut found = vec![0usize; tests.len()];
-            for article in articles {
-                let texts = Texts {
-                    title: article.title,
-                    text: text_of(&article.html),
-                    author: article.author,
-                    tags: article.tags,
-                };
-                for (count, (_, test)) in found.iter_mut().zip(&tests) {
-                    *count += usize::from(test.matches(&texts));
+        let mut after = feed.last_seq - RECENT;
+        loop {
+            let account_id = session.account_id;
+            let articles =
+                candidates(&mut conn, account_id, feed.feed_id, (0, false), after).await?;
+            let (Some(last), whole) = (articles.last(), articles.len() == CHUNK as usize) else {
+                break;
+            };
+            after = last.seq;
+            let looked_at = articles.len();
+            let tests = tests.clone();
+            let found = tokio::task::spawn_blocking(move || {
+                let mut found = vec![0usize; tests.len()];
+                for article in articles {
+                    let texts = Texts {
+                        title: article.title,
+                        text: text_of(&article.html),
+                        author: article.author,
+                        tags: article.tags,
+                    };
+                    for (count, (_, test)) in found.iter_mut().zip(&tests) {
+                        *count += usize::from(test.matches(&texts));
+                    }
+                }
+                tests
+                    .into_iter()
+                    .map(|(at, _)| at)
+                    .zip(found)
+                    .collect::<Vec<_>>()
+            })
+            .await?;
+            for (at, count) in found {
+                if let Some(hits) = hits.get_mut(at) {
+                    hits.matches += count;
+                    hits.of += looked_at;
                 }
             }
-            tests
-                .into_iter()
-                .map(|(at, _)| at)
-                .zip(found)
-                .collect::<Vec<_>>()
-        })
-        .await?;
-        for (at, count) in found {
-            if let Some(hits) = hits.get_mut(at) {
-                hits.matches += count;
-                hits.of += looked_at;
+            if !whole {
+                break;
             }
         }
     }
