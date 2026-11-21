@@ -366,6 +366,54 @@ async fn wrong_codes_count_like_wrong_passwords(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn wrong_codes_while_setting_it_up_count_like_wrong_passwords(db: PgPool) {
+    let ada = accounts::create(&db, "ada", Some(PASSWORD), false)
+        .await
+        .unwrap()
+        .unwrap();
+    let state = AppState::new(db.clone());
+    let first = cookie(&log_in(&state, "ada", None).await.1);
+    let body = json!({ "password": PASSWORD });
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/second-factor/setup",
+        Some(&first),
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let right = app_code(&db, ada, true, 0).await;
+    let wrong = format!(
+        "{:06}",
+        (right.parse::<u32>().unwrap() + 500_000) % 1_000_000
+    );
+
+    // A stolen session cannot guess its way into a second factor of its own.
+    let path = "/api/second-factor/confirm";
+    for _ in 0..rueder::login::PER_NAME {
+        let answer = said(&state, Method::POST, path, &first, json!({ "code": wrong })).await;
+        assert_eq!(
+            answer,
+            (StatusCode::FORBIDDEN, "the code is wrong".to_owned())
+        );
+    }
+    let (status, _) = said(&state, Method::POST, path, &first, json!({ "code": right })).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    let on: bool = sqlx::query_scalar("SELECT totp_secret IS NOT NULL FROM accounts WHERE id = $1")
+        .bind(ada)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert!(!on);
+    // The login with the name is held up as well.
+    assert_eq!(
+        log_in(&state, "ada", None).await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[sqlx::test]
 async fn it_is_switched_off_with_the_password_and_a_code_or_on_the_command_line(db: PgPool) {
     let ada = accounts::create(&db, "ada", Some(PASSWORD), false)
         .await

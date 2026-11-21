@@ -1010,3 +1010,526 @@ async fn where_images_are_public_every_app_gets_the_same_addresses(db: PgPool) {
         shared(Size::Icon, "https://blog.example/icon.png")
     );
 }
+
+/// A site on this machine with two feeds, a page that names one of them and
+/// a page without; returns its address.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a made-up site of the test, not a route of rueder"
+)]
+async fn site() -> String {
+    const FEED: &str = "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel>\
+        <title>The Example</title><link>https://example.org/</link>\
+        <item><guid>b</guid><title>Second</title><description>two</description></item>\
+        <item><guid>a</guid><title>First</title><description>one</description></item>\
+        </channel></rss>";
+    const PAGE: &str = r#"<!doctype html><html><head><title>A blog</title>
+        <link rel="alternate" type="application/rss+xml" title="The blog" href="/feed.xml">
+        </head><body><p>Hello</p></body></html>"#;
+    let feed = async || ([(header::CONTENT_TYPE, "application/rss+xml")], FEED);
+    let router = axum::Router::new()
+        .route("/feed.xml", axum::routing::get(feed))
+        .route("/other.xml", axum::routing::get(feed))
+        .route(
+            "/blog/",
+            axum::routing::get(async || ([(header::CONTENT_TYPE, "text/html")], PAGE)),
+        )
+        .route(
+            "/plain",
+            axum::routing::get(async || ([(header::CONTENT_TYPE, "text/html")], "<p>No feed</p>")),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    format!("http://{addr}")
+}
+
+/// A server that may reach the site on this machine and nothing else inside,
+/// and looks at so many addresses for an account in an hour.
+fn fetching(db: &PgPool, lookups: u32) -> AppState {
+    let config = http_client::Config {
+        allow: vec!["127.0.0.1".parse().unwrap()],
+        ..http_client::Config::default()
+    };
+    AppState {
+        client: Some(HttpClient::new(config).unwrap()),
+        rates: Rates::new(Limits {
+            lookups: Rate::new(lookups, Duration::from_secs(3600)),
+            ..Limits::default()
+        })
+        .into(),
+        ..AppState::new(db.clone())
+    }
+}
+
+/// A form body, written as an app writes it.
+fn form(pairs: &[(&str, &str)]) -> String {
+    url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(pairs)
+        .finish()
+}
+
+async fn quickadd(state: &AppState, token: &str, address: &str) -> (StatusCode, Value) {
+    let (status, body) = post(
+        state,
+        "/reader/api/0/subscription/quickadd",
+        token,
+        &form(&[("quickadd", address)]),
+    )
+    .await;
+    (status, serde_json::from_str(&body).unwrap_or(Value::Null))
+}
+
+async fn feed_rows(db: &PgPool) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM feeds")
+        .fetch_one(db)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn an_app_subscribes_by_the_address_of_a_feed_or_a_page(db: PgPool) {
+    let site = site().await;
+    let (ada, grace) = (
+        common::account(&db, "ada").await,
+        common::account(&db, "grace").await,
+    );
+    let state = fetching(&db, 100);
+    let token = logged_in(&state, ada, "ada").await;
+    let feed = format!("feed/{site}/feed.xml");
+
+    // Into a folder made on the way, under a name of its own.
+    let (status, body) = post(
+        &state,
+        "/reader/api/0/subscription/edit",
+        &token,
+        &form(&[
+            ("ac", "subscribe"),
+            ("s", &feed),
+            ("t", "Mine"),
+            ("a", "user/-/label/News"),
+        ]),
+    )
+    .await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "OK"));
+    let list = get(
+        &state,
+        "/reader/api/0/subscription/list?output=json",
+        &token,
+    )
+    .await;
+    let subscription = &list["subscriptions"][0];
+    assert_eq!(subscription["title"], "Mine");
+    assert_eq!(subscription["url"], format!("{site}/feed.xml"));
+    assert_eq!(subscription["categories"][0]["id"], "user/-/label/News");
+    let id = subscription["id"].as_str().unwrap().to_owned();
+    // Fetched on the way: its articles are there, by its number as by its
+    // address.
+    let by_number = get(
+        &state,
+        &format!("/reader/api/0/stream/items/ids?output=json&s={id}"),
+        &token,
+    )
+    .await;
+    assert_eq!(ids(&by_number).len(), 2);
+    let by_address = get(
+        &state,
+        &format!(
+            "/reader/api/0/stream/items/ids?output=json&{}",
+            form(&[("s", &feed)])
+        ),
+        &token,
+    )
+    .await;
+    assert_eq!(ids(&by_address), ids(&by_number));
+
+    // By the address of a page that names it: the same feed again.
+    let (status, added) = quickadd(&state, &token, &format!("{site}/blog/")).await;
+    assert_eq!(status, StatusCode::OK, "{added}");
+    assert_eq!(added["numResults"], 1);
+    assert_eq!(added["streamId"], id);
+    assert_eq!(added["streamName"], "The blog");
+    // A page without a feed adds nothing.
+    let (status, added) = quickadd(&state, &token, &format!("{site}/plain")).await;
+    assert_eq!(
+        (status, added),
+        (StatusCode::OK, json!({ "numResults": 0 }))
+    );
+
+    // Another reader shares the feed, and reads it by its address only as a
+    // subscriber.
+    let theirs = logged_in(&state, grace, "grace").await;
+    let (status, _, _) = ask(
+        &state,
+        Method::GET,
+        &format!(
+            "/reader/api/0/stream/items/ids?output=json&{}",
+            form(&[("s", &feed)])
+        ),
+        Some(&theirs),
+        "",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, added) = quickadd(&state, &theirs, &format!("{site}/feed.xml")).await;
+    assert_eq!(status, StatusCode::OK, "{added}");
+    assert_eq!(added["streamId"], id);
+    assert_eq!(added["query"], format!("{site}/feed.xml"));
+    assert_eq!(feed_rows(&db).await, 1);
+    let list = get(
+        &state,
+        "/reader/api/0/subscription/list?output=json",
+        &theirs,
+    )
+    .await;
+    assert_eq!(list["subscriptions"].as_array().unwrap().len(), 1);
+    assert_eq!(list["subscriptions"][0]["categories"], json!([]));
+}
+
+#[sqlx::test]
+async fn subscribing_from_an_app_has_the_rules_of_the_page(db: PgPool) {
+    let site = site().await;
+    let ada = common::account(&db, "ada").await;
+    let state = fetching(&db, 100);
+    let token = logged_in(&state, ada, "ada").await;
+
+    // What is not a feed's address, or not one to subscribe to.
+    for pairs in [
+        vec![("ac", "subscribe"), ("s", "user/-/label/News")],
+        vec![("ac", "subscribe"), ("s", "feed/1")],
+        vec![("ac", "subscribe"), ("s", "feed/ftp://files.example/feed")],
+        vec![("ac", "unsubscribe"), ("s", "user/-/label/News")],
+        vec![("ac", "edit"), ("s", "user/-/state/com.google/starred")],
+        vec![("ac", "follow"), ("s", "feed/1")],
+        vec![("s", "feed/1")],
+    ] {
+        let (status, body) = post(
+            &state,
+            "/reader/api/0/subscription/edit",
+            &token,
+            &form(&pairs),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{pairs:?}: {body}");
+    }
+    // Nothing inside the server's own network, by either way.
+    for inside in ["http://[::1]/feed.xml", "http://169.254.169.254/latest/"] {
+        let (status, body) = post(
+            &state,
+            "/reader/api/0/subscription/edit",
+            &token,
+            &form(&[("ac", "subscribe"), ("s", &format!("feed/{inside}"))]),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{inside}: {body}");
+        let (status, _) = quickadd(&state, &token, inside).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{inside}");
+    }
+    assert_eq!(feed_rows(&db).await, 0);
+
+    // A feed the operator blocked.
+    let blocked: i32 = sqlx::query_scalar(
+        "INSERT INTO feeds (feed_url, title, blocked_at) VALUES ($1, 'Blocked', now()) RETURNING id",
+    )
+    .bind(format!("{site}/other.xml"))
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/subscription/edit",
+        &token,
+        &form(&[
+            ("ac", "subscribe"),
+            ("s", &format!("feed/{site}/other.xml")),
+        ]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = quickadd(&state, &token, &format!("{site}/other.xml")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let subscribed: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM subscriptions WHERE feed_id = $1")
+            .bind(blocked)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(subscribed, 0);
+
+    // The addresses the server looks at count as on the page: the search of
+    // quickadd and the fetch of a new feed, two of two here.
+    let state = fetching(&db, 2);
+    let (status, added) = quickadd(&state, &token, &format!("{site}/feed.xml")).await;
+    assert_eq!(status, StatusCode::OK, "{added}");
+    let (status, _) = quickadd(&state, &token, &format!("{site}/blog/")).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/subscription/edit",
+        &token,
+        &form(&[("ac", "subscribe"), ("s", &format!("feed/{site}/blog/"))]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    // A feed that is there already is not fetched, so it is no lookup.
+    let (status, body) = post(
+        &state,
+        "/reader/api/0/subscription/edit",
+        &token,
+        &form(&[("ac", "subscribe"), ("s", &format!("feed/{site}/feed.xml"))]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[sqlx::test]
+async fn an_app_renames_and_removes_labels_and_others_cannot(db: PgPool) {
+    let (ada, _) = common::reader(&db, "ada", 2).await;
+    let (grace, _) = common::reader(&db, "grace", 1).await;
+    let state = AppState::new(db.clone());
+    let token = logged_in(&state, ada, "ada").await;
+    let theirs = logged_in(&state, grace, "grace").await;
+    let cookie = common::session(&db, ada).await;
+    let all = ids(&get(&state, "/reader/api/0/stream/items/ids?output=json", &token).await);
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/edit-tag",
+        &token,
+        &format!("{}&a=user/-/label/Later", form_of_ids(&all)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let titles = |state: AppState, cookie: String| async move {
+        let (_, labels) =
+            common::call(&state, Method::GET, "/api/labels", Some(&cookie), None).await;
+        labels
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|label| label["title"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    // Taking off a label that is not there changes nothing.
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/edit-tag",
+        &token,
+        &format!("i={}&r=user/-/label/Never", all[0]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(state.clone(), cookie.clone()).await, ["Later"]);
+
+    // Another account's app finds no label of that name.
+    let rename = "s=user/-/label/Later&dest=user/-/label/Someday";
+    let (status, _) = post(&state, "/reader/api/0/rename-tag", &theirs, rename).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/disable-tag",
+        &theirs,
+        "s=user/-/label/Later",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(titles(state.clone(), cookie.clone()).await, ["Later"]);
+
+    // Renamed, the articles keep it.
+    let (status, _) = post(&state, "/reader/api/0/rename-tag", &token, rename).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(titles(state.clone(), cookie.clone()).await, ["Someday"]);
+    let someday = get(
+        &state,
+        "/reader/api/0/stream/items/ids?output=json&s=user/-/label/Someday",
+        &token,
+    )
+    .await;
+    assert_eq!(ids(&someday), all);
+    let (status, _) = post(&state, "/reader/api/0/rename-tag", &token, rename).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    for wrong in [
+        "s=user/-/label/Someday",
+        "s=user/-/state/com.google/starred&dest=user/-/label/Starred",
+        "s=user/-/label/Someday&dest=feed/1",
+    ] {
+        let (status, _) = post(&state, "/reader/api/0/rename-tag", &token, wrong).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{wrong}");
+    }
+
+    // Removed, from the articles too; the articles stay.
+    for wrong in ["s=user/-/state/com.google/starred", "s=feed/1"] {
+        let (status, _) = post(&state, "/reader/api/0/disable-tag", &token, wrong).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{wrong}");
+    }
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/disable-tag",
+        &token,
+        "s=user/-/label/Someday",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(titles(state.clone(), cookie.clone()).await.is_empty());
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM article_labels")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    let all_now = ids(&get(&state, "/reader/api/0/stream/items/ids?output=json", &token).await);
+    assert_eq!(all_now, all);
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/disable-tag",
+        &token,
+        "s=user/-/label/Someday",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn an_app_reads_the_states_of_articles(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 3).await;
+    let news = common::folder(&db, ada, None, "News").await;
+    common::move_to(&db, ada, feed, news).await;
+    let state = AppState::new(db.clone());
+    let token = logged_in(&state, ada, "ada").await;
+    let edit = async |form: String| {
+        let (status, body) = post(&state, "/reader/api/0/edit-tag", &token, &form).await;
+        assert_eq!(status, StatusCode::OK, "{form}: {body}");
+    };
+    // All three read, and a fourth that came after.
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/mark-all-as-read",
+        &token,
+        &format!("s=feed/{feed}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    common::add(&db, feed, 1).await;
+    let all = ids(&get(&state, "/reader/api/0/stream/items/ids?output=json", &token).await);
+    // The newest unread; the next read; the third read, starred and
+    // labelled; the oldest kept unread below the read mark.
+    edit(format!(
+        "i={}&a=user/-/state/com.google/starred&a=user/-/label/Later",
+        all[2]
+    ))
+    .await;
+    edit(format!(
+        "i={}&a=user/-/state/com.google/kept-unread",
+        all[3]
+    ))
+    .await;
+
+    let list = async |query: &str| {
+        ids(&get(
+            &state,
+            &format!("/reader/api/0/stream/items/ids?output=json&{query}"),
+            &token,
+        )
+        .await)
+    };
+    let pick = |n: &[usize]| n.iter().map(|&i| all[i].clone()).collect::<Vec<_>>();
+    assert_eq!(list("s=user/-/state/com.google/read").await, pick(&[1, 2]));
+    assert_eq!(list("it=user/-/state/com.google/read").await, pick(&[1, 2]));
+    assert_eq!(
+        list("s=user/-/state/com.google/kept-unread").await,
+        pick(&[0, 3])
+    );
+    assert_eq!(
+        list("it=user/-/state/com.google/kept-unread").await,
+        pick(&[0, 3])
+    );
+    assert_eq!(list("it=user/-/state/com.google/starred").await, pick(&[2]));
+    assert_eq!(
+        list("xt=user/-/state/com.google/starred").await,
+        pick(&[0, 1, 3])
+    );
+    assert_eq!(
+        list("xt=user/-/state/com.google/read&xt=user/-/state/com.google/starred").await,
+        pick(&[0, 3])
+    );
+    // States rueder does not have hold nothing.
+    assert!(list("s=user/-/state/com.google/broadcast").await.is_empty());
+    // Marking a list of starred articles as read changes nothing: they have
+    // no read mark of their own.
+    let (status, _) = post(
+        &state,
+        "/reader/api/0/mark-all-as-read",
+        &token,
+        "s=user/-/state/com.google/starred",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list("xt=user/-/state/com.google/read").await, pick(&[0, 3]));
+
+    // The texts say the same, as categories.
+    let (status, body) = post(
+        &state,
+        "/reader/api/0/stream/items/contents",
+        &token,
+        &form_of_ids(&all),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let contents: Value = serde_json::from_str(&body).unwrap();
+    let categories: Vec<Vec<String>> = contents["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            let mut of: Vec<String> = item["categories"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|category| category.as_str().unwrap().to_owned())
+                .collect();
+            of.sort();
+            of
+        })
+        .collect();
+    let state = |name: &str| format!("user/-/state/com.google/{name}");
+    let (list, news) = (state("reading-list"), "user/-/label/News".to_owned());
+    let later = "user/-/label/Later".to_owned();
+    assert_eq!(
+        categories,
+        [
+            vec![news.clone(), list.clone()],
+            vec![news.clone(), state("read"), list.clone()],
+            vec![
+                later,
+                news.clone(),
+                state("read"),
+                list.clone(),
+                state("starred")
+            ],
+            vec![news, state("kept-unread"), list],
+        ]
+    );
+}
+
+#[sqlx::test]
+async fn a_list_that_skips_many_says_where_to_go_on(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 0).await;
+    let scan = rueder::greader::SCAN;
+    common::add(&db, feed, scan + 5).await;
+    // Only the five oldest are read.
+    sqlx::query("UPDATE subscriptions SET read_upto = 5 WHERE account_id = $1")
+        .bind(ada)
+        .execute(&db)
+        .await
+        .unwrap();
+    let state = AppState::new(db.clone());
+    let token = logged_in(&state, ada, "ada").await;
+    let path = "/reader/api/0/stream/items/ids?output=json&n=10&s=user/-/state/com.google/read";
+
+    // A request looks at so many and says where it stopped, although none of
+    // them passed: the app goes on and finds the rest.
+    let first = get(&state, path, &token).await;
+    assert_eq!(ids(&first), Vec::<String>::new());
+    let c = first["continuation"].as_str().unwrap();
+    let rest = get(&state, &format!("{path}&c={c}"), &token).await;
+    assert_eq!(ids(&rest).len(), 5);
+    assert!(rest.get("continuation").is_none());
+}

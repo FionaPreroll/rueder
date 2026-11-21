@@ -844,6 +844,131 @@ async fn wrong_answers_count_like_wrong_passwords(db: PgPool) {
     assert!(logged_in.is_none());
 }
 
+/// A device that answers for another's passkey with a key of its own, as one
+/// that copied the passkey's id and user would.
+fn thief_of(device: &Device) -> Device {
+    Device {
+        id: device.id.clone(),
+        user: device.user.clone(),
+        ..Device::new()
+    }
+}
+
+/// Asks for an app password with this proof of the owner: the status and the
+/// text of the answer.
+async fn app_password(state: &AppState, cookie: &str, mut shown: Value) -> (StatusCode, String) {
+    shown["name"] = "Reeder".into();
+    let body = Some(("application/json", shown.to_string().into_bytes()));
+    let (status, _, text) = raw(
+        state,
+        Method::POST,
+        "/api/app-passwords",
+        Some(cookie),
+        body,
+    )
+    .await;
+    (status, String::from_utf8(text).unwrap())
+}
+
+async fn app_passwords(state: &AppState, cookie: &str) -> usize {
+    let (_, list) = call(state, Method::GET, "/api/app-passwords", Some(cookie), None).await;
+    list["app_passwords"].as_array().unwrap().len()
+}
+
+fn wrong_passkey() -> (StatusCode, String) {
+    (StatusCode::FORBIDDEN, "the passkey is wrong".to_owned())
+}
+
+#[sqlx::test]
+async fn a_wrong_passkey_proves_nothing_and_counts_like_a_wrong_password(db: PgPool) {
+    let ada = ada(&db).await;
+    let state = with_passkeys(&db);
+    let cookie = common::session(&db, ada).await;
+    let mut device = Device::new();
+    add(
+        &state,
+        &cookie,
+        &mut device,
+        json!({ "password": PASSWORD }),
+    )
+    .await;
+
+    // Signed with another key, the answer to the session's own ceremony
+    // proves nothing.
+    let mut thief = thief_of(&device);
+    for _ in 0..login::PER_NAME {
+        let shown = proof(&state, &cookie, &mut thief).await;
+        assert_eq!(app_password(&state, &cookie, shown).await, wrong_passkey());
+    }
+    // A stolen session cannot try on: then not even the right passkey gets
+    // through for a while.
+    let shown = proof(&state, &cookie, &mut device).await;
+    let (status, _) = app_password(&state, &cookie, shown).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(app_passwords(&state, &cookie).await, 0);
+    // The login with the name is held up as well, as after wrong passwords.
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/login",
+        None,
+        Some(json!({ "username": "ada", "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[sqlx::test]
+async fn a_right_proof_forgets_the_wrong_ones(db: PgPool) {
+    let ada = ada(&db).await;
+    let state = with_passkeys(&db);
+    let cookie = common::session(&db, ada).await;
+    let mut device = Device::new();
+    add(
+        &state,
+        &cookie,
+        &mut device,
+        json!({ "password": PASSWORD }),
+    )
+    .await;
+    let mut thief = thief_of(&device);
+    for _ in 0..2 {
+        for _ in 1..login::PER_NAME {
+            let shown = proof(&state, &cookie, &mut thief).await;
+            assert_eq!(app_password(&state, &cookie, shown).await, wrong_passkey());
+        }
+        let shown = proof(&state, &cookie, &mut device).await;
+        let (status, made) = app_password(&state, &cookie, shown).await;
+        assert_eq!(status, StatusCode::CREATED, "{made}");
+    }
+    assert_eq!(app_passwords(&state, &cookie).await, 2);
+}
+
+#[sqlx::test]
+async fn a_passkey_removed_while_it_was_asked_proves_nothing(db: PgPool) {
+    let ada = ada(&db).await;
+    let state = with_passkeys(&db);
+    let cookie = common::session(&db, ada).await;
+    let mut phone = Device::new();
+    add(&state, &cookie, &mut phone, json!({ "password": PASSWORD })).await;
+    let mut laptop = Device::new();
+    let shown = proof(&state, &cookie, &mut phone).await;
+    add(&state, &cookie, &mut laptop, shown).await;
+
+    // The phone is asked, and meanwhile removed with the laptop.
+    let asked = start(&state, "/api/passkeys/proof", Some(&cookie), json!({})).await;
+    let (_, list) = call(&state, Method::GET, "/api/passkeys", Some(&cookie), None).await;
+    assert_eq!(list["passkeys"][0]["name"], "Phone");
+    let path = format!("/api/passkeys/{}", list["passkeys"][0]["id"]);
+    let shown = proof(&state, &cookie, &mut laptop).await;
+    let (status, _) = call(&state, Method::DELETE, &path, Some(&cookie), Some(shown)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let late = json!({ "passkey": phone.get(&asked) });
+    assert_eq!(app_password(&state, &cookie, late).await, wrong_passkey());
+    assert_eq!(app_passwords(&state, &cookie).await, 0);
+}
+
 #[sqlx::test]
 async fn ceremonies_have_a_limit(db: PgPool) {
     let state = with_passkeys(&db);
@@ -883,6 +1008,57 @@ async fn an_account_has_at_most_ten(db: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test]
+async fn two_registrations_at_once_stay_within_the_limit(db: PgPool) {
+    let ada = ada(&db).await;
+    let state = with_passkeys(&db);
+    let cookie = common::session(&db, ada).await;
+    let mut first = Device::new();
+    add(&state, &cookie, &mut first, json!({ "password": PASSWORD })).await;
+    for _ in 2..rueder::passkeys::MAX_PER_ACCOUNT {
+        let shown = proof(&state, &cookie, &mut first).await;
+        add(&state, &cookie, &mut Device::new(), shown).await;
+    }
+    // One place is left, and two devices are asked for it at once.
+    let mut asked = Vec::new();
+    for name in ["Phone", "Tablet"] {
+        let mut body = proof(&state, &cookie, &mut first).await;
+        body["name"] = name.into();
+        asked.push(start(&state, "/api/passkeys/register", Some(&cookie), body).await);
+    }
+    let (status, _) = call(
+        &state,
+        Method::POST,
+        "/api/passkeys",
+        Some(&cookie),
+        Some(Device::new().create(&asked[0])),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let body = Device::new().create(&asked[1]).to_string().into_bytes();
+    let (status, _, said) = raw(
+        &state,
+        Method::POST,
+        "/api/passkeys",
+        Some(&cookie),
+        Some(("application/json", body)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        String::from_utf8(said).unwrap(),
+        format!(
+            "an account has at most {} passkeys",
+            rueder::passkeys::MAX_PER_ACCOUNT
+        )
+    );
+    let (_, list) = call(&state, Method::GET, "/api/passkeys", Some(&cookie), None).await;
+    assert_eq!(
+        list["passkeys"].as_array().unwrap().len() as i64,
+        rueder::passkeys::MAX_PER_ACCOUNT
+    );
 }
 
 #[sqlx::test]

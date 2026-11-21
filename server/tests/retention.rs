@@ -672,6 +672,7 @@ async fn a_text_that_went_stays_gone_when_the_feed_lists_it(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(swept.texts, 1);
+    assert_eq!(retention::kept(&db).await.unwrap().dropped_texts, 1);
     let opened = articles::open(&db, account_id, feed_id, 1)
         .await
         .unwrap()
@@ -860,30 +861,6 @@ async fn a_long_feed_goes_in_portions(db: PgPool) {
 }
 
 #[sqlx::test]
-async fn a_run_stops_when_its_time_is_up(db: PgPool) {
-    let (_, feed_id) = common::reader(&db, "ada", 0).await;
-    let portion = retention::PORTION as usize;
-    add_arriving(&db, feed_id, &vec![0; 2 * portion]).await;
-    keep(&db, articles_after_a_year(Remove::Article)).await;
-    // The time is up after the first portion: the rest is for the next run.
-    let swept = retention::sweep(&db, None, a_year_after(50), Some(std::time::Instant::now()))
-        .await
-        .unwrap();
-    assert!(swept.more);
-    assert!(swept.articles as usize <= portion);
-    let swept = retention::sweep(&db, None, a_year_after(50), None)
-        .await
-        .unwrap();
-    assert!(!swept.more);
-    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM articles WHERE feed_id = $1")
-        .bind(feed_id)
-        .fetch_one(&db)
-        .await
-        .unwrap();
-    assert_eq!(left, 0);
-}
-
-#[sqlx::test]
 async fn a_move_still_says_where_the_mark_is_after_a_cut(db: PgPool) {
     use rueder::transfer::{self, Node};
 
@@ -917,4 +894,310 @@ async fn a_move_still_says_where_the_mark_is_after_a_cut(db: PgPool) {
     assert_eq!(mark.seq, 3);
     assert_eq!(mark.guid, sent[2].guid);
     assert_eq!(mark.published_at, sent[2].published_at);
+}
+
+/// Waits until `count` connections to this test's database wait for a lock,
+/// such as a run of the retention for a row the test holds.
+async fn until_waiting(db: &PgPool, count: i64) {
+    for _ in 0..2000 {
+        let waiting: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity
+             WHERE datname = current_database() AND wait_event_type = 'Lock'",
+        )
+        .fetch_one(db)
+        .await
+        .unwrap();
+        if waiting >= count {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    panic!("not {count} waiting for a lock");
+}
+
+/// Holds the feed's row as a fetch or a new subscription does, so that a run
+/// that comes to the feed waits.
+async fn hold(db: &PgPool, feed_id: i32) -> sqlx::Transaction<'static, sqlx::Postgres> {
+    let mut tx = db.begin().await.unwrap();
+    sqlx::query("SELECT id FROM feeds WHERE id = $1 FOR UPDATE")
+        .bind(feed_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx
+}
+
+/// A run of the retention at `now` in a task of its own, with time until
+/// `until`.
+fn sweeping(
+    db: &PgPool,
+    now: OffsetDateTime,
+    until: Option<std::time::Instant>,
+) -> tokio::task::JoinHandle<retention::Swept> {
+    let db = db.clone();
+    tokio::spawn(async move { retention::sweep(&db, None, now, until).await.unwrap() })
+}
+
+async fn articles_of(db: &PgPool, feed_id: i32) -> Vec<i32> {
+    sqlx::query_scalar("SELECT seq FROM articles WHERE feed_id = $1 ORDER BY seq")
+        .bind(feed_id)
+        .fetch_all(db)
+        .await
+        .unwrap()
+}
+
+fn orphans_after(days: i32) -> Articles {
+    Articles {
+        orphans_days: Some(days),
+        ..Articles::default()
+    }
+}
+
+#[sqlx::test]
+async fn whoever_subscribes_while_a_feed_goes_keeps_it(db: PgPool) {
+    let feed_id = common::feed(&db, "back").await;
+    add_arriving(&db, feed_id, &[0, 1, 2]).await;
+    sqlx::query("UPDATE feeds SET orphaned_at = $1 WHERE id = $2")
+        .bind(START)
+        .bind(feed_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    keep(&db, orphans_after(90)).await;
+    let ada = common::account(&db, "ada").await;
+
+    // The run found the feed without readers and waits for it, while the
+    // subscription that holds it comes in.
+    let mut tx = hold(&db, feed_id).await;
+    let run = sweeping(&db, START + Duration::days(91), None);
+    until_waiting(&db, 1).await;
+    sqlx::query("INSERT INTO subscriptions (account_id, feed_id, position) VALUES ($1, $2, 1)")
+        .bind(ada)
+        .bind(feed_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let swept = run.await.unwrap();
+
+    assert_eq!((swept.feeds, swept.feed_articles), (0, 0));
+    assert_eq!(articles_of(&db, feed_id).await, [1, 2, 3]);
+    assert_eq!(orphaned_since(&db, feed_id).await, None);
+    let counts = reading::unread_counts(&db, ada).await.unwrap();
+    assert_eq!((counts[0].read_upto, counts[0].unread), (0, 3));
+}
+
+#[sqlx::test]
+async fn whoever_subscribes_after_a_portion_went_keeps_the_rest(db: PgPool) {
+    let feed_id = common::feed(&db, "long").await;
+    let portion = retention::PORTION as usize;
+    add_arriving(&db, feed_id, &vec![0; portion + 10]).await;
+    sqlx::query("UPDATE feeds SET orphaned_at = $1 WHERE id = $2")
+        .bind(START)
+        .bind(feed_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    keep(&db, orphans_after(90)).await;
+    let now = START + Duration::days(91);
+
+    // Without time nothing goes, and the run says that more is to do.
+    let swept = retention::sweep(&db, None, now, Some(std::time::Instant::now()))
+        .await
+        .unwrap();
+    assert!(swept.more);
+    assert_eq!(swept.feed_articles, 0);
+    assert_eq!(articles_of(&db, feed_id).await.len(), portion + 10);
+
+    // The time runs out while the run waits for the feed: one portion goes.
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let tx = hold(&db, feed_id).await;
+    let run = sweeping(&db, now, Some(until));
+    until_waiting(&db, 1).await;
+    tokio::time::sleep_until((until + std::time::Duration::from_millis(10)).into()).await;
+    tx.rollback().await.unwrap();
+    let swept = run.await.unwrap();
+    assert!(swept.more);
+    assert_eq!((swept.feeds, swept.feed_articles), (0, portion as u64));
+    let left = articles_of(&db, feed_id).await;
+    assert_eq!(left.len(), 10);
+    assert_eq!(left[0], portion as i32 + 1);
+
+    // Subscribed now, the feed stays with what is left, from the cut on.
+    let ada = common::account(&db, "ada").await;
+    common::subscribe(&db, ada, feed_id).await;
+    let swept = retention::sweep(&db, None, now, None).await.unwrap();
+    assert!(swept.is_empty());
+    assert_eq!(articles_of(&db, feed_id).await, left);
+    assert_eq!(orphaned_since(&db, feed_id).await, None);
+    let counts = reading::unread_counts(&db, ada).await.unwrap();
+    assert_eq!(
+        (counts[0].read_upto, counts[0].unread),
+        (portion as i32, 10)
+    );
+}
+
+#[sqlx::test]
+async fn a_run_whose_time_runs_out_goes_on_with_the_next(db: PgPool) {
+    let (ada, feed_id) = common::reader(&db, "ada", 0).await;
+    let portion = retention::PORTION as usize;
+    let mut days = vec![0; 2 * portion];
+    days.extend([100, 100]);
+    add_arriving(&db, feed_id, &days).await;
+    keep(&db, articles_after_a_year(Remove::Article)).await;
+    let now = a_year_after(50);
+
+    // Without time nothing goes, and the run says that more is to do.
+    let swept = retention::sweep(&db, None, now, Some(std::time::Instant::now()))
+        .await
+        .unwrap();
+    assert!(swept.more);
+    assert_eq!(swept.articles, 0);
+
+    // The time runs out while the run waits for the feed: one portion goes,
+    // and the read mark moves over it.
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let tx = hold(&db, feed_id).await;
+    let run = sweeping(&db, now, Some(until));
+    until_waiting(&db, 1).await;
+    tokio::time::sleep_until((until + std::time::Duration::from_millis(10)).into()).await;
+    tx.rollback().await.unwrap();
+    let swept = run.await.unwrap();
+    assert!(swept.more);
+    assert_eq!(swept.articles, portion as u64);
+    let counts = reading::unread_counts(&db, ada).await.unwrap();
+    assert_eq!(
+        (counts[0].read_upto, counts[0].unread),
+        (portion as i32, portion as i64 + 2)
+    );
+
+    // The next run takes the rest, and nothing twice.
+    let swept = retention::sweep(&db, None, now, None).await.unwrap();
+    assert!(!swept.more);
+    assert_eq!(swept.articles, portion as u64);
+    let counts = reading::unread_counts(&db, ada).await.unwrap();
+    assert_eq!(
+        (counts[0].read_upto, counts[0].unread),
+        (2 * portion as i32, 2)
+    );
+    assert_eq!(
+        articles_of(&db, feed_id).await,
+        [2 * portion as i32 + 1, 2 * portion as i32 + 2]
+    );
+    let kept = retention::kept(&db).await.unwrap();
+    assert_eq!(kept.tombstones as usize, 2 * portion);
+}
+
+#[sqlx::test]
+async fn a_feed_that_goes_meanwhile_is_no_error(db: PgPool) {
+    for (settings, name) in [
+        (articles_after_a_year(Remove::Article), "article"),
+        (articles_after_a_year(Remove::Text), "text"),
+        (orphans_after(90), "orphan"),
+    ] {
+        let feed_id = common::feed(&db, name).await;
+        add_arriving(&db, feed_id, &[0, 0, 100]).await;
+        sqlx::query("UPDATE feeds SET orphaned_at = $1 WHERE id = $2")
+            .bind(START)
+            .bind(feed_id)
+            .execute(&db)
+            .await
+            .unwrap();
+        keep(&db, settings).await;
+        // Another run, such as `rueder retention run` beside the server's,
+        // takes the feed while this one waits for it.
+        let mut tx = hold(&db, feed_id).await;
+        let run = sweeping(&db, a_year_after(50), None);
+        until_waiting(&db, 1).await;
+        sqlx::query("DELETE FROM feeds WHERE id = $1")
+            .bind(feed_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let swept = run.await.unwrap();
+        assert!(swept.is_empty(), "{name}: {swept:?}");
+    }
+}
+
+#[sqlx::test]
+async fn two_runs_at_once_clear_everything_once(db: PgPool) {
+    let (ada, read) = common::reader(&db, "ada", 0).await;
+    add_arriving(&db, read, &[0, 0, 0, 100]).await;
+    let lonely = common::feed(&db, "lonely").await;
+    add_arriving(&db, lonely, &[0, 100]).await;
+    sqlx::query("UPDATE feeds SET orphaned_at = $1 WHERE id = $2")
+        .bind(START)
+        .bind(lonely)
+        .execute(&db)
+        .await
+        .unwrap();
+    keep(
+        &db,
+        Articles {
+            orphans_days: Some(90),
+            ..articles_after_a_year(Remove::Article)
+        },
+    )
+    .await;
+
+    // Both wait for the same feed, and then go on side by side.
+    let tx = hold(&db, lonely).await;
+    let runs = [
+        sweeping(&db, a_year_after(50), None),
+        sweeping(&db, a_year_after(50), None),
+    ];
+    until_waiting(&db, 2).await;
+    tx.rollback().await.unwrap();
+    let mut total = retention::Swept::default();
+    for run in runs {
+        let swept = run.await.unwrap();
+        total.feeds += swept.feeds;
+        total.feed_articles += swept.feed_articles;
+        total.articles += swept.articles;
+        assert!(!swept.more);
+    }
+    assert_eq!((total.feeds, total.feed_articles), (1, 2));
+    assert_eq!(total.articles, 3);
+    assert!(!feed_exists(&db, lonely).await);
+    assert_eq!(articles_of(&db, read).await, [4]);
+    let counts = reading::unread_counts(&db, ada).await.unwrap();
+    assert_eq!((counts[0].read_upto, counts[0].unread), (3, 1));
+}
+
+#[sqlx::test]
+async fn a_month_of_versions_in_use_goes_the_next_time(db: PgPool) {
+    let (_, feed_id) = common::reader(&db, "ada", 0).await;
+    // Articles in March and May 2026.
+    add_arriving(&db, feed_id, &[0, 62]).await;
+    keep(
+        &db,
+        Articles {
+            versions_months: Some(12),
+            ..Articles::default()
+        },
+    )
+    .await;
+    let before = retention::kept(&db).await.unwrap();
+    assert_eq!(before.months, ["2026_03", "2026_05"]);
+
+    // Somebody reads the old versions for longer than dropping them may wait.
+    let mut reading = db.begin().await.unwrap();
+    sqlx::query("SELECT count(*) FROM article_versions_2026_03")
+        .execute(&mut *reading)
+        .await
+        .unwrap();
+    let now = (START + Duration::days(75))
+        .replace_year(START.year() + 1)
+        .unwrap();
+    let swept = retention::sweep(&db, None, now, None).await.unwrap();
+    assert!(swept.more);
+    assert!(swept.months.is_empty());
+    reading.rollback().await.unwrap();
+    assert_eq!(retention::kept(&db).await.unwrap().months, before.months);
+
+    let swept = retention::sweep(&db, None, now, None).await.unwrap();
+    assert!(!swept.more);
+    assert_eq!(swept.months, ["2026_03"]);
+    assert_eq!(retention::kept(&db).await.unwrap().months, ["2026_05"]);
 }
