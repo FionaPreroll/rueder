@@ -11,6 +11,7 @@ cargo-fuzz = true
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 libfuzzer-sys = "0.4.12"
 rueder = { path = ".." }
+serde_json = "1.0.151"
 time = { version = "0.3.55", features = ["macros"] }
 url = "2.5.8"
 
@@ -45,6 +46,20 @@ bench = false
 [[bin]]
 name = "image"
 path = "fuzz_targets/image.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "opml"
+path = "fuzz_targets/opml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "account"
+path = "fuzz_targets/account.rs"
 test = false
 doc = false
 bench = false

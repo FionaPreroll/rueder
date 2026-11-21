@@ -16,7 +16,12 @@
 //!   account's articles for its rules, runs only a few at a time
 //!   ([`HEAVY_AT_ONCE`], [`HEAVY_PER_ACCOUNT`], see [`Rates::heavy`]), so that
 //!   no account takes the database's connections and the processors from
-//!   everybody else.
+//!   everybody else;
+//! - per account, what reads much at once but is reading all the same, such as
+//!   a search or texts for an app: only a few of an account at a time
+//!   ([`LONG_READS_PER_ACCOUNT`], see [`Rates::long_read`]), so that no
+//!   account holds all connections, while those of different accounts never
+//!   wait for each other.
 //!
 //! - mail the server sends ([`MAILS_PER_ACCOUNT`], [`MAILS_PER_ADDRESS`],
 //!   [`MAILS_PER_DAY`]): per account, per address it goes to and for the whole
@@ -125,6 +130,8 @@ pub const HEAVY_AT_ONCE: usize = 3;
 /// How many costly requests one account may have under way, waiting or
 /// running. More are refused.
 pub const HEAVY_PER_ACCOUNT: usize = 2;
+/// How many long reads one account may have under way. More are refused.
+pub const LONG_READS_PER_ACCOUNT: usize = 2;
 
 /// A limit: `burst` at once, and one more after every `every`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,30 +206,52 @@ impl<K: Hash + Eq + Clone> Limiter<K> {
     }
 }
 
+/// How many requests of a kind each account has under way.
+#[derive(Default)]
+struct UnderWay(Mutex<HashMap<i32, usize>>);
+
+impl UnderWay {
+    fn counts(&self) -> std::sync::MutexGuard<'_, HashMap<i32, usize>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Counts one more for the account, or refuses it at `most`.
+    fn take(&self, account_id: i32, most: usize) -> Result<Turn<'_>, AppError> {
+        let mut counts = self.counts();
+        let count = counts.entry(account_id).or_default();
+        if *count >= most {
+            let message = "too much at once for this account, try again in a moment";
+            return Err(AppError::TooMany(Duration::from_secs(1), message));
+        }
+        *count += 1;
+        Ok(Turn {
+            under_way: self,
+            account_id,
+            _running: None,
+        })
+    }
+}
+
 /// Costly requests: how many run, and how many each account has under way.
 struct Heavy {
     running: Semaphore,
-    accounts: Mutex<HashMap<i32, usize>>,
+    accounts: UnderWay,
 }
 
-/// A costly request's turn: while it is kept, the request counts.
+/// A counted request's turn: while it is kept, the request counts.
 pub struct Turn<'a> {
-    heavy: &'a Heavy,
+    under_way: &'a UnderWay,
     account_id: i32,
     _running: Option<SemaphorePermit<'a>>,
 }
 
 impl Drop for Turn<'_> {
     fn drop(&mut self) {
-        let mut accounts = self
-            .heavy
-            .accounts
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        if let Some(count) = accounts.get_mut(&self.account_id) {
+        let mut counts = self.under_way.counts();
+        if let Some(count) = counts.get_mut(&self.account_id) {
             *count = count.saturating_sub(1);
             if *count == 0 {
-                accounts.remove(&self.account_id);
+                counts.remove(&self.account_id);
             }
         }
     }
@@ -289,6 +318,7 @@ pub struct Rates {
     registrations_per_network: Limiter<IpAddr>,
     open_registrations: Limiter<()>,
     heavy: Heavy,
+    long_reads: UnderWay,
 }
 
 impl Rates {
@@ -310,8 +340,9 @@ impl Rates {
             open_registrations: Limiter::new(limits.open_registrations),
             heavy: Heavy {
                 running: Semaphore::new(limits.heavy_at_once),
-                accounts: Mutex::default(),
+                accounts: UnderWay::default(),
             },
+            long_reads: UnderWay::default(),
         }
     }
 
@@ -319,27 +350,17 @@ impl Rates {
     /// [`HEAVY_PER_ACCOUNT`] under way already. The request keeps the turn
     /// until it is done, and takes no connection of the database before.
     pub async fn heavy(&self, account_id: i32) -> Result<Turn<'_>, AppError> {
-        {
-            let mut accounts = self
-                .heavy
-                .accounts
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            let count = accounts.entry(account_id).or_default();
-            if *count >= HEAVY_PER_ACCOUNT {
-                let message = "too much at once for this account, try again in a moment";
-                return Err(AppError::TooMany(Duration::from_secs(1), message));
-            }
-            *count += 1;
-        }
-        let mut turn = Turn {
-            heavy: &self.heavy,
-            account_id,
-            _running: None,
-        };
+        let mut turn = self.heavy.accounts.take(account_id, HEAVY_PER_ACCOUNT)?;
         // Never closed, so the permit always comes.
         turn._running = self.heavy.running.acquire().await.ok();
         Ok(turn)
+    }
+
+    /// A long read's turn, or a refusal if the account has
+    /// [`LONG_READS_PER_ACCOUNT`] under way already. Nothing waits: a long
+    /// read of one account never holds up another's.
+    pub fn long_read(&self, account_id: i32) -> Result<Turn<'_>, AppError> {
+        self.long_reads.take(account_id, LONG_READS_PER_ACCOUNT)
     }
 
     /// Counts a move from another rueder into the account.
@@ -618,7 +639,22 @@ mod tests {
         assert!(rates.heavy(1).await.is_ok());
         drop(ada);
         drop(others);
-        assert!(rates.heavy.accounts.lock().unwrap().len() <= 1);
+        assert!(rates.heavy.accounts.counts().len() <= 1);
+    }
+
+    #[test]
+    fn an_account_has_only_a_few_long_reads_at_once() {
+        let rates = Rates::default();
+        let ada: Vec<_> = (0..LONG_READS_PER_ACCOUNT)
+            .map(|_| rates.long_read(1).ok().unwrap())
+            .collect();
+        assert!(matches!(rates.long_read(1), Err(AppError::TooMany(..))));
+        // Others are not held up, and a costly request is counted apart.
+        assert!(rates.long_read(2).is_ok());
+        assert_eq!(rates.heavy.accounts.counts().get(&1), None);
+        drop(ada);
+        assert!(rates.long_read(1).is_ok());
+        assert!(rates.long_reads.counts().is_empty());
     }
 
     #[tokio::test]

@@ -1338,6 +1338,9 @@
           },
           "401": {
             "description": "No valid session: log in first."
+          },
+          "429": {
+            "description": "The account searches too much at once; see `Retry-After`."
           }
         },
         "security": [
@@ -4629,6 +4632,9 @@
           },
           "401": {
             "description": "No valid app password: log in again at ClientLogin."
+          },
+          "429": {
+            "description": "The account asks for too many texts at once; see `Retry-After`."
           }
         },
         "security": [
@@ -4672,6 +4678,9 @@
           },
           "401": {
             "description": "No valid app password: log in again at ClientLogin."
+          },
+          "429": {
+            "description": "The account asks for too many texts at once; see `Retry-After`."
           }
         },
         "security": [
@@ -4781,6 +4790,9 @@
           },
           "401": {
             "description": "No valid app password: log in again at ClientLogin."
+          },
+          "429": {
+            "description": "The account asks for too many texts at once; see `Retry-After`."
           }
         },
         "security": [
@@ -4888,6 +4900,9 @@
           },
           "401": {
             "description": "No valid app password: log in again at ClientLogin."
+          },
+          "429": {
+            "description": "The account asks for too many texts at once; see `Retry-After`."
           }
         },
         "security": [
@@ -5006,6 +5021,9 @@
           },
           "401": {
             "description": "No valid app password: log in again at ClientLogin."
+          },
+          "429": {
+            "description": "The account asks for too many texts at once; see `Retry-After`."
           }
         },
         "security": [
@@ -5122,6 +5140,9 @@
           },
           "401": {
             "description": "No valid app password: log in again at ClientLogin."
+          },
+          "429": {
+            "description": "The account asks for too many texts at once; see `Retry-After`."
           }
         },
         "security": [

@@ -54,3 +54,13 @@ fn the_image_proxy_keeps_to_its_properties() {
 fn requests_of_apps_keep_to_their_properties() {
     play("greader", checks::greader);
 }
+
+#[test]
+fn opml_files_keep_to_their_properties() {
+    play("opml", checks::opml);
+}
+
+#[test]
+fn files_of_accounts_keep_to_their_properties() {
+    play("account", checks::account);
+}

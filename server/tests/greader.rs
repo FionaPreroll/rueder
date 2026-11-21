@@ -858,6 +858,36 @@ async fn an_answer_with_texts_ends_before_too_many_bytes(db: PgPool) {
     assert_eq!(titles(&contents), ["Article 3", "Article 2"]);
 }
 
+#[sqlx::test]
+async fn an_account_asks_for_texts_only_so_often_at_once(db: PgPool) {
+    let (ada, feed) = common::reader(&db, "ada", 3).await;
+    let state = AppState::new(db.clone());
+    let token = logged_in(&state, ada, "ada").await;
+    let held: Vec<_> = (0..rueder::rate::LONG_READS_PER_ACCOUNT)
+        .map(|_| state.rates.long_read(ada).ok().unwrap())
+        .collect();
+    for path in [
+        format!("/reader/api/0/stream/contents/feed/{feed}"),
+        format!("/reader/api/0/stream/contents?s=feed/{feed}"),
+        format!(
+            "/reader/api/0/stream/items/contents?i={}",
+            (i64::from(feed) << 32) + 1
+        ),
+    ] {
+        let (status, _, _) = ask(&state, Method::GET, &path, Some(&token), "").await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{path}");
+    }
+    // The IDs are no long read.
+    get(&state, "/reader/api/0/stream/items/ids?output=json", &token).await;
+    drop(held);
+    get(
+        &state,
+        &format!("/reader/api/0/stream/contents/feed/{feed}"),
+        &token,
+    )
+    .await;
+}
+
 /// A state with an image proxy, which these tests never let fetch anything.
 fn with_images(db: &PgPool) -> AppState {
     let dir = std::env::temp_dir().join(format!("rueder-greader-{}", std::process::id()));

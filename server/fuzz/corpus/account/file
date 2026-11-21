@@ -1,0 +1,10 @@
+{"format":"rueder-account","version":1,"exported_at":"2026-11-12T10:00:00+01:00","settings":{"theme":"dark","size":1e2},
+ "tree":[{"kind":"folder","path":["News"]},{"kind":"folder","path":["News","Tech"]},
+  {"kind":"feed","id":3,"url":"https://blog.example/feed.xml","site_url":"https://blog.example/","title":"A blog","own_title":"Mine","folder":["News","Tech"],"agent":"browser","last_seq":12,
+   "read_upto":{"seq":10,"guid":"g-10","url":"https://blog.example/10","published_at":"2026-11-01T08:00:00Z"},
+   "articles":[{"seq":11,"guid":"g-11","url":null,"published_at":"2026-11-02T08:00:00Z","title":"Eleven","read":true,"starred":true,"labels":["Later","Später"]},
+    {"seq":4,"guid":"g-4","published_at":"2026-10-02T08:00:00.5Z","labels":[]}]},
+  {"kind":"feed","url":"http://top.example/rss"}],
+ "labels":[{"title":"Later","color":"#336699"},{"title":"Später","color":"red"}],
+ "rules":[{"enabled":true,"scope":{"kind":"folder","path":["News"]},"field":"title","match":"word","pattern":"Werbung","action":"hide"},
+  {"enabled":true,"scope":{"kind":"all"},"field":"any","match":"all","pattern":"","action":"read"}]}
