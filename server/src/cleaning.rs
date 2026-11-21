@@ -43,6 +43,13 @@ pub const MAX_DEPTH: u32 = 256;
 /// leaves formatting open makes the parser repeat it in every paragraph that
 /// follows, so a megabyte of text can come to a hundred times as much tree.
 pub const MAX_NODES: usize = 200_000;
+/// A text also comes to no more than one node for so many of its bytes, past
+/// [`FREE_NODES`]. Articles come to one in twenty or fifty bytes; formatting
+/// left open in every paragraph comes to more than one a byte, and cleaning it
+/// took 20 times as long as other markup.
+pub const BYTES_PER_NODE: usize = 2;
+/// The nodes any text may come to, however short.
+pub const FREE_NODES: usize = 1000;
 /// How many attributes of one tag are read. The parser looks through those it
 /// has for each new one, so its work grows with the square of their number:
 /// one tag with a megabyte of them kept it busy for 15 seconds.
@@ -453,6 +460,8 @@ struct Counting {
     deepest: Cell<u32>,
     /// How deep every element lies.
     depths: RefCell<HashMap<*const Node, u32>>,
+    /// The most nodes this text may come to.
+    most: usize,
 }
 
 impl Counting {
@@ -471,7 +480,7 @@ impl Counting {
     }
 
     fn within_limits(&self) -> bool {
-        self.nodes.get() <= MAX_NODES && self.deepest.get() <= MAX_DEPTH
+        self.nodes.get() <= self.most && self.deepest.get() <= MAX_DEPTH
     }
 }
 
@@ -619,21 +628,22 @@ impl TreeSink for Counting {
 }
 
 /// Reads a piece of HTML into a tree and returns the element that holds it. If
-/// the text nests too deep or comes to too much (see [`MAX_DEPTH`] and
-/// [`MAX_NODES`]), the parser stops where it is, and the tree is `None`, or
+/// the text nests too deep or comes to too much (see [`MAX_DEPTH`],
+/// [`MAX_NODES`] and [`BYTES_PER_NODE`]), the parser stops where it is, and the tree is `None`, or
 /// with `so_far` what it read until then.
 fn read_within_limits(html: &str, so_far: bool) -> Option<Handle> {
+    let html = uncrowded(html);
     let sink = Counting {
         dom: RcDom::default(),
         nodes: Cell::new(0),
         deepest: Cell::new(0),
         depths: RefCell::default(),
+        most: MAX_NODES.min(FREE_NODES + html.len() / BYTES_PER_NODE),
     };
     let context = QualName::new(None, ns!(html), LocalName::from("div"));
     // The one place that reads HTML from outside; `clippy.toml` forbids it elsewhere.
     #[expect(clippy::disallowed_methods)]
     let mut parser = parse_fragment(sink, ParseOpts::default(), context, Vec::new(), false);
-    let html = uncrowded(html);
     let mut rest = &*html;
     while !rest.is_empty() {
         let (piece, later) = rest.split_at(rest.floor_char_boundary(PIECE));

@@ -37,6 +37,11 @@ pub const MAX_IDS: usize = 1000;
 /// How many items with their texts an answer has at most. A text can have
 /// tens of thousands of bytes; NetNewsWire asks for 150, Read You for 100.
 pub const MAX_ITEMS: usize = 250;
+/// How many bytes of texts an answer with items has at most, the first item's
+/// whatever it has: an answer ends before the item that would pass them, and a
+/// list then goes on in a continuation. An article has tens of thousands of
+/// bytes, but a feed of its own can bring a thousand times as much.
+pub const MAX_TEXTS: i64 = 16 * 1024 * 1024;
 /// How many items a list has when the app does not say.
 const DEFAULT_ITEMS: usize = 20;
 /// How many articles one request looks at for a filter only apps have.
@@ -435,32 +440,58 @@ struct Opened {
 }
 
 /// These articles with their texts, in this order, as far as the account
-/// reads their feeds and nothing hides them.
-async fn open(db: &PgPool, account_id: i32, keys: &[(i32, i32)]) -> anyhow::Result<Vec<Opened>> {
+/// reads their feeds and nothing hides them, and up to [`MAX_TEXTS`]: also
+/// how many of the keys that covers.
+async fn open(
+    db: &PgPool,
+    account_id: i32,
+    keys: &[(i32, i32)],
+) -> anyhow::Result<(Vec<Opened>, usize)> {
     let (feeds, seqs): (Vec<i32>, Vec<i32>) = keys.iter().copied().unzip();
+    // The length of a text is known without reading it, so what is left out
+    // is not read either.
     let rows = sqlx::query!(
-        r#"SELECT a.feed_id, a.seq, a.published_at, a.updated_at, a.title, a.author, a.url,
-                  c.html, c.enclosures,
-                  CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
-                       ELSE coalesce(st.read, false) END AS "read!",
-                  coalesce(st.starred, false) AS "starred!",
-                  a.seq <= s.read_upto AND coalesce(st.kept_unread, false) AS "kept_unread!"
-           FROM unnest($2::int4[], $3::int4[]) WITH ORDINALITY AS k (feed_id, seq, ord)
-           JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id
-           JOIN feeds f ON f.id = k.feed_id AND f.blocked_at IS NULL
-           JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq
-           JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
-           LEFT JOIN article_states st
-               ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq
-           WHERE NOT coalesce(st.hidden, false)
-           ORDER BY k.ord"#,
+        r#"SELECT o.feed_id AS "feed_id!", o.seq AS "seq!", o.published_at AS "published_at!",
+                  o.updated_at, o.title AS "title!", o.author AS "author!", o.url,
+                  o.html AS "html!", o.enclosures AS "enclosures!", o.read AS "read!",
+                  o.starred AS "starred!", o.kept_unread AS "kept_unread!", o.ord AS "ord!",
+                  o.found AS "found!"
+           FROM (
+               SELECT a.feed_id, a.seq, a.published_at, a.updated_at, a.title, a.author, a.url,
+                      c.html, c.enclosures,
+                      CASE WHEN a.seq <= s.read_upto THEN NOT coalesce(st.kept_unread, false)
+                           ELSE coalesce(st.read, false) END AS read,
+                      coalesce(st.starred, false) AS starred,
+                      a.seq <= s.read_upto AND coalesce(st.kept_unread, false) AS kept_unread,
+                      k.ord,
+                      sum(octet_length(c.html)) OVER (ORDER BY k.ord)
+                          - octet_length(c.html) AS before,
+                      count(*) OVER () AS found
+               FROM unnest($2::int4[], $3::int4[]) WITH ORDINALITY AS k (feed_id, seq, ord)
+               JOIN subscriptions s ON s.account_id = $1 AND s.feed_id = k.feed_id
+               JOIN feeds f ON f.id = k.feed_id AND f.blocked_at IS NULL
+               JOIN articles a ON a.feed_id = k.feed_id AND a.seq = k.seq
+               JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq
+               LEFT JOIN article_states st
+                   ON st.account_id = $1 AND st.feed_id = a.feed_id AND st.seq = a.seq
+               WHERE NOT coalesce(st.hidden, false)
+           ) o
+           WHERE o.before < $4
+           ORDER BY o.ord"#,
         account_id,
         &feeds,
         &seqs,
+        MAX_TEXTS,
     )
     .fetch_all(db)
     .await?;
-    Ok(rows
+    let covered = match rows.last() {
+        Some(last) if usize::try_from(last.found).ok() != Some(rows.len()) => {
+            usize::try_from(last.ord).unwrap_or(keys.len())
+        }
+        _ => keys.len(),
+    };
+    let opened = rows
         .into_iter()
         .map(|row| Opened {
             feed_id: row.feed_id,
@@ -476,7 +507,8 @@ async fn open(db: &PgPool, account_id: i32, keys: &[(i32, i32)]) -> anyhow::Resu
             starred: row.starred,
             kept_unread: row.kept_unread,
         })
-        .collect())
+        .collect();
+    Ok((opened, covered))
 }
 
 /// The feeds of the account as items name them: stream ID, title, site and
@@ -508,83 +540,91 @@ impl Origins {
 }
 
 /// The items of these articles, as `stream/items/contents` and
-/// `stream/contents` answer.
+/// `stream/contents` answer, and how many of the keys they cover (see
+/// [`open`]).
 async fn items(
     state: &AppState,
     login: &super::AppLogin,
-    origin: Option<&str>,
+    origin: Option<String>,
     keys: &[(i32, i32)],
-) -> Result<Vec<Value>, AppError> {
+) -> Result<(Vec<Value>, usize), AppError> {
     let account_id = login.session.account_id;
-    let opened = open(&state.db, account_id, keys).await?;
+    let (opened, covered) = open(&state.db, account_id, keys).await?;
     let origins = Origins::of(&state.db, account_id).await?;
     let folders = Folders::of(&state.db, account_id).await?;
     let label_names: HashMap<i32, String> =
         labels(&state.db, account_id).await?.into_iter().collect();
     let keys: Vec<(i32, i32)> = opened.iter().map(|o| (o.feed_id, o.seq)).collect();
     let mut labelled = api::labels_of(state, &login.session, &keys).await?;
-    let signer = state.images.as_ref().map(|images| images.signer());
+    let signer = state.images.as_ref().map(|images| images.signer().clone());
     let app = (!state.images_public).then_some(login.id);
-    Ok(opened
-        .into_iter()
-        .filter_map(|article| {
-            let number = parse::item_number(article.feed_id, article.seq)?;
-            let (title, site, folder) = origins.feeds.get(&article.feed_id)?.clone();
-            let mut categories = vec![json!(Mark::ReadingList.id())];
-            if article.read {
-                categories.push(json!(Mark::Read.id()));
-            }
-            if article.starred {
-                categories.push(json!(Mark::Starred.id()));
-            }
-            if article.kept_unread {
-                categories.push(json!(Mark::KeptUnread.id()));
-            }
-            if let Some(name) = folder.and_then(|folder| folders.name(folder)) {
-                categories.push(json!(parse::label_id(&name)));
-            }
-            let labels = labelled.remove(&(article.feed_id, article.seq));
-            for label in labels.unwrap_or_default() {
-                if let Some(name) = label_names.get(&label) {
-                    categories.push(json!(parse::label_id(name)));
+    // Pointing the images to the proxy reads every text again.
+    let items = tokio::task::spawn_blocking(move || {
+        opened
+            .into_iter()
+            .filter_map(|article| {
+                let number = parse::item_number(article.feed_id, article.seq)?;
+                let (title, site, folder) = origins.feeds.get(&article.feed_id)?.clone();
+                let mut categories = vec![json!(Mark::ReadingList.id())];
+                if article.read {
+                    categories.push(json!(Mark::Read.id()));
                 }
-            }
-            let html = match (signer, origin) {
-                (Some(signer), Some(origin)) => signer.in_html_for_app(app, origin, &article.html),
-                _ => crate::cleaning::with_images(&article.html, |_| None),
-            };
-            let link: Vec<Value> = article
-                .url
-                .iter()
-                .map(|url| json!({ "href": url, "type": "text/html" }))
-                .collect();
-            let enclosures: Vec<Value> = api::enclosures(&article.enclosures)
-                .into_iter()
-                .map(|e| json!({ "href": e.url, "type": e.kind, "length": e.length }))
-                .collect();
-            let updated = article.updated_at.unwrap_or(article.published_at);
-            Some(json!({
-                "id": parse::long_item_id(number),
-                "crawlTimeMsec": (article.published_at.unix_timestamp_nanos() / 1_000_000)
-                    .to_string(),
-                "timestampUsec": usec(article.published_at),
-                "published": article.published_at.unix_timestamp(),
-                "updated": updated.unix_timestamp(),
-                "title": article.title,
-                "author": article.author,
-                "canonical": link,
-                "alternate": link,
-                "categories": categories,
-                "origin": {
-                    "streamId": parse::feed_id(article.feed_id),
-                    "title": title,
-                    "htmlUrl": site,
-                },
-                "summary": { "direction": "ltr", "content": html },
-                "enclosure": enclosures,
-            }))
-        })
-        .collect())
+                if article.starred {
+                    categories.push(json!(Mark::Starred.id()));
+                }
+                if article.kept_unread {
+                    categories.push(json!(Mark::KeptUnread.id()));
+                }
+                if let Some(name) = folder.and_then(|folder| folders.name(folder)) {
+                    categories.push(json!(parse::label_id(&name)));
+                }
+                let labels = labelled.remove(&(article.feed_id, article.seq));
+                for label in labels.unwrap_or_default() {
+                    if let Some(name) = label_names.get(&label) {
+                        categories.push(json!(parse::label_id(name)));
+                    }
+                }
+                let html = match (&signer, &origin) {
+                    (Some(signer), Some(origin)) => {
+                        signer.in_html_for_app(app, origin, &article.html)
+                    }
+                    _ => crate::cleaning::with_images(&article.html, |_| None),
+                };
+                let link: Vec<Value> = article
+                    .url
+                    .iter()
+                    .map(|url| json!({ "href": url, "type": "text/html" }))
+                    .collect();
+                let enclosures: Vec<Value> = api::enclosures(&article.enclosures)
+                    .into_iter()
+                    .map(|e| json!({ "href": e.url, "type": e.kind, "length": e.length }))
+                    .collect();
+                let updated = article.updated_at.unwrap_or(article.published_at);
+                Some(json!({
+                    "id": parse::long_item_id(number),
+                    "crawlTimeMsec": (article.published_at.unix_timestamp_nanos() / 1_000_000)
+                        .to_string(),
+                    "timestampUsec": usec(article.published_at),
+                    "published": article.published_at.unix_timestamp(),
+                    "updated": updated.unix_timestamp(),
+                    "title": article.title,
+                    "author": article.author,
+                    "canonical": link,
+                    "alternate": link,
+                    "categories": categories,
+                    "origin": {
+                        "streamId": parse::feed_id(article.feed_id),
+                        "title": title,
+                        "htmlUrl": site,
+                    },
+                    "summary": { "direction": "ltr", "content": html },
+                    "enclosure": enclosures,
+                }))
+            })
+            .collect()
+    })
+    .await?;
+    Ok((items, covered))
 }
 
 /// The frame around items: the stream, and when it was answered.
@@ -602,7 +642,8 @@ fn contents(id: &str, items: Vec<Value>, next: Option<i64>) -> Json<Value> {
 }
 
 /// `POST /reader/api/0/stream/items/contents`: the items of these IDs (`i`),
-/// at most [`MAX_ITEMS`]. What the account cannot see is left out.
+/// at most [`MAX_ITEMS`]. What the account cannot see is left out, and so is
+/// what follows past [`MAX_TEXTS`] bytes of texts.
 ///
 /// The IDs may come in the query or as a form (`i`, once per item).
 #[utoipa::path(
@@ -625,13 +666,13 @@ pub(super) async fn item_contents(
         return Err(AppError::BadRequest(message));
     }
     let origin = super::origin(&headers);
-    let items = items(&state, &login, origin.as_deref(), &keys).await?;
+    let (items, _) = items(&state, &login, origin, &keys).await?;
     let id = Mark::ReadingList.id().unwrap_or_default();
     Ok(contents(id, items, None))
 }
 
 /// `GET /reader/api/0/stream/contents/<stream>`: a page of a list with the
-/// items' texts, at most [`MAX_ITEMS`].
+/// items' texts, at most [`MAX_ITEMS`] and the texts of [`MAX_TEXTS`] bytes.
 ///
 /// The stream is the rest of the path, slashes included, such as `feed/12` or
 /// `user/-/state/com.google/reading-list`; the other parameters may come in the
@@ -697,8 +738,13 @@ async fn contents_of(
         .map(|item| (item.feed_id, item.seq))
         .collect();
     let origin = super::origin(headers);
-    let items = items(state, login, origin.as_deref(), &keys).await?;
-    Ok(contents(stream_id, items, scanned.next))
+    let (items, covered) = items(state, login, origin, &keys).await?;
+    // Past the texts an answer holds, the list goes on after the last item.
+    let next = match covered.checked_sub(1) {
+        Some(last) if covered < keys.len() => scanned.items.get(last).map(|item| item.id),
+        _ => scanned.next,
+    };
+    Ok(contents(stream_id, items, next))
 }
 
 /// The folder of a subscription as a category.

@@ -4598,7 +4598,7 @@
         "tags": [
           "Google Reader API"
         ],
-        "summary": "The items of these IDs (`i`), at most [`MAX_ITEMS`]. What the account cannot see is left out.",
+        "summary": "The items of these IDs (`i`), at most [`MAX_ITEMS`]. What the account cannot see is left out, and so is what follows past [`MAX_TEXTS`] bytes of texts.",
         "description": "The IDs may come in the query or as a form (`i`, once per item).",
         "operationId": "item_contents",
         "parameters": [
@@ -4641,7 +4641,7 @@
         "tags": [
           "Google Reader API"
         ],
-        "summary": "The items of these IDs (`i`), at most [`MAX_ITEMS`]. What the account cannot see is left out.",
+        "summary": "The items of these IDs (`i`), at most [`MAX_ITEMS`]. What the account cannot see is left out, and so is what follows past [`MAX_TEXTS`] bytes of texts.",
         "description": "The IDs may come in the query or as a form (`i`, once per item).",
         "operationId": "item_contents_post",
         "parameters": [
@@ -4902,7 +4902,7 @@
         "tags": [
           "Google Reader API"
         ],
-        "summary": "A page of a list with the items' texts, at most [`MAX_ITEMS`].",
+        "summary": "A page of a list with the items' texts, at most [`MAX_ITEMS`] and the texts of [`MAX_TEXTS`] bytes.",
         "description": "The stream is the rest of the path, slashes included, such as `feed/12` or\n`user/-/state/com.google/reading-list`; the other parameters may come in the\nquery or as a form.",
         "operationId": "stream_contents_of",
         "parameters": [
@@ -5018,7 +5018,7 @@
         "tags": [
           "Google Reader API"
         ],
-        "summary": "A page of a list with the items' texts, at most [`MAX_ITEMS`].",
+        "summary": "A page of a list with the items' texts, at most [`MAX_ITEMS`] and the texts of [`MAX_TEXTS`] bytes.",
         "description": "The stream is the rest of the path, slashes included, such as `feed/12` or\n`user/-/state/com.google/reading-list`; the other parameters may come in the\nquery or as a form.",
         "operationId": "stream_contents_of_post",
         "parameters": [

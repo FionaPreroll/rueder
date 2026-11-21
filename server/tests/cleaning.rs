@@ -642,6 +642,19 @@ fn the_lists_are_read_from_files() {
 }
 
 #[test]
+fn formatting_left_open_does_not_multiply() {
+    // The parser repeats what is open in every paragraph after it: here more
+    // than one node for each byte, far more than any article comes to.
+    let text = "<b><i><u><s><em><p>x".repeat(2_000);
+    let cleaned = clean(&text, BASE, &rules()).html;
+    assert!(cleaned.len() < text.len(), "{} bytes out", cleaned.len());
+    assert_eq!(cleaned.matches('x').count(), 2_000);
+    // Markup as dense as a table of short cells stays.
+    let table = "<table><tr><td>1</td><td>2</td></tr></table>".repeat(2_000);
+    assert!(clean(&table, BASE, &rules()).html.contains("<td>2</td>"));
+}
+
+#[test]
 fn a_tag_keeps_only_its_first_attributes() {
     use rueder::cleaning::MAX_ATTRIBUTES;
     let many =

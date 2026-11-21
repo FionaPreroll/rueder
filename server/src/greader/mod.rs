@@ -27,6 +27,8 @@ pub mod parse;
 mod read;
 mod write;
 
+pub use read::MAX_TEXTS;
+
 use axum::{
     Json, Router,
     body::Bytes,
