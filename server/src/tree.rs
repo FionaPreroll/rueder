@@ -304,6 +304,7 @@ async fn move_node(
     if change.node == change.target {
         return Err(bad("a node cannot move onto itself"));
     }
+    let tree_change = filters::TreeChange::begin(&state, account_id).await?;
     let mut tx = state.db.begin().await?;
     accounts::lock(&mut tx, account_id).await?;
     let Some(from) = parent_of(&mut tx, account_id, change.node).await? else {
@@ -354,7 +355,11 @@ async fn move_node(
     nodes.insert(index, change.node);
     renumber(&mut tx, account_id, &nodes).await?;
     tx.commit().await?;
-    filters::tree_changed(&state.db, account_id).await?;
+    let feed = match change.node {
+        Node::Feed(id) => Some(id),
+        Node::Folder(_) => None,
+    };
+    tree_change.done(&state.db, account_id, feed).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -478,6 +483,7 @@ pub(crate) async fn remove_folder(
     Path(id): Path<i32>,
 ) -> Result<StatusCode, AppError> {
     let account_id = session.account_id;
+    let tree_change = filters::TreeChange::begin(&state, account_id).await?;
     let mut tx = state.db.begin().await?;
     accounts::lock(&mut tx, account_id).await?;
     let Some(parent) = parent_of(&mut tx, account_id, Node::Folder(id)).await? else {
@@ -514,7 +520,7 @@ pub(crate) async fn remove_folder(
     .await?;
     renumber(&mut tx, account_id, &nodes).await?;
     tx.commit().await?;
-    filters::tree_changed(&state.db, account_id).await?;
+    tree_change.done(&state.db, account_id, None).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

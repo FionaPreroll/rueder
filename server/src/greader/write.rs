@@ -282,6 +282,7 @@ async fn place(
     folder: Option<i32>,
 ) -> Result<(), AppError> {
     let account_id = session.account_id;
+    let tree_change = filters::TreeChange::begin(state, account_id).await?;
     let mut tx = state.db.begin().await?;
     accounts::lock(&mut tx, account_id).await?;
     let now = sqlx::query_scalar!(
@@ -308,7 +309,9 @@ async fn place(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    filters::tree_changed(&state.db, account_id).await?;
+    tree_change
+        .done(&state.db, account_id, Some(feed_id))
+        .await?;
     Ok(())
 }
 

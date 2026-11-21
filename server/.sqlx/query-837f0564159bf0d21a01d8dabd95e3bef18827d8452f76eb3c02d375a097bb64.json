@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.feed_id, f.last_seq FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1 ORDER BY s.feed_id",
+  "query": "SELECT s.feed_id, f.last_seq FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1 AND ($2::int4 IS NULL OR s.feed_id = $2)\n         ORDER BY s.feed_id",
   "describe": {
     "columns": [
       {
@@ -28,6 +28,7 @@
     ],
     "parameters": {
       "Left": [
+        "Int4",
         "Int4"
       ]
     },
@@ -36,5 +37,5 @@
       false
     ]
   },
-  "hash": "47be8d731980db8976f67b08f34a54748144e7c4152b0297f664916a5d27237d"
+  "hash": "837f0564159bf0d21a01d8dabd95e3bef18827d8452f76eb3c02d375a097bb64"
 }

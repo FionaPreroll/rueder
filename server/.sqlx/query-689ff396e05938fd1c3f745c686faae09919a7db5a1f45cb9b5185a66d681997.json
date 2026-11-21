@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM filter_rules\n                              WHERE account_id = $1 AND enabled AND folder_id IS NOT NULL)\n                   OR EXISTS (SELECT 1 FROM article_states WHERE account_id = $1 AND hidden)\n                   AS \"needed!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "needed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "689ff396e05938fd1c3f745c686faae09919a7db5a1f45cb9b5185a66d681997"
+}
