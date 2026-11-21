@@ -987,7 +987,7 @@ pub async fn import(
     .await?;
     tx.commit().await?;
     // The rules decide again what is hidden, the new ones included.
-    filters::reapply(db, account_id).await?;
+    filters::reapply(db, account_id, None).await?;
     Ok(imported)
 }
 

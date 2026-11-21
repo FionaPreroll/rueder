@@ -25,7 +25,9 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppError, AppState, articles::Opened, reading, sessions::Session, tree::bad};
+use crate::{
+    AppError, AppState, articles::Opened, rate::Turn, reading, sessions::Session, tree::bad,
+};
 
 /// How many rules an account can have.
 pub const MAX_RULES: i64 = 200;
@@ -592,16 +594,18 @@ pub async fn subscribed(
 }
 
 /// The rules of an account look again at what is there: each feed's newest
-/// [`RECENT`] articles and everything that is hidden. For after a rule
-/// changed, or the tree did.
-pub async fn reapply(db: &PgPool, account_id: i32) -> anyhow::Result<Changed> {
+/// [`RECENT`] articles and everything that is hidden, of all feeds or of
+/// `feed` alone. For after a rule changed, or the tree did.
+pub async fn reapply(db: &PgPool, account_id: i32, feed: Option<i32>) -> anyhow::Result<Changed> {
     let mut tx = db.begin().await?;
     let rules = stored(&mut tx, account_id).await?;
     let folders = folders_of(&mut tx, account_id, None).await?;
     let feeds = sqlx::query!(
         "SELECT s.feed_id, f.last_seq FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
-         WHERE s.account_id = $1 ORDER BY s.feed_id",
-        account_id
+         WHERE s.account_id = $1 AND ($2::int4 IS NULL OR s.feed_id = $2)
+         ORDER BY s.feed_id",
+        account_id,
+        feed,
     )
     .fetch_all(&mut *tx)
     .await?;
@@ -675,23 +679,39 @@ pub async fn hiding_rule(
     Ok(rule.map(|rule| rule.id))
 }
 
-/// Folders decide which rules hold for a feed, so after a move or after a
-/// folder went, the rules look again. Not needed while no rule names a folder
-/// and nothing is hidden.
-pub async fn tree_changed(db: &PgPool, account_id: i32) -> anyhow::Result<()> {
-    let needed = sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM filter_rules
-                          WHERE account_id = $1 AND enabled AND folder_id IS NOT NULL)
-               OR EXISTS (SELECT 1 FROM article_states WHERE account_id = $1 AND hidden)
-               AS "needed!""#,
-        account_id
-    )
-    .fetch_one(db)
-    .await?;
-    if needed {
-        reapply(db, account_id).await?;
+/// A change of the tree: folders decide which rules hold for a feed, so after
+/// a move or after a folder went, the rules look again. That is needed only
+/// where a rule names a folder or something is hidden, and then it is heavy
+/// work, which waits for its turn (see `rate`) before the tree changes, so
+/// that a change that is made is never refused afterwards.
+pub struct TreeChange<'a>(Option<Turn<'a>>);
+
+impl<'a> TreeChange<'a> {
+    pub async fn begin(state: &'a AppState, account_id: i32) -> Result<Self, AppError> {
+        let needed = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM filter_rules
+                              WHERE account_id = $1 AND enabled AND folder_id IS NOT NULL)
+                   OR EXISTS (SELECT 1 FROM article_states WHERE account_id = $1 AND hidden)
+                   AS "needed!""#,
+            account_id
+        )
+        .fetch_one(&state.db)
+        .await?;
+        let turn = match needed {
+            true => Some(state.rates.heavy(account_id).await?),
+            false => None,
+        };
+        Ok(Self(turn))
     }
-    Ok(())
+
+    /// The rules look again after the change: at `feed` alone if only that
+    /// feed moved.
+    pub async fn done(self, db: &PgPool, account_id: i32, feed: Option<i32>) -> anyhow::Result<()> {
+        if self.0.is_some() {
+            reapply(db, account_id, feed).await?;
+        }
+        Ok(())
+    }
 }
 
 /// A rule as the API takes and gives it.
@@ -850,7 +870,7 @@ async fn add(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| bad("too many rules"))?;
-    let changed = reapply(&state.db, session.account_id).await?;
+    let changed = reapply(&state.db, session.account_id, None).await?;
     Ok((StatusCode::CREATED, Json(Outcome { id, changed })))
 }
 
@@ -895,7 +915,7 @@ async fn change(
     if updated.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
-    let changed = reapply(&state.db, session.account_id).await?;
+    let changed = reapply(&state.db, session.account_id, None).await?;
     Ok(Json(Outcome { id, changed }))
 }
 
@@ -926,7 +946,7 @@ async fn remove(
     if gone.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
-    let changed = reapply(&state.db, session.account_id).await?;
+    let changed = reapply(&state.db, session.account_id, None).await?;
     Ok(Json(Outcome { id, changed }))
 }
 

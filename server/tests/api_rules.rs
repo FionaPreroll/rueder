@@ -740,3 +740,100 @@ async fn an_account_looks_at_all_its_articles_only_so_often_at_once(db: PgPool) 
     drop(held);
     get(&state, "/api/rules/hits", &cookie).await;
 }
+
+#[sqlx::test]
+async fn a_move_looks_again_only_at_what_moved_and_waits_its_turn_first(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 3).await;
+    let blog = common::feed(&db, "blog").await;
+    common::subscribe(&db, ada, blog).await;
+    common::add(&db, blog, 3).await;
+    let folder = common::folder(&db, ada, None, "Folder").await;
+    let state = AppState::new(db.clone());
+    let cookie = common::session(&db, ada).await;
+    let into = |feed: i32| {
+        json!({
+            "node": { "kind": "feed", "id": feed },
+            "target": { "kind": "folder", "id": folder },
+            "position": "inside",
+        })
+    };
+    let folder_of = |feed: i32| {
+        sqlx::query_scalar::<_, Option<i32>>(
+            "SELECT folder_id FROM subscriptions WHERE account_id = $1 AND feed_id = $2",
+        )
+        .bind(ada)
+        .bind(feed)
+        .fetch_one(&db)
+    };
+
+    // Without rules and with nothing hidden, a move waits for nothing.
+    let held: Vec<_> = futures_util::future::join_all(
+        (0..rueder::rate::HEAVY_PER_ACCOUNT).map(|_| state.rates.heavy(ada)),
+    )
+    .await
+    .into_iter()
+    .map(|turn| turn.ok().unwrap())
+    .collect();
+    let (status, _) = send(&state, Method::POST, "/api/tree/move", &cookie, into(news)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    drop(held);
+
+    let scope = json!({ "kind": "folder", "id": folder });
+    add(
+        &state,
+        &cookie,
+        json!({ "scope": scope, "pattern": "article 2" }),
+    )
+    .await;
+    assert_eq!(hidden(&state, &cookie).await, [2]);
+    // With a rule at a folder, a move is heavy work: refused before anything
+    // changes when the account has too much under way.
+    let held: Vec<_> = futures_util::future::join_all(
+        (0..rueder::rate::HEAVY_PER_ACCOUNT).map(|_| state.rates.heavy(ada)),
+    )
+    .await
+    .into_iter()
+    .map(|turn| turn.ok().unwrap())
+    .collect();
+    let (status, _) = send(&state, Method::POST, "/api/tree/move", &cookie, into(blog)).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(folder_of(blog).await.unwrap(), None);
+    drop(held);
+
+    // The rules look again at the feed that moved, and at no other: what is
+    // hidden in the news stays as it is, even where no rule would say so.
+    sqlx::query("DELETE FROM article_states WHERE account_id = $1")
+        .bind(ada)
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO article_states (account_id, feed_id, seq, hidden) VALUES ($1, $2, 3, true)",
+    )
+    .bind(ada)
+    .bind(news)
+    .execute(&db)
+    .await
+    .unwrap();
+    let (status, _) = send(&state, Method::POST, "/api/tree/move", &cookie, into(blog)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(folder_of(blog).await.unwrap(), Some(folder));
+    let blog_hidden: Vec<i32> = sqlx::query_scalar(
+        "SELECT seq FROM article_states WHERE account_id = $1 AND feed_id = $2 AND hidden",
+    )
+    .bind(ada)
+    .bind(blog)
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    assert_eq!(blog_hidden, [2]);
+    let news_hidden: Vec<i32> = sqlx::query_scalar(
+        "SELECT seq FROM article_states WHERE account_id = $1 AND feed_id = $2 AND hidden",
+    )
+    .bind(ada)
+    .bind(news)
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    assert_eq!(news_hidden, [3]);
+}

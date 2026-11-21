@@ -1087,6 +1087,14 @@ Was eine neue Regel (`POST /api/rules`, danach `filters::reapply`) an Speicher b
 - **Der Speicher wuchs mit der Zahl der ausgeblendeten Artikel**, weil alle mit ihrem Text auf einmal gelesen wurden; bei Hunderttausenden in einem großen Feed wären es Gigabytes gewesen, bei jeder Änderung an Regeln oder Baum. Jetzt liest jede Abfrage `filters::CHUNK` Artikel ab dem letzten. Damit jede Abfrage beim letzten Artikel einsetzt und nicht den Feed von vorn liest, nennen auch die Verbindungen zu Text und Lesestand die Untergrenze der Nummer; ohne das dauerte es mit 20.000 Artikeln 5,3 s.
 - Die Zeit wächst weiter mit der Zahl, aber linear.
 
+### Verschieben im Baum vom 2026-11-21
+
+Wie lange ein Zug eines Feeds in einen Ordner (`POST /api/tree/move`) dauert, wenn das Konto eine Regel für alle Feeds hat und etwas ausgeblendet ist: 100 Feeds mit je 200 ausgedachten Artikeln zu 5 KB, Release-Build mit PostgreSQL 16 auf derselben Maschine.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,1 GHz), 15 GB Arbeitsspeicher.
+- **Vorher:** 1,2 s, denn jeder Zug bewertete alle Feeds des Kontos neu; bei `tree::MAX_FEEDS` Feeds wären es hochgerechnet rund 24 s gewesen. Das lief ohne Grenze für teure Anfragen, also hätte ein Konto mit einigen Zügen zugleich alle Verbindungen zur Datenbank belegt.
+- **Nachher:** 28 ms, denn bewertet wird nur der Feed, der zog, und der Zug wartet als teure Anfrage auf seinen Platz.
+
 ## Wissen über das Altsystem
 
 Wo im alten Code steht, was der neue nachbauen oder übernehmen musste. Der alte Code ist nicht mehr im Repository; die Pfade gelten im Commit `0b36a96`, etwa mit `git show 0b36a96:backend/pkg/worker/feed.go`.
