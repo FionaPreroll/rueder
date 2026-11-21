@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn the_sizes_come_from_the_environment_within_bounds() {
-        // As rueder comes: 10 connections, 3 costly requests at once, 1,000
+        // As rueder comes: 10 connections, 4 costly requests at once, 1,000
         // mails a day, and the limits it has without any setting.
         let default = sizes(&[]).unwrap();
         assert_eq!(default, Sizes::default());
@@ -137,7 +137,7 @@ mod tests {
                 default.heavy_at_once,
                 default.mails_per_day
             ),
-            (10, 3, 1000)
+            (10, 4, 1000)
         );
         assert_eq!(default.limits(), Limits::default());
         let large = sizes(&[
