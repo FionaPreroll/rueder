@@ -590,6 +590,60 @@ fn deep_and_long_texts_do_not_hang() {
 }
 
 #[test]
+fn a_text_beyond_the_limits_keeps_its_words_and_no_markup() {
+    use rueder::cleaning::{MAX_DEPTH, text};
+    let deep = "<div>".repeat(MAX_DEPTH as usize + 1);
+    let words = |html: &str| html.split_whitespace().collect::<Vec<_>>().join(" ");
+    for (tail, cleaned, said) in [
+        // What only looks like the start of a tag is text, and stays text.
+        (
+            "1 < 2 and 3 > 2, a<>b, <3, x<=y",
+            "1 &lt; 2 and 3 &gt; 2, a&lt;&gt;b, &lt;3, x&lt;=y",
+            "1 < 2 and 3 > 2, a<>b, <3, x<=y",
+        ),
+        (
+            "<b>bold</b> &amp; &lt;i&gt; <!-- a note --> end",
+            "bold &amp; &lt;i&gt; end",
+            "bold & <i> end",
+        ),
+        (
+            "a <a href='javascript:alert(1)'>link</a> <script>alert(1)</script> b",
+            "a link alert(1) b",
+            "a link alert(1) b",
+        ),
+        // A tag that never ends takes the rest with it.
+        ("words <img src=x onerror=alert(1)", "words", "words"),
+        ("words</div", "words", "words"),
+        ("a <", "a &lt;", "a <"),
+    ] {
+        let beyond = format!("{deep}{tail}");
+        let out = clean(&beyond, BASE, &rules());
+        assert_eq!(words(&out.html), cleaned, "{tail}");
+        assert_clean(&out.html, tail);
+        // The words the search finds.
+        assert_eq!(text(&beyond), said, "{tail}");
+    }
+}
+
+#[test]
+fn the_images_of_a_text_are_found_once_each_and_within_limits() {
+    use rueder::cleaning::{MAX_IMAGES, images_in};
+    let image = |n: usize| format!("<img src=\"https://example.com/{n}.png\">");
+    let mut html: String = (0..MAX_IMAGES + 10).map(image).collect();
+    html.insert_str(0, &format!("<p>{}{}</p>", image(1), image(0)));
+    let found = images_in(&html);
+    assert_eq!(found.len(), MAX_IMAGES);
+    assert_eq!(
+        found[..3],
+        [1, 0, 2].map(|n| format!("https://example.com/{n}.png"))
+    );
+    assert_eq!(
+        found.last().unwrap(),
+        &format!("https://example.com/{}.png", MAX_IMAGES - 1)
+    );
+}
+
+#[test]
 fn the_lists_are_read_from_files() {
     let rules = Rules::parse(
         "# a comment\n\n  Example.ORG  \nshare.example /Button\n",
@@ -601,6 +655,8 @@ fn the_lists_are_read_from_files() {
     assert!(blocks("https://share.example/x/button?id=1"));
     assert!(!blocks("https://share.example/x"));
     assert!(!blocks("https://www.facebook.com/"));
+    // An address without a host is no site's.
+    assert!(!blocks("mailto:ada@example.org"));
     assert_eq!(
         rules.clean_url(
             "https://a.example/?ref=1&mc_id=2&via=feed&via=web&src=thenewsletter&src=x&utm_source=y"
