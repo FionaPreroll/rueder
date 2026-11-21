@@ -2660,6 +2660,67 @@ describe('changes without a connection', () => {
 		expect(reader.isStarred(third)).toBe(false);
 	});
 
+	it(`take back a change beyond the ${MAX_UNSENT} that wait`, async () => {
+		const reader = await onTech();
+		goAway();
+		const [third, second] = reader.visible;
+		for (let i = 0; i < MAX_UNSENT / 2; i++) {
+			reader.setRead(third, true);
+			reader.setRead(third, false);
+		}
+		reader.toggleStar(second);
+		await settle();
+		expect(reader.unsentChanges).toBe(MAX_UNSENT);
+		expect(reader.notice).toBe('tooManyUnsent');
+		// The one that found no place is not shown as if it would come.
+		expect(reader.isStarred(second)).toBe(false);
+		await comeBack();
+		expect(onServer(2).starred).toBe(false);
+		expect(onServer(3).read).toBe(false);
+	});
+
+	it('take back no refused change that a later one of the same thing replaced', async () => {
+		const reader = await onTech();
+		goAway();
+		const [third] = reader.visible;
+		reader.setRead(third, true);
+		reader.toggleStar(third);
+		reader.setRead(third, false);
+		await settle();
+		// Only the first one is refused; the last word on reading is the later one.
+		server.refuse('PUT', new RegExp(`/feeds/${tech}/articles/3/state$`), 400);
+		await comeBack();
+		expect(reader.notice).toBe('notSaved');
+		expect(reader.unsentChanges).toBe(0);
+		expect(onServer(3)).toEqual({ read: false, starred: true });
+		expect([reader.isRead(third), reader.isStarred(third)]).toEqual([false, true]);
+	});
+
+	it('send no more of what waits once the reader stops on the way', async () => {
+		const reader = new ServerReader({ name: 'fiona', admin: true }, session);
+		const stop = reader.start();
+		reader.show({ kind: 'feed', id: `feed-${tech}` });
+		await settle();
+		goAway();
+		const [third, second] = reader.visible;
+		reader.setRead(third, true);
+		reader.setRead(second, true);
+		await settle();
+		const release = server.hold(/\/state$/);
+		const before = server.requests.length;
+		await comeBack();
+		// The first is on its way when the reader stops, as at logging out.
+		stop();
+		release();
+		await settle();
+		const sent = server.requests
+			.slice(before)
+			.filter((request) => request.method === 'PUT' && request.path.endsWith('/state'));
+		expect(sent).toHaveLength(1);
+		expect(reader.unsentChanges).toBe(0);
+		expect(onServer(2).read).toBe(false);
+	});
+
 	it('end as a simple model says, for random breaks and refusals', async () => {
 		for (const seed of [1, 2, 3, 4, 5, 6]) {
 			let state = seed;
