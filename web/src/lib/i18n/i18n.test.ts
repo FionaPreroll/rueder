@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { shortcutGroups } from '#lib/keys.ts';
 import en from './en.ts';
 import { catalogs, language, languageNames, languages, m } from './index.ts';
+import type { Language } from './locale.svelte.ts';
 import { formatNumber, plural } from './intl.ts';
 import {
 	browserLanguage,
@@ -125,6 +126,74 @@ describe('catalogs', () => {
 			'22 статьи',
 			'25 статей'
 		]);
+	});
+
+	it('show in every language what the English texts show of what they are given', () => {
+		type Text = (...given: unknown[]) => unknown;
+		const texts = (shape: unknown, path = ''): Map<string, Text> =>
+			new Map(
+				typeof shape === 'function'
+					? [[path, shape as Text]]
+					: shape && typeof shape === 'object'
+						? Object.entries(shape).flatMap(([k, v]) => [...texts(v, path ? `${path}.${k}` : k)])
+						: []
+			);
+		// A word and a number that no text has of its own; 12 and up is said
+		// with its digits in every language, unlike 1 and 2 in Arabic.
+		const word = (i: number) => `«given ${i}»`;
+		const number = (i: number) => 12 + i;
+		const nan = (text: Text, given: unknown[]) => {
+			try {
+				return String(text(...given)).split('NaN').length;
+			} catch {
+				return Infinity;
+			}
+		};
+		const said = (code: Language, text: Text, given: unknown[]) => {
+			useLanguage(code);
+			return String(text(...given));
+		};
+
+		// What each text is given: a number where a word makes one of the
+		// languages say "NaN", and then whether English shows it or only counts
+		// with it; else a word, which English shows or not.
+		const english = texts(en);
+		const kinds = new Map(
+			[...english].map(([path, text]) => {
+				const words: unknown[] = Array.from({ length: text.length }, (_, i) => word(i));
+				const of = words.map((_, i) => {
+					const counted = words.with(i, number(i));
+					const counts = languages.some((code) => {
+						const there = texts(catalogs[code]).get(path)!;
+						useLanguage(code);
+						return nan(there, counted) < nan(there, words);
+					});
+					const shown = (given: unknown[], what: string) => said('en', text, given).includes(what);
+					if (counts) return shown(counted, formatNumber(number(i))) ? 'number' : 'count';
+					return shown(words, word(i)) ? 'word' : 'other';
+				});
+				return [path, of] as const;
+			})
+		);
+		for (const code of languages) {
+			for (const [path, text] of texts(catalogs[code])) {
+				const of = kinds.get(path)!;
+				const given = of.map((kind, i) =>
+					kind === 'number' || kind === 'count' ? number(i) : word(i)
+				);
+				const where = `${code}: ${path}`;
+				const out = said(code, text, given);
+				expect(out.trim(), where).not.toBe('');
+				expect(out, where).not.toMatch(/\b(?:undefined|NaN|null)\b|\[object /);
+				of.forEach((kind, i) => {
+					if (kind === 'word') expect(out, where).toContain(word(i));
+					if (kind === 'number') expect(out, where).toContain(formatNumber(number(i)));
+				});
+			}
+		}
+		// The ways of telling apart above still find each kind.
+		const all = [...kinds.values()].flat();
+		for (const kind of ['word', 'number', 'count', 'other']) expect(all, kind).toContain(kind);
 	});
 
 	it('describe every shortcut once', () => {

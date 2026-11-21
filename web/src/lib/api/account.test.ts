@@ -197,3 +197,154 @@ describe('young sessions', () => {
 		expect(await settings.setUpSecondFactor('')).toBe('loginAgain');
 	});
 });
+
+describe('refusals', () => {
+	const fiona = () => opened({ name: 'fiona', admin: false });
+	/** What the settings make of the server's next answer to this request. */
+	async function heard(
+		method: string,
+		path: RegExp,
+		status: number,
+		reason: string,
+		ask: () => Promise<unknown>,
+		headers: Record<string, string> = {}
+	) {
+		server.refuse(method, path, status, 1, reason, headers);
+		return ask();
+	}
+
+	it('of an app password say what to do about it', async () => {
+		const { settings } = fiona();
+		const make = () => settings.createAppPassword('Reeder', 'correct horse', '');
+		const path = /^\/app-passwords$/;
+		for (const [status, reason, refusal] of [
+			[403, 'second factor needed', 'codeNeeded'],
+			[403, 'the code is wrong', 'wrongCode'],
+			[403, 'the passkey is wrong', 'wrongCode'],
+			[403, 'wrong password', 'wrongPassword'],
+			[400, 'an account has at most 20 app passwords', 'tooManyApps'],
+			[429, 'too many wrong tries, try again later', 'tooMany'],
+			[500, 'internal server error', 'unreachable']
+		] as const) {
+			expect(await heard('POST', path, status, reason, make), `${status} ${reason}`).toBe(refusal);
+		}
+		server.down = true;
+		expect(await make()).toBe('unreachable');
+		expect(session.expired).not.toHaveBeenCalled();
+	});
+
+	it('of the second factor say what to do about it', async () => {
+		const { settings } = fiona();
+		const setUp = () => settings.setUpSecondFactor('correct horse');
+		const setup = /^\/second-factor\/setup$/;
+		for (const [status, reason, refusal] of [
+			[403, 'second factor needed', 'codeNeeded'],
+			[403, 'the code is wrong', 'wrongCode'],
+			[403, 'the passkey is wrong', 'wrongCode'],
+			[403, 'wrong password', 'wrongPassword'],
+			[429, 'too many wrong tries, try again later', 'tooMany'],
+			[500, 'internal server error', 'unreachable']
+		] as const) {
+			expect(await heard('POST', setup, status, reason, setUp), `${status} ${reason}`).toBe(
+				refusal
+			);
+		}
+
+		const confirm = () => settings.confirmSecondFactor(' 123456 ');
+		const confirming = /^\/second-factor\/confirm$/;
+		expect(await heard('POST', confirming, 403, 'the code is wrong', confirm)).toBe('wrongCode');
+		expect(await heard('POST', confirming, 429, 'too many wrong tries', confirm)).toBe('tooMany');
+
+		const off = () => settings.switchOffSecondFactor('correct horse', '123456');
+		const switching = /^\/second-factor$/;
+		for (const [reason, refusal] of [
+			['the code is wrong', 'wrongCode'],
+			['the passkey is wrong', 'wrongCode'],
+			['wrong password', 'wrongPassword']
+		] as const) {
+			expect(await heard('DELETE', switching, 403, reason, off), reason).toBe(refusal);
+		}
+		expect(await heard('DELETE', switching, 429, 'too many', off)).toBe('tooMany');
+
+		// Asked while the session is over, the page logs out.
+		server.refuse('GET', /^\/second-factor$/, 401, 1, 'not logged in');
+		expect(await settings.secondFactor()).toBeNull();
+		expect(session.expired).toHaveBeenCalledTimes(1);
+	});
+
+	it('of passkeys say what to do about it', async () => {
+		server.passkeysOn = true;
+		const { settings } = fiona();
+		const answers = [
+			[403, 'second factor needed', 'codeNeeded'],
+			[403, 'the code is wrong', 'wrongCode'],
+			[403, 'the passkey is wrong', 'wrong'],
+			[403, 'log in again first', 'loginAgain'],
+			[403, 'wrong password', 'wrongPassword'],
+			[400, 'an account has at most 10 passkeys', 'tooManyPasskeys'],
+			[400, 'the passkey could not be checked', 'failed'],
+			[409, 'this passkey is known already', 'known'],
+			[409, 'no such ceremony', 'wrong'],
+			[429, 'too many passkey ceremonies, try again later', 'tooMany'],
+			[500, 'internal server error', 'unreachable']
+		] as const;
+		for (const [method, path, ask] of [
+			['POST', /^\/passkeys\/register$/, () => settings.addPasskey('Phone', 'correct horse', '')],
+			['DELETE', /^\/passkeys\/7$/, () => settings.removePasskey(7, 'correct horse', '')],
+			['POST', /^\/passkeys\/proof$/, () => settings.provePasskey()]
+		] as const) {
+			for (const [status, reason, refusal] of answers) {
+				expect(await heard(method, path, status, reason, ask), `${method} ${reason}`).toBe(refusal);
+			}
+		}
+		server.refuse('DELETE', /^\/passkeys\/7$/, 401, 1, 'not logged in');
+		expect(await settings.removePasskey(7, 'correct horse', '')).toBe('unreachable');
+		expect(session.expired).toHaveBeenCalledTimes(1);
+	});
+
+	it('of deleting the account say what to do about it', async () => {
+		const { settings } = fiona();
+		const path = /^\/account$/;
+		const remove = (code?: string) => () => settings.removeAccount('correct horse', code);
+		expect(await heard('DELETE', path, 403, 'second factor needed', remove())).toEqual({
+			problem: 'code'
+		});
+		// With a code given, a refusal means that something given was wrong.
+		expect(await heard('DELETE', path, 403, 'second factor needed', remove('123456'))).toEqual({
+			problem: 'wrong'
+		});
+		expect(await heard('DELETE', path, 403, 'wrong password', remove())).toEqual({
+			problem: 'wrong'
+		});
+		const busy = await heard('DELETE', path, 429, 'too many', remove(), { 'Retry-After': '61' });
+		expect(busy).toEqual({ problem: 'busy', minutes: 2 });
+		expect(await heard('DELETE', path, 429, 'too many', remove())).toEqual({
+			problem: 'busy',
+			minutes: 1
+		});
+		expect(await heard('DELETE', path, 500, 'internal server error', remove())).toEqual({
+			problem: 'unreachable'
+		});
+		expect(session.expired).not.toHaveBeenCalled();
+		// An account without a password says its name instead.
+		const { settings: nameless } = opened({ name: 'fiona', admin: false, password: false });
+		await heard('DELETE', path, 403, 'wrong name', () => nameless.removeAccount('fiona'));
+		expect(server.requests.at(-1)).toMatchObject({ body: { name: 'fiona' } });
+	});
+
+	it('of a new password say what to do about it', async () => {
+		const { settings } = fiona();
+		const path = /^\/password$/;
+		const change = () => settings.changePassword('correct horse', 'short');
+		expect(await heard('PUT', path, 400, 'the password is too short', change)).toEqual({
+			problem: 'invalid'
+		});
+		expect(await heard('PUT', path, 429, 'too many', change, { 'Retry-After': '300' })).toEqual({
+			problem: 'busy',
+			minutes: 5
+		});
+		expect(await heard('PUT', path, 500, 'internal server error', change)).toEqual({
+			problem: 'unreachable'
+		});
+	});
+});
