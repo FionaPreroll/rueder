@@ -112,6 +112,19 @@ docker run --rm -v rssifier:/etc/rssifier rssifier token add rueder
 docker run -d -v rssifier:/etc/rssifier -p 127.0.0.1:3100:3100 rssifier
 ```
 
+The image holds bash and env next to the program, to look around in a running
+container, and no other tools.
+
+`rssifier fetch <page>` fetches a page as the server would, at the address a
+recipe names for it, with the same settings (`FETCH_ALLOW_NETS`,
+`RSSIFIER_RECIPES`, `RSSIFIER_ENABLE`) but without asking `robots.txt`. It
+prints the page and, on stderr, what the site answered and the entries
+RSSifier reads in it, or that the page is made by scripts:
+
+```sh
+docker compose exec rssifier rssifier fetch https://www.reddit.com/r/rust/ >/dev/null
+```
+
 ## Checks
 
 ```sh
