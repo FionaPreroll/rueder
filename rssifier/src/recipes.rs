@@ -343,13 +343,14 @@ mod tests {
             permalink="/r/rust/comments/1abc/rust_20_is_out/" score="1234" comment-count="56"
             created-timestamp="2026-11-20T10:15:00.123000+0000" author="someone">
           <a slot="title" href="/r/rust/comments/1abc/rust_20_is_out/">Rust 2.0 is out</a>
-          <div slot="text-body"><p>Read all about it. 12 comments</p></div>
+          <shreddit-post-text-body slot="text-body"><a slot="text-body" href="/r/rust/comments/1abc/rust_20_is_out/">
+            <div class="md"><p>Read all about it.</p><p>12 comments</p></div></a></shreddit-post-text-body>
           <faceplate-number number="1234">1.2k</faceplate-number>
           <img src="/avatar.png">
         </shreddit-post></article>
         <article><shreddit-post id="t3_1abd" post-title="A link"
             permalink="/r/rust/comments/1abd/a_link/" created-timestamp="2026-11-19T08:00:00+0100">
-          <div slot="thumbnail"><img src="https://preview.example/1abd.jpg"></div>
+          <div slot="post-media-container"><img src="https://preview.example/1abd.jpg"></div>
           <span>99 points</span>
         </shreddit-post></article>
         <shreddit-post id="t3_1abe" permalink="/r/rust/comments/1abe/x/"></shreddit-post>

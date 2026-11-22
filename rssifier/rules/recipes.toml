@@ -61,5 +61,5 @@ path = "/r/"
 fetch = "https://www.reddit.com/r/{2}/new/"
 item = "shreddit-post"
 summary = "[slot=text-body]"
-image = "[slot=thumbnail] img"
+image = "[slot=post-media-container] img, [slot=thumbnail] img"
 attributes = { title = "post-title", link = "permalink", date = "created-timestamp", id = "id" }

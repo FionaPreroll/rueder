@@ -45,7 +45,9 @@ number of comments. It is off until the operator turns it on with
 Agreement forbids collecting its pages automatically, and its `robots.txt`
 forbids every crawler everything, which this recipe, once turned on, does
 not ask. Reddit blocks data centres and clients it does not know, and it
-changes its pages; the recipe may stop finding posts at any time.
+changes its pages; the recipe may stop finding posts at any time. The page
+holds only the first few posts (three in a sample of 2026-11-22), the rest
+come by script, so a busy subreddit loses posts between two fetches.
 
 ## API
 
