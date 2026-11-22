@@ -26,7 +26,7 @@ tokio = { version = "1.53.2", features = ["full"] }
 toml = { version = "1.2.2", default-features = false, features = ["parse", "serde", "std"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-url = "2.5.8"
+url = "2.5.9"
 utoipa = { version = "6.0.0", features = ["axum_extras", "preserve_order", "preserve_path_order"] }
 utoipa-axum = "0.3.0"
 

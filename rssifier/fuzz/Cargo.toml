@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4.12"
 rssifier = { path = ".." }
-url = "2.5.8"
+url = "2.5.9"
 
 # Its own workspace: the fuzz targets need nightly Rust, RSSifier does not.
 [workspace]
