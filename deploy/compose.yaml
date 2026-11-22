@@ -1,4 +1,5 @@
-# rueder and its database. How to install: README.md in this directory.
+# rueder, its database and RSSifier, which makes feeds of websites without
+# one. How to install: README.md in this directory.
 #
 #   cp .env.example .env    # and set POSTGRES_PASSWORD
 #   docker compose up --detach --build
@@ -22,6 +23,9 @@ services:
         required: false
     environment:
       DATABASE_URL: postgres://rueder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/rueder
+      # RSSifier next door, once .env names the token both share.
+      RSSIFIER_URL: ${RSSIFIER_TOKEN:+http://rssifier:3100/}
+      RSSIFIER_TOKEN: ${RSSIFIER_TOKEN:-}
     # Only this machine reaches rueder: a reverse proxy in front of it does
     # TLS, without which nobody can log in.
     ports:
@@ -31,6 +35,31 @@ services:
       - images:/var/cache/rueder
     # The image runs as a user that is not root. It gets a file system it
     # cannot write to, except for the volume above, and no privileges.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # Websites without a feed come through RSSifier (rssifier/README.md). Only
+  # rueder reaches it, over the network of this file; it answers nobody
+  # without the token. Without RSSIFIER_TOKEN in .env it runs but nobody asks
+  # it.
+  rssifier:
+    image: ${RSSIFIER_IMAGE:-rssifier}
+    build:
+      context: ..
+      dockerfile: rssifier/Dockerfile
+    restart: unless-stopped
+    # Only these settings, not all of .env: RSSifier needs none of rueder's.
+    environment:
+      RSSIFIER_TOKEN: ${RSSIFIER_TOKEN:-}
+      RSSIFIER_BLOCKED_HOSTS: ${RSSIFIER_BLOCKED_HOSTS:-}
+      RSSIFIER_ENABLE: ${RSSIFIER_ENABLE:-}
+    volumes:
+      # The tokens `rssifier token add` makes, for other readers than this
+      # rueder.
+      - rssifier:/etc/rssifier
     read_only: true
     cap_drop:
       - ALL
@@ -62,3 +91,4 @@ volumes:
   # Everything rueder knows. This is what to back up.
   db:
   images:
+  rssifier:

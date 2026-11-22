@@ -60,6 +60,9 @@ pub struct Page {
 /// One entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
+    /// The id the site gives the entry, where a recipe reads one; else the
+    /// address is the id.
+    pub id: Option<String>,
     pub url: Url,
     pub title: String,
     pub summary: Option<String>,
@@ -288,6 +291,7 @@ fn json_item(value: &Value, base: &Url) -> Option<Item> {
         .or_else(|| text("dateCreated"))
         .or_else(|| text("uploadDate"));
     Some(Item {
+        id: None,
         url: link(base, address)?,
         title: clip(&words(title), MAX_TITLE),
         summary: text("description").map(|summary| clip(&words(summary), MAX_SUMMARY)),
@@ -323,6 +327,7 @@ fn from_h_entries(entries: &[Handle], base: &Url) -> Vec<Item> {
             let published = find(entry, &|node| has_class(node, "dt-published"))
                 .and_then(|node| attribute(&node, "datetime").or_else(|| Some(text_of(&node))));
             Some(Item {
+                id: None,
                 url: link(base, &address)?,
                 title: clip(&title, MAX_TITLE),
                 summary: summary.filter(|summary| !summary.is_empty()),
@@ -430,6 +435,7 @@ pub(crate) fn block_item(block: &Handle, parts: Parts, base: &Url) -> Option<Ite
                 .find_map(|address| link(base, &address))
         });
     Some(Item {
+        id: None,
         url: link(base, &address)?,
         summary: (!summary.is_empty() && summary != title).then_some(summary),
         title: clip(&title, MAX_TITLE),
@@ -686,10 +692,21 @@ pub fn link(base: &Url, address: &str) -> Option<Url> {
     Some(url)
 }
 
-/// A date as pages write it for machines: RFC 3339, or just the day.
+/// A date as pages write it for machines: RFC 3339, also with the offset
+/// without a colon (`+0000`), or just the day.
 pub(crate) fn date(text: &str) -> Option<OffsetDateTime> {
     let text = text.trim();
     if let Ok(at) = OffsetDateTime::parse(text, &Rfc3339) {
+        return Some(at);
+    }
+    if let Some((time, offset)) = text.split_at_checked(text.len().saturating_sub(4))
+        && offset.bytes().all(|b| b.is_ascii_digit())
+        && time.ends_with(['+', '-'])
+        && let Ok(at) = OffsetDateTime::parse(
+            &format!("{time}{}:{}", &offset[..2], &offset[2..]),
+            &Rfc3339,
+        )
+    {
         return Some(at);
     }
     let day = Date::parse(text.get(..10)?, format_description!("[year]-[month]-[day]")).ok()?;

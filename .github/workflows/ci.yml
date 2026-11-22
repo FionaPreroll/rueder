@@ -436,8 +436,8 @@ jobs:
         with:
           subject-path: out/rueder.apk
 
-  # The container image as deploy/compose.yaml runs it: built, started next to
-  # PostgreSQL and asked whether it works. Both architectures are built on a
+  # The container images as deploy/compose.yaml runs them, rueder's and
+  # RSSifier's: built, started next to PostgreSQL and asked whether they work. Both architectures are built on a
   # runner of their own, each for the machine it runs on: building arm64 under
   # emulation would take far longer than all other jobs together. On main the
   # very image that was tested goes on to the job publish, as an OCI archive;
@@ -485,54 +485,75 @@ jobs:
             RUEDER_CI_RUN=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           cache-from: type=gha,scope=image-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=image-${{ matrix.platform }}
-      # With RUEDER_IMAGE the test starts the image built above instead of
-      # building one of its own; with RUEDER_COMMIT it also asks the image
-      # which commit it says it is of. What it should say comes from git, not
-      # from the same expression as the build argument, so the two can differ.
+      # RSSifier the same way, from its own Dockerfile.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: rssifier/Dockerfile
+          outputs: |
+            type=docker,name=rssifier:ci
+            type=oci,dest=${{ runner.temp }}/rssifier-${{ matrix.platform }}.tar
+          provenance: false
+          cache-from: type=gha,scope=rssifier-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=rssifier-${{ matrix.platform }}
+      # With RUEDER_IMAGE and RSSIFIER_IMAGE the test starts the images built
+      # above instead of building its own; with RUEDER_COMMIT it also asks the
+      # image which commit it says it is of. What it should say comes from git,
+      # not from the same expression as the build argument, so the two can
+      # differ.
       - run: RUEDER_COMMIT="$(git rev-parse HEAD)" deploy/smoke-test.sh
         env:
           RUEDER_IMAGE: rueder:ci
-      # The archive holds one image, the one the smoke test started. Docker
+          RSSIFIER_IMAGE: rssifier:ci
+      # Each archive holds one image, the one the smoke test started. Docker
       # knows that image by a digest of it: with its own image store by that
       # of the configuration, with the store of containerd (Docker 29 on
       # ubuntu-26.04) by that of the manifest, which names the configuration.
-      - name: Check the archive
+      - name: Check the archives
         env:
-          ARCHIVE: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+          PLATFORM: ${{ matrix.platform }}
+        working-directory: ${{ runner.temp }}
         run: |
-          tar -xOf "$ARCHIVE" index.json | jq -e '.manifests | length == 1' > /dev/null
-          manifest=$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')
-          config=$(tar -xOf "$ARCHIVE" "blobs/sha256/${manifest#sha256:}" | jq -r '.config.digest')
-          tested=$(docker image inspect rueder:ci --format '{{.Id}}')
-          echo "archive: manifest $manifest, configuration $config; tested: $tested"
-          [ "$tested" = "$manifest" ] || [ "$tested" = "$config" ]
+          for image in rueder rssifier; do
+            archive="$image-$PLATFORM.tar"
+            tar -xOf "$archive" index.json | jq -e '.manifests | length == 1' > /dev/null
+            manifest=$(tar -xOf "$archive" index.json | jq -r '.manifests[0].digest')
+            config=$(tar -xOf "$archive" "blobs/sha256/${manifest#sha256:}" | jq -r '.config.digest')
+            tested=$(docker image inspect "$image:ci" --format '{{.Id}}')
+            echo "$image: manifest $manifest, configuration $config; tested: $tested"
+            [ "$tested" = "$manifest" ] || [ "$tested" = "$config" ]
+          done
       # What publish does with the archive, tried against a registry on this
       # runner, so that a change to it shows up before it reaches main. Only
       # the amd64 runner has skopeo; publish runs there too.
       - name: Rehearse publishing
         if: matrix.platform == 'amd64'
-        env:
-          ARCHIVE: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+        working-directory: ${{ runner.temp }}
         run: |
           docker run --detach --name registry --publish 127.0.0.1:5000:5000 registry:3
           for _ in $(seq 30); do curl -fs http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
-          digest=$(tar -xOf "$ARCHIVE" index.json | jq -r '.manifests[0].digest')
-          skopeo copy --preserve-digests --dest-tls-verify=false "oci-archive:$ARCHIVE" "docker://127.0.0.1:5000/rueder@$digest"
-          skopeo inspect --tls-verify=false --raw "docker://127.0.0.1:5000/rueder@$digest" | sha256sum | grep -q "^${digest#sha256:} "
+          for image in rueder rssifier; do
+            archive="$image-amd64.tar"
+            digest=$(tar -xOf "$archive" index.json | jq -r '.manifests[0].digest')
+            skopeo copy --preserve-digests --dest-tls-verify=false "oci-archive:$archive" "docker://127.0.0.1:5000/$image@$digest"
+            skopeo inspect --tls-verify=false --raw "docker://127.0.0.1:5000/$image@$digest" | sha256sum | grep -q "^${digest#sha256:} "
+          done
       # Only a push to main publishes, and only what got this far.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: image-${{ matrix.platform }}
-          path: ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+          path: |
+            ${{ runner.temp }}/rueder-${{ matrix.platform }}.tar
+            ${{ runner.temp }}/rssifier-${{ matrix.platform }}.tar
           if-no-files-found: error
           retention-days: 1
           # The layers are compressed already.
           compression-level: 0
 
   # Every push to main that passed the jobs above becomes
-  # ghcr.io/fionapreroll/rueder:latest and :sha-<commit>, for both
-  # architectures: the two archives the job image tested are pushed as they
+  # ghcr.io/fionapreroll/rueder:latest and :sha-<commit>, and the same of
+  # ghcr.io/fionapreroll/rssifier, for both architectures: the two archives the job image tested are pushed as they
   # are, by their digests, then tied together under the tags by an index that
   # says which of them fits the machine that pulls it.
   publish:
@@ -581,12 +602,14 @@ jobs:
       - name: Push
         working-directory: ${{ runner.temp }}/images
         run: |
-          for platform in amd64 arm64; do
-            archive="rueder-$platform.tar"
-            tar -xOf "$archive" index.json | jq -e '.manifests | length == 1' > /dev/null
-            digest=$(tar -xOf "$archive" index.json | jq -r '.manifests[0].digest')
-            skopeo copy --preserve-digests "oci-archive:$archive" "docker://ghcr.io/fionapreroll/rueder@$digest"
-            echo "ghcr.io/fionapreroll/rueder@$digest" >> sources
+          for image in rueder rssifier; do
+            for platform in amd64 arm64; do
+              archive="$image-$platform.tar"
+              tar -xOf "$archive" index.json | jq -e '.manifests | length == 1' > /dev/null
+              digest=$(tar -xOf "$archive" index.json | jq -r '.manifests[0].digest')
+              skopeo copy --preserve-digests "oci-archive:$archive" "docker://ghcr.io/fionapreroll/$image@$digest"
+              echo "ghcr.io/fionapreroll/$image@$digest" >> "sources-$image"
+            done
           done
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
@@ -602,7 +625,7 @@ jobs:
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(cat sources)
+            $(cat sources-rueder)
           digest=$(docker buildx imagetools inspect "ghcr.io/fionapreroll/rueder:$VERSION" \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
@@ -613,6 +636,31 @@ jobs:
         with:
           subject-name: ghcr.io/fionapreroll/rueder
           subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+      # RSSifier under the same tags, attested the same way.
+      - id: meta-rssifier
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/fionapreroll/rssifier
+          tags: |
+            type=raw,value=latest,enable=${{ steps.head.outputs.latest }}
+            type=sha
+      - id: index-rssifier
+        working-directory: ${{ runner.temp }}/images
+        env:
+          VERSION: ${{ steps.meta-rssifier.outputs.version }}
+          TAGS: ${{ steps.meta-rssifier.outputs.json }}
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$TAGS") \
+            $(cat sources-rssifier)
+          digest=$(docker buildx imagetools inspect "ghcr.io/fionapreroll/rssifier:$VERSION" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/fionapreroll/rssifier
+          subject-digest: ${{ steps.index-rssifier.outputs.digest }}
           push-to-registry: true
 
   # Every Monday (see schedule above): the published image against the known
@@ -636,8 +684,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: |
           failed=0
-          for platform in linux/amd64 linux/arm64; do
-            trivy image --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL \
-              --exit-code 1 --platform "$platform" ghcr.io/fionapreroll/rueder:latest || failed=1
+          for image in rueder rssifier; do
+            for platform in linux/amd64 linux/arm64; do
+              trivy image --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL \
+                --exit-code 1 --platform "$platform" "ghcr.io/fionapreroll/$image:latest" || failed=1
+            done
           done
           exit "$failed"

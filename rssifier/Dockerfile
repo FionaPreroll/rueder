@@ -30,5 +30,7 @@ ENV LISTEN_ADDR=0.0.0.0:3100 \
 VOLUME /etc/rssifier
 EXPOSE 3100
 USER nonroot
+HEALTHCHECK --interval=30s --timeout=6s --start-period=30s --start-interval=2s --retries=3 \
+    CMD ["rssifier", "health"]
 ENTRYPOINT ["rssifier"]
 CMD ["serve"]

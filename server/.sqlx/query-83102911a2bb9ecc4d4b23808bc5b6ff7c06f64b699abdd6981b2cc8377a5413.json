@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title,\n                  f.feed_url, f.site_url, f.title, f.fetch_agent, f.last_seq,\n                  a.seq AS \"mark_seq?\", a.url AS mark_url, a.published_at AS \"mark_at?\",\n                  c.guid AS \"mark_guid?\", s.read_upto, f.cut_seq, f.cut_guid, f.cut_url,\n                  f.cut_published_at\n           FROM subscriptions s\n           JOIN feeds f ON f.id = s.feed_id\n           LEFT JOIN articles a ON a.feed_id = s.feed_id AND a.seq = s.read_upto\n           LEFT JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           WHERE s.account_id = $1",
+  "query": "SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title,\n                  f.feed_url, f.source = 'page' AS \"page!\", f.site_url, f.title, f.fetch_agent,\n                  f.last_seq,\n                  a.seq AS \"mark_seq?\", a.url AS mark_url, a.published_at AS \"mark_at?\",\n                  c.guid AS \"mark_guid?\", s.read_upto, f.cut_seq, f.cut_guid, f.cut_url,\n                  f.cut_published_at\n           FROM subscriptions s\n           JOIN feeds f ON f.id = s.feed_id\n           LEFT JOIN articles a ON a.feed_id = s.feed_id AND a.seq = s.read_upto\n           LEFT JOIN article_content c ON c.feed_id = a.feed_id AND c.seq = a.seq\n           WHERE s.account_id = $1",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,12 @@
       },
       {
         "ordinal": 5,
+        "name": "page!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
         "name": "site_url",
         "type_info": "Text",
         "origin": {
@@ -70,7 +76,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "title",
         "type_info": "Text",
         "origin": {
@@ -81,7 +87,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "fetch_agent",
         "type_info": "Text",
         "origin": {
@@ -92,7 +98,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_seq",
         "type_info": "Int4",
         "origin": {
@@ -103,7 +109,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "mark_seq?",
         "type_info": "Int4",
         "origin": {
@@ -114,7 +120,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "mark_url",
         "type_info": "Text",
         "origin": {
@@ -125,7 +131,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "mark_at?",
         "type_info": "Timestamptz",
         "origin": {
@@ -136,7 +142,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "mark_guid?",
         "type_info": "Text",
         "origin": {
@@ -147,7 +153,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "read_upto",
         "type_info": "Int4",
         "origin": {
@@ -158,7 +164,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "cut_seq",
         "type_info": "Int4",
         "origin": {
@@ -169,7 +175,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "cut_guid",
         "type_info": "Text",
         "origin": {
@@ -180,7 +186,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "cut_url",
         "type_info": "Text",
         "origin": {
@@ -191,7 +197,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "cut_published_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -213,6 +219,7 @@
       false,
       true,
       false,
+      null,
       true,
       false,
       false,
@@ -228,5 +235,5 @@
       true
     ]
   },
-  "hash": "f6f94fb8801dd776ea33c1806779952f3c3d047c2c7755f8785c5683264ad96d"
+  "hash": "83102911a2bb9ecc4d4b23808bc5b6ff7c06f64b699abdd6981b2cc8377a5413"
 }

@@ -30,8 +30,16 @@ Give the database a password in `.env`, for example the output of
 POSTGRES_PASSWORD=…
 ```
 
-Build the image and start both containers. The first build compiles the server
-and takes a few minutes.
+For websites without a feed, give rueder and [RSSifier](#websites-without-a-feed)
+the token they share, for example `rsf_` and the output of
+`openssl rand -hex 16`:
+
+```sh
+RSSIFIER_TOKEN=rsf_…
+```
+
+Build the images and start the containers: rueder, its database and RSSifier.
+The first build compiles the server and takes a few minutes.
 
 ```sh
 docker compose up --detach --build
@@ -43,10 +51,11 @@ instead of building one yourself: name it in `.env`, then fetch it and start.
 ```sh
 # in .env
 RUEDER_IMAGE=ghcr.io/fionapreroll/rueder:latest
+RSSIFIER_IMAGE=ghcr.io/fionapreroll/rssifier:latest
 ```
 
 ```sh
-docker compose pull rueder
+docker compose pull rueder rssifier
 docker compose up --detach
 ```
 
@@ -56,7 +65,7 @@ version. Both tags carry an image for amd64 and one for arm64, and docker takes
 the one for the machine.
 
 rueder now listens on `127.0.0.1:3000` and applies its database migrations on
-every start. `docker compose ps` shows both containers as `healthy` once they
+every start. `docker compose ps` shows the containers as `healthy` once they
 are up.
 
 There is no registration. Make an account for everybody who reads, the first
@@ -64,6 +73,24 @@ one as admin; the command asks for the password:
 
 ```sh
 docker compose exec rueder rueder account add fiona --admin
+```
+
+## Websites without a feed
+
+RSSifier (`rssifier/`) makes a feed of a website that names none, of the titles
+and summaries it lists; the feed search offers such a website when
+`RSSIFIER_TOKEN` is set, and the status page says how RSSifier fares. It runs
+in a container of its own that only rueder reaches, and it asks every
+website's `robots.txt` first. `RSSIFIER_BLOCKED_HOSTS` names hosts it never
+fetches from. `RSSIFIER_ENABLE=reddit` turns on the recipe for subreddits,
+which goes against Reddit's terms and its `robots.txt` and is only for a
+private instance; [RSSifier's README](../rssifier/README.md#reddit) says what
+it does.
+
+For other readers than this rueder, make a token of their own, with limits:
+
+```sh
+docker compose exec rssifier rssifier token add other --per-minute 60 --fetches-per-hour 300
 ```
 
 ## The reverse proxy
@@ -223,7 +250,8 @@ a change, `docker compose up --detach` starts the containers anew.
 | `IMAGE_CACHE_MB`, `IMAGE_PROXY_KEY` | Size of the image proxy's cache, and its secret if you want to set it yourself. |
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
-| `RSSIFIER_URL`, `RSSIFIER_TOKEN` | Where [RSSifier](../rssifier/README.md) answers and rueder's token there (`rssifier token add rueder`), for websites without a feed. Without them the feed search offers none of those; with only one rueder does not start. |
+| `RSSIFIER_TOKEN`, `RSSIFIER_URL` | The token rueder and RSSifier share, for [websites without a feed](#websites-without-a-feed); `compose.yaml` sets `RSSIFIER_URL` once there is a token. Without them the feed search offers no such website; with only one rueder does not start. |
+| `RSSIFIER_BLOCKED_HOSTS`, `RSSIFIER_ENABLE`, `RSSIFIER_IMAGE` | Hosts RSSifier never fetches from, the recipes it turns on (`reddit`, only for a private instance) and its image, as with `RUEDER_IMAGE`. |
 | `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (4) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
 | `IMAGES_PUBLIC` | `on` lets a CDN in front of your reverse proxy keep images, which then come without a session too. Off if not set; see [Images through a CDN](#images-through-a-cdn). |
 | `DATABASE_WARN_GB` | From what size of the database in GB the status page warns, such as `50` on a disk of 64 GB. Off if not set; see [Keeping old articles, or not](#keeping-old-articles-or-not). |
@@ -566,11 +594,11 @@ git pull
 docker compose up --detach --build
 ```
 
-With the published image (`RUEDER_IMAGE` in `.env`):
+With the published images (`RUEDER_IMAGE` and `RSSIFIER_IMAGE` in `.env`):
 
 ```sh
 git pull
-docker compose pull rueder
+docker compose pull rueder rssifier
 docker compose up --detach
 ```
 
@@ -660,14 +688,15 @@ database can go: `docker rm -f rueder3-db` and
   image proxy, where the key for the proxy's addresses lies too.
 - It has no Linux capabilities and cannot gain privileges.
 - The database is reachable from the rueder container only; no port of it is
-  open on the machine.
+  open on the machine. Nor is one of RSSifier, which runs the same way.
 - Secrets come from `.env` when the container starts. None is in the image or
   in the frontend.
 
-`deploy/smoke-test.sh` builds the image, starts everything under another name
-and port, checks these points and that an account can log in, and takes it
-all away again. CI runs it on every pull request, against the image it built; `RUEDER_IMAGE=… deploy/smoke-test.sh` tests a finished image
-without building one.
+`deploy/smoke-test.sh` builds the images, starts everything under another name
+and port, checks these points, that an account can log in and that rueder
+reaches RSSifier, and takes it all away again. CI runs it on every pull
+request, against the images it built; `RUEDER_IMAGE=… RSSIFIER_IMAGE=…
+deploy/smoke-test.sh` tests finished images without building them.
 
 ## Without Docker
 

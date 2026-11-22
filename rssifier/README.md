@@ -22,7 +22,8 @@ entries wins:
    images and lying in `<main>`, less in `<nav>`, `<header>`, `<footer>` and
    `<aside>`.
 
-An entry gets a title, its link (which is also its id), a short text without
+An entry gets a title, its link (which is also its id, unless a recipe reads
+the site's own), a short text without
 the page's markup, and an image and a date where the page names them.
 Nothing that changes from one look to the next goes into the text: "3 hours
 ago", "vor einer Stunde" and counts of comments are left out. Pages made in
@@ -32,6 +33,21 @@ there is no headless browser.
 Before it fetches a page, RSSifier reads the site's `robots.txt` (RFC 9309)
 as `rueder-rssifier` and keeps it for a day. Hosts the operator blocks are
 never fetched from, nor redirected to.
+
+### Reddit
+
+Reddit ended its RSS feeds on 2026-11-13. A recipe built in reads the newest
+posts of a subreddit (`reddit.com/r/<name>`, read as `/r/<name>/new/`) from
+the page Reddit shows without a login: title, link, time and the post's own
+id, the text and a preview where there are any, never the score or the
+number of comments. It is off until the operator turns it on with
+`RSSIFIER_ENABLE=reddit`, and it is not for a public instance: Reddit's User
+Agreement forbids collecting its pages automatically, and its `robots.txt`
+forbids every crawler everything, which this recipe, once turned on, does
+not ask. Reddit blocks data centres and clients it does not know, and it
+changes its pages; the recipe may stop finding posts at any time. The page
+holds only the first few posts (three in a sample of 2026-11-22), the rest
+come by script, so a busy subreddit loses posts between two fetches.
 
 ## API
 
@@ -85,6 +101,7 @@ and `RSSIFIER_TOKEN=rsf_…` in its own settings.
 | `FETCH_ALLOW_NETS` | none | Internal networks that may be fetched from, comma separated; for tests. |
 | `RSSIFIER_RECIPES` | none | A file of recipes, written like `rules/recipes.toml`, that go before those built in. Read at the start. |
 | `RSSIFIER_BLOCKED_HOSTS` | none | Hosts never fetched from, comma separated; each also stands for its subdomains. |
+| `RSSIFIER_ENABLE` | none | Recipes that are off until the operator names them, comma separated: `reddit` (see above). A name no recipe has stops the start. |
 | `RUST_LOG` | `info` | |
 
 As a container, built from the root of the repository:

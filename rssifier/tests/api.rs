@@ -294,6 +294,47 @@ async fn what_robots_txt_or_the_operator_forbids_is_not_fetched() {
 }
 
 #[tokio::test]
+async fn a_recipe_may_read_another_address_and_an_optional_one_leave_out_robots_txt() {
+    let written = r#"
+        [[recipe]]
+        optional = "mine"
+        robots = false
+        host = "127.0.0.1"
+        path = "/private"
+        item = "nothing"
+
+        [[recipe]]
+        host = "127.0.0.1"
+        path = "/r/"
+        fetch = "/{2}"
+        item = "nothing"
+    "#;
+    let off = Sites::new(Recipes::parse(written).unwrap(), "");
+    let (world, secret) = World::with(Limits::default(), off).await;
+    let (status, _, problem) = world
+        .get(&world.feed_of("/private"), Some(&secret), None)
+        .await;
+    assert_eq!(
+        (status, &problem["type"]),
+        (StatusCode::FORBIDDEN, &"robots".into())
+    );
+    // The address the recipe names is the feed's.
+    let (status, _, feed) = world
+        .get(&world.feed_of("/r/club/top?t=week"), Some(&secret), None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{feed}");
+    assert_eq!(feed["home_page_url"], format!("http://{}/club", world.site));
+
+    let on = Sites::new(Recipes::parse(written).unwrap().enable("mine").unwrap(), "");
+    let (world, secret) = World::with(Limits::default(), on).await;
+    let (status, _, feed) = world
+        .get(&world.feed_of("/private"), Some(&secret), None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{feed}");
+    assert_eq!(feed["_rssifier"]["source"], "json-ld");
+}
+
+#[tokio::test]
 async fn addresses_inside_the_network_and_other_schemes_are_refused() {
     let (world, secret) = World::new(Limits::default()).await;
     for address in [

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0" xmlns:rueder="https://fionapreroll.github.io/rueder/opml">
+  <body>
+    <outline text="Clubs">
+      <outline type="link" text="The club" url="https://club.example/news" rueder:source="page"/>
+      <outline type="link" text="No address" rueder:source="page"/>
+      <outline type="link" text="Just a link" url="https://link.example/"/>
+      <outline text="Both" url="https://club.example/" xmlUrl="https://club.example/feed" rueder:source="page"/>
+      <outline text="Other" xmlUrl="https://club.example/news" rueder:source="feed"/>
+    </outline>
+  </body>
+</opml>

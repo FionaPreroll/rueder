@@ -28,6 +28,7 @@ pub mod cache;
 pub mod extract;
 pub mod feed;
 pub mod guess;
+pub mod health;
 pub mod html;
 pub mod limits;
 pub mod recipes;

@@ -16,7 +16,7 @@
             ]
           },
           "id": {
-            "description": "The address of the entry, which is also its id.",
+            "description": "The id the site gives the entry, else its address.",
             "type": "string"
           },
           "image": {

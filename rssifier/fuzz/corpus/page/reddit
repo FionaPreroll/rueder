@@ -1,0 +1,8 @@
+<shreddit-feed>
+<article><shreddit-post id="t3_1abc" post-title="  Rust 2.0 is   out " permalink="/r/x/comments/1abc/rust/" score="1234" comment-count="56" created-timestamp="2026-11-20T10:15:00.123000+0000">
+<div slot="text-body"><p>Read all about it. 12 comments</p></div><img src="/avatar.png"></shreddit-post></article>
+<article><shreddit-post id="t3_1abd" post-title="A link" permalink="https://example.com/r/x/comments/1abd/a/" created-timestamp="2026-11-19T08:00:00+0100">
+<div slot="thumbnail"><img src="https://preview.example/1abd.jpg"></div></shreddit-post></article>
+<shreddit-post id="" post-title="No id" permalink="/r/x/new/"></shreddit-post>
+<shreddit-post id="t3_&#1;" post-title="&#9;" permalink="javascript:alert(1)"></shreddit-post>
+</shreddit-feed>

@@ -37,7 +37,7 @@ pub struct Made {
 /// An entry of a feed.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FeedItem {
-    /// The address of the entry, which is also its id.
+    /// The id the site gives the entry, else its address.
     pub id: String,
     pub url: String,
     pub title: String,
@@ -83,7 +83,7 @@ impl JsonFeed {
                     ));
                 }
                 FeedItem {
-                    id: item.url.to_string(),
+                    id: item.id.unwrap_or_else(|| item.url.to_string()),
                     url: item.url.to_string(),
                     title: item.title,
                     content_html: content,

@@ -585,11 +585,20 @@ fn xml(text: &str) -> String {
 /// A node of the tree on its way into an OPML file.
 enum Entry {
     Folder(i32),
-    Feed { url: String, site: Option<String> },
+    Feed {
+        url: String,
+        site: Option<String>,
+        page: bool,
+    },
 }
 
+/// The namespace of what rueder adds to an OPML file: `rueder:source="page"`
+/// marks a web page without a feed, which RSSifier reads.
+const OPML_NAMESPACE: &str = "https://fionapreroll.github.io/rueder/opml";
+
 /// The account's subscriptions as an OPML file, folders as outlines around
-/// their feeds.
+/// their feeds. A web page without a feed is a link (`type="link"`) marked
+/// as a page, so that other readers do not take it for a feed.
 #[utoipa::path(
     get,
     path = "/opml",
@@ -600,11 +609,12 @@ enum Entry {
 async fn export(State(state): State<AppState>, session: Session) -> Result<Response, AppError> {
     let rows = sqlx::query!(
         r#"SELECT true AS "folder!", id AS "id!", parent_id AS parent, title AS "title!",
-                  position AS "position!", NULL::text AS feed_url, NULL::text AS site_url
+                  position AS "position!", NULL::text AS feed_url, NULL::text AS site_url,
+                  false AS "page!"
            FROM folders WHERE account_id = $1
            UNION ALL
            SELECT false, s.feed_id, s.folder_id, coalesce(s.title, nullif(f.title, ''), f.feed_url),
-                  s.position, f.feed_url, f.site_url
+                  s.position, f.feed_url, f.site_url, f.source = 'page'
            FROM subscriptions s JOIN feeds f ON f.id = s.feed_id WHERE s.account_id = $1
            ORDER BY 5, 1 DESC, 2"#,
         session.account_id
@@ -617,6 +627,7 @@ async fn export(State(state): State<AppState>, session: Session) -> Result<Respo
             (false, Some(url)) => Entry::Feed {
                 url,
                 site: row.site_url,
+                page: row.page,
             },
             _ => Entry::Folder(row.id),
         };
@@ -626,8 +637,9 @@ async fn export(State(state): State<AppState>, session: Session) -> Result<Respo
             .push((row.title, entry));
     }
 
-    let mut out = String::from(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<opml version=\"2.0\">\n  <head>\n    \
+    let mut out = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <opml version=\"2.0\" xmlns:rueder=\"{OPML_NAMESPACE}\">\n  <head>\n    \
          <title>rueder</title>\n  </head>\n  <body>\n",
     );
     // What is still to write, the last first; `None` closes a folder.
@@ -649,7 +661,19 @@ async fn export(State(state): State<AppState>, session: Session) -> Result<Respo
                 waiting.push((depth, None));
                 push(&mut waiting, Some(id), depth + 1);
             }
-            Some((title, Entry::Feed { url, site })) => {
+            Some((
+                title,
+                Entry::Feed {
+                    url, page: true, ..
+                },
+            )) => {
+                let (title, url) = (xml(&title), xml(&url));
+                out.push_str(&format!(
+                    "{indent}<outline type=\"link\" text=\"{title}\" title=\"{title}\" \
+                     url=\"{url}\" rueder:source=\"page\"/>\n"
+                ));
+            }
+            Some((title, Entry::Feed { url, site, .. })) => {
                 let (title, url) = (xml(&title), xml(&url));
                 let site = site.map(|site| format!(" htmlUrl=\"{}\"", xml(&site)));
                 let site = site.unwrap_or_default();
@@ -677,9 +701,11 @@ pub struct Outline {
     /// The folders by the names from the top level down, each once, a folder
     /// after the one it is in.
     pub folders: Vec<Vec<String>>,
-    /// The feeds in the order of the file, each address once: the folder it
-    /// is in (empty at the top level), its address and its name.
-    pub feeds: Vec<(Vec<String>, Url, Option<String>)>,
+    /// The feeds in the order of the file, each address once as a feed and
+    /// once as a page: the folder it
+    /// is in (empty at the top level), its address, its name and whether it
+    /// is a web page without a feed.
+    pub feeds: Vec<(Vec<String>, Url, Option<String>, bool)>,
     /// Both in the order of the file, by their place in the lists above.
     pub order: Vec<Step>,
     /// Outlines that were left out: a feed without an address that can be
@@ -715,8 +741,10 @@ fn attributes(outline: &BytesStart<'_>) -> HashMap<String, String> {
     found
 }
 
-/// Reads an OPML file. An outline with an address (`xmlUrl`) is a feed; one
-/// without is a folder, named by `text` or `title`, and holds what is in it.
+/// Reads an OPML file. An outline with an address (`xmlUrl`) is a feed, one
+/// marked `rueder:source="page"` with an address (`url`) a web page without
+/// a feed; one without is a folder, named by `text` or `title`, and holds
+/// what is in it. The mark counts only with the prefix rueder writes.
 /// Folders deeper than the tree allows give what they hold to the deepest
 /// folder that fits.
 pub fn outline(file: &str) -> Result<Outline, &'static str> {
@@ -753,16 +781,17 @@ pub fn outline(file: &str) -> Result<Outline, &'static str> {
             .iter()
             .find_map(|key| attributes.get(*key).and_then(|text| name(text)));
         let mut is_folder = false;
-        match attributes.get("xmlurl") {
+        let page = attributes.get("rueder:source").is_some_and(|s| s == "page");
+        match attributes.get(if page { "url" } else { "xmlurl" }) {
             Some(url) => match address(url) {
                 Ok(url) if result.feeds.len() >= MAX_OPML_FEEDS => {
                     drop(url);
                     result.skipped += 1;
                 }
                 Ok(url) => {
-                    if seen.insert(url.clone()) {
+                    if seen.insert((url.clone(), page)) {
                         result.order.push(Step::Feed(result.feeds.len()));
-                        result.feeds.push((path.clone(), url, title));
+                        result.feeds.push((path.clone(), url, title, page));
                     }
                 }
                 Err(_) => result.skipped += 1,
@@ -954,18 +983,20 @@ pub(crate) async fn take(
                 ids.insert(outline.folders[at].clone(), id);
             }
             Step::Feed(at) => {
-                let Some((path, url, title)) = outline.feeds.get(at) else {
+                let Some((path, url, title, page)) = outline.feeds.get(at) else {
                     continue;
                 };
-                let (feed_id, created) = match known(&mut *tx, url.as_str(), false, None).await? {
+                let (feed_id, created) = match known(&mut *tx, url.as_str(), *page, None).await? {
                     // A blocked feed comes in neither with a file nor with a move.
                     Some(id) if blocked(&mut *tx, id).await? => continue,
                     Some(id) => (id, false),
                     None => {
                         let id = sqlx::query_scalar!(
-                            "INSERT INTO feeds (feed_url, title) VALUES ($1, $2) RETURNING id",
+                            "INSERT INTO feeds (feed_url, title, source) VALUES ($1, $2, $3)
+                             RETURNING id",
                             url.as_str(),
                             title.as_deref().unwrap_or_default(),
+                            if *page { "page" } else { "feed" },
                         )
                         .fetch_one(&mut *tx)
                         .await?;
@@ -1176,6 +1207,9 @@ mod tests {
               <outline text="News"><outline text="Again" xmlUrl="https://news.example/feed"/></outline>
               <outline text="No address" type="rss"/>
               <outline text="Not the web" xmlUrl="ftp://files.example/feed"/>
+              <outline type="link" text="Club" url="https://club.example/news" rueder:source="page"/>
+              <outline type="link" text="Just a link" url="https://link.example/"/>
+              <outline text="Page and feed" url="https://club.example/" xmlUrl="https://club.example/feed" rueder:source="page"/>
             </body></opml>"#;
         let read = outline(file).unwrap();
         assert_eq!(
@@ -1192,17 +1226,32 @@ mod tests {
                 (
                     names(&["News"]),
                     url("https://news.example/feed"),
-                    Some("The & Example".into())
+                    Some("The & Example".into()),
+                    false
                 ),
                 (
                     names(&["News", "Deeper"]),
                     url("https://deep.example/atom.xml"),
-                    None
+                    None,
+                    false
                 ),
                 (
                     names(&[]),
                     url("https://blog.example/rss"),
-                    Some("Top".into())
+                    Some("Top".into()),
+                    false
+                ),
+                (
+                    names(&[]),
+                    url("https://club.example/news"),
+                    Some("Club".into()),
+                    true
+                ),
+                (
+                    names(&[]),
+                    url("https://club.example/"),
+                    Some("Page and feed".into()),
+                    true
                 ),
             ]
         );
@@ -1211,7 +1260,16 @@ mod tests {
         use Step::{Feed, Folder};
         assert_eq!(
             read.order,
-            [Folder(0), Feed(0), Folder(1), Feed(1), Folder(2), Feed(2)]
+            [
+                Folder(0),
+                Feed(0),
+                Folder(1),
+                Feed(1),
+                Folder(2),
+                Feed(2),
+                Feed(3),
+                Feed(4)
+            ]
         );
     }
 
@@ -1244,7 +1302,10 @@ mod tests {
             <opml><body><outline text="&b;&b;&b;"><outline text="&b;" xmlUrl="https://a.example/"/></outline></body></opml>"#;
         let read = outline(bomb).unwrap();
         assert_eq!(read.folders, Vec::<Vec<String>>::new());
-        assert_eq!(read.feeds, [(names(&[]), url("https://a.example/"), None)]);
+        assert_eq!(
+            read.feeds,
+            [(names(&[]), url("https://a.example/"), None, false)]
+        );
 
         let many: String = (0..=tree::MAX_FOLDERS)
             .map(|n| {
