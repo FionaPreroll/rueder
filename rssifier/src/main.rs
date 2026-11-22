@@ -6,7 +6,7 @@ use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use hardened_http::{Config, HttpClient, Net};
 use rssifier::{
-    AGENT, AppState, Sites, app,
+    AGENT, AppState, Sites, app, health,
     limits::Pace,
     recipes::Recipes,
     tokens::{self, Keeper, Limits, Token},
@@ -49,6 +49,12 @@ enum Command {
         /// needs no `rssifier token add`.
         #[arg(long, env = "RSSIFIER_TOKEN", hide_env_values = true)]
         token: Option<String>,
+    },
+    /// Asks the server that runs on LISTEN_ADDR whether it is well: the
+    /// health check of the container. Fails if it does not answer.
+    Health {
+        #[arg(long, env = "LISTEN_ADDR", default_value = "127.0.0.1:3100")]
+        listen: String,
     },
     /// Makes, lists and ends tokens.
     #[command(subcommand)]
@@ -130,6 +136,9 @@ async fn main() -> anyhow::Result<()> {
                 Sites::new(recipes, &blocked),
             )
             .await
+        }
+        Command::Health { listen } => {
+            health::check(health::address(&listen).await?, health::WAIT).await
         }
         Command::Token(command) => token(&cli.tokens, command),
     }

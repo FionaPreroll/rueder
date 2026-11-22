@@ -1,16 +1,16 @@
 #!/bin/sh
-# Builds the image, starts rueder and its database as compose.yaml describes
-# them, and checks that what comes up is a working rueder: it answers, serves
-# the frontend, lets an account log in, keeps its data over a restart, and
-# runs the way the file promises (not root, read-only). For CI, and for trying
-# a change to the image:
+# Builds the images, starts rueder, its database and RSSifier as compose.yaml
+# describes them, and checks that what comes up is a working rueder: it
+# answers, serves the frontend, lets an account log in, reaches RSSifier,
+# keeps its data over a restart, and runs the way the file promises (not
+# root, read-only). For CI, and for trying a change to the images:
 #
 #   deploy/smoke-test.sh
 #
-# With RUEDER_IMAGE set it starts that image instead of building one, as CI
-# does with the image it built before:
+# With RUEDER_IMAGE and RSSIFIER_IMAGE set it starts those images instead of
+# building them, as CI does with the images it built before:
 #
-#   RUEDER_IMAGE=rueder:ci deploy/smoke-test.sh
+#   RUEDER_IMAGE=rueder:ci RSSIFIER_IMAGE=rssifier:ci deploy/smoke-test.sh
 #
 # It uses a project and a port of its own and takes both away again, so it can
 # run next to a real installation.
@@ -20,6 +20,8 @@ cd "$(dirname "$0")"
 export COMPOSE_PROJECT_NAME=rueder-smoke
 export POSTGRES_PASSWORD=smoke
 export RUEDER_LISTEN=127.0.0.1:3999
+# Made for this run, as the setup in README.md makes one.
+export RSSIFIER_TOKEN="rsf_$(od -An -N16 -tx1 /dev/urandom | tr -d " \n")"
 at=http://$RUEDER_LISTEN
 password=correct-horse-battery
 
@@ -49,13 +51,14 @@ headers=$(mktemp)
 trap finish EXIT
 
 say "Build and start"
-if [ -n "${RUEDER_IMAGE:-}" ]; then
+if [ -n "${RUEDER_IMAGE:-}" ] && [ -n "${RSSIFIER_IMAGE:-}" ]; then
 	build=--no-build
 else
 	build=--build
 fi
-# --wait returns once both containers call themselves healthy: PostgreSQL
-# accepts connections, and `rueder health` got an answer from the server.
+# --wait returns once the containers call themselves healthy: PostgreSQL
+# accepts connections, and `rueder health` and `rssifier health` got an
+# answer from their servers.
 compose up "$build" --detach --wait
 
 say "The server answers and reaches its database"
@@ -105,13 +108,16 @@ code=$(curl --silent --output /dev/null --write-out '%{http_code}' "$at/api/me")
 [ "$code" = 401 ] || fail "/api/me answers $code without a session, not 401"
 
 say "It runs as promised"
-container=$(compose ps --quiet rueder)
-user=$(docker inspect --format '{{.Config.User}}' "$container")
-case "$user" in
-'' | root | 0 | 0:*) fail "the container runs as root" ;;
-esac
-[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true ] ||
-	fail "the container's file system is not read-only"
+for service in rueder rssifier; do
+	container=$(compose ps --quiet "$service")
+	user=$(docker inspect --format '{{.Config.User}}' "$container")
+	case "$user" in
+	'' | root | 0 | 0:*) fail "the container of $service runs as root" ;;
+	esac
+	[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true ] ||
+		fail "the file system of $service is not read-only"
+done
+[ -z "$(compose port rssifier 3100 2>/dev/null)" ] || fail "RSSifier is open on the machine"
 # The server made its key for the image proxy, so it can write where it must.
 compose logs rueder | grep -q 'listening on' || fail "the server did not say it listens"
 
@@ -128,6 +134,11 @@ if [ -n "${RUEDER_COMMIT:-}" ]; then
 fi
 printf '%s' "$status" | grep -q '"profile":"release"' ||
 	fail "the image was not built as a release"
+
+say "rueder reaches RSSifier with the token they share"
+printf '%s' "$status" | grep -q '"rssifier":{"on":true' || fail "the status says RSSifier is off"
+printf '%s' "$status" | grep -q '"usage":{"name":"env"' ||
+	fail "RSSifier did not tell rueder what its token used"
 
 say "Data outlives the containers"
 compose down
