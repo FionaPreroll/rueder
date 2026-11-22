@@ -121,6 +121,19 @@ export function demoStatus(now: number): ServerStatus {
 			failed: 1,
 			limited: 0
 		},
+		rssifier: {
+			on: true,
+			pages: 3,
+			failing: 1,
+			usage: {
+				name: 'rueder',
+				limits: { per_minute: 120, fetches_per_hour: 600, at_once: 8 },
+				requests: 2,
+				fetches: 1,
+				under_way: 0
+			},
+			error: null
+		},
 		images: {
 			on: true,
 			cache_bytes: 183 * 1024 * 1024,

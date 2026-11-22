@@ -808,6 +808,7 @@ const ko: Messages = {
 		subscribed: '구독함',
 		show: '보기',
 		untitled: '이름 없음',
+		page: '피드가 없는 웹사이트입니다. rueder가 제목과 요약만 담은 피드를 만듭니다.',
 		folder: '넣을 폴더',
 		topLevel: '폴더 없음',
 		add: '구독',
@@ -1009,6 +1010,20 @@ const ko: Messages = {
 				`피드를 찾음 ${n(found)}번, 찾지 못함 ${n(none)}번, 실패 ${n(failed)}번`,
 			limited: '계정 한도를 넘음',
 			took: '찾기 1회당 시간'
+		},
+		rssifier: {
+			title: '피드가 없는 웹사이트',
+			state: 'RSSifier',
+			pages: '읽는 웹사이트',
+			pagesValue: (pages, failing) => `${n(pages)}개, 그중 ${n(failing)}개 실패`,
+			used: '토큰 사용량',
+			usedValue: (requests, fetches, underWay) =>
+				`최근 1분 요청 ${n(requests)}건, 최근 1시간 가져온 페이지 ${n(fetches)}건, 진행 중 ${n(underWay)}건`,
+			unanswered: (why) => `RSSifier가 응답하지 않습니다: ${why}`,
+			limits: '토큰 한도',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`분당 ${perMinute}, 시간당 페이지 ${perHour}, 동시에 ${atOnce}`,
+			noLimit: '제한 없음'
 		},
 		images: {
 			title: '이미지 프록시',

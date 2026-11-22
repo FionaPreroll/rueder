@@ -946,6 +946,7 @@ async fn the_readers_of_a_feed_hear_what_a_round_of_fetching_finds(db: PgPool) {
         fetch::fetch_due(
             &db,
             &client,
+            None,
             &rules,
             &state.events,
             &state.monitor,

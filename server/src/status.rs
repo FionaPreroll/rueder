@@ -2,7 +2,7 @@
 //!
 //! It says how the server fares: how long requests take and where they wait,
 //! how the database is doing, how fetching, the feed search and the image
-//! proxy went in the last hour, and the warnings and errors of the log. It
+//! proxy went in the last hour, what RSSifier says, and the warnings and errors of the log. It
 //! names hints where something looks like a bottleneck, as kinds with numbers;
 //! the page has the words.
 //!
@@ -13,7 +13,11 @@
 //! others. What the server logs is the exception, as an admin who runs the
 //! server reads it anyway.
 
-use std::{fs, ops::RangeInclusive, time::Instant};
+use std::{
+    fs,
+    ops::RangeInclusive,
+    time::{Duration, Instant},
+};
 
 use axum::{Json, extract::State};
 use serde::Serialize;
@@ -26,7 +30,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::{
     AppError, AppState, moderation,
     monitor::{self, Severity, Timing},
-    profile, reports,
+    profile, reports, rssifier,
     sessions::Session,
     sizes, version,
 };
@@ -48,6 +52,8 @@ const TABLES: i64 = 8;
 const ENOUGH: u64 = 5;
 /// From how many milliseconds in the 95th percentile a route counts as slow.
 const SLOW_MS: f64 = 500.0;
+/// How long the status waits for RSSifier.
+const RSSIFIER_WAIT: Duration = Duration::from_secs(5);
 /// From how many seconds past its time a feed counts as overdue.
 const OVERDUE_S: f64 = 10.0 * 60.0;
 /// The sizes in gigabytes `DATABASE_WARN_GB` may name.
@@ -84,6 +90,7 @@ struct Status {
     database: Database,
     fetcher: Fetcher,
     finder: Finder,
+    rssifier: Rssifier,
     images: Images,
     problems: Problems,
     /// Errors in the browsers of readers who agreed to send them.
@@ -327,6 +334,24 @@ struct Finder {
     limited: u64,
 }
 
+/// RSSifier, for web pages without a feed.
+#[derive(Serialize, TS, ToSchema)]
+#[ts(rename = "StatusRssifier")]
+#[schema(as = StatusRssifier)]
+struct Rssifier {
+    /// Whether the server has RSSifier (`RSSIFIER_URL`).
+    on: bool,
+    /// Web pages that are read, as `subscribed_feeds` counts feeds.
+    pages: i64,
+    /// Of them, those whose last fetch failed.
+    failing: i64,
+    /// What RSSifier says the server's token used; null where it is off or
+    /// did not answer.
+    usage: Option<rssifier::Usage>,
+    /// Why RSSifier did not answer.
+    error: Option<String>,
+}
+
 /// The image proxy.
 #[derive(Serialize, TS, ToSchema)]
 #[ts(rename = "StatusImages")]
@@ -497,6 +522,31 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         too_large: served.too_large,
     };
 
+    let pages = sqlx::query!(
+        r#"SELECT count(*) AS "pages!", count(*) FILTER (WHERE f.error_message IS NOT NULL) AS "failing!"
+           FROM feeds f
+           WHERE f.source = 'page' AND f.blocked_at IS NULL
+             AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id
+                         WHERE s.feed_id = f.id AND a.disabled_at IS NULL)"#
+    )
+    .fetch_one(&state.db)
+    .await?;
+    let (usage, error) = match &state.rssifier {
+        None => (None, None),
+        Some(rssifier) => match tokio::time::timeout(RSSIFIER_WAIT, rssifier.usage()).await {
+            Ok(Ok(usage)) => (Some(usage), None),
+            Ok(Err(err)) => (None, Some(format!("{err:#}"))),
+            Err(_) => (None, Some("RSSifier does not answer".to_owned())),
+        },
+    };
+    let rssifier = Rssifier {
+        on: state.rssifier.is_some(),
+        pages: pages.pages,
+        failing: pages.failing,
+        usage,
+        error,
+    };
+
     let browsers = reports::summary(&state.db, state.reports).await?;
     let mut hints = hints(
         &routes,
@@ -559,6 +609,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
             failed: lookups.failed,
             limited: lookups.limited,
         },
+        rssifier,
         images,
         problems: Problems {
             errors: problems.errors,

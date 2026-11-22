@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT feed_url, fetch_agent, etag, last_modified FROM feeds WHERE id = $1",
+  "query": "SELECT feed_url, fetch_agent, etag, last_modified, source = 'page' AS \"page!\"\n           FROM feeds WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,12 @@
             "name": "last_modified"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "page!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -57,8 +63,9 @@
       false,
       false,
       true,
-      true
+      true,
+      null
     ]
   },
-  "hash": "cddae9dd973608545ba28ec84791cf07bbec45055aa57483df317b06beb74e8f"
+  "hash": "958b204e0cb3eb5915e02b9d811a00e03d412635112836e50b87af4c9006a7a8"
 }

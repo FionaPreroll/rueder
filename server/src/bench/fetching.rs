@@ -367,7 +367,10 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
         let (monitor, underway, pace) = (monitor.clone(), underway.clone(), options.pace);
         rounds.spawn(async move {
             let started = Instant::now();
-            fetch::round(&db, &client, &rules, &events, &monitor, &pace, &underway).await?;
+            fetch::round(
+                &db, &client, None, &rules, &events, &monitor, &pace, &underway,
+            )
+            .await?;
             anyhow::Ok(started.elapsed().as_secs_f64() * 1000.0)
         });
     }

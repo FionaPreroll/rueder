@@ -24,6 +24,15 @@ export const MAIL_ENV = {
 	PUBLIC_URL: RUEDER
 };
 
+/**
+ * A made-up RSSifier on the made-up site (site.js), which makes a feed of its
+ * page without one, and what rueder needs to ask it.
+ */
+export const RSSIFIER_ENV = {
+	RSSIFIER_URL: `${SITE}/_rssifier/`,
+	RSSIFIER_TOKEN: 'rsf_made_up_for_the_end_to_end_tests'
+};
+
 /** The database of a run; it is made anew every time. */
 export const DATABASE = 'rueder_e2e';
 
@@ -68,5 +77,6 @@ export const ACCOUNTS = [
 	'forgetful',
 	'support',
 	'helper',
-	'tags'
+	'tags',
+	'pages'
 ];

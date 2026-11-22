@@ -158,7 +158,7 @@ async fn the_search_finds_the_feed_at_an_address_or_the_feeds_a_page_names(db: P
 
     let (status, found) = find(format!(" {site}/feed.xml ")).await;
     assert_eq!(status, StatusCode::OK);
-    let feed = |url: String, title: &str, feed_id: Value| json!({ "url": url, "title": title, "feed_id": feed_id });
+    let feed = |url: String, title: &str, feed_id: Value| json!({ "url": url, "title": title, "feed_id": feed_id, "page": false });
     assert_eq!(
         found,
         json!({ "feeds": [feed(format!("{site}/feed.xml"), "The Example", Value::Null)], "moved_to": null })

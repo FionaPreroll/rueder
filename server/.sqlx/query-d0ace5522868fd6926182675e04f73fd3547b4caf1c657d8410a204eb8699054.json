@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM feeds WHERE feed_url = $1 AND ($2::int4 IS NULL OR id < $2)\n         ORDER BY id LIMIT 1",
+  "query": "INSERT INTO feeds (feed_url, source) VALUES ($1, $2) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -18,12 +18,12 @@
     "parameters": {
       "Left": [
         "Text",
-        "Int4"
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "d3be6c8848a5f18f5b8d0448a194739d27e421364f93711bd6c5fdf69f89912a"
+  "hash": "d0ace5522868fd6926182675e04f73fd3547b4caf1c657d8410a204eb8699054"
 }

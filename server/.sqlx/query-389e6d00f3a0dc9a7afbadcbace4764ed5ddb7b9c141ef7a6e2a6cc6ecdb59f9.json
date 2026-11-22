@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT f.id, f.feed_url FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n         WHERE s.account_id = $1 AND f.feed_url = ANY($2)",
+  "query": "SELECT f.id, f.feed_url, f.source = 'page' AS \"page!\"\n           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id\n           WHERE s.account_id = $1 AND f.feed_url = ANY($2)",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,12 @@
             "name": "feed_url"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "page!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -34,8 +40,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "ca0c06f5b7917794e666a18cc8d4ba4a289756a77890df3a2a781a08cecd0925"
+  "hash": "389e6d00f3a0dc9a7afbadcbace4764ed5ddb7b9c141ef7a6e2a6cc6ecdb59f9"
 }

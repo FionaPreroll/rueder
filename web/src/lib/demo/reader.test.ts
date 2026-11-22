@@ -588,7 +588,7 @@ describe('the tree', () => {
 	it('finds the feed at an address, which is the address itself', async () => {
 		const { reader } = setup();
 		const found = (feedId: string | null) => ({
-			feeds: [{ url: 'https://blog.example/feed.xml', title: 'blog.example', feedId }],
+			feeds: [{ url: 'https://blog.example/feed.xml', title: 'blog.example', feedId, page: false }],
 			movedTo: null
 		});
 		expect(await reader.findFeeds(' blog.example/feed.xml ')).toEqual(found(null));
@@ -601,6 +601,18 @@ describe('the tree', () => {
 		for (const nothing of ['', 'not an address', 'localhost', 'ftp://files.example/feed']) {
 			expect(await reader.findFeeds(nothing)).toEqual({ problem: 'refused', reason: '' });
 		}
+	});
+
+	it('finds the made-up website without a feed as a page, and subscribes to it', async () => {
+		const { reader } = setup();
+		const page = (feedId: string | null) => ({
+			feeds: [{ url: 'https://club.example/news', title: 'club.example', feedId, page: true }],
+			movedTo: null
+		});
+		expect(await reader.findFeeds('club.example')).toEqual(page(null));
+		const subscribed = await reader.subscribe('https://club.example/news', null);
+		if (!('feedId' in subscribed)) throw new Error('not subscribed');
+		expect(await reader.findFeeds('https://club.example/about')).toEqual(page(subscribed.feedId));
 	});
 
 	it('subscribes to an address, into a folder or at the top', async () => {

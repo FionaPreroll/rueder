@@ -840,6 +840,7 @@ const it: Messages = {
 		subscribed: 'Iscritto',
 		show: 'Mostra',
 		untitled: 'Senza nome',
+		page: 'Un sito web senza feed: rueder ne crea uno, solo con titoli e riassunti.',
 		folder: 'Nella cartella',
 		topLevel: 'Nessuna cartella',
 		add: 'Iscriviti',
@@ -1056,6 +1057,20 @@ const it: Messages = {
 				`${n(found)} hanno trovato feed, ${n(none)} nessuno, ${n(failed)} non riuscite`,
 			limited: 'Oltre il limite dell’account',
 			took: 'Tempo per ricerca'
+		},
+		rssifier: {
+			title: 'Siti web senza feed',
+			state: 'RSSifier',
+			pages: 'Siti web letti',
+			pagesValue: (pages, failing) => `${n(pages)}, di cui ${n(failing)} con errori`,
+			used: 'Uso del token',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} richieste nell’ultimo minuto, ${n(fetches)} pagine scaricate nell’ultima ora, ${n(underWay)} in corso`,
+			unanswered: (why) => `RSSifier non risponde: ${why}`,
+			limits: 'Limiti del token',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} al minuto, ${perHour} pagine all’ora, ${atOnce} alla volta`,
+			noLimit: 'nessun limite'
 		},
 		images: {
 			title: 'Proxy delle immagini',

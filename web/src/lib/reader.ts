@@ -132,6 +132,11 @@ export interface FeedCandidate {
 	title: string;
 	/** The feed in the tree, if it is subscribed to already. */
 	feedId: string | null;
+	/**
+	 * A web page without a feed, which the server makes one of: of titles and
+	 * summaries, not whole texts.
+	 */
+	page: boolean;
 }
 
 /** Why looking for feeds, subscribing or an import did not work. The page has the words. */
@@ -402,9 +407,9 @@ export interface Reader {
 	findFeeds(address: string): Promise<Found>;
 	/**
 	 * Subscribes to a feed found by `findFeeds`, at the end of a folder or of the top
-	 * level, and shows it.
+	 * level, and shows it. `page` says the candidate was a web page without a feed.
 	 */
-	subscribe(url: string, folderId: string | null): Promise<Subscribed>;
+	subscribe(url: string, folderId: string | null, page?: boolean): Promise<Subscribed>;
 	/** Gives a feed a name of the reader's own; an empty one goes back to the feed's. */
 	renameFeed(id: string, title: string): void;
 	/** Ends a subscription, and with it what was read and starred there. */

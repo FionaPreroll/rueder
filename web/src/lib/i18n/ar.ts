@@ -865,6 +865,7 @@ const ar: Messages = {
 		subscribed: 'تم الاشتراك',
 		show: 'إظهار',
 		untitled: 'بلا اسم',
+		page: 'موقع بلا خلاصة: يصنع rueder خلاصة منه، بالعناوين والملخصات فقط.',
 		folder: 'إلى المجلد',
 		topLevel: 'بلا مجلد',
 		add: 'اشتراك',
@@ -1064,6 +1065,20 @@ const ar: Messages = {
 				`${n(found)} وجدت خلاصات، ${n(none)} لم تجد شيئًا، ${n(failed)} فشلت`,
 			limited: 'تجاوز حد الحساب',
 			took: 'الوقت لكل عملية بحث'
+		},
+		rssifier: {
+			title: 'مواقع بلا خلاصة',
+			state: 'RSSifier',
+			pages: 'المواقع المقروءة',
+			pagesValue: (pages, failing) => `${n(pages)}، منها ${n(failing)} تفشل`,
+			used: 'استهلاك الرمز',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} طلبات في الدقيقة الأخيرة، ${n(fetches)} صفحات جُلبت في الساعة الأخيرة، ${n(underWay)} قيد التنفيذ`,
+			unanswered: (why) => `لا يجيب RSSifier: ${why}`,
+			limits: 'حدود الرمز',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} في الدقيقة، ${perHour} صفحات في الساعة، ${atOnce} في وقت واحد`,
+			noLimit: 'بلا حد'
 		},
 		images: {
 			title: 'وكيل الصور',

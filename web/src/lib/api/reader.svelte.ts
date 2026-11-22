@@ -2112,10 +2112,11 @@ export class ServerReader implements Reader {
 	async findFeeds(address: string): Promise<Found> {
 		try {
 			const found = await this.after(() => this.api.findFeeds(address));
-			const feeds = found.feeds.map(({ url, title, feed_id }) => ({
+			const feeds = found.feeds.map(({ url, title, feed_id, page }) => ({
 				url,
 				title,
-				feedId: feed_id === null ? null : feedKey(feed_id)
+				feedId: feed_id === null ? null : feedKey(feed_id),
+				page
 			}));
 			return { feeds, movedTo: found.moved_to };
 		} catch (error) {
@@ -2127,10 +2128,10 @@ export class ServerReader implements Reader {
 	 * The server fetches a feed nobody reads yet before it subscribes, which can
 	 * take a while; the feed shows once it is there.
 	 */
-	async subscribe(url: string, folderId: string | null): Promise<Subscribed> {
+	async subscribe(url: string, folderId: string | null, page = false): Promise<Subscribed> {
 		const folder = folderId === null ? null : serverId(folderId);
 		try {
-			const id = await this.after(() => this.api.subscribe(url, folder));
+			const id = await this.after(() => this.api.subscribe(url, folder, page));
 			const feedId = feedKey(id);
 			const known = feedId in this.feeds;
 			await this.loadTree();

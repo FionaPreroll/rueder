@@ -70,6 +70,7 @@ pub mod recovery;
 pub mod registration;
 pub mod reports;
 pub mod retention;
+pub mod rssifier;
 pub mod search;
 pub mod second_factor;
 pub mod sessions;
@@ -134,6 +135,9 @@ pub struct AppState {
     /// The hardened HTTP client, for looking at an address a reader wants to
     /// subscribe to. Without it, nobody subscribes to a feed that is new.
     pub client: Option<HttpClient>,
+    /// RSSifier, for web pages without a feed (`RSSIFIER_URL`). Without it the
+    /// feed search finds none of them and their feeds are not fetched.
+    pub rssifier: Option<Arc<rssifier::Rssifier>>,
     /// How much each sender and each account has asked of the server lately.
     pub rates: Arc<Rates>,
     /// What the server notices about itself, for the status page.
@@ -185,6 +189,7 @@ impl AppState {
             rules: None,
             events: Events::new(),
             client: None,
+            rssifier: None,
             rates: Arc::default(),
             monitor: Arc::default(),
             reports: true,

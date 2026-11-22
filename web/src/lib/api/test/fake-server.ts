@@ -41,6 +41,8 @@ interface FakeFeed {
 interface FakeSiteFeed {
 	url: string;
 	title: string;
+	/** A website without a feed, which the server makes one of. */
+	page?: boolean;
 }
 
 export interface FakeArticle {
@@ -1304,8 +1306,10 @@ export class FakeServer {
 			const found = this.sites.get(moved ?? asked);
 			if (!found) return refused(400, 'the address cannot be fetched: no such site');
 			const feeds = found.map((feed) => ({
-				...feed,
-				feed_id: this.feeds.find((known) => known.url === feed.url)?.id ?? null
+				url: feed.url,
+				title: feed.title,
+				feed_id: this.feeds.find((known) => known.url === feed.url)?.id ?? null,
+				page: feed.page ?? false
 			}));
 			return json({ feeds, moved_to: moved ?? null });
 		}
@@ -1316,7 +1320,8 @@ export class FakeServer {
 			const known = this.feeds.find((feed) => feed.url === url);
 			if (known) return json({ id: known.id });
 			const feed = this.sites.get(url)?.find((found) => found.url === url);
-			if (!feed) return refused(400, 'this is not a feed that can be read: it is a web page');
+			if (!feed || (feed.page ?? false) !== (data.page ?? false))
+				return refused(400, 'this is not a feed that can be read: it is a web page');
 			return json({ id: this.addFeed(feed.title, folder as number | null, { url }) }, 201);
 		}
 		const about = /^\/feeds\/(\d+)\/(info|agent)$/.exec(path);

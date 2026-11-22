@@ -235,7 +235,7 @@ cargo run -- article show 130 359 --versions   # what is known of article 359 of
 
 Admins see the status of the server in the account menu of the page
 (`GET /api/status`, `src/monitor.rs`, `src/status.rs`): how long requests take
-by route, the database, fetching, the feed search, the image proxy and the
+by route, the database, fetching, the feed search, RSSifier, the image proxy and the
 warnings and errors of the log, for the last hour, kept in memory. It counts
 failing feeds by why and names none.
 

@@ -223,6 +223,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `IMAGE_CACHE_MB`, `IMAGE_PROXY_KEY` | Size of the image proxy's cache, and its secret if you want to set it yourself. |
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
+| `RSSIFIER_URL`, `RSSIFIER_TOKEN` | Where [RSSifier](../rssifier/README.md) answers and rueder's token there (`rssifier token add rueder`), for websites without a feed. Without them the feed search offers none of those; with only one rueder does not start. |
 | `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (4) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
 | `IMAGES_PUBLIC` | `on` lets a CDN in front of your reverse proxy keep images, which then come without a session too. Off if not set; see [Images through a CDN](#images-through-a-cdn). |
 | `DATABASE_WARN_GB` | From what size of the database in GB the status page warns, such as `50` on a disk of 64 GB. Off if not set; see [Keeping old articles, or not](#keeping-old-articles-or-not). |

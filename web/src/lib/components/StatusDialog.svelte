@@ -107,6 +107,26 @@
 		return rows;
 	}
 
+	/** What RSSifier says of the server's token, as rows: why not, where it did not answer. */
+	function rssifierUsage(rssifier: ServerStatus['rssifier']): [string, string][] {
+		const r = m.status.rssifier;
+		if (rssifier.error !== null) return [[r.used, r.unanswered(rssifier.error)]];
+		if (rssifier.usage === null) return [];
+		const { usage } = rssifier;
+		const limit = (value: number | null) => (value === null ? r.noLimit : formatNumber(value));
+		return [
+			[r.used, r.usedValue(usage.requests, usage.fetches, usage.under_way)],
+			[
+				r.limits,
+				r.limitsValue(
+					limit(usage.limits.per_minute),
+					limit(usage.limits.fetches_per_hour),
+					limit(usage.limits.at_once)
+				)
+			]
+		];
+	}
+
 	/** A text cut where it names a command of `rueder`, so the command shows as code. */
 	const commands = (text: string) =>
 		text.split(/[“„](rueder [^”“]+)[”“]/).map((part, i) => ({ part, code: i % 2 === 1 }));
@@ -362,6 +382,14 @@
 				],
 				[m.status.finder.limited, formatNumber(s.finder.limited)],
 				[m.status.finder.took, took(s.finder.took)]
+			])}
+			{@render facts(m.status.rssifier.title, [
+				[m.status.rssifier.state, s.rssifier.on ? m.status.on : m.status.off],
+				[
+					m.status.rssifier.pages,
+					m.status.rssifier.pagesValue(s.rssifier.pages, s.rssifier.failing)
+				],
+				...rssifierUsage(s.rssifier)
 			])}
 			{@render facts(m.status.images.title, [
 				[m.status.images.state, s.images.on ? m.status.on : m.status.off],

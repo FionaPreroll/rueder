@@ -17,6 +17,7 @@ import {
 	DATABASE,
 	MAIL_ENV,
 	PASSWORD,
+	RSSIFIER_ENV,
 	RUEDER_LISTEN,
 	database,
 	postgres
@@ -59,7 +60,9 @@ const env = {
 	// Passkeys, for the address the browser reaches the server at
 	// (passkeys.spec.ts); browsers allow them over HTTP for localhost. Mail
 	// goes to the made-up relay (email.spec.ts), and its links lead here.
-	...MAIL_ENV
+	...MAIL_ENV,
+	// A website without a feed comes through the made-up RSSifier (pages.spec.ts).
+	...RSSIFIER_ENV
 };
 
 // The screenshots (screenshots/) name accounts of their own, all of them

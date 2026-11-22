@@ -1413,7 +1413,7 @@ describe('subscribing', () => {
 	it('finds the feeds of an address, and what is not there', async () => {
 		server.addSite('https://site.example', site, other);
 		const reader = await started();
-		const fresh = (feed: typeof site) => ({ ...feed, feedId: null });
+		const fresh = (feed: typeof site) => ({ ...feed, feedId: null, page: false });
 		expect(await reader.findFeeds('site.example')).toEqual({
 			feeds: [fresh(site), fresh(other)],
 			movedTo: null
@@ -1443,8 +1443,8 @@ describe('subscribing', () => {
 		const feedId = 'feedId' in subscribed ? subscribed.feedId : '';
 		expect(await reader.findFeeds('members.example')).toEqual({
 			feeds: [
-				{ ...site, feedId },
-				{ ...other, feedId: null }
+				{ ...site, feedId, page: false },
+				{ ...other, feedId: null, page: false }
 			],
 			movedTo: 'https://site.example'
 		});
@@ -1467,6 +1467,21 @@ describe('subscribing', () => {
 		expect(reader.notice).toBeNull();
 	});
 
+	it('finds a website without a feed and subscribes to it as one', async () => {
+		const club = { url: 'https://club.example/news', title: 'The club', page: true };
+		server.addSite('https://club.example', club);
+		const reader = await started();
+		expect(await reader.findFeeds('club.example')).toEqual({
+			feeds: [{ ...club, feedId: null }],
+			movedTo: null
+		});
+		// The server is told it is a page, which it then asks RSSifier for.
+		expect(await reader.subscribe(club.url, null)).toMatchObject({ problem: 'refused' });
+		const subscribed = await reader.subscribe(club.url, null, true);
+		if (!('feedId' in subscribed)) throw new Error('not subscribed');
+		expect(reader.feeds[subscribed.feedId].title).toBe('The club');
+	});
+
 	it('subscribes into a folder and shows the new feed', async () => {
 		server.addSite('https://site.example', site);
 		const reader = await started();
@@ -1478,7 +1493,8 @@ describe('subscribing', () => {
 		expect(subscribed.known).toBe(false);
 		expect(server.requests.find((r) => r.method === 'POST' && r.path === '/feeds')?.body).toEqual({
 			url: site.url,
-			folder_id: news
+			folder_id: news,
+			page: false
 		});
 		expect(shape(reader.tree)).toEqual([
 			{ [`News (folder-${news})`]: [`feed-${tech}`, `feed-${blog}`, feedId] },
@@ -1491,7 +1507,7 @@ describe('subscribing', () => {
 		// Once more, it is known; at the top level, the folder is null.
 		expect(await reader.subscribe(site.url, null)).toEqual({ feedId, known: true });
 		const second = server.requests.filter((r) => r.method === 'POST' && r.path === '/feeds')[1];
-		expect(second.body).toEqual({ url: site.url, folder_id: null });
+		expect(second.body).toEqual({ url: site.url, folder_id: null, page: false });
 	});
 
 	it('says why the server would not subscribe, and changes nothing', async () => {

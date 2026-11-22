@@ -4,7 +4,9 @@
 //! A feed is fetched with a conditional request, so a feed that did not change
 //! costs its site next to nothing. What comes back goes through
 //! [`crate::feeds`]; the feed's row records how the fetch went and when the next
-//! one is due. A failure is written to the feed, where the interface shows it,
+//! one is due. A web page without a feed is asked of RSSifier instead, which
+//! answers with a feed of it, or with a problem that says why not. A failure
+//! is written to the feed, where the interface shows it,
 //! and makes the next try come later each time. A site that says it is asked
 //! too often (429) is asked less often for a while, and one that says when to
 //! come back (`Retry-After`) is not asked before then.
@@ -29,6 +31,7 @@ use crate::{
     filters,
     http_client::{Agent, HttpClient, Request},
     monitor::{Fetched, Monitor, Round},
+    rssifier::{self, Rssifier},
     sizes::within,
 };
 
@@ -202,16 +205,19 @@ fn spread(feed_id: i32) -> f64 {
     f64::from(feed_id.rem_euclid(120))
 }
 
-/// Fetches one feed and writes down how it went. An error from here means the
-/// database failed; a feed that cannot be fetched is an [`Outcome::Failed`].
+/// Fetches one feed and writes down how it went: from its site, or from
+/// RSSifier for a web page. An error from here means the database failed; a
+/// feed that cannot be fetched is an [`Outcome::Failed`].
 pub async fn fetch_feed(
     db: &PgPool,
     client: &HttpClient,
+    rssifier: Option<&Rssifier>,
     rules: &Arc<Rules>,
     feed_id: i32,
 ) -> anyhow::Result<Outcome> {
     let feed = sqlx::query!(
-        "SELECT feed_url, fetch_agent, etag, last_modified FROM feeds WHERE id = $1",
+        r#"SELECT feed_url, fetch_agent, etag, last_modified, source = 'page' AS "page!"
+           FROM feeds WHERE id = $1"#,
         feed_id
     )
     .fetch_optional(db)
@@ -229,7 +235,15 @@ pub async fn fetch_feed(
         last_modified: feed.last_modified.as_deref(),
         ..Request::new(&feed.feed_url)
     };
-    let response = match client.get(request).await {
+    let response = match (feed.page, rssifier) {
+        (false, _) => client.get(request).await,
+        (true, Some(rssifier)) => rssifier.feed(&feed.feed_url, feed.etag.as_deref()).await,
+        (true, None) => {
+            let message = "this server reads no web pages without a feed".into();
+            return failed(db, feed_id, message, Back::default()).await;
+        }
+    };
+    let response = match response {
         Ok(response) => response,
         Err(err) => return failed(db, feed_id, err.to_string(), Back::default()).await,
     };
@@ -260,13 +274,23 @@ pub async fn fetch_feed(
                 .unwrap_or(0),
             limited,
         };
-        let message = format!("the site answers with {}", response.status);
+        let message = if feed.page {
+            rssifier::problem(&response)
+        } else {
+            format!("the site answers with {}", response.status)
+        };
         return failed(db, feed_id, message, back).await;
     }
+    // What RSSifier answers is the feed of the page.
+    let url = if feed.page {
+        Url::parse(&feed.feed_url).unwrap_or_else(|_| response.url.clone())
+    } else {
+        response.url.clone()
+    };
     // Reading and cleaning a large feed takes a while, so it runs where it
     // keeps nothing else waiting.
     let reading = {
-        let (rules, body, url) = (rules.clone(), response.body.clone(), response.url.clone());
+        let (rules, body) = (rules.clone(), response.body.clone());
         tokio::task::spawn_blocking(move || feeds::parse(&body, url.as_str(), now, &rules))
     };
     let parsed = match reading.await {
@@ -370,13 +394,17 @@ async fn failed(db: &PgPool, feed_id: i32, message: String, back: Back) -> anyho
 pub async fn fetch_due(
     db: &PgPool,
     client: &HttpClient,
+    rssifier: Option<&Arc<Rssifier>>,
     rules: &Arc<Rules>,
     events: &Events,
     monitor: &Arc<Monitor>,
     pace: &Pace,
 ) -> anyhow::Result<usize> {
     let underway = Underway::new(pace);
-    round(db, client, rules, events, monitor, pace, &underway).await
+    round(
+        db, client, rssifier, rules, events, monitor, pace, &underway,
+    )
+    .await
 }
 
 /// Takes the feeds that are due and have somebody reading them, at most a
@@ -386,9 +414,11 @@ pub async fn fetch_due(
 /// are fetched. Each fetch and the round count for the status page. A disabled
 /// account reads nothing, so a feed only such accounts subscribe to rests
 /// until one of them is enabled or somebody else subscribes.
+#[allow(clippy::too_many_arguments, reason = "what a round needs")]
 pub async fn round(
     db: &PgPool,
     client: &HttpClient,
+    rssifier: Option<&Arc<Rssifier>>,
     rules: &Arc<Rules>,
     events: &Events,
     monitor: &Arc<Monitor>,
@@ -451,12 +481,14 @@ pub async fn round(
         for line in lines {
             let (db, client, underway, busy) =
                 (db.clone(), client.clone(), underway.clone(), busy.clone());
+            let rssifier = rssifier.cloned();
             let (rules, events, monitor) = (rules.clone(), events.clone(), monitor.clone());
             fetches.spawn(async move {
                 for (feed_id, was_failing) in line {
                     fetch_one(
                         &db,
                         &client,
+                        rssifier.as_deref(),
                         &rules,
                         &events,
                         &monitor,
@@ -484,6 +516,7 @@ pub async fn round(
 async fn fetch_one(
     db: &PgPool,
     client: &HttpClient,
+    rssifier: Option<&Rssifier>,
     rules: &Arc<Rules>,
     events: &Events,
     monitor: &Arc<Monitor>,
@@ -495,7 +528,7 @@ async fn fetch_one(
         return;
     };
     let fetching = Instant::now();
-    let result = fetch_feed(db, client, rules, feed_id).await;
+    let result = fetch_feed(db, client, rssifier, rules, feed_id).await;
     let fetched = match &result {
         Ok(Outcome::Fetched(stored)) => Fetched::Fetched {
             new: u64::try_from(stored.new).unwrap_or(0),
@@ -571,6 +604,7 @@ pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<ServerE
 pub async fn run(
     db: PgPool,
     client: HttpClient,
+    rssifier: Option<Arc<Rssifier>>,
     rules: Arc<Rules>,
     events: Events,
     monitor: Arc<Monitor>,
@@ -586,9 +620,19 @@ pub async fn run(
         // Rounds overlap: one that waits for a slow host keeps no other from
         // taking what is due; `underway` keeps them apart.
         let (db, client, rules) = (db.clone(), client.clone(), rules.clone());
+        let rssifier = rssifier.clone();
         let (events, monitor, underway) = (events.clone(), monitor.clone(), underway.clone());
         tokio::spawn(async move {
-            let round = round(&db, &client, &rules, &events, &monitor, &pace, &underway);
+            let round = round(
+                &db,
+                &client,
+                rssifier.as_ref(),
+                &rules,
+                &events,
+                &monitor,
+                &pace,
+                &underway,
+            );
             if let Err(err) = round.await {
                 tracing::error!("fetching feeds: {err:#}");
             }
