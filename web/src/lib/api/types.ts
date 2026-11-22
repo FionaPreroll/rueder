@@ -2294,6 +2294,10 @@ export type ExportedFeed = {
 	 * The address of the feed: how it is found again.
 	 */
 	url: string,
+	/**
+	 * Whether it is a web page without a feed, which RSSifier reads.
+	 */
+	page: boolean,
 	site_url: string | null,
 	/**
 	 * The feed's own title.

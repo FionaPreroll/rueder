@@ -2450,7 +2450,7 @@
         "tags": [
           "Subscribing"
         ],
-        "summary": "The account's subscriptions as an OPML file, folders as outlines around their feeds.",
+        "summary": "The account's subscriptions as an OPML file, folders as outlines around their feeds. A web page without a feed is a link (`type=\"link\"`) marked as a page, so that other readers do not take it for a feed.",
         "operationId": "export",
         "responses": {
           "200": {
@@ -6668,6 +6668,10 @@
           "url": {
             "type": "string",
             "description": "The address of the feed: how it is found again."
+          },
+          "page": {
+            "type": "boolean",
+            "description": "Whether it is a web page without a feed, which RSSifier reads."
           },
           "site_url": {
             "type": [

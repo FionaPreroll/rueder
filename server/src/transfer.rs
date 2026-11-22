@@ -150,6 +150,8 @@ struct FlatNode {
     id: i32,
     #[serde(default)]
     url: String,
+    #[serde(default)]
+    page: bool,
     site_url: Option<String>,
     #[serde(default)]
     title: String,
@@ -174,6 +176,7 @@ impl TryFrom<FlatNode> for Node {
             Kind::Feed => ExportedFeed {
                 id: node.id,
                 url: node.url,
+                page: node.page,
                 site_url: node.site_url,
                 title: node.title,
                 own_title: node.own_title,
@@ -205,6 +208,9 @@ pub struct ExportedFeed {
     pub id: i32,
     /// The address of the feed: how it is found again.
     pub url: String,
+    /// Whether it is a web page without a feed, which RSSifier reads.
+    #[serde(default)]
+    pub page: bool,
     pub site_url: Option<String>,
     /// The feed's own title.
     #[serde(default)]
@@ -427,7 +433,8 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
     .await?;
     let subscriptions = sqlx::query!(
         r#"SELECT s.feed_id, s.folder_id, s.position, s.title AS own_title,
-                  f.feed_url, f.site_url, f.title, f.fetch_agent, f.last_seq,
+                  f.feed_url, f.source = 'page' AS "page!", f.site_url, f.title, f.fetch_agent,
+                  f.last_seq,
                   a.seq AS "mark_seq?", a.url AS mark_url, a.published_at AS "mark_at?",
                   c.guid AS "mark_guid?", s.read_upto, f.cut_seq, f.cut_guid, f.cut_url,
                   f.cut_published_at
@@ -541,6 +548,7 @@ pub async fn export(db: &PgPool, account_id: i32) -> anyhow::Result<Export> {
         let feed = ExportedFeed {
             id: sub.feed_id,
             url: sub.feed_url,
+            page: sub.page,
             site_url: sub.site_url,
             title: sub.title,
             own_title: sub.own_title,
@@ -769,7 +777,7 @@ fn plan(file: Export, rules: &Rules) -> Result<Plan, AppError> {
                     skipped += 1;
                     continue;
                 };
-                if !seen.insert(url.clone()) {
+                if !seen.insert((url.clone(), feed.page)) {
                     skipped += 1;
                     continue;
                 }
@@ -804,7 +812,7 @@ fn plan(file: Export, rules: &Rules) -> Result<Plan, AppError> {
                     .map(|mark| (mark.guid, web(mark.url, rules), mark.published_at));
                 outline.order.push(Step::Feed(outline.feeds.len()));
                 let title = subscribe::name(&feed.title);
-                outline.feeds.push((path, url.clone(), title));
+                outline.feeds.push((path, url.clone(), title, feed.page));
                 feeds.push(WantedFeed {
                     url: url.into(),
                     site_url: web(feed.site_url, rules),

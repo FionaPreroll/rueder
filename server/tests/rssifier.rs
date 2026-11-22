@@ -1,7 +1,8 @@
 //! Web pages without a feed, through RSSifier: the search offers such a page,
 //! subscribing makes a feed of it, the fetching asks RSSifier for it, its
-//! problems stand at the feed, and the status says how RSSifier fares. The
-//! site and RSSifier are made up, on this machine.
+//! problems stand at the feed, the status says how RSSifier fares, and a page
+//! moves as a page in OPML and in the file of an account. The site and
+//! RSSifier are made up, on this machine.
 
 mod common;
 
@@ -378,4 +379,84 @@ async fn the_status_says_how_rssifier_fares(db: PgPool) {
         off,
         json!({ "on": false, "pages": 1, "failing": 0, "usage": null, "error": null })
     );
+}
+
+#[sqlx::test]
+async fn a_page_moves_as_a_page_in_opml_and_in_the_file_of_an_account(db: PgPool) {
+    // Without RSSifier too: what comes with a file is fetched later.
+    let state = state(&db, None);
+    let ada = common::account(&db, "ada").await;
+    let blog = common::feed(&db, "blog").await;
+    let page: i32 = sqlx::query_scalar(
+        "INSERT INTO feeds (feed_url, title, source)
+         VALUES ('https://club.example/news', 'The club', 'page') RETURNING id",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    common::subscribe(&db, ada, blog).await;
+    common::subscribe(&db, ada, page).await;
+    let cookie = common::session(&db, ada).await;
+    let subscribed = async |account: i32| {
+        sqlx::query_scalar::<_, i32>(
+            "SELECT feed_id FROM subscriptions WHERE account_id = $1 ORDER BY feed_id",
+        )
+        .bind(account)
+        .fetch_all(&db)
+        .await
+        .unwrap()
+    };
+
+    let (status, _, opml) =
+        common::raw(&state, Method::GET, "/api/opml", Some(&cookie), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let opml = String::from_utf8(opml).unwrap();
+    assert!(
+        opml.contains(
+            r#"<outline type="link" text="The club" title="The club" url="https://club.example/news" rueder:source="page"/>"#
+        ),
+        "{opml}"
+    );
+    assert!(
+        opml.contains(r#"xmlUrl="https://blog.example/feed.xml""#),
+        "{opml}"
+    );
+    let grace = common::account(&db, "grace").await;
+    let grace_cookie = common::session(&db, grace).await;
+    let body = Some(("text/x-opml", opml.into_bytes()));
+    let (status, _, _) =
+        common::raw(&state, Method::POST, "/api/opml", Some(&grace_cookie), body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(subscribed(grace).await, [blog, page]);
+
+    let (status, file) = call(&state, Method::GET, "/api/export", Some(&cookie), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let pages: Vec<_> = file["tree"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|node| {
+            (
+                node["url"].as_str().unwrap(),
+                node["page"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        pages,
+        [
+            ("https://blog.example/feed.xml", false),
+            ("https://club.example/news", true)
+        ]
+    );
+    let linus = common::account(&db, "linus").await;
+    let linus_cookie = common::session(&db, linus).await;
+    let (status, _) = post(&state, "/api/import", &linus_cookie, file).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(subscribed(linus).await, [blog, page]);
+    let feeds: i64 = sqlx::query_scalar("SELECT count(*) FROM feeds")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(feeds, 2);
 }

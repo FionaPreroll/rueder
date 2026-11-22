@@ -204,13 +204,13 @@ pub fn opml(data: &[u8]) {
         assert!(!outline.folders[..at].contains(path), "{path:?} twice");
     }
     let mut seen = std::collections::HashSet::new();
-    for (path, url, title) in &outline.feeds {
+    for (path, url, title, page) in &outline.feeds {
         assert!(
             path.is_empty() || outline.folders.contains(path),
             "{path:?}"
         );
         assert!(is_web(url.as_str()), "{url}");
-        assert!(seen.insert(url), "{url} twice");
+        assert!(seen.insert((url, page)), "{url} twice");
         title.iter().for_each(|name| assert_name(name));
     }
     let mut folders: Vec<usize> = Vec::new();
