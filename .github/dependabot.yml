@@ -6,7 +6,7 @@
 version: 2
 updates:
   - package-ecosystem: cargo
-    directories: ["/server", "/server/fuzz"]
+    directories: ["/server", "/server/fuzz", "/hardened-http", "/rssifier"]
     schedule:
       interval: monthly
     cooldown:
@@ -33,10 +33,10 @@ updates:
     groups:
       gradle:
         patterns: ["*"]
-  # The base images in the Dockerfile, weekly: they bring the fixes of glibc
+  # The base images in the Dockerfiles, weekly: they bring the fixes of glibc
   # and the certificates, which the job image-scan in ci.yml asks about.
   - package-ecosystem: docker
-    directory: /
+    directories: ["/", "/rssifier"]
     schedule:
       interval: weekly
     cooldown:

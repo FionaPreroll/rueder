@@ -1,0 +1,17 @@
+# Only the hardened client of ../hardened-http reaches out to the internet.
+disallowed-methods = [
+    { path = "reqwest::Client::new", reason = "use hardened_http::HttpClient" },
+    { path = "reqwest::Client::builder", reason = "use hardened_http::HttpClient" },
+    { path = "reqwest::get", reason = "use hardened_http::HttpClient" },
+    # Only src/html.rs reads HTML, with limits for the depth and the size of
+    # the tree; without them a page of a megabyte can keep the parser busy
+    # for minutes or fill the memory.
+    { path = "html5ever::parse_fragment", reason = "use rssifier::html" },
+    { path = "html5ever::parse_document", reason = "use rssifier::html" },
+    { path = "html5ever::driver::parse_fragment", reason = "use rssifier::html" },
+    { path = "html5ever::driver::parse_document", reason = "use rssifier::html" },
+    # Routes are registered with utoipa_axum's routes!, so that RSSifier serves
+    # nothing its description (openapi.json) does not list.
+    { path = "axum::routing::Router::route", reason = "use OpenApiRouter::routes(routes!(handler))" },
+    { path = "utoipa_axum::router::OpenApiRouter::route", reason = "use OpenApiRouter::routes(routes!(handler))" },
+]

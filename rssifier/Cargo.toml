@@ -1,0 +1,37 @@
+[package]
+name = "rssifier"
+version = "0.1.0"
+edition = "2024"
+description = "Makes feeds of web pages that have none, for rueder and other feed readers"
+repository = "https://github.com/FionaPreroll/rueder"
+# A program, not a crate for crates.io. It lives next to rueder until it moves
+# to a repository of its own; the two only talk HTTP to each other.
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+axum = "0.8.9"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+getrandom = "0.4.3"
+# Everything that goes out to the internet, with rueder's rules against SSRF.
+hardened-http = { path = "../hardened-http" }
+# The parser rueder's cleaning uses, with a tree for it; see src/html.rs.
+html5ever = "0.40.1"
+markup5ever_rcdom = "=0.40.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11"
+time = { version = "0.3.55", features = ["formatting", "macros", "parsing", "serde"] }
+tokio = { version = "1.53.2", features = ["full"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2.5.8"
+utoipa = { version = "6.0.0", features = ["axum_extras", "preserve_order", "preserve_path_order"] }
+utoipa-axum = "0.3.0"
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+tower = { version = "0.5.3", features = ["util"] }
+
+[lints.rust]
+unsafe_code = "forbid"

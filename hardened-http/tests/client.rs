@@ -25,9 +25,7 @@ use axum::{
     response::{IntoResponse, Response as ServerResponse},
     routing::get,
 };
-use rueder::http_client::{
-    Agent, Config, Error, HttpClient, Looking, Lookup, Remembering, Request,
-};
+use hardened_http::{Agent, Config, Error, HttpClient, Looking, Lookup, Remembering, Request};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -121,7 +119,7 @@ impl World {
             .into()
     }
 
-    async fn get(&self, url: &str) -> Result<rueder::http_client::Response, Error> {
+    async fn get(&self, url: &str) -> Result<hardened_http::Response, Error> {
         self.client.get(Request::new(url)).await
     }
 }
@@ -170,10 +168,6 @@ fn gzip(bytes: &[u8]) -> Vec<u8> {
     encoder.finish().unwrap()
 }
 
-#[allow(
-    clippy::disallowed_methods,
-    reason = "a made-up site of the test, not a route of rueder"
-)]
 fn site() -> Router {
     Router::new()
         .route("/feed", get(feed))
@@ -259,7 +253,7 @@ async fn feed(headers: HeaderMap) -> ServerResponse {
     ([(header::ETAG, "\"v1\"")], Json(seen)).into_response()
 }
 
-fn said(response: &rueder::http_client::Response) -> serde_json::Value {
+fn said(response: &hardened_http::Response) -> serde_json::Value {
     serde_json::from_slice(&response.body).unwrap()
 }
 
@@ -273,7 +267,7 @@ async fn fetches_a_page_and_says_who_is_asking() {
     let seen = said(&response);
     let agent = seen["agent"].as_str().unwrap();
     assert!(
-        agent.starts_with("rueder/") && agent.contains("github.com"),
+        agent.starts_with("hardened-http/") && agent.contains("github.com"),
         "{agent}"
     );
     // Whoever says nothing about what they read accepts anything.

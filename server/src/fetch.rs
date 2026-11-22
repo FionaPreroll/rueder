@@ -222,7 +222,7 @@ pub async fn fetch_feed(
         agent: if feed.fetch_agent == "browser" {
             Agent::Browser
         } else {
-            Agent::Rueder
+            Agent::Own
         },
         accept: Some(ACCEPT),
         etag: feed.etag.as_deref(),

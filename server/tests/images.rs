@@ -356,6 +356,7 @@ fn proxy(name: &str, local: bool) -> Arc<ImageProxy> {
         Vec::new()
     };
     let client = HttpClient::new(http_client::Config {
+        agent: http_client::AGENT.to_owned(),
         allow,
         ..Default::default()
     })

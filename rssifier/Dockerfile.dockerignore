@@ -1,0 +1,7 @@
+# The image of RSSifier is built from rssifier/ and hardened-http/ only.
+*
+!rssifier
+!hardened-http
+rssifier/target
+hardened-http/target
+**/tokens.json

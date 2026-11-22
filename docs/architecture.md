@@ -2,7 +2,7 @@
 
 Dieses Dokument beschreibt, wie der neue rueder aufgebaut ist und warum. Den Plan mit Anforderungen und Entscheidungen führt [plan.md](plan.md), die Umsetzung mit Stand und Arbeitspaketen [implementation.md](implementation.md).
 
-Was noch Entwurf ist, sagt der Abschnitt selbst. Der [einmalige Import in den laufenden Bestand](implementation.md#einmaliger-import-in-den-laufenden-bestand) ist dort beschrieben. Wo ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `server/src/http_client.rs`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für die Endpunkte die Module in `server/src/`, für die Oberfläche `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
+Was noch Entwurf ist, sagt der Abschnitt selbst. Der [einmalige Import in den laufenden Bestand](implementation.md#einmaliger-import-in-den-laufenden-bestand) ist dort beschrieben. Wo ein Teil gebaut ist, gilt der Code: für das Schema die Migrationen in `server/migrations/`, für Artikelspeicher und Lesestand `server/src/articles.rs` und `server/src/reading.rs`, für den HTTP-Client `hardened-http/`, für die Bereinigung `server/src/cleaning.rs`, für den Bild-Proxy `server/src/images.rs`, für die Endpunkte die Module in `server/src/`, für die Oberfläche `web/src/lib/`. Wer von diesem Dokument abweicht, ändert es im selben Pull Request.
 
 - [Überblick](#überblick)
 - [Bausteine](#bausteine)
@@ -22,6 +22,7 @@ Was noch Entwurf ist, sagt der Abschnitt selbst. Der [einmalige Import in den la
 - [Security](#security)
 - [API](#api)
 - [Apps anderer Anbieter](#apps-anderer-anbieter)
+- [RSSifier: Feeds aus Webseiten](#rssifier-feeds-aus-webseiten)
 - [Frontend](#frontend)
 - [Betrieb](#betrieb)
 - [Status für Admins](#status-für-admins)
@@ -611,7 +612,7 @@ Lesende Anfragen von fremden Seiten bleiben erlaubt, sonst ließe sich rueder ni
 
 ### Gehärteter HTTP-Client
 
-Im Code: `server/src/http_client.rs`, die Adressregeln in `server/src/http_client/address.rs`. Er ist der einzige Weg ins Internet; `server/clippy.toml` verbietet, an anderer Stelle einen `reqwest`-Client zu bauen. Die eine begründete Ausnahme sind Mails an das Relais, das der Betreiber nennt (E6, [E-Mail am Konto](#e-mail-am-konto)).
+Im Code: das Crate `hardened-http/` neben dem Server (`src/lib.rs`, die Adressregeln in `src/address.rs`), das `server/src/http_client.rs` nur weiterreicht, mit dem Namen von rueder (`http_client::AGENT`). Es ist ein eigenes Crate, damit [RSSifier](#rssifier-feeds-aus-webseiten) dieselben Regeln nutzt; beide nehmen es über seinen Pfad, und wenn RSSifier in ein eigenes Repository zieht, geht es auf crates.io. Er ist der einzige Weg ins Internet; `server/clippy.toml` verbietet, an anderer Stelle einen `reqwest`-Client zu bauen. Die eine begründete Ausnahme sind Mails an das Relais, das der Betreiber nennt (E6, [E-Mail am Konto](#e-mail-am-konto)).
 
 - **Nur http und https**, auch als Ziel einer Weiterleitung.
 - **Adressen.** Gesperrt ist, was nicht zum öffentlichen Internet gehört, nach den Listen der IANA: der eigene Rechner, private Netze, Link-Local (darunter der Metadaten-Dienst der Cloud-Anbieter), Carrier-NAT, Multicast, reservierte Netze, bei IPv6 alles außerhalb von `2000::/3` sowie Teredo und 6to4. Eine IPv4-Adresse in IPv6-Schreibweise zählt als diese IPv4-Adresse.
@@ -719,6 +720,29 @@ Im Code (A24): `server/src/greader/` (`parse.rs` liest Anfragen, `read.rs` antwo
 - **Live.** Was eine App ändert, erreicht die offenen Tabs als Ereignis: Die Schicht um die API (`greader::around`) meldet es an der Adresse der Anfrage, wie unter `/api`; `events::changed` kennt dafür die ändernden Adressen unter `/greader`, und jede andere meldet nichts. Ein neuer ändernder Endpunkt braucht deshalb seine Zeile dort. Die erste Anmeldung und jede Änderung an den App-Passwörtern melden `apps`.
 - **Typen.** Das JSON der Google-Reader-API geht an Apps, nicht an die Seite, und steht deshalb nicht in `types.ts`; die Endpunkte der App-Passwörter unter `/api` schon.
 - **Geprüft** gegen die Abläufe, mit denen NetNewsWire und Read You anmelden, abgleichen und ändern, nach ihrem Quellcode (`server/tests/greader.rs`), im Browser bis zur Anmeldung, zu Bildern und zum Widerruf (`web/e2e/apps.spec.ts`) und mit einem [Fuzz-Target](#fuzzing) für die Anfragen. Ob echte Apps damit zurechtkommen, prüft Fiona auf ihren Geräten.
+
+## RSSifier: Feeds aus Webseiten
+
+RSSifier macht Feeds aus Webseiten, die keinen haben, damit Leser in rueder auch solche Seiten abonnieren können (A25). Es ist ein eigenes Programm in `rssifier/`, mit eigenem Lockfile und ohne Datenbank, und spricht mit rueder nur HTTP, damit es später mit seiner Geschichte in ein eigenes Repository ziehen kann. Wie es läuft und was es antwortet, steht in [rssifier/README.md](../rssifier/README.md), die Schnittstelle in `rssifier/openapi.json`.
+
+```mermaid
+flowchart LR
+    rueder["rueder: Feed-Suche, Abruf"]
+    rssifier["RSSifier: Extraktion, Cache, Limits"]
+    feeds["Feeds"]
+    pages["Webseiten ohne Feed"]
+    rueder -->|"gehärteter Client"| feeds
+    rueder -->|"GET /v1/feed, Token"| rssifier
+    rssifier -->|"gehärteter Client, Abstand je Host"| pages
+```
+
+- **Vertrauen.** Für rueder ist RSSifier eine fremde Quelle: Was es antwortet, liest rueder wie jeden Feed, mit `feeds::limited`, der [Bereinigung](#bereinigung) und dem [Bild-Proxy](#bild-proxy). RSSifier liefert deshalb nur Text ohne das Markup der Seite.
+- **Eine Anfrage.** `GET /v1/feed?url=…` antwortet einen JSON Feed 1.1, den `feed-rs` schon liest. `home_page_url` ist die Seite, wie RSSifier sie schreibt (ohne `#…` und Tracking-Parameter), damit verschiedene Schreibweisen ein Feed sind. Die Kennung eines Eintrags ist sein Link, so erkennt rueder ihn beim nächsten Abruf wieder, und RSSifier muss sich nichts merken. Probleme kommen als `application/problem+json` mit einem festen Wort in `type`, das `detail` ist so geschrieben, dass rueder es am Feed zeigen kann.
+- **Tokens.** Jeder Client nennt ein Token des Betreibers (`Authorization: Bearer rsf_…`, 120 Bit wie ein App-Passwort). Die Datei der Tokens (`RSSIFIER_TOKENS`) hält nur ihren SHA-256 mit Name und Limits; `rssifier token` schreibt sie, und der Server liest sie neu, wenn sie sich ändert, so dass ein widerrufenes Token mit der nächsten Anfrage endet. Tokens bekommen nur Fionas eigene Instanzen (entschieden am 2026-11-21); RSSifier ist kein Dienst für Fremde.
+- **Limits je Token**, jedes wahlweise (`tokens::Limits`): Anfragen je Minute, Abrufe je Stunde (nur, was der Cache nicht beantwortet) und Anfragen zugleich. Darüber kommt 429 mit `Retry-After`, und das hält der [Abruf](#abruf) von rueder schon ein. Gezählt wird im Speicher; nach einem Neustart beginnen die Zähler neu, denn abgerechnet wird damit nichts.
+- **Limits für den Server** (`limits::Pace`), die kein Token aufhebt: Eine Antwort für eine Seite gilt eine Viertelstunde für alle Tokens, auch eine, die ein Problem meldet, so dass viele Leser einer Seite ihre Site einmal kosten. Ein Host wird nur einmal zugleich und mit Abstand gefragt; wer zu lange auf ihn wartet, bekommt 503. Nur wenige Seiten werden zugleich geholt und gelesen, das Lesen auf eigenen Threads.
+- **Lesen.** Nur `rssifier/src/html.rs` liest HTML, mit den Grenzen der Bereinigung von rueder für Tiefe, Knoten und Attribute, die dort gemessen sind (`clippy.toml` verbietet den Parser anderswo). Eine Seite hat höchstens `api::MAX_PAGE` Byte, ein Feed höchstens `extract::MAX_ITEMS` Einträge mit kurzen Texten. Was RSSifier aus einer Seite liest, steht in `rssifier/src/extract.rs`: zuerst JSON-LD von schema.org, dann Microformats (`h-entry`). Es nimmt nichts in den Text, was sich von Abruf zu Abruf ändert, denn rueder machte daraus jedes Mal eine neue Version.
+- **Was RSSifier nicht tut.** Kein Headless-Browser: Eine Seite, die erst Skripte im Browser bauen, bekommt `needs-javascript`. Keine Volltexte, nur Titel, Anriss, Bild und Link. Geplant und noch nicht gebaut (Pakete R2 bis R4 in [implementation.md](implementation.md#rssifier)): Rezepte je Host als Daten, eine Heuristik für wiederholte Blöcke, `robots.txt`, ein Fuzz-Target, ein Rezept für Reddit, das nur der Betreiber einer privaten Instanz einschaltet, und die Einbindung in rueder: `feeds.source` für Seiten, die Feed-Suche fragt RSSifier, wenn eine Seite keinen Feed nennt, und der Abruf holt solche Feeds von RSSifier mit einem eigenen Client, der nur dessen Adresse erreicht.
 
 ## Frontend
 
