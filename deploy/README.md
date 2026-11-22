@@ -82,7 +82,10 @@ and summaries it lists; the feed search offers such a website when
 `RSSIFIER_TOKEN` is set, and the status page says how RSSifier fares. It runs
 in a container of its own that only rueder reaches, and it asks every
 website's `robots.txt` first. `RSSIFIER_BLOCKED_HOSTS` names hosts it never
-fetches from.
+fetches from. `RSSIFIER_ENABLE=reddit` turns on the recipe for subreddits,
+which goes against Reddit's terms and its `robots.txt` and is only for a
+private instance; [RSSifier's README](../rssifier/README.md#reddit) says what
+it does.
 
 For other readers than this rueder, make a token of their own, with limits:
 
@@ -248,7 +251,7 @@ a change, `docker compose up --detach` starts the containers anew.
 | `FETCH_ALLOW_NETS`, `FETCH` | Internal networks feeds may come from; `FETCH=off` stops fetching. |
 | `FETCH_ROUND`, `FETCH_AT_ONCE`, `FETCH_EVERY`, `FETCH_PER_HOST` | How fast feeds are fetched, see [A large instance](#a-large-instance). |
 | `RSSIFIER_TOKEN`, `RSSIFIER_URL` | The token rueder and RSSifier share, for [websites without a feed](#websites-without-a-feed); `compose.yaml` sets `RSSIFIER_URL` once there is a token. Without them the feed search offers no such website; with only one rueder does not start. |
-| `RSSIFIER_BLOCKED_HOSTS`, `RSSIFIER_IMAGE` | Hosts RSSifier never fetches from, and its image, as with `RUEDER_IMAGE`. |
+| `RSSIFIER_BLOCKED_HOSTS`, `RSSIFIER_ENABLE`, `RSSIFIER_IMAGE` | Hosts RSSifier never fetches from, the recipes it turns on (`reddit`, only for a private instance) and its image, as with `RUEDER_IMAGE`. |
 | `DATABASE_CONNECTIONS`, `HEAVY_AT_ONCE`, `MAILS_PER_DAY` | How large the server is set up: connections to the database (10), costly requests at once (4) and mails a day in all (1,000), see [A large instance](#a-large-instance). |
 | `IMAGES_PUBLIC` | `on` lets a CDN in front of your reverse proxy keep images, which then come without a session too. Off if not set; see [Images through a CDN](#images-through-a-cdn). |
 | `DATABASE_WARN_GB` | From what size of the database in GB the status page warns, such as `50` on a disk of 64 GB. Off if not set; see [Keeping old articles, or not](#keeping-old-articles-or-not). |

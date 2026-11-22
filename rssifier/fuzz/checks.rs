@@ -14,7 +14,8 @@ use rssifier::{
 use url::Url;
 
 /// A recipe for the page of the first base, so that the input also goes
-/// through the selectors; the second base has none.
+/// through the selectors, and one that reads attributes, as for Reddit, for
+/// the third; the second base has none.
 static RECIPES: LazyLock<Recipes> = LazyLock::new(|| {
     Recipes::parse(
         r#"[[recipe]]
@@ -24,12 +25,23 @@ static RECIPES: LazyLock<Recipes> = LazyLock::new(|| {
         summary = "p"
         date = "time, .date"
         image = "img[src]"
+
+        [[recipe]]
+        host = "example.com"
+        item = "shreddit-post, article"
+        summary = "[slot=text-body]"
+        image = "[slot=thumbnail] img"
+        attributes = { title = "post-title", link = "permalink", date = "created-timestamp", id = "id" }
         "#,
     )
     .expect("the recipe of the fuzz target")
 });
 
-const BASES: [&str; 2] = ["https://example.org/news/", "https://example.net/a/b?c=d"];
+const BASES: [&str; 3] = [
+    "https://example.org/news/",
+    "https://example.net/a/b?c=d",
+    "https://example.com/r/x/new/",
+];
 
 /// Reading a page, with any text: at most `MAX_ITEMS` entries, each with a
 /// whole web address that is its own, a title and short texts, and the same
@@ -59,6 +71,10 @@ pub fn page(data: &[u8]) {
             }
             if let Some(image) = &item.image {
                 assert!(is_web(image), "{image}");
+            }
+            if let Some(id) = &item.id {
+                assert!(!id.is_empty() && id.len() <= 200, "{id:?}");
+                assert!(!id.contains(char::is_control), "{id:?}");
             }
         }
         assert_eq!(

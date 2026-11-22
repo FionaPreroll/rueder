@@ -182,6 +182,8 @@ async fn answer(
     let url = state.client.parse(address).map_err(refused)?;
     let url = extract::link(&url, url.as_str())
         .ok_or_else(|| refused(FetchError::Address("no host".into())))?;
+    // A recipe may read the page at another address, which is then the feed's.
+    let url = state.sites.recipes.address(&url);
     let host = url.host_str().unwrap_or_default().to_owned();
     if state.sites.blocks(&host) {
         return Err(blocked(&host));
@@ -221,23 +223,31 @@ fn blocked(host: &str) -> Problem {
     )
 }
 
-/// Asks the site's `robots.txt`, fetches the page and reads it.
+/// Asks the site's `robots.txt`, unless the operator turned on a recipe for
+/// the page that leaves it out, fetches the page and reads it.
 async fn make(state: &AppState, url: &Url) -> Result<Written, Problem> {
     let address = url.as_str();
     let host = url.host_str().unwrap_or_default();
+    let robots = state
+        .sites
+        .recipes
+        .for_page(url)
+        .is_none_or(|recipe| recipe.robots);
     let fetched = {
         let _place = state.gates.fetch().await;
-        let rules = state
-            .robots
-            .rules(&state.client, url)
-            .await
-            .map_err(|why| {
-                let detail = format!("the robots.txt of {host} cannot be read: {why}");
-                Problem::new(StatusCode::BAD_GATEWAY, "upstream", detail)
-            })?;
-        if !rules.allows(url) {
-            let detail = format!("the robots.txt of {host} does not allow this page");
-            return Err(Problem::new(StatusCode::FORBIDDEN, "robots", detail));
+        if robots {
+            let rules = state
+                .robots
+                .rules(&state.client, url)
+                .await
+                .map_err(|why| {
+                    let detail = format!("the robots.txt of {host} cannot be read: {why}");
+                    Problem::new(StatusCode::BAD_GATEWAY, "upstream", detail)
+                })?;
+            if !rules.allows(url) {
+                let detail = format!("the robots.txt of {host} does not allow this page");
+                return Err(Problem::new(StatusCode::FORBIDDEN, "robots", detail));
+            }
         }
         let request = Request {
             accept: Some(ACCEPT_HTML),

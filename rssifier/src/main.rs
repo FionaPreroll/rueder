@@ -41,6 +41,9 @@ enum Command {
         /// before those that come with RSSifier.
         #[arg(long, env = "RSSIFIER_RECIPES")]
         recipes: Option<PathBuf>,
+        /// Optional recipes to turn on, comma separated: "reddit".
+        #[arg(long, env = "RSSIFIER_ENABLE", default_value = "")]
+        enable: String,
         /// Hosts never fetched from, each also for its subdomains, comma
         /// separated.
         #[arg(long, env = "RSSIFIER_BLOCKED_HOSTS", default_value = "")]
@@ -117,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
             listen,
             allow,
             recipes,
+            enable,
             blocked,
             token,
         } => {
@@ -124,6 +128,7 @@ async fn main() -> anyhow::Result<()> {
                 Some(file) => Recipes::with_file(&file)?,
                 None => Recipes::built_in()?,
             };
+            let recipes = recipes.enable(&enable)?;
             let mut keeper = Keeper::new(cli.tokens.clone())?;
             if let Some(token) = token.filter(|token| !token.is_empty()) {
                 keeper = keeper.with(tokens::chosen(token.trim())?);

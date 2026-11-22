@@ -22,6 +22,18 @@
 #   date      optional, below the item: what has the date in `datetime` or in
 #             its text; else the first <time datetime>, else a date in the text
 #   image     optional, below the item: the image; else the first one
+#   attributes  optional: the attributes of the item itself that hold its
+#             `title`, `link`, `date` and `id` (the entry's id in the feed,
+#             else its address), for sites that write them there. Then title,
+#             link and date are not named as selectors, and a summary or an
+#             image comes only from the selector the recipe names.
+#   fetch     optional: the address to read instead of the page, with {1} to
+#             {9} for the parts of the page's path; it is also the address of
+#             the feed. A page without the parts it names is read as it is.
+#   optional  optional: a name; the recipe is off until the operator names it
+#             in RSSIFIER_ENABLE
+#   robots    optional, only with `optional`: false reads the pages without
+#             asking robots.txt
 #
 # Selectors are the simple part of CSS: tags, .classes, #ids and [attributes]
 # or [attributes=values], one inside another separated by spaces, several
@@ -33,3 +45,21 @@
 # item = "main .news-list li"
 # title = "h3"
 # date = ".date"
+
+# Reddit, off until the operator turns it on (RSSIFIER_ENABLE=reddit), and
+# never on a public instance: Reddit's User Agreement forbids collecting its
+# pages automatically, and its robots.txt forbids it to every crawler, which
+# this recipe does not ask. It reads the newest posts of a subreddit from
+# the page Reddit shows without a login, whatever sorting the address asks
+# for, so that every post comes once; the score and the number of comments
+# never go into the text, as they change with every look.
+[[recipe]]
+optional = "reddit"
+robots = false
+host = "reddit.com"
+path = "/r/"
+fetch = "https://www.reddit.com/r/{2}/new/"
+item = "shreddit-post"
+summary = "[slot=text-body]"
+image = "[slot=thumbnail] img"
+attributes = { title = "post-title", link = "permalink", date = "created-timestamp", id = "id" }
