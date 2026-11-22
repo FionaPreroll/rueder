@@ -117,7 +117,8 @@ for service in rueder rssifier; do
 	[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true ] ||
 		fail "the file system of $service is not read-only"
 done
-[ -z "$(compose port rssifier 3100 2>/dev/null)" ] || fail "RSSifier is open on the machine"
+# `docker port` lists only the ports published on the machine.
+[ -z "$(docker port "$(compose ps --quiet rssifier)")" ] || fail "RSSifier is open on the machine"
 # The server made its key for the image proxy, so it can write where it must.
 compose logs rueder | grep -q 'listening on' || fail "the server did not say it listens"
 
