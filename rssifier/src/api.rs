@@ -13,6 +13,7 @@ use axum::{
 };
 use hardened_http::{Error as FetchError, Request};
 use serde::Deserialize;
+use url::Url;
 use utoipa::{
     IntoParams, Modify, OpenApi,
     openapi::{
@@ -23,8 +24,7 @@ use utoipa::{
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    AppState,
-    extract::{self, MIN_ITEMS},
+    AppState, extract,
     feed::{JsonFeed, Problem, ProblemBody, Written},
     limits::{Over, Usage},
     tokens::Token,
@@ -138,9 +138,10 @@ pub struct FeedQuery {
         (status = NOT_MODIFIED, description = "The feed is the one of the `ETag` named."),
         (status = BAD_REQUEST, description = "`address`: not an address, or one inside the server's own network.", content_type = "application/problem+json", body = ProblemBody),
         (status = UNAUTHORIZED, description = "`token`: no token, or an unknown one.", content_type = "application/problem+json", body = ProblemBody),
+        (status = FORBIDDEN, description = "`robots`: the site's `robots.txt` does not allow RSSifier the page; `blocked-host`: the operator does not fetch from the host.", content_type = "application/problem+json", body = ProblemBody),
         (status = UNPROCESSABLE_ENTITY, description = "`no-items`: the page lists nothing; `needs-javascript`: the page is made in the browser; `too-large`: the page is larger than 4 MB.", content_type = "application/problem+json", body = ProblemBody),
         (status = TOO_MANY_REQUESTS, description = "`quota`: a limit of the token; see `Retry-After`.", content_type = "application/problem+json", body = ProblemBody),
-        (status = BAD_GATEWAY, description = "`upstream`: the site answers with an error, or not at all.", content_type = "application/problem+json", body = ProblemBody),
+        (status = BAD_GATEWAY, description = "`upstream`: the site answers with an error, or not at all, or its `robots.txt` cannot be read.", content_type = "application/problem+json", body = ProblemBody),
         (status = SERVICE_UNAVAILABLE, description = "`busy`: the host of the page is asked too much right now; see `Retry-After`.", content_type = "application/problem+json", body = ProblemBody),
         (status = GATEWAY_TIMEOUT, description = "`timeout`: the site took too long.", content_type = "application/problem+json", body = ProblemBody),
     ),
@@ -181,12 +182,15 @@ async fn answer(
     let url = state.client.parse(address).map_err(refused)?;
     let url = extract::link(&url, url.as_str())
         .ok_or_else(|| refused(FetchError::Address("no host".into())))?;
+    let host = url.host_str().unwrap_or_default().to_owned();
+    if state.sites.blocks(&host) {
+        return Err(blocked(&host));
+    }
     let key = url.to_string();
     if let Some(answer) = state.cache.get(&key, Instant::now()) {
         return Ok(answer);
     }
     state.usage.fetch(&token, Instant::now()).map_err(over)?;
-    let host = url.host_str().unwrap_or_default().to_owned();
     let Some(_host) = state.gates.host(&host).await else {
         return Err(Problem {
             retry_after: Some(state.gates.pace.host_wait),
@@ -201,7 +205,7 @@ async fn answer(
     if let Some(answer) = state.cache.get(&key, Instant::now()) {
         return Ok(answer);
     }
-    let answer = Arc::new(make(state, &key).await);
+    let answer = Arc::new(make(state, &url).await);
     // An address that is not allowed tells nothing about the page.
     if !matches!(&*answer, Err(problem) if problem.kind == "address") {
         state.cache.put(&key, answer.clone(), Instant::now());
@@ -209,10 +213,32 @@ async fn answer(
     Ok(answer)
 }
 
-/// Fetches the page and reads it.
-async fn make(state: &AppState, address: &str) -> Result<Written, Problem> {
+fn blocked(host: &str) -> Problem {
+    Problem::new(
+        StatusCode::FORBIDDEN,
+        "blocked-host",
+        format!("this server does not fetch from {host}"),
+    )
+}
+
+/// Asks the site's `robots.txt`, fetches the page and reads it.
+async fn make(state: &AppState, url: &Url) -> Result<Written, Problem> {
+    let address = url.as_str();
+    let host = url.host_str().unwrap_or_default();
     let fetched = {
         let _place = state.gates.fetch().await;
+        let rules = state
+            .robots
+            .rules(&state.client, url)
+            .await
+            .map_err(|why| {
+                let detail = format!("the robots.txt of {host} cannot be read: {why}");
+                Problem::new(StatusCode::BAD_GATEWAY, "upstream", detail)
+            })?;
+        if !rules.allows(url) {
+            let detail = format!("the robots.txt of {host} does not allow this page");
+            return Err(Problem::new(StatusCode::FORBIDDEN, "robots", detail));
+        }
         let request = Request {
             accept: Some(ACCEPT_HTML),
             max_body: Some(MAX_PAGE),
@@ -234,6 +260,14 @@ async fn make(state: &AppState, address: &str) -> Result<Written, Problem> {
         }
         _ => Problem::new(StatusCode::BAD_GATEWAY, "upstream", err.to_string()),
     })?;
+    // A redirect may lead to a host the operator does not fetch from.
+    if let Some(host) = response
+        .url
+        .host_str()
+        .filter(|host| state.sites.blocks(host))
+    {
+        return Err(blocked(host));
+    }
     if !response.status.is_success() {
         let detail = format!("the site answers with {}", response.status);
         return Err(Problem::new(StatusCode::BAD_GATEWAY, "upstream", detail));
@@ -242,11 +276,14 @@ async fn make(state: &AppState, address: &str) -> Result<Written, Problem> {
         let _place = state.gates.read().await;
         let base = response.url.clone();
         let body = response.body;
-        tokio::task::spawn_blocking(move || extract::page(&String::from_utf8_lossy(&body), &base))
-            .await
-            .unwrap_or_default()
+        let sites = state.sites.clone();
+        tokio::task::spawn_blocking(move || {
+            extract::page(&String::from_utf8_lossy(&body), &base, &sites.recipes)
+        })
+        .await
+        .unwrap_or_default()
     };
-    if page.items.len() < MIN_ITEMS {
+    if page.items.is_empty() {
         return Err(if page.scripted {
             Problem::new(
                 StatusCode::UNPROCESSABLE_ENTITY,

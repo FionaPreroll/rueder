@@ -1,11 +1,12 @@
 name: Fuzz
 
-# The fuzz targets in server/fuzz run here, not on a developer's machine:
+# The fuzz targets in server/fuzz and rssifier/fuzz run here, not on a
+# developer's machine:
 # three minutes each on a pull request that touches what they look at, half
 # an hour each every week, and as long as asked when started by hand. A finding fails the
 # run and comes with the input that broke a property, as an artifact; whoever
-# fixes it puts the input into server/fuzz/corpus/<target>/ as `found-…`, where
-# server/tests/fuzz_corpus.rs plays it in every `cargo test`.
+# fixes it puts the input into <dir>/fuzz/corpus/<target>/ as `found-…`, where
+# <dir>/tests/fuzz_corpus.rs plays it in every `cargo test`.
 on:
   pull_request:
     paths:
@@ -16,6 +17,12 @@ on:
       - "server/src/greader/**"
       - "server/src/subscribe.rs"
       - "server/src/transfer.rs"
+      - "rssifier/fuzz/**"
+      - "rssifier/src/extract.rs"
+      - "rssifier/src/guess.rs"
+      - "rssifier/src/html.rs"
+      - "rssifier/src/recipes.rs"
+      - "rssifier/src/select.rs"
       - ".github/workflows/fuzz.yml"
   # Mondays at 03:41 UTC.
   schedule:
@@ -40,10 +47,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [greader, cleaning, feed, image, opml, account]
+        target: [greader, cleaning, feed, image, opml, account, page]
+        # Where a target lives, if not in server/.
+        include:
+          - target: page
+            dir: rssifier
     defaults:
       run:
-        working-directory: server
+        working-directory: ${{ matrix.dir || 'server' }}
     env:
       SQLX_OFFLINE: "true"
       # Three minutes on a pull request, half an hour on schedule.
@@ -59,7 +70,7 @@ jobs:
           toolchain: nightly
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: server/fuzz
+          workspaces: ${{ matrix.dir || 'server' }}/fuzz
       # A fixed version: cargo-fuzz is not in the list of taiki-e/install-action,
       # and Dependabot does not raise what cargo install builds. It only needs
       # raising when a new nightly breaks it.
@@ -81,5 +92,5 @@ jobs:
         if: failure()
         with:
           name: fuzz-found-${{ matrix.target }}
-          path: server/fuzz/artifacts/${{ matrix.target }}
+          path: ${{ matrix.dir || 'server' }}/fuzz/artifacts/${{ matrix.target }}
           if-no-files-found: ignore

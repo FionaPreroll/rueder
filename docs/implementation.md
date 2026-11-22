@@ -34,7 +34,7 @@ Fachliche Entscheidungen trifft Fiona. Die [Detailfragen](plan.md#detailfragen) 
 | 3 Frontend | Fertig |
 | 4 Umstieg | Der neue rueder läuft in der Produktion, mit neuen Konten und Feeds; der alte Code ist entfernt. Offen: 4.5 (Import in der Produktion), 4.6 (Lesestand und Labels aus dem Browser) |
 | 5 Öffentliche Instanz | Offen: 5.11 (Betrieb der öffentlichen Instanz) |
-| RSSifier | Fertig: R1 (Programm, Tokens, JSON-LD und Microformats). Offen: R2 bis R4 |
+| RSSifier | Fertig: R1 (Programm, Tokens, JSON-LD und Microformats), R2 (Rezepte, Heuristik, `robots.txt`, gesperrte Hosts, Fuzzing). Offen: R3 und R4 |
 
 Was es gibt:
 
@@ -62,7 +62,7 @@ Was es gibt:
 | `server/tests/` | Integrationstests gegen PostgreSQL. `tests/fixtures/legacy_schema.sql` ist das Schema des alten rueder, nachgebaut aus `backend/migrations/` im Commit `0b36a96`. `tests/data/` hält Feeds, wie die Tests des alten rueder sie aufgezeichnet haben. `fuzz_corpus.rs` spielt den Korpus der Fuzz-Targets ab, `soak.rs` ist der Soak-Test. |
 | `server/fuzz/` | Fuzz-Targets für Bereinigung, Feed-Verarbeitung, Bild-Proxy, die Anfragen der Google-Reader-API, OPML-Dateien und die Datei eines Kontos (`fuzz_targets/`), was sie prüfen (`checks.rs`) und ihr Korpus (`corpus/`). Eine eigene Crate, weil `cargo-fuzz` Nightly-Rust braucht. |
 | `hardened-http/` | Der gehärtete HTTP-Client als eigenes Crate: `src/lib.rs` der Client, `src/address.rs` die Adressregeln, in `tests/` ihr Property-Test und Tests gegen Server auf dieser Maschine. Eigenes Lockfile, kein Workspace. |
-| `rssifier/` | RSSifier mit eigenem Lockfile, `Dockerfile`, `deny.toml` und `openapi.json` (erzeugt: `UPDATE_OPENAPI=1 cargo test` schreibt sie neu). `src/api.rs` die Schnittstelle, `tokens.rs` Tokens, `limits.rs` Limits je Token und für den Server, `cache.rs` der Cache je Seite, `html.rs` HTML lesen in Grenzen, `extract.rs` was eine Seite listet, `feed.rs` JSON Feed und Probleme, `main.rs` die Kommandozeile. |
+| `rssifier/` | RSSifier mit eigenem Lockfile, `Dockerfile`, `deny.toml` und `openapi.json` (erzeugt: `UPDATE_OPENAPI=1 cargo test` schreibt sie neu). `src/api.rs` die Schnittstelle, `tokens.rs` Tokens, `limits.rs` Limits je Token und für den Server, `cache.rs` der Cache je Seite, `html.rs` HTML lesen in Grenzen, `extract.rs` was eine Seite listet, `recipes.rs` die Rezepte (eingebaut: `rules/recipes.toml`, das auch ihre Form beschreibt) mit den Selektoren aus `select.rs`, `guess.rs` die Heuristik, `robots.rs` `robots.txt`, `feed.rs` JSON Feed und Probleme, `main.rs` die Kommandozeile. `fuzz/` das Fuzz-Target für das Lesen einer Seite, wie `server/fuzz/` aufgebaut, `tests/fuzz_corpus.rs` spielt seinen Korpus ab. |
 | `web/` | SvelteKit, TypeScript und TailwindCSS als statische SPA. Siehe [web/README.md](../web/README.md). |
 | `web/src/lib/` | Modelle (Lesestand, Regeln, Baum), Komponenten, Texte (`i18n/`). `reader.ts` ist die Naht: was die Seite von ihrer Datenquelle braucht. `api/` erfüllt sie mit dem Server (`types.ts` die Typen der API, erzeugt und nicht von Hand zu ändern, `client.ts` die Endpunkte, `reader.svelte.ts` der Reader, `session.svelte.ts` Login und Sitzung), `demo/` mit erfundenen Daten. |
 | `web/e2e/` | End-to-End-Tests mit Playwright: die Specs je Weg, in `harness/` der Start des Servers mit eigener Datenbank (`server.js`), die erfundene Website mit ihren Feeds (`site.js`) und gemeinsame Helfer. |
@@ -73,7 +73,7 @@ Was es gibt:
 | `docs/` | Diese Dokumente. `design_review.md` ist das Review des Designs: Maßstab, wie man es wiederholt, Messwerte und Funde. `user_data.md` gehört zum alten rueder: Es beschreibt die Daten des alten Frontends im Browser, die Vorlage für Paket 4.6, nicht die des neuen. Was das neue im Browser hält, steht unter [Frontend](architecture.md#frontend). |
 | `SECURITY.md` | Wie man eine Lücke meldet: privat über „Report a vulnerability“ auf GitHub, was dazugehört und dass nur der neueste Stand von `main` Korrekturen bekommt. Die Meldungen kommen nur an, wenn in den Einstellungen des Repositorys unter Security „Private vulnerability reporting“ eingeschaltet ist. |
 | `.github/workflows/ci.yml` | CI für den neuen Code, veröffentlicht das Image und das APK. Daneben `pages.yml` für die Seite auf GitHub Pages, `codeql-analysis.yml`, `gitleaks.yml`, `fuzz.yml`, `soak.yml` und `screenshots.yml` (siehe [CI](#ci)). |
-| `.github/dependabot.yml` | Updates der Abhängigkeiten von `server/`, `server/fuzz/`, `hardened-http/`, `rssifier/`, `web/`, `app/` (npm und Gradle), `pages/` und der Actions einmal im Monat, der Basis-Images jede Woche, jeweils erst eine Woche nach dem Erscheinen einer Version. |
+| `.github/dependabot.yml` | Updates der Abhängigkeiten von `server/`, `server/fuzz/`, `hardened-http/`, `rssifier/`, `rssifier/fuzz/`, `web/`, `app/` (npm und Gradle), `pages/` und der Actions einmal im Monat, der Basis-Images jede Woche, jeweils erst eine Woche nach dem Erscheinen einer Version. |
 
 
 ## Stack und Konventionen
@@ -163,7 +163,7 @@ cargo run --release -- bench generate   # 10 Konten, 300 Feeds, 10 Millionen Art
 cargo run --release -- bench measure    # misst die Abfragen und gibt die Tabellen aus
 
 SOAK_SECONDS=3600 cargo test --release --test soak -- --nocapture   # Soak-Test eine Stunde, mit Tabelle
-cd fuzz && cargo +nightly fuzz run -O feed -- -max_total_time=1800 -timeout=10 -max_len=131072   # ebenso cleaning, image, greader, opml und account; auf GitHub läuft das in fuzz.yml
+cd fuzz && cargo +nightly fuzz run -O feed -- -max_total_time=1800 -timeout=10 -max_len=131072   # ebenso cleaning, image, greader, opml und account, in rssifier/fuzz page; auf GitHub läuft das in fuzz.yml
 ```
 
 Fuzzen braucht Nightly-Rust und `cargo install cargo-fuzz`; wie der Korpus danach klein bleibt, steht in [server/README.md](../server/README.md#fuzzing).
@@ -209,7 +209,7 @@ Das alte System ist nicht mehr lauffähig: Seine Paket- und Compose-Dateien sind
 |---|---|
 | `ci.yml`, Job `web` | Neues Frontend: Lint, svelte-check, Tests mit Abdeckung, Build, dazu die Ein-Datei-Fassung als Artefakt. |
 | `ci.yml`, Job `server` | Neuer Server: PostgreSQL 16 als Dienst, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, Tests mit Abdeckung (`cargo llvm-cov`). Gebaut wird mit `SQLX_OFFLINE=true`. Zu den Tests gehört, dass die eingecheckten TypeScript-Typen der API zu den Rust-Typen passen. |
-| `ci.yml`, Job `rssifier` | `hardened-http/` und `rssifier/`, je für sich: `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings` und `cargo test --locked`. |
+| `ci.yml`, Job `rssifier` | `hardened-http/` und `rssifier/`, je für sich: `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings` und `cargo test --locked`, mit dem Korpus des Fuzz-Targets von RSSifier. |
 | `ci.yml`, Job `dependencies` | Die Abhängigkeiten des Servers und, mit `rssifier/deny.toml`, die von RSSifier: `cargo audit` gegen die Datenbank von RustSec, `cargo deny check` nach `server/deny.toml` (bekannte Lücken, Lizenzen, Quellen, gesperrte Crates). Läuft auch jeden Montag, zusammen mit `workflows` und `image-scan`, damit eine neue Meldung ohne Änderung am Code auffällt. |
 | `ci.yml`, Job `dependency-review` | Nur bei Pull Requests: ob der Pull Request eine Abhängigkeit mit bekannter Lücke hinzufügt oder auf eine solche Version hebt, über alles, was GitHub im Abhängigkeitsgraphen kennt (npm in `web/` und `app/`, die Actions, Cargo; Gradle nur, soweit GitHub es aus den Build-Dateien liest). Zählt ab Schwere „low“ und auch für Abhängigkeiten, die nur beim Bauen laufen. Ausgenommen sind `deepmerge` und `minimatch` 10 (siehe unten). |
 | `ci.yml`, Job `workflows` | Die Workflows selbst, mit [zizmor](https://docs.zizmor.sh): Text von außen in Skripten, zu weite Rechte, Tokens, die für spätere Schritte liegen bleiben, nicht festgelegte Actions und Actions mit bekannter Lücke. Läuft auch jeden Montag. Ein Fund wird behoben, nicht mit einem Kommentar unterdrückt. |
@@ -223,7 +223,7 @@ Das alte System ist nicht mehr lauffähig: Seine Paket- und Compose-Dateien sind
 | `pages.yml` | Die Seite auf GitHub Pages: Jobs `rust` (rustdoc mit `-D warnings`), `web` (Demo, die Bilder der README von ihr mit `pnpm showcase` und TypeDoc), `app` (Javadoc), `site` (Prettier und Tests von `pages/`, dann `pages/build.js` mit der Prüfung der Links und der Bilder der README, die Seite als Artefakt `github-pages`) und nur auf `main` `deploy`, der sie veröffentlicht. Dafür muss in den Einstellungen des Repositorys unter Pages einmal „GitHub Actions“ als Quelle stehen. |
 | `gitleaks.yml` | Geheimnisse in jedem Commit eines Pull Requests und in dem, was auf `main` landet. Kein Lauf nach Zeitplan: Die Geschichte ändert sich nicht, und Neues findet gitleaks in ihr nur mit einer neuen Version, die mit dem Update der Action kommt. Was vor dem Push aufhalten soll, ist die Push Protection von GitHub (siehe [Einstellungen des Repositorys](#einstellungen-des-repositorys)). |
 | `codeql-analysis.yml` | Statische Analyse von Rust, JavaScript und TypeScript, dem Java der App und den Workflows. Das Java der App mit Build (`build-mode: manual`, Build `github`), damit CodeQL die Klassen von Capacitor, AndroidX und Gradle kennt, statt sie zu raten; der Rest ohne Build. |
-| `fuzz.yml` | Die Fuzz-Targets in `server/fuzz/` mit Nightly-Rust: je drei Minuten bei einem Pull Request, der sie oder ihren Code berührt, je eine halbe Stunde jeden Montag, von Hand so lange wie angegeben (siehe [Fuzzing](architecture.md#fuzzing)). |
+| `fuzz.yml` | Die Fuzz-Targets in `server/fuzz/` und `rssifier/fuzz/` mit Nightly-Rust: je drei Minuten bei einem Pull Request, der sie oder ihren Code berührt, je eine halbe Stunde jeden Montag, von Hand so lange wie angegeben (siehe [Fuzzing](architecture.md#fuzzing)). |
 | `soak.yml` | Der Soak-Test (`server/tests/soak.rs`) eine halbe Stunde lang jeden Montag oder von Hand so lange wie angegeben. |
 | `screenshots.yml` | Von Hand, für ein Review des Designs, und bei einem Pull Request, der ändert, wie die Bilder entstehen: Bildschirmfotos jeder Ansicht (Login, Listen und Ansichten, Menüs, Dialoge, Einstellungen, Konto, Status des Servers) auf dem Desktop und auf einem Handy, hell und dunkel, auf Englisch, Deutsch oder in beiden, als Artefakt `screenshots`. Wie `e2e` die gebaute Oberfläche in Chromium gegen den gebauten Server, hier mit den erfundenen Feeds des Entwurfs (`src/lib/demo/data.ts`), die eine erfundene Website als RSS ausliefert (`web/screenshots/`). Ein Konto je Sprache, Gerät und Thema; alle sind Admins, damit auch der Status drauf ist. Eine Ansicht, die scheitert, lässt den Lauf scheitern, die übrigen Bilder hängen trotzdem am Lauf. Neben den Bildern misst der Rundgang die Touch-Ziele und die Länge der Zeilen im Artikel; `measure.md` im Artefakt zählt es zusammen ([Review des Designs](design_review.md#vorgehen)). |
 
@@ -398,7 +398,7 @@ Ergebnis: Eine öffentliche Instanz lässt sich mit rueder betreiben, ohne dass 
 Ergebnis: Leser fügen in rueder auch Webseiten ohne Feed hinzu (A25), über RSSifier ([plan.md](plan.md#entscheidungen), [RSSifier](architecture.md#rssifier-feeds-aus-webseiten)).
 
 - [x] **R1 Programm, Tokens und strukturierte Daten.** Der gehärtete Client als Crate `hardened-http/`; RSSifier mit `GET /v1/feed`, `GET /v1/usage`, Tokens mit Limits, Cache, Abstand je Host und Extraktion aus JSON-LD und Microformats.
-- [ ] **R2 Mehr Seiten.** Rezepte je Host als Daten in `rssifier/rules/`, eine Heuristik für wiederholte Blöcke nach dem Vorbild von rss-proxy, `robots.txt` nach RFC 9309 mit dem Namen `rueder-rssifier`, eine Liste gesperrter Hosts des Betreibers, ein Fuzz-Target für das Lesen einer Seite.
+- [x] **R2 Mehr Seiten.** Rezepte je Host als Daten, eine Heuristik für wiederholte Blöcke, `robots.txt` nach RFC 9309, gesperrte Hosts des Betreibers und ein Fuzz-Target für das Lesen einer Seite.
 - [ ] **R3 Einbindung in rueder.** `feeds.source` für Seiten; `RSSIFIER_URL` und `RSSIFIER_TOKEN`, ohne sie aus; die Feed-Suche fragt RSSifier, wenn eine Seite keinen Feed nennt, mit dem Hinweis auf Titel und Anriss in allen Sprachen; Abonnieren und Abruf über einen eigenen Client, der nur RSSifier erreicht; `detail` eines Problems am Feed; RSSifier auf der Statusseite; die Demo bekommt eine erfundene Seite.
 - [ ] **R4 Reddit, OPML, Umzug und Betrieb.** Das Rezept für die ausgeloggte Seite von Reddit, aus als Standard und auf der öffentlichen Instanz aus; Seiten in OPML und in der Datei eines Kontos; RSSifier in `deploy/compose.yaml` und `deploy/README.md`; sein Image in der CI.
 
@@ -419,7 +419,8 @@ Was beim Bauen selbst entschieden wurde und noch ihr Wort braucht:
 - **Artikel-Infos (5.45):** Der Feed steht mit dem Namen, den er sich gibt, nicht mit dem, den ihm der Leser gab, damit der Betreiber ihn wiederfindet. „Zuerst abgerufen“ ist bei importierten Artikeln, wann der alte rueder sie zuerst sah. Das Menü unter dem Artikel ist immer da, „Artikel melden …“ darin nur, wo der Server Meldungen nimmt.
 - **Bildadressen im Vergleich (5.46):** Ein Bild wird mit dem an derselben Stelle der anderen Version verglichen. Markiert ist der Teil seiner Adresse, der sich unterscheidet, auf ganze Wörter aus Buchstaben und Ziffern erweitert, damit aus `-118` und `-122` nicht `18` und `22` werden.
 - **Quelltext (5.48):** Er zeigt die neueste aufbewahrte Version, wie der Feed sie schickte, nicht jede; ältere zeigt der Vergleich der Versionen. Wo ein Tag auf einen anderen folgt, beginnt eine neue Zeile, damit sich der Text lesen lässt; kopiert wird er unverändert.
-- **RSSifier (R1):** Eine Antwort, die ein Problem meldet, gilt wie ein Feed eine Viertelstunde, damit eine Seite ohne Liste nicht bei jedem Abruf neu gefragt wird; nur eine abgelehnte Adresse nicht. Ein Host wird höchstens alle zwei Sekunden gefragt, wer 20 Sekunden auf ihn wartet, bekommt 503. Ein Token ohne Limits ist unbegrenzt. Eine Liste braucht mindestens drei Einträge. Die Tokens stehen als JSON-Datei, nicht als TOML, damit es keine weitere Abhängigkeit braucht.
+- **RSSifier (R1):** Eine Antwort, die ein Problem meldet, gilt wie ein Feed eine Viertelstunde, damit eine Seite ohne Liste nicht bei jedem Abruf neu gefragt wird; nur eine abgelehnte Adresse nicht. Ein Host wird höchstens alle zwei Sekunden gefragt, wer 20 Sekunden auf ihn wartet, bekommt 503. Ein Token ohne Limits ist unbegrenzt. Eine Liste braucht mindestens drei Einträge. Die Tokens stehen als JSON-Datei, denn nur `rssifier token` schreibt sie.
+- **RSSifier (R2):** Ein Rezept geht vor den strukturierten Daten, nicht nach ihnen, denn der Betreiber schreibt es für eine Seite, deren eigene Angaben nicht taugen; ihm reicht ein Eintrag. Rezepte sind TOML, weil der Betreiber sie mit Kommentaren schreibt; eingebaut ist noch keines, weil sich das Markup fremder Seiten hier nicht prüfen ließ, und `RSSIFIER_RECIPES` nennt eine Datei mit eigenen. Die Selektoren sind ein kleiner Teil von CSS ohne `>` und `:`, eigener Code statt einer Crate, die einen eigenen Baum mitbrächte. Ist `robots.txt` nicht zu lesen (5xx, keine Antwort, zu groß), ist das `upstream` (502) und wird nicht behalten, damit es beim nächsten Abruf neu gefragt wird; ein gelesenes gilt einen Tag. Die gesperrten Hosts stehen in `RSSIFIER_BLOCKED_HOSTS`, gelten auch für ihre Subdomains und für das Ziel einer Weiterleitung, und ihr Problem (`blocked-host`, 403) kommt nicht in den Cache. Die Heuristik nimmt bei gleichen Punkten die äußere Gruppe, ein Datum aus `<time datetime>` oder deutschen und englischen Formen im Text und lässt „vor 3 Stunden“, „3 hours ago“ und Zähler wie „12 Kommentare“ aus dem Anriss.
 - **Passkeys in der Android-App (5.17):** `assetlinks.json` nennt neben `get_login_creds` auch `handle_all_urls`, wie Googles Beispiel; Android darf es eine Stunde zwischenspeichern; höchstens 10 Apps.
 
 ### Für später
@@ -571,6 +572,13 @@ Die vier Fuzz-Targets (`greader`, `cleaning`, `feed`, `image`) zum zweiten Secur
 
 - **Maschine:** je Target ein Runner `ubuntu-latest` von GitHub, alle vier zugleich, Nightly-Rust vom Tag des Laufs.
 - **Ergebnis:** alle vier je eine halbe Stunde ohne Fund; mit Bauen dauerte jeder Job rund 41 bis 44 Minuten. Der Workflow sagt nicht, wie viele Eingaben es waren.
+
+### Fuzzing von RSSifier vom 2026-11-22
+
+Das Target `page` aus Paket R2 vor seinem ersten Pull Request: `cargo +nightly fuzz run -O page -- -max_total_time=300 -timeout=10 -rss_limit_mb=2048 -max_len=131072`, ausgehend von sieben selbst gebauten Seiten und 300 zufälligen Eingaben aus dem Korpus der Bereinigung.
+
+- **Maschine:** 4 virtuelle Kerne (Intel Xeon, 2,3 GHz), 15 GB Arbeitsspeicher, ein Kern für den Fuzzer. Nightly-Rust vom 2026-11-21.
+- **Ergebnis:** 62.020 Eingaben in fünf Minuten ohne Fund, rund 200 je Sekunde, höchstens 556 MB. `cargo fuzz cmin` ließ 2.328 Eingaben mit rund 5 MB, die als Korpus gespeichert sind; im Test mit stabilem Rust ohne Optimierung brauchen sie zusammen 8 s.
 
 ### Suche vom 2026-11-11
 

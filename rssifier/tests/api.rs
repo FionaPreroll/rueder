@@ -21,8 +21,9 @@ use axum::{
 use hardened_http::{Config, HttpClient};
 use http_body_util::BodyExt;
 use rssifier::{
-    AppState, app,
+    AppState, Sites, app,
     limits::Pace,
+    recipes::Recipes,
     tokens::{self, Keeper, Limits, Token},
 };
 use serde_json::Value;
@@ -34,6 +35,12 @@ const LISTED: &str = r#"<html><head><title>Club news</title>
  {"@type":"ListItem","item":{"@type":"NewsArticle","headline":"New pitch","url":"/news/pitch"}},
  {"@type":"ListItem","item":{"@type":"NewsArticle","headline":"Elections","url":"/news/elections"}}]}</script>
 </head><body><h1>News</h1></body></html>"#;
+
+/// A page that says nothing about itself, just looks like a list.
+const CLUB: &str = r#"<title>Club</title><nav><a href="/">Home</a> <a href="/club">Club</a></nav>
+<main><div class=item><h3><a href="/club/fair">The summer fair is coming</a></h3><p>Bring a cake.</p></div>
+<div class=item><h3><a href="/club/pitch">Our new pitch is open now</a></h3><p>Since 3 May 2026.</p></div>
+<div class=item><h3><a href="/club/vote">Elections for the board</a></h3><p>Vote! 4 comments</p></div></main>"#;
 
 #[allow(
     clippy::disallowed_methods,
@@ -59,6 +66,12 @@ fn site(hits: Arc<AtomicUsize>) -> Router {
                 r#"<div id=app></div><script src="/app.js"></script>"#,
             )),
         )
+        .route("/club", get(counted(CLUB)))
+        .route("/private", get(counted(LISTED)))
+        .route(
+            "/robots.txt",
+            get(|| async { "User-agent: rueder-rssifier\nDisallow: /private\n" }),
+        )
         .route("/gone", get(|| async { StatusCode::NOT_FOUND }))
 }
 
@@ -71,6 +84,10 @@ struct World {
 
 impl World {
     async fn new(limits: Limits) -> (Self, String) {
+        Self::with(limits, Sites::new(Recipes::default(), "")).await
+    }
+
+    async fn with(limits: Limits, sites: Sites) -> (Self, String) {
         let hits = Arc::new(AtomicUsize::new(0));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let site = listener.local_addr().unwrap();
@@ -96,7 +113,7 @@ impl World {
             host_spacing: Duration::ZERO,
             ..Pace::default()
         };
-        let state = AppState::new(client, Keeper::new(file.clone()).unwrap(), pace);
+        let state = AppState::new(client, Keeper::new(file.clone()).unwrap(), pace, sites);
         let world = Self {
             app: app(state),
             site,
@@ -228,6 +245,52 @@ async fn pages_that_list_nothing_say_why() {
         .get(&world.feed_of("/gone"), Some(&secret), None)
         .await;
     assert_eq!(problem["detail"], "the site answers with 404 Not Found");
+}
+
+#[tokio::test]
+async fn a_page_that_only_looks_like_a_list_is_guessed() {
+    let (world, secret) = World::new(Limits::default()).await;
+    let (status, _, feed) = world
+        .get(&world.feed_of("/club"), Some(&secret), None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{feed}");
+    assert_eq!(feed["_rssifier"]["source"], "guess");
+    let titles: Vec<&str> = feed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        titles,
+        [
+            "The summer fair is coming",
+            "Our new pitch is open now",
+            "Elections for the board"
+        ]
+    );
+    assert_eq!(feed["items"][1]["date_published"], "2026-05-03T00:00:00Z");
+    assert_eq!(feed["items"][2]["content_html"], "<p>Vote!</p>");
+}
+
+#[tokio::test]
+async fn what_robots_txt_or_the_operator_forbids_is_not_fetched() {
+    let (world, secret) = World::new(Limits::default()).await;
+    let (status, _, problem) = world
+        .get(&world.feed_of("/private"), Some(&secret), None)
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(problem["type"], "robots");
+    assert_eq!(world.hits.load(Ordering::SeqCst), 0);
+
+    let blocked = Sites::new(Recipes::default(), "127.0.0.1");
+    let (world, secret) = World::with(Limits::default(), blocked).await;
+    let (status, _, problem) = world
+        .get(&world.feed_of("/news"), Some(&secret), None)
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(problem["type"], "blocked-host");
+    assert_eq!(world.hits.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

@@ -45,7 +45,7 @@
         "properties": {
           "_rssifier": {
             "$ref": "#/components/schemas/Made",
-            "description": "How the entries were found: `json-ld` or `h-feed`."
+            "description": "How the entries were found: `recipe`, `json-ld`, `h-feed` or `guess`."
           },
           "home_page_url": {
             "description": "The page the feed is made of, as RSSifier writes it: a client keeps\nthis one, so that ways of writing the same page are one feed.",
@@ -268,6 +268,16 @@
             },
             "description": "`token`: no token, or an unknown one."
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "`robots`: the site's `robots.txt` does not allow RSSifier the page; `blocked-host`: the operator does not fetch from the host."
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -296,7 +306,7 @@
                 }
               }
             },
-            "description": "`upstream`: the site answers with an error, or not at all."
+            "description": "`upstream`: the site answers with an error, or not at all, or its `robots.txt` cannot be read."
           },
           "503": {
             "content": {
