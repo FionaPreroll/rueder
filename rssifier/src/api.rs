@@ -232,31 +232,23 @@ pub fn page_request(address: &str) -> Request<'_> {
     }
 }
 
-/// Asks the site's `robots.txt`, unless the operator turned on a recipe for
-/// the page that leaves it out, fetches the page and reads it.
+/// Asks the site's `robots.txt`, fetches the page and reads it.
 async fn make(state: &AppState, url: &Url) -> Result<Written, Problem> {
     let address = url.as_str();
     let host = url.host_str().unwrap_or_default();
-    let robots = state
-        .sites
-        .recipes
-        .for_page(url)
-        .is_none_or(|recipe| recipe.robots);
     let fetched = {
         let _place = state.gates.fetch().await;
-        if robots {
-            let rules = state
-                .robots
-                .rules(&state.client, url)
-                .await
-                .map_err(|why| {
-                    let detail = format!("the robots.txt of {host} cannot be read: {why}");
-                    Problem::new(StatusCode::BAD_GATEWAY, "upstream", detail)
-                })?;
-            if !rules.allows(url) {
-                let detail = format!("the robots.txt of {host} does not allow this page");
-                return Err(Problem::new(StatusCode::FORBIDDEN, "robots", detail));
-            }
+        let rules = state
+            .robots
+            .rules(&state.client, url)
+            .await
+            .map_err(|why| {
+                let detail = format!("the robots.txt of {host} cannot be read: {why}");
+                Problem::new(StatusCode::BAD_GATEWAY, "upstream", detail)
+            })?;
+        if !rules.allows(url) {
+            let detail = format!("the robots.txt of {host} does not allow this page");
+            return Err(Problem::new(StatusCode::FORBIDDEN, "robots", detail));
         }
         state.client.get(page_request(address)).await
     };

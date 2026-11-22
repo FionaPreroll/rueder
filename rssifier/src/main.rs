@@ -76,9 +76,6 @@ struct Reading {
     /// those that come with RSSifier.
     #[arg(long, env = "RSSIFIER_RECIPES")]
     recipes: Option<PathBuf>,
-    /// Optional recipes to turn on, comma separated: "reddit".
-    #[arg(long, env = "RSSIFIER_ENABLE", default_value = "")]
-    enable: String,
     /// What RSSifier calls itself when it fetches. `robots.txt` is read for
     /// "rueder-rssifier" whatever this says.
     #[arg(long = "user-agent", env = "RSSIFIER_USER_AGENT", default_value = AGENT)]
@@ -87,11 +84,10 @@ struct Reading {
 
 impl Reading {
     fn recipes(&self) -> anyhow::Result<Recipes> {
-        let recipes = match &self.recipes {
-            Some(file) => Recipes::with_file(file)?,
-            None => Recipes::built_in()?,
-        };
-        recipes.enable(&self.enable)
+        match &self.recipes {
+            Some(file) => Recipes::with_file(file),
+            None => Recipes::built_in(),
+        }
     }
 
     /// Empty, as compose passes it when `.env` names none, is the default.
