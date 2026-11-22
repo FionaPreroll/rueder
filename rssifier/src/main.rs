@@ -45,6 +45,10 @@ enum Command {
         /// separated.
         #[arg(long, env = "RSSIFIER_BLOCKED_HOSTS", default_value = "")]
         blocked: String,
+        /// One more token, named "env" and without limits, so that a setup
+        /// needs no `rssifier token add`.
+        #[arg(long, env = "RSSIFIER_TOKEN", hide_env_values = true)]
+        token: Option<String>,
     },
     /// Makes, lists and ends tokens.
     #[command(subcommand)]
@@ -108,19 +112,32 @@ async fn main() -> anyhow::Result<()> {
             allow,
             recipes,
             blocked,
+            token,
         } => {
             let recipes = match recipes {
                 Some(file) => Recipes::with_file(&file)?,
                 None => Recipes::built_in()?,
             };
-            serve(cli.tokens, listen, &allow, Sites::new(recipes, &blocked)).await
+            let mut keeper = Keeper::new(cli.tokens.clone())?;
+            if let Some(token) = token.filter(|token| !token.is_empty()) {
+                keeper = keeper.with(tokens::chosen(token.trim())?);
+            }
+            serve(
+                keeper,
+                &cli.tokens,
+                listen,
+                &allow,
+                Sites::new(recipes, &blocked),
+            )
+            .await
         }
         Command::Token(command) => token(&cli.tokens, command),
     }
 }
 
 async fn serve(
-    tokens: PathBuf,
+    keeper: Keeper,
+    tokens: &std::path::Path,
     listen: SocketAddr,
     allow: &str,
     sites: Sites,
@@ -139,7 +156,6 @@ async fn serve(
         allow,
         ..Config::default()
     })?;
-    let keeper = Keeper::new(tokens.clone())?;
     let state = AppState::new(client, keeper, Pace::default(), sites);
     let listener = tokio::net::TcpListener::bind(listen)
         .await

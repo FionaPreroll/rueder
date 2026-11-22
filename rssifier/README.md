@@ -80,6 +80,7 @@ and `RSSIFIER_TOKEN=rsf_…` in its own settings.
 | Setting | Default | |
 |---|---|---|
 | `RSSIFIER_TOKENS` | `tokens.json` | The tokens, as SHA-256 with name and limits. `rssifier token` writes it, only readable by its owner; the server reads it again when it changes. |
+| `RSSIFIER_TOKEN` | none | One more token, called `env` and without limits, so that a setup needs no `token add`: `rsf_` and at least 24 letters or digits, e.g. `rsf_$(openssl rand -hex 16)`. rueder gets the same value as its `RSSIFIER_TOKEN`. |
 | `LISTEN_ADDR` | `127.0.0.1:3100` | Where the server listens. |
 | `FETCH_ALLOW_NETS` | none | Internal networks that may be fetched from, comma separated; for tests. |
 | `RSSIFIER_RECIPES` | none | A file of recipes, written like `rules/recipes.toml`, that go before those built in. Read at the start. |

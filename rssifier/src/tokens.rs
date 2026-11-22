@@ -4,7 +4,9 @@
 //! app password of rueder. It is shown once, when it is made; the file keeps
 //! only its SHA-256. The file belongs to the operator and is written by
 //! `rssifier token`; the server reads it again when it changes, so a revoked
-//! token ends with the next request.
+//! token ends with the next request. One more token can come from the
+//! environment (`RSSIFIER_TOKEN`), for a setup that needs no command: it
+//! is called [`FROM_ENV`] and has no limits.
 
 use std::{
     fs, io,
@@ -24,6 +26,8 @@ pub const PREFIX: &str = "rsf_";
 const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 /// How many letters follow the prefix.
 const LETTERS: usize = 24;
+/// The name of the token from the environment.
+pub const FROM_ENV: &str = "env";
 
 /// What one token may do. A limit that is not set does not hold.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -62,6 +66,24 @@ pub fn new_secret() -> anyhow::Result<String> {
         .map(|byte| char::from(ALPHABET[usize::from(byte & 31)]))
         .collect();
     Ok(format!("{PREFIX}{letters}"))
+}
+
+/// The token the operator chose (`RSSIFIER_TOKEN`), if it is long enough to
+/// be one: the prefix and at least as many letters or digits as a token of
+/// RSSifier has, e.g. `rsf_` and `openssl rand -hex 16`.
+pub fn chosen(secret: &str) -> anyhow::Result<Token> {
+    let letters = secret.strip_prefix(PREFIX).unwrap_or_default();
+    if letters.len() < LETTERS || !letters.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        anyhow::bail!(
+            "RSSIFIER_TOKEN has to be {PREFIX} and at least {LETTERS} letters or digits, \
+             e.g. {PREFIX}$(openssl rand -hex 16)"
+        );
+    }
+    Ok(Token {
+        name: FROM_ENV.to_owned(),
+        hash: hash(secret),
+        limits: Limits::default(),
+    })
 }
 
 /// The SHA-256 of a token, in hex, as the file keeps it.
@@ -104,10 +126,12 @@ pub fn save(path: &Path, tokens: &[Token]) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The tokens the server knows, from the file, read again when it changed.
+/// The tokens the server knows, from the file, read again when it changed,
+/// and the one from the environment.
 pub struct Keeper {
     path: PathBuf,
     read: Mutex<(Option<SystemTime>, Arc<Vec<Token>>)>,
+    chosen: Option<Token>,
 }
 
 impl Keeper {
@@ -117,7 +141,16 @@ impl Keeper {
         Ok(Self {
             path,
             read: Mutex::new((modified, Arc::new(tokens))),
+            chosen: None,
         })
+    }
+
+    /// Takes the token from the environment too.
+    pub fn with(self, chosen: Token) -> Self {
+        Self {
+            chosen: Some(chosen),
+            ..self
+        }
     }
 
     /// The token with this secret, if there is one. A file that cannot be read
@@ -125,7 +158,11 @@ impl Keeper {
     pub fn find(&self, secret: &str) -> Option<Token> {
         let tokens = self.current();
         let hash = hash(secret);
-        tokens.iter().find(|token| token.hash == hash).cloned()
+        tokens
+            .iter()
+            .chain(&self.chosen)
+            .find(|token| token.hash == hash)
+            .cloned()
     }
 
     fn current(&self) -> Arc<Vec<Token>> {
@@ -155,5 +192,34 @@ mod tests {
         assert!(letters.bytes().all(|b| ALPHABET.contains(&b)));
         assert_ne!(secret, new_secret().unwrap());
         assert_eq!(hash(&secret).len(), 64);
+    }
+
+    #[test]
+    fn a_chosen_token_has_to_be_long_enough_and_is_found_next_to_the_file() {
+        let dir = std::env::temp_dir().join(format!("rssifier-chosen-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tokens.json");
+        let in_file = new_secret().unwrap();
+        let token = |name: &str, secret: &str| Token {
+            name: name.into(),
+            hash: hash(secret),
+            limits: Limits::default(),
+        };
+        save(&path, &[token("rueder", &in_file)]).unwrap();
+        let secret = new_secret().unwrap();
+        let keeper = Keeper::new(path).unwrap().with(chosen(&secret).unwrap());
+        assert_eq!(keeper.find(&secret).unwrap().name, FROM_ENV);
+        assert_eq!(keeper.find(&in_file).unwrap().name, "rueder");
+        assert!(keeper.find(&format!("{secret}x")).is_none());
+        for wrong in [
+            "",
+            "secret",
+            "rsf_short",
+            "0123456789abcdef0123456789abcdef",
+            "rsf_0123456789abcdef 0123456789abcd",
+        ] {
+            assert!(chosen(wrong).is_err(), "{wrong:?}");
+        }
+        fs::remove_dir_all(dir).unwrap();
     }
 }
