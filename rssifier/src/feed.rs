@@ -23,7 +23,7 @@ pub struct JsonFeed {
     /// this one, so that ways of writing the same page are one feed.
     pub home_page_url: String,
     pub items: Vec<FeedItem>,
-    /// How the entries were found: `json-ld` or `h-feed`.
+    /// How the entries were found: `recipe`, `json-ld`, `h-feed` or `guess`.
     #[serde(rename = "_rssifier")]
     pub rssifier: Made,
 }

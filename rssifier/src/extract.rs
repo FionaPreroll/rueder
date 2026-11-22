@@ -1,17 +1,19 @@
 //! What a page lists, as entries of a feed.
 //!
-//! The first way that finds at least [`MIN_ITEMS`] entries wins, from the most
-//! reliable to the guessed:
+//! A recipe for the page's host goes first ([`crate::recipes`]): the operator
+//! wrote it for this site. Without one, or when it finds nothing, the first
+//! way that finds at least [`MIN_ITEMS`] entries wins, from the most reliable
+//! to the guessed:
 //!
 //! 1. Structured data the page gives about itself: JSON-LD (`ItemList`, and
 //!    articles of schema.org in a list or a `@graph`).
 //! 2. Microformats: `h-entry` elements, as an `h-feed` has them.
+//! 3. The guess from blocks that look alike ([`crate::guess`]).
 //!
-//! Rules for single hosts and a guess from repeated blocks follow in a later
-//! step. An entry has a title, a link, a short text without markup and maybe
-//! an image and a date; nothing that changes from one look to the next, such
-//! as "3 hours ago" or a count of comments, as rueder makes a new version of
-//! an article whenever its text changes.
+//! An entry has a title, a link, a short text without markup and maybe an
+//! image and a date; nothing that changes from one look to the next, such as
+//! "3 hours ago" or a count of comments ([`steady`]), as rueder makes a new
+//! version of an article whenever its text changes.
 
 use std::collections::HashSet;
 
@@ -23,7 +25,7 @@ use time::{
 };
 use url::Url;
 
-use crate::html;
+use crate::{guess, html, recipes::Recipes};
 
 /// Fewer entries than this are no list, just a page that mentions a few things.
 pub const MIN_ITEMS: usize = 3;
@@ -48,7 +50,8 @@ const SCRIPTED_TEXT: usize = 200;
 pub struct Page {
     pub title: String,
     pub items: Vec<Item>,
-    /// Where the entries came from: `json-ld`, `h-feed`, or empty.
+    /// Where the entries came from: `recipe`, `json-ld`, `h-feed`, `guess`,
+    /// or empty.
     pub source: &'static str,
     /// The page has hardly any text but scripts: it is made in the browser.
     pub scripted: bool,
@@ -65,7 +68,7 @@ pub struct Item {
 }
 
 /// What a page lists. A page beyond the limits of the parser lists nothing.
-pub fn page(text: &str, base: &Url) -> Page {
+pub fn page(text: &str, base: &Url, recipes: &Recipes) -> Page {
     let Some(document) = html::read(text) else {
         return Page::default();
     };
@@ -76,12 +79,25 @@ pub fn page(text: &str, base: &Url) -> Page {
         MAX_TITLE,
     );
     let scripted = seen.text < SCRIPTED_TEXT && (seen.scripts > 0 || seen.noscript);
-    let ways: [(&'static str, Vec<Item>); 2] = [
-        ("json-ld", from_json_ld(&seen.json_ld, base)),
-        ("h-feed", from_h_entries(&seen.h_entries, base)),
+    if let Some(recipe) = recipes.for_page(base) {
+        let items = tidy(recipe.items(&document, base), base);
+        if !items.is_empty() {
+            return Page {
+                title,
+                items,
+                source: "recipe",
+                scripted,
+            };
+        }
+    }
+    // Each way only when the one before found too little.
+    let ways: [(&'static str, &dyn Fn() -> Vec<Item>); 3] = [
+        ("json-ld", &|| from_json_ld(&seen.json_ld, base)),
+        ("h-feed", &|| from_h_entries(&seen.h_entries, base)),
+        ("guess", &|| guess::items(&document, base)),
     ];
-    for (source, items) in ways {
-        let items = tidy(items, base);
+    for (source, way) in ways {
+        let items = tidy(way(), base);
         if items.len() >= MIN_ITEMS {
             return Page {
                 title,
@@ -327,6 +343,325 @@ fn tidy(items: Vec<Item>, base: &Url) -> Vec<Item> {
         .collect()
 }
 
+/// The parts of a block of the page that make one entry. What is not named
+/// is looked for in the block: the link at or around the title, else the
+/// first in the block; the title in the heading at or in the link, else the
+/// link; the text of the block without the title; the first `<time>` or date
+/// in the text; the first image.
+#[derive(Default)]
+pub(crate) struct Parts {
+    pub title: Option<Handle>,
+    pub link: Option<Handle>,
+    pub summary: Option<Handle>,
+    pub date: Option<Handle>,
+    pub image: Option<Handle>,
+}
+
+const HEADINGS: [&str; 6] = ["h1", "h2", "h3", "h4", "h5", "h6"];
+
+pub(crate) fn is_heading(node: &Handle) -> bool {
+    HEADINGS.iter().any(|tag| is_element(node, tag))
+}
+
+pub(crate) fn is_link(node: &Handle) -> bool {
+    is_element(node, "a") && attribute(node, "href").is_some()
+}
+
+/// `node` or the nearest element around it, up to `block`, that passes `test`.
+fn around(node: &Handle, block: &Handle, test: impl Fn(&Handle) -> bool) -> Option<Handle> {
+    let mut at = Some(node.clone());
+    while let Some(node) = at {
+        if test(&node) {
+            return Some(node);
+        }
+        if std::rc::Rc::ptr_eq(&node, block) {
+            return None;
+        }
+        at = crate::select::parent(&node);
+    }
+    None
+}
+
+/// The entry a block of the page makes, if it has a link and a title.
+pub(crate) fn block_item(block: &Handle, parts: Parts, base: &Url) -> Option<Item> {
+    let anchor = parts
+        .link
+        .or_else(|| {
+            let title = parts.title.as_ref()?;
+            around(title, block, is_link).or_else(|| find(title, &is_link))
+        })
+        .or_else(|| around(block, block, is_link))
+        .or_else(|| find(block, &is_link))?;
+    let address = attribute(&anchor, "href")?;
+    let title_node = parts
+        .title
+        .or_else(|| around(&anchor, block, is_heading))
+        .or_else(|| find(&anchor, &is_heading))
+        .unwrap_or_else(|| anchor.clone());
+    let title = words(&text_of(&title_node));
+    if title.is_empty() {
+        return None;
+    }
+    let text = match &parts.summary {
+        Some(summary) => words(&text_of(summary)),
+        None => words(&text_without(block, &title_node)),
+    };
+    let summary = clip(&steady(&text), MAX_SUMMARY);
+    let published = match &parts.date {
+        Some(node) => attribute(node, "datetime")
+            .as_deref()
+            .and_then(date)
+            .or_else(|| date_in_text(&text_of(node))),
+        None => find(block, &|node| {
+            is_element(node, "time") && attribute(node, "datetime").is_some()
+        })
+        .and_then(|node| attribute(&node, "datetime"))
+        .as_deref()
+        .and_then(date)
+        .or_else(|| date_in_text(&text_of(block))),
+    };
+    let image = parts
+        .image
+        .or_else(|| find(block, &|node| is_element(node, "img")))
+        .and_then(|node| {
+            ["src", "data-src"]
+                .iter()
+                .filter_map(|name| attribute(&node, name))
+                .find_map(|address| link(base, &address))
+        });
+    Some(Item {
+        url: link(base, &address)?,
+        summary: (!summary.is_empty() && summary != title).then_some(summary),
+        title: clip(&title, MAX_TITLE),
+        image,
+        published,
+    })
+}
+
+/// The text under `block` without `left_out` and without what tells a time.
+fn text_without(block: &Handle, left_out: &Handle) -> String {
+    fn collect(node: &Handle, left_out: &Handle, text: &mut String) {
+        for child in node.children.borrow().iter() {
+            match &child.data {
+                NodeData::Text { contents } => text.push_str(&contents.borrow()),
+                NodeData::Element { name, .. }
+                    if !std::rc::Rc::ptr_eq(child, left_out)
+                        && !matches!(
+                            name.local,
+                            local_name!("script")
+                                | local_name!("style")
+                                | local_name!("time")
+                                | local_name!("button")
+                        ) =>
+                {
+                    collect(child, left_out, text);
+                    text.push(' ');
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut text = String::new();
+    collect(block, left_out, &mut text);
+    text
+}
+
+/// Words that say how long ago something was.
+const UNITS: [&str; 40] = [
+    "s", "sec", "secs", "second", "seconds", "m", "min", "mins", "minute", "minutes", "h", "hr",
+    "hrs", "hour", "hours", "d", "day", "days", "week", "weeks", "month", "months", "year",
+    "years", "sekunde", "sekunden", "minuten", "std", "stunde", "stunden", "tag", "tage", "tagen",
+    "woche", "wochen", "monat", "monate", "monaten", "jahr", "jahren",
+];
+/// Words that follow a count that grows.
+const COUNTED: [&str; 24] = [
+    "comment",
+    "comments",
+    "kommentar",
+    "kommentare",
+    "point",
+    "points",
+    "punkt",
+    "punkte",
+    "like",
+    "likes",
+    "reply",
+    "replies",
+    "antwort",
+    "antworten",
+    "view",
+    "views",
+    "aufruf",
+    "aufrufe",
+    "share",
+    "shares",
+    "vote",
+    "votes",
+    "stimme",
+    "stimmen",
+];
+
+/// Text without what changes from one look at the page to the next: "3 hours
+/// ago", "vor einer Stunde", "12 comments". rueder would make a new version
+/// of the entry each time.
+pub(crate) fn steady(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let plain = |i: usize| {
+        words.get(i).map(|word| {
+            word.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
+    };
+    let is = |i: usize, list: &[&str]| plain(i).is_some_and(|word| list.contains(&word.as_str()));
+    let count = |i: usize| {
+        plain(i).is_some_and(|word| {
+            ["a", "an", "ein", "eine", "einer", "einem", "wenigen"].contains(&word.as_str())
+                || (word.starts_with(|c: char| c.is_ascii_digit())
+                    && word
+                        .chars()
+                        .all(|c| c.is_ascii_digit() || matches!(c, '.' | ',' | 'k')))
+        })
+    };
+    // "3h", "5min": a count and a unit in one word.
+    let glued = |i: usize| {
+        plain(i).is_some_and(|word| {
+            let unit = word.trim_start_matches(|c: char| c.is_ascii_digit());
+            unit.len() < word.len() && UNITS.contains(&unit)
+        })
+    };
+    let mut kept = Vec::with_capacity(words.len());
+    let mut i = 0;
+    while i < words.len() {
+        let three = (is(i, &["vor"]) && count(i + 1) && is(i + 2, &UNITS))
+            || (count(i) && is(i + 1, &UNITS) && is(i + 2, &["ago"]));
+        let two = (glued(i) && is(i + 1, &["ago"]))
+            || (count(i) && is(i + 1, &COUNTED))
+            || (is(i, &["just"]) && is(i + 1, &["now"]))
+            || (is(i, &["gerade"]) && is(i + 1, &["eben"]));
+        let skip = if three {
+            3
+        } else if two {
+            2
+        } else {
+            0
+        };
+        if skip == 0 {
+            kept.push(words[i]);
+            i += 1;
+        } else {
+            i += skip;
+        }
+    }
+    kept.join(" ")
+}
+
+const MONTHS: [(&str, u8); 37] = [
+    ("jan", 1),
+    ("januar", 1),
+    ("january", 1),
+    ("feb", 2),
+    ("februar", 2),
+    ("february", 2),
+    ("mar", 3),
+    ("mär", 3),
+    ("märz", 3),
+    ("march", 3),
+    ("apr", 4),
+    ("april", 4),
+    ("mai", 5),
+    ("may", 5),
+    ("jun", 6),
+    ("juni", 6),
+    ("june", 6),
+    ("jul", 7),
+    ("juli", 7),
+    ("july", 7),
+    ("aug", 8),
+    ("august", 8),
+    ("sep", 9),
+    ("sept", 9),
+    ("september", 9),
+    ("okt", 10),
+    ("oct", 10),
+    ("oktober", 10),
+    ("october", 10),
+    ("nov", 11),
+    ("november", 11),
+    ("dez", 12),
+    ("dec", 12),
+    ("dezember", 12),
+    ("december", 12),
+    ("maerz", 3),
+    ("jänner", 1),
+];
+/// How many words of a text are looked through for a date.
+const DATE_WORDS: usize = 300;
+
+/// The first date in a text as people write it: `2026-11-20`, `20.11.2026`,
+/// `20. November 2026`, `20 Nov 2026`, `November 20, 2026`.
+pub(crate) fn date_in_text(text: &str) -> Option<OffsetDateTime> {
+    let words: Vec<String> = text
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|word| !word.is_empty())
+        .take(DATE_WORDS)
+        .map(str::to_lowercase)
+        .collect();
+    let day = |word: &str| {
+        let word = word.trim_end_matches('.');
+        let word = ["st", "nd", "rd", "th"]
+            .iter()
+            .find_map(|end| word.strip_suffix(end))
+            .unwrap_or(word);
+        word.parse::<u8>().ok().filter(|day| (1..=31).contains(day))
+    };
+    let month = |word: &str| {
+        let word = word.trim_end_matches('.');
+        MONTHS
+            .iter()
+            .find(|(name, _)| *name == word)
+            .map(|(_, month)| *month)
+    };
+    let year = |word: &str| {
+        let word = word.trim_end_matches(|c: char| !c.is_ascii_digit());
+        (word.len() == 4)
+            .then(|| word.parse::<i32>().ok())
+            .flatten()
+            .filter(|year| (1990..=2100).contains(year))
+    };
+    let made = |year: i32, month: u8, day: u8| {
+        let month = time::Month::try_from(month).ok()?;
+        Some(
+            Date::from_calendar_date(year, month, day)
+                .ok()?
+                .midnight()
+                .assume_utc(),
+        )
+    };
+    let at = |i: usize| words.get(i).map(String::as_str).unwrap_or_default();
+    for i in 0..words.len() {
+        let word = at(i).trim_matches(|c: char| !c.is_ascii_digit());
+        let found = if word.len() >= 10 && word.as_bytes().get(4) == Some(&b'-') {
+            date(word)
+        } else if let [d, m, y] = word.split('.').collect::<Vec<_>>()[..]
+            && let (Some(d), Ok(m), Some(y)) = (day(d), m.parse::<u8>(), year(y))
+        {
+            made(y, m, d)
+        } else if let (Some(d), Some(m), Some(y)) = (day(at(i)), month(at(i + 1)), year(at(i + 2)))
+        {
+            made(y, m, d)
+        } else if let (Some(m), Some(d), Some(y)) = (month(at(i)), day(at(i + 1)), year(at(i + 2)))
+        {
+            made(y, m, d)
+        } else {
+            None
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
 /// An address as the page wrote it, made whole: only http and https, without
 /// the part after `#` and without the parameters that only track.
 pub fn link(base: &Url, address: &str) -> Option<Url> {
@@ -352,7 +687,7 @@ pub fn link(base: &Url, address: &str) -> Option<Url> {
 }
 
 /// A date as pages write it for machines: RFC 3339, or just the day.
-fn date(text: &str) -> Option<OffsetDateTime> {
+pub(crate) fn date(text: &str) -> Option<OffsetDateTime> {
     let text = text.trim();
     if let Ok(at) = OffsetDateTime::parse(text, &Rfc3339) {
         return Some(at);
@@ -361,11 +696,11 @@ fn date(text: &str) -> Option<OffsetDateTime> {
     Some(day.midnight().assume_utc())
 }
 
-fn is_element(node: &Handle, tag: &str) -> bool {
+pub(crate) fn is_element(node: &Handle, tag: &str) -> bool {
     matches!(&node.data, NodeData::Element { name, .. } if &*name.local == tag)
 }
 
-fn attribute(node: &Handle, wanted: &str) -> Option<String> {
+pub(crate) fn attribute(node: &Handle, wanted: &str) -> Option<String> {
     let NodeData::Element { attrs, .. } = &node.data else {
         return None;
     };
@@ -376,13 +711,13 @@ fn attribute(node: &Handle, wanted: &str) -> Option<String> {
         .map(|attr| attr.value.to_string())
 }
 
-fn has_class(node: &Handle, class: &str) -> bool {
+pub(crate) fn has_class(node: &Handle, class: &str) -> bool {
     attribute(node, "class")
         .is_some_and(|classes| classes.split_ascii_whitespace().any(|c| c == class))
 }
 
 /// The first element under `node` (itself left out) that passes `test`.
-fn find(node: &Handle, test: &dyn Fn(&Handle) -> bool) -> Option<Handle> {
+pub(crate) fn find(node: &Handle, test: &dyn Fn(&Handle) -> bool) -> Option<Handle> {
     for child in node.children.borrow().iter() {
         if matches!(child.data, NodeData::Element { .. }) {
             if test(child) {
@@ -397,7 +732,7 @@ fn find(node: &Handle, test: &dyn Fn(&Handle) -> bool) -> Option<Handle> {
 }
 
 /// The text under a node, without scripts and styles.
-fn text_of(node: &Handle) -> String {
+pub(crate) fn text_of(node: &Handle) -> String {
     let mut text = String::new();
     collect_text(node, &mut text);
     text
@@ -420,12 +755,12 @@ fn collect_text(node: &Handle, text: &mut String) {
 }
 
 /// Text with every run of white space as one space.
-fn words(text: &str) -> String {
+pub(crate) fn words(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// At most `most` characters, with "…" where it was cut.
-fn clip(text: &str, most: usize) -> String {
+pub(crate) fn clip(text: &str, most: usize) -> String {
     match text.char_indices().nth(most) {
         None => text.to_owned(),
         Some((end, _)) => format!("{}…", text[..end].trim_end()),
@@ -452,7 +787,7 @@ mod tests {
                 {"@type":"ListItem","position":3,"item":{"@type":"BlogPosting","headline":"Three",
                   "mainEntityOfPage":{"@id":"https://example.org/news/3"},"datePublished":"2026-11-18"}}
               ]}</script></head><body><p>Hello</p></body></html>"#;
-        let page = page(html, &base());
+        let page = page(html, &base(), &Recipes::default());
         assert_eq!(page.source, "json-ld");
         assert_eq!(page.title, "News");
         let one = &page.items[0];
@@ -478,7 +813,7 @@ mod tests {
             {"@type":"Article","headline":"This page","url":"https://example.org/news/"},
             {"@type":"Article","headline":"A","url":"/a"},
             {"@type":"Article","headline":"B","url":"/b"}]</script>"#;
-        let page = page(html, &base());
+        let page = page(html, &base(), &Recipes::default());
         assert!(page.items.is_empty(), "{:?}", page.items);
     }
 
@@ -497,7 +832,7 @@ mod tests {
             entry(2),
             entry(3)
         );
-        let page = page(&html, &base());
+        let page = page(&html, &base(), &Recipes::default());
         assert_eq!(page.source, "h-feed");
         assert_eq!(page.title, "Blog");
         assert_eq!(page.items.len(), 3);
@@ -517,12 +852,14 @@ mod tests {
         let plain = page(
             "<title>Hi</title><p>Just a page with <a href=/a>a link</a>.</p>",
             &base(),
+            &Recipes::default(),
         );
         assert!(plain.items.is_empty());
         assert!(!plain.scripted);
         let scripted = page(
             r#"<div id="app"></div><noscript>Enable JavaScript</noscript><script src="/app.js"></script>"#,
             &base(),
+            &Recipes::default(),
         );
         assert!(scripted.items.is_empty());
         assert!(scripted.scripted);
@@ -532,7 +869,7 @@ mod tests {
     fn a_page_beyond_the_limits_of_the_parser_lists_nothing_and_ends_soon() {
         let deep = "<div>".repeat(100_000);
         let started = std::time::Instant::now();
-        assert_eq!(page(&deep, &base()), Page::default());
+        assert_eq!(page(&deep, &base(), &Recipes::default()), Page::default());
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 
@@ -543,11 +880,12 @@ mod tests {
             "[".repeat(10_000),
             "]".repeat(10_000)
         );
-        assert!(page(&deep, &base()).items.is_empty());
+        assert!(page(&deep, &base(), &Recipes::default()).items.is_empty());
         assert!(
             page(
                 r#"<script type="application/ld+json">{"@type":</script>"#,
-                &base()
+                &base(),
+                &Recipes::default(),
             )
             .items
             .is_empty()
@@ -567,6 +905,45 @@ mod tests {
         );
         assert!(link(&base, "javascript:alert(1)").is_none());
         assert!(link(&base, "mailto:a@example.org").is_none());
+    }
+
+    #[test]
+    fn what_changes_from_look_to_look_is_left_out() {
+        assert_eq!(
+            steady("Neu: Grillfest vor 3 Stunden · 12 Kommentare (1.2k likes)"),
+            "Neu: Grillfest ·"
+        );
+        assert_eq!(steady("posted an hour ago, 5h ago, just now"), "posted");
+        assert_eq!(steady("vor einer Woche"), "");
+        // What only looks like it stays.
+        assert_eq!(
+            steady("Vor dem Rathaus 3 Tage Fest"),
+            "Vor dem Rathaus 3 Tage Fest"
+        );
+    }
+
+    #[test]
+    fn dates_are_read_as_people_write_them() {
+        let day = |text: &str| date_in_text(text).map(|at| at.date().to_string());
+        for (text, wanted) in [
+            ("am 20.11.2026 um 10 Uhr", "2026-11-20"),
+            ("Freitag, 20. November 2026", "2026-11-20"),
+            ("Posted Nov 20th, 2026", "2026-11-20"),
+            ("20 Nov. 2026", "2026-11-20"),
+            ("on 2026-11-20T10:00", "2026-11-20"),
+            ("3. März 2026", "2026-03-03"),
+        ] {
+            assert_eq!(day(text).as_deref(), Some(wanted), "{text}");
+        }
+        for text in [
+            "31.02.2026",
+            "20. Smarch 2026",
+            "Version 1.2.3",
+            "20 Nov 26",
+            "",
+        ] {
+            assert_eq!(day(text), None, "{text}");
+        }
     }
 
     #[test]

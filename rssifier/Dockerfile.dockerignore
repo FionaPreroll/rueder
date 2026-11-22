@@ -5,3 +5,4 @@
 rssifier/target
 hardened-http/target
 **/tokens.json
+rssifier/fuzz

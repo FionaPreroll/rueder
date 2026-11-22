@@ -1,0 +1,27 @@
+[package]
+name = "rssifier-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.12"
+rssifier = { path = ".." }
+url = "2.5.8"
+
+# Its own workspace: the fuzz targets need nightly Rust, RSSifier does not.
+[workspace]
+members = ["."]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "page"
+path = "fuzz_targets/page.rs"
+test = false
+doc = false
+bench = false

@@ -6,8 +6,9 @@ use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use hardened_http::{Config, HttpClient, Net};
 use rssifier::{
-    AGENT, AppState, app,
+    AGENT, AppState, Sites, app,
     limits::Pace,
+    recipes::Recipes,
     tokens::{self, Keeper, Limits, Token},
 };
 
@@ -36,6 +37,14 @@ enum Command {
         /// separated; for tests against a server on this machine.
         #[arg(long, env = "FETCH_ALLOW_NETS", default_value = "")]
         allow: String,
+        /// A file of recipes, written like `rules/recipes.toml`, that go
+        /// before those that come with RSSifier.
+        #[arg(long, env = "RSSIFIER_RECIPES")]
+        recipes: Option<PathBuf>,
+        /// Hosts never fetched from, each also for its subdomains, comma
+        /// separated.
+        #[arg(long, env = "RSSIFIER_BLOCKED_HOSTS", default_value = "")]
+        blocked: String,
     },
     /// Makes, lists and ends tokens.
     #[command(subcommand)]
@@ -94,12 +103,28 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let cli = Cli::parse();
     match cli.command {
-        Command::Serve { listen, allow } => serve(cli.tokens, listen, &allow).await,
+        Command::Serve {
+            listen,
+            allow,
+            recipes,
+            blocked,
+        } => {
+            let recipes = match recipes {
+                Some(file) => Recipes::with_file(&file)?,
+                None => Recipes::built_in()?,
+            };
+            serve(cli.tokens, listen, &allow, Sites::new(recipes, &blocked)).await
+        }
         Command::Token(command) => token(&cli.tokens, command),
     }
 }
 
-async fn serve(tokens: PathBuf, listen: SocketAddr, allow: &str) -> anyhow::Result<()> {
+async fn serve(
+    tokens: PathBuf,
+    listen: SocketAddr,
+    allow: &str,
+    sites: Sites,
+) -> anyhow::Result<()> {
     let allow = allow
         .split(',')
         .map(str::trim)
@@ -115,7 +140,7 @@ async fn serve(tokens: PathBuf, listen: SocketAddr, allow: &str) -> anyhow::Resu
         ..Config::default()
     })?;
     let keeper = Keeper::new(tokens.clone())?;
-    let state = AppState::new(client, keeper, Pace::default());
+    let state = AppState::new(client, keeper, Pace::default(), sites);
     let listener = tokio::net::TcpListener::bind(listen)
         .await
         .with_context(|| format!("listening on {listen}"))?;

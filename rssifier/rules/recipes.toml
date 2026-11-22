@@ -1,0 +1,35 @@
+# Recipes: how to read the pages of one site that has no feed and whose pages
+# say nothing about themselves that RSSifier understands (no JSON-LD, no
+# h-entry). A recipe goes first: for a page it fits, RSSifier only tries the
+# structured data and the guess when the recipe finds nothing.
+#
+# These are built into the program; RSSIFIER_RECIPES names a file of more,
+# written the same way, whose recipes go before these.
+#
+# Each recipe:
+#
+#   host      the host, which also stands for its subdomains ("example.org"
+#             fits "www.example.org" too)
+#   path      optional: the start of the path of the pages it fits ("/news/");
+#             of the recipes for a host, the one with the longest path wins
+#   item      a selector for each entry
+#   title     optional, below the item: the title; else the heading at or in
+#             the link, else the link
+#   link      optional, below the item: what has the address in `href`; else
+#             the link at or around the title, else the first link
+#   summary   optional, below the item: the text; else the text of the item
+#             without the title
+#   date      optional, below the item: what has the date in `datetime` or in
+#             its text; else the first <time datetime>, else a date in the text
+#   image     optional, below the item: the image; else the first one
+#
+# Selectors are the simple part of CSS: tags, .classes, #ids and [attributes]
+# or [attributes=values], one inside another separated by spaces, several
+# separated by commas. Nothing else, no ">" and nothing with ":".
+#
+# [[recipe]]
+# host = "example.org"
+# path = "/news/"
+# item = "main .news-list li"
+# title = "h3"
+# date = ".date"
