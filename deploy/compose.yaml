@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgres://rueder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/rueder
       # RSSifier next door, once .env names the token both share.
       RSSIFIER_URL: ${RSSIFIER_TOKEN:+http://rssifier:3100/}
+      RSSIFIER_TOKEN: ${RSSIFIER_TOKEN:-}
     # Only this machine reaches rueder: a reverse proxy in front of it does
     # TLS, without which nobody can log in.
     ports:
