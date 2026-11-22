@@ -850,6 +850,7 @@ const ru: Messages = {
 		subscribed: 'Вы подписаны',
 		show: 'Показать',
 		untitled: 'Без названия',
+		page: 'Сайт без ленты: rueder делает из него ленту, только с заголовками и анонсами.',
 		folder: 'В папку',
 		topLevel: 'Без папки',
 		add: 'Подписаться',
@@ -1066,6 +1067,20 @@ const ru: Messages = {
 				`${n(found)} нашли ленты, ${n(none)} ничего не нашли, ${n(failed)} с ошибкой`,
 			limited: 'Сверх лимита аккаунта',
 			took: 'Время на поиск'
+		},
+		rssifier: {
+			title: 'Сайты без ленты',
+			state: 'RSSifier',
+			pages: 'Читаемые сайты',
+			pagesValue: (pages, failing) => `${n(pages)}, из них с ошибкой: ${n(failing)}`,
+			used: 'Расход токена',
+			usedValue: (requests, fetches, underWay) =>
+				`запросов за последнюю минуту: ${n(requests)}, страниц загружено за последний час: ${n(fetches)}, выполняется: ${n(underWay)}`,
+			unanswered: (why) => `RSSifier не отвечает: ${why}`,
+			limits: 'Лимиты токена',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`в минуту: ${perMinute}, страниц в час: ${perHour}, одновременно: ${atOnce}`,
+			noLimit: 'без лимита'
 		},
 		images: {
 			title: 'Прокси изображений',

@@ -2,8 +2,10 @@
 //! taking a list of subscriptions in and out as OPML.
 //!
 //! An address a reader types is fetched by the hardened HTTP client and by
-//! nothing else. A feed that is new is fetched before anybody subscribes to
-//! it, so no address becomes a feed without being one. An OPML file is the
+//! nothing else. A web page that names no feed is asked of RSSifier, if the
+//! server has it, which makes a feed of what the page lists. A feed that is
+//! new is fetched before anybody subscribes to it, so no address becomes a
+//! feed without being one. An OPML file is the
 //! exception: its feeds are taken on trust and fetched by the next round,
 //! and the ones that are none show their error in the tree.
 
@@ -40,6 +42,7 @@ use crate::{
     filters,
     http_client::{self, HttpClient, Request},
     monitor::Looked,
+    rssifier::{self, Rssifier},
     sessions::Session,
     tree::{self, bad},
 };
@@ -142,6 +145,9 @@ pub(crate) struct Candidate {
     pub(crate) title: String,
     /// The number of the feed if the reader subscribes to it already.
     feed_id: Option<i32>,
+    /// A web page without a feed, whose feed RSSifier makes: of titles and
+    /// summaries, not of whole texts.
+    pub(crate) page: bool,
 }
 
 /// What `POST /api/feeds/find` answers.
@@ -198,6 +204,7 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
             url: response.url.to_string(),
             title: feed.title.unwrap_or_default(),
             feed_id: None,
+            page: false,
         }];
     }
     let body = &response.body[..response.body.len().min(MAX_PAGE)];
@@ -218,6 +225,7 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
             url: channel.into(),
             title,
             feed_id: None,
+            page: false,
         });
     }
     for link in page.links {
@@ -226,6 +234,7 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
                 url: link.url.into(),
                 title: link.title,
                 feed_id: None,
+                page: false,
             });
         }
     }
@@ -233,7 +242,9 @@ fn candidates(response: &http_client::Response, rules: &Rules) -> Vec<Candidate>
 }
 
 /// Looks at an address for feeds. An address that is a feed is the one feed;
-/// a web page has the feeds it names, which nobody has looked at yet.
+/// a web page has the feeds it names, which nobody has looked at yet. A page
+/// that names none is, where the server has RSSifier and it finds a list on
+/// the page, a feed of its own.
 #[utoipa::path(
     post,
     path = "/feeds/find",
@@ -284,13 +295,20 @@ async fn look(state: &AppState, session: &Session, url: Url) -> Result<Json<Foun
     }
     let moved_to = (response.url != url).then(|| response.url.to_string());
     let rules = rules(state)?;
+    let page = response.url.clone();
     // Reading a feed or a page takes a while.
     let mut feeds = tokio::task::spawn_blocking(move || candidates(&response, &rules)).await?;
+    if feeds.is_empty()
+        && let Some(rssifier) = &state.rssifier
+    {
+        feeds.extend(of_page(rssifier, &page).await);
+    }
     // What the reader subscribes to already says so.
     let urls: Vec<String> = feeds.iter().map(|feed| feed.url.clone()).collect();
     let read = sqlx::query!(
-        "SELECT f.id, f.feed_url FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
-         WHERE s.account_id = $1 AND f.feed_url = ANY($2)",
+        r#"SELECT f.id, f.feed_url, f.source = 'page' AS "page!"
+           FROM subscriptions s JOIN feeds f ON f.id = s.feed_id
+           WHERE s.account_id = $1 AND f.feed_url = ANY($2)"#,
         session.account_id,
         &urls,
     )
@@ -299,10 +317,36 @@ async fn look(state: &AppState, session: &Session, url: Url) -> Result<Json<Foun
     for feed in &mut feeds {
         feed.feed_id = read
             .iter()
-            .find(|row| row.feed_url == feed.url)
+            .find(|row| row.feed_url == feed.url && row.page == feed.page)
             .map(|row| row.id);
     }
     Ok(Json(Found { feeds, moved_to }))
+}
+
+/// The feed RSSifier makes of a page, if it finds a list there. Why not, if it
+/// does not, is no answer to the search: the page has no feed then either.
+async fn of_page(rssifier: &Rssifier, page: &Url) -> Option<Candidate> {
+    let response = match rssifier.feed(page.as_str(), None).await {
+        Ok(response) if response.status.is_success() => response,
+        Ok(response) => {
+            tracing::debug!(%page, "RSSifier: {}", rssifier::problem(&response));
+            return None;
+        }
+        Err(err) => {
+            tracing::warn!("RSSifier cannot be reached: {err}");
+            return None;
+        }
+    };
+    let made: rssifier::Page = serde_json::from_slice(&response.body)
+        .inspect_err(|err| tracing::warn!("RSSifier answers no feed: {err}"))
+        .ok()?;
+    let url = address(&made.home_page_url).ok()?;
+    Some(Candidate {
+        url: url.into(),
+        title: made.title,
+        feed_id: None,
+        page: true,
+    })
 }
 
 /// What `POST /api/feeds` reads. It answers with `Subscribed`.
@@ -312,6 +356,9 @@ async fn look(state: &AppState, session: &Session, url: Url) -> Result<Json<Foun
 pub(crate) struct New {
     pub(crate) url: String,
     pub(crate) folder_id: Option<i32>,
+    /// The address is of a web page without a feed, as the search found it:
+    /// its feed comes from RSSifier.
+    pub(crate) page: Option<bool>,
 }
 
 /// The answer to subscribing: the number of the feed.
@@ -320,17 +367,20 @@ pub(crate) struct Subscribed {
     pub(crate) id: i32,
 }
 
-/// The feed at this address that is there already: the oldest, as the store
-/// does not rule out two.
+/// The feed at this address that is there already, of a web page or not: the
+/// oldest, as the store does not rule out two.
 async fn known(
     conn: &mut PgConnection,
     url: &str,
+    page: bool,
     before: Option<i32>,
 ) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar!(
-        "SELECT id FROM feeds WHERE feed_url = $1 AND ($2::int4 IS NULL OR id < $2)
+        "SELECT id FROM feeds
+         WHERE feed_url = $1 AND (source = 'page') = $2 AND ($3::int4 IS NULL OR id < $3)
          ORDER BY id LIMIT 1",
         url,
+        page,
         before,
     )
     .fetch_optional(conn)
@@ -348,21 +398,32 @@ async fn blocked(conn: &mut PgConnection, feed_id: i32) -> sqlx::Result<bool> {
     .unwrap_or(false))
 }
 
-/// Makes a feed of an address: fetches it, and keeps it only if that worked.
-async fn create(state: &AppState, url: &Url) -> Result<i32, AppError> {
+/// Makes a feed of an address, or of a web page through RSSifier: fetches it,
+/// and keeps it only if that worked.
+async fn create(state: &AppState, url: &Url, page: bool) -> Result<i32, AppError> {
     let (client, rules) = (client(state)?, rules(state)?);
+    let rssifier = state.rssifier.as_deref();
+    if page && rssifier.is_none() {
+        let message = "this server reads no web pages without a feed";
+        return Err(AppError::Status(
+            StatusCode::SERVICE_UNAVAILABLE,
+            message.into(),
+        ));
+    }
+    let source = if page { "page" } else { "feed" };
     let id = sqlx::query_scalar!(
-        "INSERT INTO feeds (feed_url) VALUES ($1) RETURNING id",
-        url.as_str()
+        "INSERT INTO feeds (feed_url, source) VALUES ($1, $2) RETURNING id",
+        url.as_str(),
+        source,
     )
     .fetch_one(&state.db)
     .await?;
-    let outcome = fetch::fetch_feed(&state.db, client, &rules, id).await;
+    let outcome = fetch::fetch_feed(&state.db, client, rssifier, &rules, id).await;
     let mut conn = state.db.acquire().await?;
     // Somebody may have made the same feed meanwhile: the older one stays.
     let older = match &outcome {
         Ok(Outcome::Fetched(_) | Outcome::NotModified) => {
-            known(&mut conn, url.as_str(), Some(id)).await?
+            known(&mut conn, url.as_str(), page, Some(id)).await?
         }
         _ => None,
     };
@@ -441,15 +502,16 @@ async fn own_folder(conn: &mut PgConnection, account_id: i32, id: i32) -> Result
 }
 
 /// Subscribes to the feed at an address: 201 with its number, or 200 if the
-/// reader has it already. The address has to be the feed itself; `find` says
-/// which feeds a web page has.
+/// reader has it already. The address has to be the feed itself, or with
+/// `page` a web page whose feed RSSifier makes; `find` says which feeds a web
+/// page has.
 #[utoipa::path(
     post,
     path = "/feeds",
     tag = "Subscribing",
     request_body = New,
     security(("session" = [])),
-    responses((status = CREATED, description = "Subscribed.", body = Subscribed), (status = OK, description = "The account reads this feed already.", body = Subscribed), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Not a feed, an address the server does not go to, or as many feeds as an account may have (2,000)."), (status = FORBIDDEN, description = "The operator blocked this feed."), (status = TOO_MANY_REQUESTS, description = "Too many lookups of addresses; see `Retry-After`.")),
+    responses((status = CREATED, description = "Subscribed.", body = Subscribed), (status = OK, description = "The account reads this feed already.", body = Subscribed), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Not a feed, an address the server does not go to, or as many feeds as an account may have (2,000)."), (status = FORBIDDEN, description = "The operator blocked this feed."), (status = TOO_MANY_REQUESTS, description = "Too many lookups of addresses; see `Retry-After`."), (status = SERVICE_UNAVAILABLE, description = "This server does not fetch feeds, or reads no web pages without a feed.")),
 )]
 pub(crate) async fn subscribe(
     State(state): State<AppState>,
@@ -458,15 +520,16 @@ pub(crate) async fn subscribe(
 ) -> Result<(StatusCode, Json<Subscribed>), AppError> {
     let account_id = session.account_id;
     let url = address(&new.url)?;
+    let page = new.page.unwrap_or(false);
     let mut conn = state.db.acquire().await?;
     if let Some(folder) = new.folder_id {
         own_folder(&mut conn, account_id, folder).await?;
     }
     // A feed is known by its address as it is written here, or as the old
     // rueder wrote it down.
-    let mut feed = known(&mut conn, url.as_str(), None).await?;
+    let mut feed = known(&mut conn, url.as_str(), page, None).await?;
     if feed.is_none() && new.url.trim() != url.as_str() {
-        feed = known(&mut conn, new.url.trim(), None).await?;
+        feed = known(&mut conn, new.url.trim(), page, None).await?;
     }
     if let Some(id) = feed
         && blocked(&mut conn, id).await?
@@ -482,7 +545,7 @@ pub(crate) async fn subscribe(
             let now = Instant::now();
             state.rates.lookup(account_id, now)?;
             state.rates.new_feeds(account_id, 1, now)?;
-            (create(&state, &url).await?, true)
+            (create(&state, &url, page).await?, true)
         }
     };
     let mut tx = state.db.begin().await?;
@@ -894,7 +957,7 @@ pub(crate) async fn take(
                 let Some((path, url, title)) = outline.feeds.get(at) else {
                     continue;
                 };
-                let (feed_id, created) = match known(&mut *tx, url.as_str(), None).await? {
+                let (feed_id, created) = match known(&mut *tx, url.as_str(), false, None).await? {
                     // A blocked feed comes in neither with a file nor with a move.
                     Some(id) if blocked(&mut *tx, id).await? => continue,
                     Some(id) => (id, false),

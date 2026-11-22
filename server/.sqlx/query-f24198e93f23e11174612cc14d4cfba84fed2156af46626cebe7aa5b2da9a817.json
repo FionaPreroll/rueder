@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"pages!\", count(*) FILTER (WHERE f.error_message IS NOT NULL) AS \"failing!\"\n           FROM feeds f\n           WHERE f.source = 'page' AND f.blocked_at IS NULL\n             AND EXISTS (SELECT 1 FROM subscriptions s JOIN accounts a ON a.id = s.account_id\n                         WHERE s.feed_id = f.id AND a.disabled_at IS NULL)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "failing!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "f24198e93f23e11174612cc14d4cfba84fed2156af46626cebe7aa5b2da9a817"
+}

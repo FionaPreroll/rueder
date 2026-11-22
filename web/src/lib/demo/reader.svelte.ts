@@ -61,6 +61,12 @@ const PAGE = 40;
 /** Unread articles the made-up account starts with, feed by feed in the order of the data. */
 const startUnread = [3, 0, 2, 7, 1, 12, 18, 9, 1, 0, 4, 0, 2, 5];
 
+/**
+ * The made-up website without a feed of its own: any address on its host is found as
+ * its news page, which the server would make a feed of.
+ */
+const WEBSITE = new URL('https://club.example/news');
+
 /** What a reader typed, as an address of the web; without a scheme it is https. */
 function webAddress(text: string): URL | null {
 	const trimmed = text.trim();
@@ -574,14 +580,16 @@ export class DemoReader implements Reader {
 
 	/**
 	 * The draft cannot fetch, so whatever looks like an address is taken as a feed,
-	 * named after its host.
+	 * named after its host; one on the host of the made-up website is that website.
 	 */
 	async findFeeds(address: string): Promise<Found> {
-		const url = webAddress(address);
-		if (!url) return { problem: 'refused', reason: '' };
+		const typed = webAddress(address);
+		if (!typed) return { problem: 'refused', reason: '' };
+		const page = typed.hostname === WEBSITE.hostname;
+		const url = page ? WEBSITE : typed;
 		const known = this.addresses.get(url.href);
 		const feedId = known && this.feeds[known] ? known : null;
-		return { feeds: [{ url: url.href, title: url.hostname, feedId }], movedTo: null };
+		return { feeds: [{ url: url.href, title: url.hostname, feedId, page }], movedTo: null };
 	}
 
 	/** Adds a feed for an address; it starts empty and stays so. */

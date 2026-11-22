@@ -426,9 +426,9 @@ export const api = {
 
 	/** The feeds at an address: the feed itself, or those a web page names. */
 	findFeeds: (url: string) => call<FoundFeeds>('POST', '/feeds/find', { url } satisfies FindFeeds),
-	/** Subscribes to the feed at an address and gives back its number. */
-	subscribe: async (url: string, folderId: number | null) => {
-		const body: NewSubscription = { url, folder_id: folderId };
+	/** Subscribes to the feed at an address, or of a web page, and gives back its number. */
+	subscribe: async (url: string, folderId: number | null, page = false) => {
+		const body: NewSubscription = { url, folder_id: folderId, page };
 		return (await call<Subscribed>('POST', '/feeds', body)).id;
 	},
 	/** An empty title gives the feed its own name back. */

@@ -793,6 +793,7 @@ const zhHant: Messages = {
 		subscribed: '已訂閱',
 		show: '顯示',
 		untitled: '沒有名稱',
+		page: '一個沒有訂閱源的網站：rueder 會為它產生一個，只有標題和摘要。',
 		folder: '放入資料夾',
 		topLevel: '不放入資料夾',
 		add: '訂閱',
@@ -984,6 +985,20 @@ const zhHant: Messages = {
 				`找到訂閱源 ${n(found)} 次，沒有找到 ${n(none)} 次，失敗 ${n(failed)} 次`,
 			limited: '超過帳號限額',
 			took: '每次尋找的時間'
+		},
+		rssifier: {
+			title: '沒有訂閱源的網站',
+			state: 'RSSifier',
+			pages: '閱讀中的網站',
+			pagesValue: (pages, failing) => `${n(pages)} 個，其中 ${n(failing)} 個失敗`,
+			used: '權杖用量',
+			usedValue: (requests, fetches, underWay) =>
+				`最近一分鐘 ${n(requests)} 次請求，最近一小時抓取 ${n(fetches)} 個頁面，進行中 ${n(underWay)} 個`,
+			unanswered: (why) => `RSSifier 沒有回應：${why}`,
+			limits: '權杖限額',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`每分鐘 ${perMinute}，每小時 ${perHour} 個頁面，同時 ${atOnce} 個`,
+			noLimit: '無限制'
 		},
 		images: {
 			title: '圖片代理伺服器',

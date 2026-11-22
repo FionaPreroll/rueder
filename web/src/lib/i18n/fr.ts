@@ -843,6 +843,7 @@ const fr: Messages = {
 		subscribed: 'Abonné',
 		show: 'Afficher',
 		untitled: 'Sans nom',
+		page: 'Un site web sans flux : rueder en fait un, avec seulement les titres et les résumés.',
 		folder: 'Dans le dossier',
 		topLevel: 'Aucun dossier',
 		add: 'S’abonner',
@@ -1059,6 +1060,20 @@ const fr: Messages = {
 				`${n(found)} ont trouvé des flux, ${n(none)} aucun, ${n(failed)} en échec`,
 			limited: 'Au-delà de la limite du compte',
 			took: 'Durée par recherche'
+		},
+		rssifier: {
+			title: 'Sites web sans flux',
+			state: 'RSSifier',
+			pages: 'Sites web lus',
+			pagesValue: (pages, failing) => `${n(pages)}, dont ${n(failing)} en échec`,
+			used: 'Utilisation du jeton',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} requêtes dans la dernière minute, ${n(fetches)} pages récupérées dans la dernière heure, ${n(underWay)} en cours`,
+			unanswered: (why) => `RSSifier ne répond pas : ${why}`,
+			limits: 'Limites du jeton',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} par minute, ${perHour} pages par heure, ${atOnce} à la fois`,
+			noLimit: 'sans limite'
 		},
 		images: {
 			title: 'Proxy d’images',

@@ -292,7 +292,7 @@ async fn a_blocked_feed_is_not_fetched_seen_or_subscribed_to(db: PgPool) {
     let monitor = Arc::new(Monitor::default());
     let pace = fetch::Pace::default();
     // The other feed is due too; it is the only one taken.
-    fetch::fetch_due(&db, &client, &rules, &Events::new(), &monitor, &pace)
+    fetch::fetch_due(&db, &client, None, &rules, &Events::new(), &monitor, &pace)
         .await
         .unwrap();
     let due: Vec<i32> =

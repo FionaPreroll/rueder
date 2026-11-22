@@ -1,7 +1,7 @@
 <script lang="ts">
-	// Subscribing: an address is looked at for feeds, which may be the feed itself or
-	// the feeds a website names, and one of them is subscribed to, into a folder if
-	// the reader wants. Below, the subscriptions go in and out as an OPML file.
+	// Subscribing: an address is looked at for feeds, which may be the feed itself, the
+	// feeds a website names, or a website without one that the server makes a feed of,
+	// and one of them is subscribed to, into a folder if the reader wants. Below, the subscriptions go in and out as an OPML file.
 	import {
 		MAX_OPML,
 		type FeedCandidate,
@@ -59,11 +59,11 @@
 		onclose();
 	}
 
-	async function subscribe(url: string) {
+	async function subscribe({ url, page }: FeedCandidate) {
 		if (busy) return;
 		adding = url;
 		problem = null;
-		const result = await reader.subscribe(url, folder || null);
+		const result = await reader.subscribe(url, folder || null, page);
 		adding = null;
 		if ('feedId' in result) onclose();
 		else problem = result;
@@ -177,6 +177,9 @@
 							<div class="min-w-0 flex-1">
 								<p class="truncate text-sm font-medium">{feed.title || m.subscribe.untitled}</p>
 								<p class="truncate text-xs text-soft">{feed.url}</p>
+								{#if feed.page}
+									<p class="mt-0.5 text-xs text-soft">{m.subscribe.page}</p>
+								{/if}
 							</div>
 							{#if feed.feedId}
 								{@const feedId = feed.feedId}
@@ -195,7 +198,7 @@
 									class={['primary', waits]}
 									aria-label={`${m.subscribe.add}: ${feed.title || feed.url}`}
 									aria-disabled={busy}
-									onclick={() => subscribe(feed.url)}
+									onclick={() => subscribe(feed)}
 								>
 									{adding === feed.url ? m.subscribe.adding : m.subscribe.add}
 								</button>

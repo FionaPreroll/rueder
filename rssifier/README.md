@@ -74,6 +74,9 @@ cargo run -- token limit rueder --per-minute 60   # limits not named no longer h
 cargo run -- token revoke rueder         # the server stops taking it at once
 ```
 
+rueder asks it with the token `token add` prints, as `RSSIFIER_URL=http://127.0.0.1:3100`
+and `RSSIFIER_TOKEN=rsf_…` in its own settings.
+
 | Setting | Default | |
 |---|---|---|
 | `RSSIFIER_TOKENS` | `tokens.json` | The tokens, as SHA-256 with name and limits. `rssifier token` writes it, only readable by its owner; the server reads it again when it changes. |

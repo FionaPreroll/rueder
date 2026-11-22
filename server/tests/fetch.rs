@@ -148,7 +148,7 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
     let feed = feed_at(&db, "ada", &url).await;
     let client = client();
 
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert_eq!(
@@ -177,7 +177,7 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
 
     // Nothing changed: the site says so and sends no feed.
     assert_eq!(
-        fetch::fetch_feed(&db, &client, &rules(), feed)
+        fetch::fetch_feed(&db, &client, None, &rules(), feed)
             .await
             .unwrap(),
         Outcome::NotModified
@@ -191,7 +191,7 @@ async fn a_fetch_stores_the_articles_and_the_next_one_asks_whether_anything_chan
         ("b", "Second", "two, corrected"),
         ("a", "First", "one"),
     ]);
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert_eq!(
@@ -218,7 +218,7 @@ async fn the_readers_rules_see_what_a_fetch_brings(db: PgPool) {
     .await
     .unwrap();
 
-    fetch::fetch_feed(&db, &client(), &rules(), feed)
+    fetch::fetch_feed(&db, &client(), None, &rules(), feed)
         .await
         .unwrap();
     // The article is hidden for Ada from the moment it is there, and for
@@ -242,7 +242,7 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
     let client = client();
 
     site.lock().unwrap().status = StatusCode::NOT_FOUND;
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert_eq!(
@@ -260,7 +260,7 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
 
     // Failing again doubles the wait, up to the longest interval.
     for _ in 0..5 {
-        fetch::fetch_feed(&db, &client, &rules(), feed)
+        fetch::fetch_feed(&db, &client, None, &rules(), feed)
             .await
             .unwrap();
     }
@@ -275,7 +275,7 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
         site.status = StatusCode::OK;
         site.body = "<html><body>Under construction</body></html>".to_owned();
     }
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert!(
@@ -286,7 +286,7 @@ async fn a_failure_stands_at_the_feed_and_makes_the_next_try_come_later(db: PgPo
 
     // The site is back: the error is gone and the interval is short again.
     site.lock().unwrap().body = rss(&[("a", "First", "one")]);
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert!(
@@ -310,7 +310,7 @@ async fn a_site_that_is_asked_too_often_is_asked_less_often_for_a_while(db: PgPo
         site.status = StatusCode::TOO_MANY_REQUESTS;
         site.retry_after = Some("10800");
     }
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert_eq!(
@@ -328,7 +328,7 @@ async fn a_site_that_is_asked_too_often_is_asked_less_often_for_a_while(db: PgPo
         site.status = StatusCode::OK;
         site.retry_after = None;
     }
-    let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert!(matches!(outcome, Outcome::Fetched(_)), "{outcome:?}");
@@ -344,7 +344,7 @@ async fn a_site_that_is_asked_too_often_is_asked_less_often_for_a_while(db: PgPo
         .await
         .unwrap();
     site.lock().unwrap().body = rss(&[("a", "First", "one"), ("b", "Second", "two")]);
-    fetch::fetch_feed(&db, &client, &rules(), feed)
+    fetch::fetch_feed(&db, &client, None, &rules(), feed)
         .await
         .unwrap();
     assert_eq!(row(&db, feed).await.get::<i32, _>("fetch_interval_s"), 3600);
@@ -360,7 +360,7 @@ async fn a_feed_inside_the_own_network_is_not_fetched(db: PgPool) {
         "not an address",
     ] {
         let feed = feed_at(&db, &format!("reader of {url}"), url).await;
-        let outcome = fetch::fetch_feed(&db, &client, &rules(), feed)
+        let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
             .await
             .unwrap();
         assert!(matches!(outcome, Outcome::Failed(_)), "{url}: {outcome:?}");
@@ -384,7 +384,7 @@ async fn a_feed_can_be_fetched_as_a_browser(db: PgPool) {
         .execute(&db)
         .await
         .unwrap();
-    fetch::fetch_feed(&db, &client(), &rules(), feed)
+    fetch::fetch_feed(&db, &client(), None, &rules(), feed)
         .await
         .unwrap();
     assert!(site.lock().unwrap().agents[0].starts_with("Mozilla/5.0"));
@@ -416,6 +416,7 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         fetch::fetch_due(
             &db,
             &client,
+            None,
             &rules(),
             &Events::new(),
             &monitor,
@@ -443,6 +444,7 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         fetch::fetch_due(
             &db,
             &client,
+            None,
             &rules(),
             &Events::new(),
             &monitor,
@@ -476,7 +478,7 @@ async fn a_feed_only_disabled_accounts_read_rests_until_somebody_reads_it(db: Pg
     let (client, rules, events) = (client(), rules(), Events::new());
     let monitor = Arc::new(Monitor::default());
     let pace = fetch::Pace::default();
-    let round = || fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace);
+    let round = || fetch::fetch_due(&db, &client, None, &rules, &events, &monitor, &pace);
 
     // Disabled, ada reads nothing: only the feed grace reads too is fetched.
     assert_eq!(
@@ -533,7 +535,7 @@ async fn a_round_takes_no_more_than_the_pace_says(db: PgPool) {
     let (client, rules, events) = (client(), rules(), Events::new());
     let monitor = Arc::new(Monitor::default());
     for taken in [2, 1, 0] {
-        let round = fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace);
+        let round = fetch::fetch_due(&db, &client, None, &rules, &events, &monitor, &pace);
         assert_eq!(round.await.unwrap(), taken);
     }
     assert_eq!(site.lock().unwrap().requests, 3);
@@ -736,7 +738,10 @@ async fn a_slow_host_holds_up_only_itself(db: PgPool) {
             underway.clone(),
         );
         tokio::spawn(async move {
-            fetch::round(&db, &client, &rules, &events, &monitor, &pace, &underway).await
+            fetch::round(
+                &db, &client, None, &rules, &events, &monitor, &pace, &underway,
+            )
+            .await
         })
     };
     // The first round is done with the fast host and still at the slow one;
@@ -749,9 +754,11 @@ async fn a_slow_host_holds_up_only_itself(db: PgPool) {
         .await
         .unwrap();
     let started = Instant::now();
-    let second = fetch::round(&db, &client, &rules, &events, &monitor, &pace, &underway)
-        .await
-        .unwrap();
+    let second = fetch::round(
+        &db, &client, None, &rules, &events, &monitor, &pace, &underway,
+    )
+    .await
+    .unwrap();
     assert_eq!(second, 2, "only the feeds of the fast host");
     assert!(started.elapsed() < delay * 2, "{:?}", started.elapsed());
     assert!(!first.is_finished(), "the slow host is still at it");
@@ -791,7 +798,7 @@ async fn no_more_of_a_host_at_once_than_the_pace_says(db: PgPool) {
             per_host,
             ..fetch::Pace::default()
         };
-        let fetched = fetch::fetch_due(&db, &client, &rules, &events, &monitor, &pace).await;
+        let fetched = fetch::fetch_due(&db, &client, None, &rules, &events, &monitor, &pace).await;
         assert_eq!(fetched.unwrap(), 7);
         assert_eq!(seen.lock().unwrap().most, per_host);
     }

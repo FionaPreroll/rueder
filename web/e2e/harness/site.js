@@ -1,5 +1,6 @@
 // A made-up website for the end-to-end tests: a few feeds, a page that names its
-// feed, and an image. The rueder under test fetches from it as it would from the
+// feed, an image, a page without a feed and a made-up RSSifier that makes one of
+// it. The rueder under test fetches from it as it would from the
 // web. Tests change what it serves through /_control, to let an article arrive
 // or change.
 //
@@ -7,7 +8,7 @@
 
 import { createServer } from 'node:http';
 import { deflateSync } from 'node:zlib';
-import { SITE, SITE_PORT } from './ports.js';
+import { RSSIFIER_ENV, SITE, SITE_PORT } from './ports.js';
 
 /** A plain PNG of one color. */
 function png(width, height, [r, g, b]) {
@@ -188,6 +189,41 @@ const controls = {
 	}
 };
 
+/** The news of the club, whose pages under /club… name no feed. */
+const club = [
+	{ n: 1, title: 'Summer party at the harbour', text: 'With music and fish rolls.' },
+	{ n: 2, title: 'General meeting in November', text: 'The board asks everybody to come.' }
+];
+
+/** What the made-up RSSifier answers, as RSSifier does (rssifier/README.md). */
+function rssifier(request, url) {
+	const problem = (status, type, detail) => [
+		status,
+		'application/problem+json',
+		JSON.stringify({ type, status, detail })
+	];
+	if (request.headers.authorization !== `Bearer ${RSSIFIER_ENV.RSSIFIER_TOKEN}`)
+		return problem(401, 'token', 'this token is not known');
+	const page = new URL(url.searchParams.get('url') ?? '', SITE);
+	if (url.pathname !== '/_rssifier/v1/feed' || !page.pathname.startsWith('/club'))
+		return problem(422, 'no-items', 'the page lists nothing RSSifier can tell apart');
+	const items = [...club].reverse().map(({ n, title, text }) => ({
+		id: `${SITE}/club/news/${n}`,
+		url: `${SITE}/club/news/${n}`,
+		title,
+		content_html: `<p>${escape(text)}</p>`,
+		date_published: new Date(START + n * 3_600_000).toISOString()
+	}));
+	const feed = {
+		version: 'https://jsonfeed.org/version/1.1',
+		title: 'The Club',
+		home_page_url: `${SITE}${page.pathname}`,
+		items,
+		_rssifier: { source: 'guess' }
+	};
+	return [200, 'application/feed+json', JSON.stringify(feed)];
+}
+
 const server = createServer((request, response) => {
 	const url = new URL(request.url, SITE);
 	const send = (status, type, body) => {
@@ -204,6 +240,15 @@ const server = createServer((request, response) => {
 		return send(204, 'text/plain', '');
 	}
 	if (url.pathname === '/pic.png') return send(200, 'image/png', picture);
+	if (url.pathname.startsWith('/_rssifier/')) return send(...rssifier(request, url));
+	if (url.pathname.startsWith('/club'))
+		return send(
+			200,
+			'text/html; charset=utf-8',
+			`<!doctype html><html><head><title>The Club</title></head><body><ul>${club
+				.map(({ n, title }) => `<li><a href="/club/news/${n}">${title}</a></li>`)
+				.join('')}</ul></body></html>`
+		);
 	const [, path, rest] = /^\/([\w-]+)(?:\/(.*))?$/.exec(url.pathname) ?? [];
 	const feed = path && feeds[path.split('-')[0]];
 	if (!feed) return send(404, 'text/plain', 'not here');

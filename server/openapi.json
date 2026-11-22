@@ -2341,7 +2341,7 @@
         "tags": [
           "Subscribing"
         ],
-        "summary": "Subscribes to the feed at an address: 201 with its number, or 200 if the reader has it already. The address has to be the feed itself; `find` says which feeds a web page has.",
+        "summary": "Subscribes to the feed at an address: 201 with its number, or 200 if the reader has it already. The address has to be the feed itself, or with `page` a web page whose feed RSSifier makes; `find` says which feeds a web page has.",
         "operationId": "subscribe",
         "requestBody": {
           "content": {
@@ -2385,6 +2385,9 @@
           },
           "429": {
             "description": "Too many lookups of addresses; see `Retry-After`."
+          },
+          "503": {
+            "description": "This server does not fetch feeds, or reads no web pages without a feed."
           }
         },
         "security": [
@@ -2399,7 +2402,7 @@
         "tags": [
           "Subscribing"
         ],
-        "summary": "Looks at an address for feeds. An address that is a feed is the one feed; a web page has the feeds it names, which nobody has looked at yet.",
+        "summary": "Looks at an address for feeds. An address that is a feed is the one feed; a web page has the feeds it names, which nobody has looked at yet. A page that names none is, where the server has RSSifier and it finds a list on the page, a feed of its own.",
         "operationId": "find",
         "requestBody": {
           "content": {
@@ -6998,7 +7001,8 @@
         "description": "A feed found at an address.",
         "required": [
           "url",
-          "title"
+          "title",
+          "page"
         ],
         "properties": {
           "url": {
@@ -7014,6 +7018,10 @@
             ],
             "format": "int32",
             "description": "The number of the feed if the reader subscribes to it already."
+          },
+          "page": {
+            "type": "boolean",
+            "description": "A web page without a feed, whose feed RSSifier makes: of titles and\nsummaries, not of whole texts."
           }
         }
       },
@@ -8100,6 +8108,13 @@
               "null"
             ],
             "format": "int32"
+          },
+          "page": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "The address is of a web page without a feed, as the search found it:\nits feed comes from RSSifier."
           }
         }
       },
@@ -8591,6 +8606,74 @@
           }
         }
       },
+      "RssifierLimits": {
+        "type": "object",
+        "description": "A token's limits in RSSifier.",
+        "properties": {
+          "per_minute": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "fetches_per_hour": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "at_once": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "RssifierUsage": {
+        "type": "object",
+        "description": "What RSSifier says rueder's token used of its limits (`GET /v1/usage`).",
+        "required": [
+          "name",
+          "limits",
+          "requests",
+          "fetches",
+          "under_way"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of the token."
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RssifierLimits"
+          },
+          "requests": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requests in the last minute, as far as the limit counts them.",
+            "minimum": 0
+          },
+          "fetches": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Pages fetched in the last hour, as far as the limit counts them.",
+            "minimum": 0
+          },
+          "under_way": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requests under way now.",
+            "minimum": 0
+          }
+        }
+      },
       "Rule": {
         "type": "object",
         "description": "A rule as the API takes and gives it.\n\n`GET /api/rules` answers with a list of them. `POST /api/rules`,\n`PUT /api/rules/{id}` and `POST /api/rules/preview` read one; there the `id`\ncounts for nothing, and a rule without `enabled` is enabled.",
@@ -8975,6 +9058,7 @@
           "database",
           "fetcher",
           "finder",
+          "rssifier",
           "images",
           "problems",
           "browsers",
@@ -9027,6 +9111,9 @@
           },
           "finder": {
             "$ref": "#/components/schemas/StatusFinder"
+          },
+          "rssifier": {
+            "$ref": "#/components/schemas/StatusRssifier"
           },
           "images": {
             "$ref": "#/components/schemas/StatusImages"
@@ -9991,6 +10078,49 @@
             "format": "int64",
             "description": "Answers with an error of the server.",
             "minimum": 0
+          }
+        }
+      },
+      "StatusRssifier": {
+        "type": "object",
+        "description": "RSSifier, for web pages without a feed.",
+        "required": [
+          "on",
+          "pages",
+          "failing"
+        ],
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "description": "Whether the server has RSSifier (`RSSIFIER_URL`)."
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Web pages that are read, as `subscribed_feeds` counts feeds."
+          },
+          "failing": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of them, those whose last fetch failed."
+          },
+          "usage": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RssifierUsage",
+                "description": "What RSSifier says the server's token used; null where it is off or\ndid not answer."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why RSSifier did not answer."
           }
         }
       },

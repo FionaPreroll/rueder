@@ -835,6 +835,7 @@ const en = {
 		subscribed: 'Subscribed',
 		show: 'Show',
 		untitled: 'Without a name',
+		page: 'A website without a feed: rueder makes one of it, with titles and summaries only.',
 		folder: 'Into the folder',
 		topLevel: 'No folder',
 		add: 'Subscribe',
@@ -1053,6 +1054,20 @@ const en = {
 				`${n(found)} found feeds, ${n(none)} found none, ${n(failed)} failed`,
 			limited: 'Over the limit of the account',
 			took: 'Time per lookup'
+		},
+		rssifier: {
+			title: 'Websites without a feed',
+			state: 'RSSifier',
+			pages: 'Websites read',
+			pagesValue: (pages: number, failing: number) => `${n(pages)}, ${n(failing)} of them failing`,
+			used: 'Used of the token',
+			usedValue: (requests: number, fetches: number, underWay: number) =>
+				`${n(requests)} requests in the last minute, ${n(fetches)} pages fetched in the last hour, ${n(underWay)} under way`,
+			unanswered: (why: string) => `RSSifier does not answer: ${why}`,
+			limits: 'Limits of the token',
+			limitsValue: (perMinute: string, perHour: string, atOnce: string) =>
+				`${perMinute} per minute, ${perHour} pages per hour, ${atOnce} at once`,
+			noLimit: 'no limit'
 		},
 		images: {
 			title: 'Image proxy',

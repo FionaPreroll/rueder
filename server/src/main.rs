@@ -1077,6 +1077,14 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         ..Default::default()
     })?;
 
+    // RSSIFIER_URL and RSSIFIER_TOKEN: where RSSifier answers and rueder's
+    // token there, for web pages without a feed. Without them rueder finds
+    // and fetches none of those.
+    let rssifier = rueder::rssifier::Rssifier::from_env()?.map(Arc::new);
+    if rssifier.is_some() {
+        tracing::info!("web pages without a feed come through RSSifier");
+    }
+
     // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
     // that come with rueder.
     let rules = Arc::new(Rules::from_env()?);
@@ -1092,6 +1100,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         tokio::spawn(fetch::run(
             db.clone(),
             client.clone(),
+            rssifier.clone(),
             rules.clone(),
             events.clone(),
             monitor.clone(),
@@ -1170,6 +1179,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         events,
         monitor,
         client: Some(client.clone()),
+        rssifier,
         rates: Arc::new(Rates::new(sizes.limits())),
         ..AppState::new(db)
     };

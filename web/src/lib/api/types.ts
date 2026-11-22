@@ -1306,6 +1306,11 @@ export type FeedCandidate = {
 	 * The number of the feed if the reader subscribes to it already.
 	 */
 	feed_id: number | null,
+	/**
+	 * A web page without a feed, whose feed RSSifier makes: of titles and
+	 * summaries, not of whole texts.
+	 */
+	page: boolean,
 };
 
 /**
@@ -1314,6 +1319,11 @@ export type FeedCandidate = {
 export type NewSubscription = {
 	url: string,
 	folder_id?: number | null,
+	/**
+	 * The address is of a web page without a feed, as the search found it:
+	 * its feed comes from RSSifier.
+	 */
+	page?: boolean | null,
 };
 
 /**
@@ -1706,6 +1716,7 @@ export type ServerStatus = {
 	database: StatusDatabase,
 	fetcher: StatusFetcher,
 	finder: StatusFinder,
+	rssifier: StatusRssifier,
 	images: StatusImages,
 	problems: StatusProblems,
 	/**
@@ -1740,6 +1751,38 @@ export type FetchFailure = "status" | "timeout" | "blocked" | "dns" | "network" 
  * What kind of error a report is about.
  */
 export type ReportKind = "error" | "rejection" | "component" | "request";
+
+/**
+ * A token's limits in RSSifier.
+ */
+export type RssifierLimits = {
+	per_minute: number | null,
+	fetches_per_hour: number | null,
+	at_once: number | null,
+};
+
+/**
+ * What RSSifier says rueder's token used of its limits (`GET /v1/usage`).
+ */
+export type RssifierUsage = {
+	/**
+	 * The name of the token.
+	 */
+	name: string,
+	limits: RssifierLimits,
+	/**
+	 * Requests in the last minute, as far as the limit counts them.
+	 */
+	requests: number,
+	/**
+	 * Pages fetched in the last hour, as far as the limit counts them.
+	 */
+	fetches: number,
+	/**
+	 * Requests under way now.
+	 */
+	under_way: number,
+};
 
 export type StatusBrowserError = {
 	kind: ReportKind,
@@ -2074,6 +2117,33 @@ export type StatusRoute = {
 	 * Answers with an error of the server.
 	 */
 	errors: number,
+};
+
+/**
+ * RSSifier, for web pages without a feed.
+ */
+export type StatusRssifier = {
+	/**
+	 * Whether the server has RSSifier (`RSSIFIER_URL`).
+	 */
+	on: boolean,
+	/**
+	 * Web pages that are read, as `subscribed_feeds` counts feeds.
+	 */
+	pages: number,
+	/**
+	 * Of them, those whose last fetch failed.
+	 */
+	failing: number,
+	/**
+	 * What RSSifier says the server's token used; null where it is off or
+	 * did not answer.
+	 */
+	usage: RssifierUsage | null,
+	/**
+	 * Why RSSifier did not answer.
+	 */
+	error: string | null,
 };
 
 export type StatusTable = {

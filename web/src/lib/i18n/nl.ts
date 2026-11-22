@@ -836,6 +836,7 @@ const nl: Messages = {
 		subscribed: 'Geabonneerd',
 		show: 'Tonen',
 		untitled: 'Zonder naam',
+		page: 'Een website zonder feed: rueder maakt er een van, met alleen titels en samenvattingen.',
 		folder: 'In de map',
 		topLevel: 'Geen map',
 		add: 'Abonneren',
@@ -1052,6 +1053,20 @@ const nl: Messages = {
 				`${n(found)} vonden feeds, ${n(none)} vonden niets, ${n(failed)} mislukt`,
 			limited: 'Boven de limiet van het account',
 			took: 'Tijd per zoekopdracht'
+		},
+		rssifier: {
+			title: 'Websites zonder feed',
+			state: 'RSSifier',
+			pages: 'Gelezen websites',
+			pagesValue: (pages, failing) => `${n(pages)}, waarvan ${n(failing)} met fouten`,
+			used: 'Gebruik van het token',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} verzoeken in de laatste minuut, ${n(fetches)} pagina’s opgehaald in het laatste uur, ${n(underWay)} bezig`,
+			unanswered: (why) => `RSSifier antwoordt niet: ${why}`,
+			limits: 'Limieten van het token',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} per minuut, ${perHour} pagina’s per uur, ${atOnce} tegelijk`,
+			noLimit: 'geen limiet'
 		},
 		images: {
 			title: 'Afbeeldingsproxy',

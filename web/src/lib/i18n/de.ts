@@ -834,6 +834,7 @@ const de: Messages = {
 		subscribed: 'Abonniert',
 		show: 'Zeigen',
 		untitled: 'Ohne Namen',
+		page: 'Eine Website ohne Feed: rueder macht einen daraus, nur mit Titeln und Anrissen.',
 		folder: 'In den Ordner',
 		topLevel: 'Kein Ordner',
 		add: 'Abonnieren',
@@ -1050,6 +1051,20 @@ const de: Messages = {
 				`${n(found)} mit Feeds, ${n(none)} ohne, ${n(failed)} fehlgeschlagen`,
 			limited: 'Über dem Limit des Kontos',
 			took: 'Zeit je Suche'
+		},
+		rssifier: {
+			title: 'Websites ohne Feed',
+			state: 'RSSifier',
+			pages: 'Gelesene Websites',
+			pagesValue: (pages, failing) => `${n(pages)}, davon ${n(failing)} mit Fehler`,
+			used: 'Verbrauch des Tokens',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} Anfragen in der letzten Minute, ${n(fetches)} Seiten in der letzten Stunde abgerufen, ${n(underWay)} laufen gerade`,
+			unanswered: (why) => `RSSifier antwortet nicht: ${why}`,
+			limits: 'Limits des Tokens',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} je Minute, ${perHour} Seiten je Stunde, ${atOnce} gleichzeitig`,
+			noLimit: 'unbegrenzt'
 		},
 		images: {
 			title: 'Bild-Proxy',

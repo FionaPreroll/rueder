@@ -348,6 +348,7 @@ pub(super) async fn edit_subscription(
             let new = subscribe::New {
                 url,
                 folder_id: folder,
+                page: None,
             };
             let (_, Json(subscribed)) =
                 subscribe::subscribe(State(state.clone()), session.clone(), Json(new)).await?;
@@ -433,6 +434,7 @@ pub(super) async fn quick_add(
     let new = subscribe::New {
         url: first.url,
         folder_id: None,
+        page: Some(first.page),
     };
     let (_, Json(subscribed)) =
         subscribe::subscribe(State(state.clone()), session.clone(), Json(new)).await?;

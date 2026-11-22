@@ -790,6 +790,7 @@ const zhHans: Messages = {
 		subscribed: '已订阅',
 		show: '显示',
 		untitled: '无名称',
+		page: '一个没有订阅源的网站：rueder 会为它生成一个，只有标题和摘要。',
 		folder: '放入文件夹',
 		topLevel: '不放入文件夹',
 		add: '订阅',
@@ -980,6 +981,20 @@ const zhHans: Messages = {
 				`找到订阅源 ${n(found)} 次，未找到 ${n(none)} 次，失败 ${n(failed)} 次`,
 			limited: '超过账户限额',
 			took: '每次查找的时间'
+		},
+		rssifier: {
+			title: '没有订阅源的网站',
+			state: 'RSSifier',
+			pages: '阅读中的网站',
+			pagesValue: (pages, failing) => `${n(pages)} 个，其中 ${n(failing)} 个失败`,
+			used: '令牌用量',
+			usedValue: (requests, fetches, underWay) =>
+				`最近一分钟 ${n(requests)} 次请求，最近一小时抓取 ${n(fetches)} 个页面，进行中 ${n(underWay)} 个`,
+			unanswered: (why) => `RSSifier 没有回应：${why}`,
+			limits: '令牌限额',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`每分钟 ${perMinute}，每小时 ${perHour} 个页面，同时 ${atOnce} 个`,
+			noLimit: '无限制'
 		},
 		images: {
 			title: '图片代理',

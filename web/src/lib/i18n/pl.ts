@@ -845,6 +845,7 @@ const pl: Messages = {
 		subscribed: 'Subskrybowany',
 		show: 'Pokaż',
 		untitled: 'Bez nazwy',
+		page: 'Strona bez kanału: rueder robi z niej kanał, tylko z tytułami i streszczeniami.',
 		folder: 'Do folderu',
 		topLevel: 'Bez folderu',
 		add: 'Subskrybuj',
@@ -1050,6 +1051,20 @@ const pl: Messages = {
 				`znalazły kanały: ${n(found)}, nic nie znalazły: ${n(none)}, nieudane: ${n(failed)}`,
 			limited: 'Ponad limit konta',
 			took: 'Czas na wyszukiwanie'
+		},
+		rssifier: {
+			title: 'Strony bez kanału',
+			state: 'RSSifier',
+			pages: 'Czytane strony',
+			pagesValue: (pages, failing) => `${n(pages)}, z błędami: ${n(failing)}`,
+			used: 'Zużycie tokenu',
+			usedValue: (requests, fetches, underWay) =>
+				`żądania w ostatniej minucie: ${n(requests)}, strony pobrane w ostatniej godzinie: ${n(fetches)}, w toku: ${n(underWay)}`,
+			unanswered: (why) => `RSSifier nie odpowiada: ${why}`,
+			limits: 'Limity tokenu',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`na minutę: ${perMinute}, stron na godzinę: ${perHour}, naraz: ${atOnce}`,
+			noLimit: 'bez limitu'
 		},
 		images: {
 			title: 'Proxy obrazów',

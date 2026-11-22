@@ -824,6 +824,7 @@ const tr: Messages = {
 		subscribed: 'Abone olundu',
 		show: 'Göster',
 		untitled: 'Adsız',
+		page: 'Akışı olmayan bir web sitesi: rueder ondan yalnızca başlıklar ve özetlerle bir akış yapar.',
 		folder: 'Klasöre',
 		topLevel: 'Klasör yok',
 		add: 'Abone ol',
@@ -1027,6 +1028,20 @@ const tr: Messages = {
 				`${n(found)} akış buldu, ${n(none)} bulamadı, ${n(failed)} başarısız`,
 			limited: 'Hesap sınırının üstünde',
 			took: 'Arama başına süre'
+		},
+		rssifier: {
+			title: 'Akışı olmayan web siteleri',
+			state: 'RSSifier',
+			pages: 'Okunan web siteleri',
+			pagesValue: (pages, failing) => `${n(pages)}, bunlardan ${n(failing)} tanesi hatalı`,
+			used: 'Belirtecin kullanımı',
+			usedValue: (requests, fetches, underWay) =>
+				`son dakikada ${n(requests)} istek, son saatte ${n(fetches)} sayfa alındı, ${n(underWay)} sürüyor`,
+			unanswered: (why) => `RSSifier yanıt vermiyor: ${why}`,
+			limits: 'Belirtecin sınırları',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`dakikada ${perMinute}, saatte ${perHour} sayfa, aynı anda ${atOnce}`,
+			noLimit: 'sınırsız'
 		},
 		images: {
 			title: 'Resim proxy’si',

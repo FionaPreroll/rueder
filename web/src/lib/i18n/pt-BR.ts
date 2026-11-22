@@ -835,6 +835,7 @@ const ptBR: Messages = {
 		subscribed: 'Assinado',
 		show: 'Mostrar',
 		untitled: 'Sem nome',
+		page: 'Um site sem feed: o rueder cria um a partir dele, só com títulos e resumos.',
 		folder: 'Na pasta',
 		topLevel: 'Sem pasta',
 		add: 'Assinar',
@@ -1050,6 +1051,20 @@ const ptBR: Messages = {
 				`${n(found)} encontraram feeds, ${n(none)} não encontraram nenhum, ${n(failed)} falharam`,
 			limited: 'Acima do limite da conta',
 			took: 'Tempo por consulta'
+		},
+		rssifier: {
+			title: 'Sites sem feed',
+			state: 'RSSifier',
+			pages: 'Sites lidos',
+			pagesValue: (pages, failing) => `${n(pages)}, ${n(failing)} deles com falha`,
+			used: 'Uso do token',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} solicitações no último minuto, ${n(fetches)} páginas buscadas na última hora, ${n(underWay)} em andamento`,
+			unanswered: (why) => `O RSSifier não responde: ${why}`,
+			limits: 'Limites do token',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} por minuto, ${perHour} páginas por hora, ${atOnce} ao mesmo tempo`,
+			noLimit: 'sem limite'
 		},
 		images: {
 			title: 'Proxy de imagens',

@@ -826,6 +826,7 @@ const id: Messages = {
 		subscribed: 'Sudah berlangganan',
 		show: 'Tampilkan',
 		untitled: 'Tanpa nama',
+		page: 'Situs web tanpa feed: rueder membuat feed darinya, hanya dengan judul dan ringkasan.',
 		folder: 'Ke folder',
 		topLevel: 'Tanpa folder',
 		add: 'Berlangganan',
@@ -1029,6 +1030,20 @@ const id: Messages = {
 				`${n(found)} menemukan feed, ${n(none)} tidak menemukan, ${n(failed)} gagal`,
 			limited: 'Melewati batas akun',
 			took: 'Waktu per pencarian'
+		},
+		rssifier: {
+			title: 'Situs web tanpa feed',
+			state: 'RSSifier',
+			pages: 'Situs web yang dibaca',
+			pagesValue: (pages, failing) => `${n(pages)}, ${n(failing)} di antaranya gagal`,
+			used: 'Pemakaian token',
+			usedValue: (requests, fetches, underWay) =>
+				`${n(requests)} permintaan dalam menit terakhir, ${n(fetches)} halaman diambil dalam jam terakhir, ${n(underWay)} sedang berjalan`,
+			unanswered: (why) => `RSSifier tidak menjawab: ${why}`,
+			limits: 'Batas token',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`${perMinute} per menit, ${perHour} halaman per jam, ${atOnce} sekaligus`,
+			noLimit: 'tanpa batas'
 		},
 		images: {
 			title: 'Proksi gambar',

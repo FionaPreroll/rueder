@@ -821,6 +821,7 @@ const ja: Messages = {
 		subscribed: '購読しました',
 		show: '表示',
 		untitled: '名前なし',
+		page: 'フィードのないウェブサイトです。rueder がタイトルと要約だけのフィードを作ります。',
 		folder: '追加先のフォルダ',
 		topLevel: 'フォルダなし',
 		add: '購読',
@@ -1026,6 +1027,20 @@ const ja: Messages = {
 				`フィードが見つかった ${n(found)} 回、見つからなかった ${n(none)} 回、失敗 ${n(failed)} 回`,
 			limited: 'アカウントの上限を超えたもの',
 			took: '検索 1 回あたりの時間'
+		},
+		rssifier: {
+			title: 'フィードのないウェブサイト',
+			state: 'RSSifier',
+			pages: '読んでいるウェブサイト',
+			pagesValue: (pages, failing) => `${n(pages)} 件、うち ${n(failing)} 件が失敗`,
+			used: 'トークンの使用量',
+			usedValue: (requests, fetches, underWay) =>
+				`直近 1 分のリクエスト ${n(requests)} 件、直近 1 時間に取得したページ ${n(fetches)} 件、処理中 ${n(underWay)} 件`,
+			unanswered: (why) => `RSSifier が応答しません: ${why}`,
+			limits: 'トークンの上限',
+			limitsValue: (perMinute, perHour, atOnce) =>
+				`毎分 ${perMinute}、毎時 ${perHour} ページ、同時に ${atOnce}`,
+			noLimit: '上限なし'
 		},
 		images: {
 			title: '画像プロキシ',
