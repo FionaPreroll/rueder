@@ -106,6 +106,7 @@ and `RSSIFIER_TOKEN=rsf_…` in its own settings.
 | `RSSIFIER_RECIPES` | none | A file of recipes, written like `rules/recipes.toml`, that go before those built in. Read at the start. |
 | `RSSIFIER_BLOCKED_HOSTS` | none | Hosts never fetched from, comma separated; each also stands for its subdomains. |
 | `RSSIFIER_ENABLE` | none | Recipes that are off until the operator names them, comma separated: `reddit` (see above). A name no recipe has stops the start. |
+| `RSSIFIER_USER_AGENT` | `rueder-rssifier/<version> (+https://github.com/FionaPreroll/rueder)` | What RSSifier calls itself when it fetches; empty is the default. `robots.txt` is still read for `rueder-rssifier`. |
 | `RUST_LOG` | `info` | |
 
 As a container, built from the root of the repository:

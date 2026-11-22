@@ -4,6 +4,7 @@
 use std::{io::Write, net::SocketAddr, path::PathBuf};
 
 use anyhow::{Context, bail};
+use axum::http::HeaderValue;
 use clap::{Parser, Subcommand};
 use hardened_http::{Config, HttpClient, Net};
 use rssifier::{
@@ -78,6 +79,10 @@ struct Reading {
     /// Optional recipes to turn on, comma separated: "reddit".
     #[arg(long, env = "RSSIFIER_ENABLE", default_value = "")]
     enable: String,
+    /// What RSSifier calls itself when it fetches. `robots.txt` is read for
+    /// "rueder-rssifier" whatever this says.
+    #[arg(long = "user-agent", env = "RSSIFIER_USER_AGENT", default_value = AGENT)]
+    agent: String,
 }
 
 impl Reading {
@@ -87,6 +92,14 @@ impl Reading {
             None => Recipes::built_in()?,
         };
         recipes.enable(&self.enable)
+    }
+
+    /// Empty, as compose passes it when `.env` names none, is the default.
+    fn agent(&self) -> &str {
+        match self.agent.trim() {
+            "" => AGENT,
+            agent => agent,
+        }
     }
 
     fn client(&self) -> anyhow::Result<HttpClient> {
@@ -100,8 +113,14 @@ impl Reading {
                     .map_err(|err| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+        if HeaderValue::from_str(self.agent()).is_err() {
+            bail!(
+                "RSSIFIER_USER_AGENT is not a header value: {:?}",
+                self.agent
+            );
+        }
         HttpClient::new(Config {
-            agent: AGENT.to_owned(),
+            agent: self.agent().to_owned(),
             allow,
             ..Config::default()
         })
@@ -209,7 +228,7 @@ async fn fetch(address: &str, reading: &Reading) -> anyhow::Result<()> {
     let recipes = reading.recipes()?;
     let url = extract::link(&client.parse(address)?, address).context("no web address")?;
     let url = recipes.address(&url);
-    eprintln!("fetching {url} as {AGENT}");
+    eprintln!("fetching {url} as {}", reading.agent());
     let response = client.get(api::page_request(url.as_str())).await?;
     eprintln!("{} from {}", response.status, response.url);
     let kind = response.header("content-type").unwrap_or("no content type");

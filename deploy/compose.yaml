@@ -56,6 +56,7 @@ services:
       RSSIFIER_TOKEN: ${RSSIFIER_TOKEN:-}
       RSSIFIER_BLOCKED_HOSTS: ${RSSIFIER_BLOCKED_HOSTS:-}
       RSSIFIER_ENABLE: ${RSSIFIER_ENABLE:-}
+      RSSIFIER_USER_AGENT: ${RSSIFIER_USER_AGENT:-}
     volumes:
       # The tokens `rssifier token add` makes, for other readers than this
       # rueder.
