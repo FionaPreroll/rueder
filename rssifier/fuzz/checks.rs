@@ -14,7 +14,7 @@ use rssifier::{
 use url::Url;
 
 /// A recipe for the page of the first base, so that the input also goes
-/// through the selectors, and one that reads attributes, as for Reddit, for
+/// through the selectors, and one that reads attributes, as some sites write them, for
 /// the third; the second base has none.
 static RECIPES: LazyLock<Recipes> = LazyLock::new(|| {
     Recipes::parse(
@@ -28,7 +28,7 @@ static RECIPES: LazyLock<Recipes> = LazyLock::new(|| {
 
         [[recipe]]
         host = "example.com"
-        item = "shreddit-post, article"
+        item = "board-post, article"
         summary = "[slot=text-body]"
         image = "[slot=thumbnail] img"
         attributes = { title = "post-title", link = "permalink", date = "created-timestamp", id = "id" }

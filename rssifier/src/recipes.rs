@@ -1,8 +1,6 @@
 //! Recipes: how to read the pages of one site, as data. The ones that come
 //! with RSSifier are in `rules/recipes.toml`, which also says how they are
-//! written; the operator can add a file of more (`RSSIFIER_RECIPES`). A
-//! recipe that is `optional` is off until the operator names it
-//! (`RSSIFIER_ENABLE`).
+//! written; the operator can add a file of more (`RSSIFIER_RECIPES`).
 
 use std::path::Path;
 
@@ -29,15 +27,8 @@ struct Written {
     summary: Option<String>,
     date: Option<String>,
     image: Option<String>,
-    optional: Option<String>,
-    #[serde(default = "yes")]
-    robots: bool,
     fetch: Option<String>,
     attributes: Option<Attributes>,
-}
-
-fn yes() -> bool {
-    true
 }
 
 /// The attributes of an item that hold its parts.
@@ -71,11 +62,6 @@ pub struct Recipe {
     summary: Option<Selector>,
     date: Option<Selector>,
     image: Option<Selector>,
-    optional: Option<String>,
-    /// Whether it is used: an optional recipe only once it is turned on.
-    on: bool,
-    /// Whether `robots.txt` is asked for the pages it fits.
-    pub robots: bool,
     fetch: Option<String>,
     attributes: Option<Attributes>,
 }
@@ -118,23 +104,6 @@ impl Recipes {
         Ok(recipes)
     }
 
-    /// Turns on the optional recipes named in `names`, separated by commas,
-    /// as `RSSIFIER_ENABLE` has them. A name no recipe has is an error, so
-    /// that a typo does not go unnoticed.
-    pub fn enable(mut self, names: &str) -> anyhow::Result<Self> {
-        for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
-            let mut found = false;
-            for recipe in &mut self.0 {
-                if recipe.optional.as_deref() == Some(name) {
-                    recipe.on = true;
-                    found = true;
-                }
-            }
-            anyhow::ensure!(found, "no optional recipe is called {name:?}");
-        }
-        Ok(self)
-    }
-
     /// The address to fetch for a page: what the recipe for it says in
     /// `fetch`, else the page.
     pub fn address(&self, page: &Url) -> Url {
@@ -148,7 +117,7 @@ impl Recipes {
     pub fn for_page(&self, page: &Url) -> Option<&Recipe> {
         let host = page.host_str()?.trim_end_matches('.');
         let mut best: Option<&Recipe> = None;
-        for recipe in self.0.iter().filter(|recipe| recipe.on) {
+        for recipe in &self.0 {
             let fits = host
                 .strip_suffix(recipe.host.as_str())
                 .is_some_and(|before| before.is_empty() || before.ends_with('.'))
@@ -163,9 +132,6 @@ impl Recipes {
 
 impl Recipe {
     fn of(written: Written, host: String) -> anyhow::Result<Self> {
-        if !written.robots && written.optional.is_none() {
-            anyhow::bail!("only an optional recipe leaves out robots.txt");
-        }
         let named = [&written.title, &written.link, &written.date];
         if written.attributes.is_some() && named.iter().any(|part| part.is_some()) {
             anyhow::bail!("title, link and date come from the attributes or from selectors");
@@ -180,9 +146,6 @@ impl Recipe {
             image: selector(written.image)?,
             path: written.path,
             host,
-            on: written.optional.is_none(),
-            optional: written.optional,
-            robots: written.robots,
             fetch: written.fetch,
             attributes: written.attributes,
         })
@@ -337,62 +300,58 @@ mod tests {
         assert_eq!(items[1].url.as_str(), "https://example.org/hv");
     }
 
-    /// A page of a subreddit as Reddit shows it without a login, made up.
-    const SUBREDDIT: &str = r#"<shreddit-feed>
-        <article><shreddit-post id="t3_1abc" post-title="  Rust 2.0 is   out "
-            permalink="/r/rust/comments/1abc/rust_20_is_out/" score="1234" comment-count="56"
-            created-timestamp="2026-11-20T10:15:00.123000+0000" author="someone">
-          <a slot="title" href="/r/rust/comments/1abc/rust_20_is_out/">Rust 2.0 is out</a>
-          <shreddit-post-text-body slot="text-body"><a slot="text-body" href="/r/rust/comments/1abc/rust_20_is_out/">
-            <div class="md"><p>Read all about it.</p><p>12 comments</p></div></a></shreddit-post-text-body>
-          <faceplate-number number="1234">1.2k</faceplate-number>
+    /// A recipe for a made-up site that writes its entries' parts into
+    /// attributes and lists the newest at another address.
+    const BOARD: &str = r#"
+        [[recipe]]
+        host = "board.example"
+        path = "/b/"
+        fetch = "https://board.example/b/{2}/new/"
+        item = "board-post"
+        summary = "[slot=text]"
+        image = "[slot=media] img"
+        attributes = { title = "post-title", link = "permalink", date = "created", id = "id" }
+    "#;
+
+    const POSTS: &str = r#"<main>
+        <board-post id="p_1abc" post-title="  Rust 2.0 is   out "
+            permalink="/b/rust/1abc/" score="1234" created="2026-11-20T10:15:00.123000+0000">
+          <a slot="title" href="/b/rust/1abc/">Rust 2.0 is out</a>
+          <div slot="text"><p>Read all about it.</p></div>
           <img src="/avatar.png">
-        </shreddit-post></article>
-        <article><shreddit-post id="t3_1abd" post-title="A link"
-            permalink="/r/rust/comments/1abd/a_link/" created-timestamp="2026-11-19T08:00:00+0100">
-          <div slot="post-media-container"><img src="https://preview.example/1abd.jpg"></div>
+        </board-post>
+        <board-post id="p_1abd" post-title="A link" permalink="/b/rust/1abd/"
+            created="2026-11-19T08:00:00+0100">
+          <div slot="media"><img src="https://preview.example/1abd.jpg"></div>
           <span>99 points</span>
-        </shreddit-post></article>
-        <shreddit-post id="t3_1abe" permalink="/r/rust/comments/1abe/x/"></shreddit-post>
-    </shreddit-feed>"#;
+        </board-post>
+        <board-post id="p_1abe" permalink="/b/rust/1abe/"></board-post>
+    </main>"#;
 
     #[test]
-    fn reddit_is_off_until_the_operator_turns_it_on() {
-        let page = Url::parse("https://www.reddit.com/r/rust/").unwrap();
-        let recipes = Recipes::built_in().unwrap();
-        assert!(recipes.for_page(&page).is_none());
-        assert_eq!(recipes.address(&page), page);
-        let recipes = recipes.enable(" reddit ,").unwrap();
-        assert!(!recipes.for_page(&page).unwrap().robots);
-        let err = Recipes::built_in().unwrap().enable("redit").unwrap_err();
-        assert!(err.to_string().contains("redit"), "{err}");
-    }
-
-    #[test]
-    fn reddit_is_read_newest_first_from_the_attributes_of_its_posts() {
-        let recipes = Recipes::built_in().unwrap().enable("reddit").unwrap();
+    fn a_recipe_may_read_another_address_and_the_attributes_of_its_items() {
+        let recipes = Recipes::parse(BOARD).unwrap();
         let address = |page: &str| recipes.address(&Url::parse(page).unwrap()).to_string();
-        let newest = "https://www.reddit.com/r/rust/new/";
-        assert_eq!(address("https://reddit.com/r/rust"), newest);
-        assert_eq!(address("https://old.reddit.com/r/rust/top/?t=week"), newest);
+        let newest = "https://board.example/b/rust/new/";
+        assert_eq!(address("https://board.example/b/rust"), newest);
         assert_eq!(
-            address("https://www.reddit.com/r/"),
-            "https://www.reddit.com/r/"
+            address("https://www.board.example/b/rust/top/?t=week"),
+            newest
+        );
+        assert_eq!(
+            address("https://board.example/b/"),
+            "https://board.example/b/"
         );
 
         let base = Url::parse(newest).unwrap();
-        let document = html::read(SUBREDDIT).unwrap();
+        let document = html::read(POSTS).unwrap();
         let items = recipes.for_page(&base).unwrap().items(&document, &base);
         assert_eq!(items.len(), 2, "a post without a title is none");
-        assert_eq!(items[0].id.as_deref(), Some("t3_1abc"));
+        assert_eq!(items[0].id.as_deref(), Some("p_1abc"));
         assert_eq!(items[0].title, "Rust 2.0 is out");
-        assert_eq!(
-            items[0].url.as_str(),
-            "https://www.reddit.com/r/rust/comments/1abc/rust_20_is_out/"
-        );
-        // Nothing that counts: no score, no comments.
+        assert_eq!(items[0].url.as_str(), "https://board.example/b/rust/1abc/");
         assert_eq!(items[0].summary.as_deref(), Some("Read all about it."));
-        assert_eq!(items[0].image, None, "an avatar is no image of the post");
+        assert_eq!(items[0].image, None, "only the image the recipe names");
         assert_eq!(
             items[0].published,
             Some(time::macros::datetime!(2026-11-20 10:15:00.123 UTC))
@@ -416,8 +375,6 @@ mod tests {
         let err = format!("{:#}", Recipes::parse(wrong).unwrap_err());
         assert!(err.contains("example.net"), "{err}");
         assert!(Recipes::parse("[[recipe]]\nhost = \"x\"\nitem = \"a\"\nfoo = 1").is_err());
-        let robots = "[[recipe]]\nhost = \"x\"\nitem = \"a\"\nrobots = false";
-        assert!(Recipes::parse(robots).is_err(), "only an optional one");
         let both = "[[recipe]]\nhost = \"x\"\nitem = \"a\"\ntitle = \"b\"\n\
                     attributes = { title = \"t\", link = \"l\" }";
         assert!(Recipes::parse(both).is_err());

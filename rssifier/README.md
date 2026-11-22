@@ -34,25 +34,6 @@ Before it fetches a page, RSSifier reads the site's `robots.txt` (RFC 9309)
 as `rueder-rssifier` and keeps it for a day. Hosts the operator blocks are
 never fetched from, nor redirected to.
 
-### Reddit
-
-Reddit ended its RSS feeds on 2026-11-13. A recipe built in reads the newest
-posts of a subreddit (`reddit.com/r/<name>`, read as `/r/<name>/new/`) from
-the page Reddit shows without a login: title, link, time and the post's own
-id, the text and a preview where there are any, never the score or the
-number of comments. It is off until the operator turns it on with
-`RSSIFIER_ENABLE=reddit`, and it is not for a public instance: Reddit's User
-Agreement forbids collecting its pages automatically, and its `robots.txt`
-forbids every crawler everything, which this recipe, once turned on, does
-not ask. Reddit blocks data centres and clients it does not know, and it
-changes its pages; the recipe may stop finding posts at any time. To many
-servers Reddit answers with a check in JavaScript instead of the page (a
-form with `js_challenge`), which RSSifier does not solve: then it reads
-nothing and says the page is made by scripts, and `rssifier fetch` shows
-that page. The page
-holds only the first few posts (three in a sample of 2026-11-22), the rest
-come by script, so a busy subreddit loses posts between two fetches.
-
 ## API
 
 Every request but `/health` and `/openapi.json` names a token in
@@ -105,7 +86,6 @@ and `RSSIFIER_TOKEN=rsf_…` in its own settings.
 | `FETCH_ALLOW_NETS` | none | Internal networks that may be fetched from, comma separated; for tests. |
 | `RSSIFIER_RECIPES` | none | A file of recipes, written like `rules/recipes.toml`, that go before those built in. Read at the start. |
 | `RSSIFIER_BLOCKED_HOSTS` | none | Hosts never fetched from, comma separated; each also stands for its subdomains. |
-| `RSSIFIER_ENABLE` | none | Recipes that are off until the operator names them, comma separated: `reddit` (see above). A name no recipe has stops the start. |
 | `RSSIFIER_USER_AGENT` | `rueder-rssifier/<version> (+https://github.com/FionaPreroll/rueder)` | What RSSifier calls itself when it fetches; empty is the default. `robots.txt` is still read for `rueder-rssifier`. |
 | `RUST_LOG` | `info` | |
 
@@ -122,12 +102,12 @@ container, and no other tools.
 
 `rssifier fetch <page>` fetches a page as the server would, at the address a
 recipe names for it, with the same settings (`FETCH_ALLOW_NETS`,
-`RSSIFIER_RECIPES`, `RSSIFIER_ENABLE`) but without asking `robots.txt`. It
+`RSSIFIER_RECIPES`, `RSSIFIER_USER_AGENT`) but without asking `robots.txt`. It
 prints the page and, on stderr, what the site answered and the entries
 RSSifier reads in it, or that the page is made by scripts:
 
 ```sh
-docker compose exec rssifier rssifier fetch https://www.reddit.com/r/rust/ >/dev/null
+docker compose exec rssifier rssifier fetch https://example.com/news >/dev/null
 ```
 
 ## Checks
