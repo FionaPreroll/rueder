@@ -93,6 +93,14 @@ For other readers than this rueder, make a token of their own, with limits:
 docker compose exec rssifier rssifier token add other --per-minute 60 --fetches-per-hour 300
 ```
 
+When a website gives no feed although it should, `rssifier fetch` shows what
+RSSifier gets from it and what it reads there, with the recipes as configured
+and without asking `robots.txt`:
+
+```sh
+docker compose exec rssifier rssifier fetch https://example.com/news >/dev/null
+```
+
 ## The reverse proxy
 
 rueder speaks plain HTTP on `127.0.0.1:3000`; the proxy does TLS and passes
@@ -683,7 +691,8 @@ database can go: `docker rm -f rueder3-db` and
 ## What the container may do
 
 - It holds the program, the frontend and the C library, with no shell and no
-  package manager, and runs as a user that is not root.
+  package manager, and runs as a user that is not root. RSSifier's holds bash
+  and env besides, for `docker compose exec rssifier bash`.
 - Its file system is read-only. It writes to one volume, the cache of the
   image proxy, where the key for the proxy's addresses lies too.
 - It has no Linux capabilities and cannot gain privileges.

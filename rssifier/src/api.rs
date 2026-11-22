@@ -223,6 +223,15 @@ fn blocked(host: &str) -> Problem {
     )
 }
 
+/// How a page is asked for, by the server and by `rssifier fetch`.
+pub fn page_request(address: &str) -> Request<'_> {
+    Request {
+        accept: Some(ACCEPT_HTML),
+        max_body: Some(MAX_PAGE),
+        ..Request::new(address)
+    }
+}
+
 /// Asks the site's `robots.txt`, unless the operator turned on a recipe for
 /// the page that leaves it out, fetches the page and reads it.
 async fn make(state: &AppState, url: &Url) -> Result<Written, Problem> {
@@ -249,12 +258,7 @@ async fn make(state: &AppState, url: &Url) -> Result<Written, Problem> {
                 return Err(Problem::new(StatusCode::FORBIDDEN, "robots", detail));
             }
         }
-        let request = Request {
-            accept: Some(ACCEPT_HTML),
-            max_body: Some(MAX_PAGE),
-            ..Request::new(address)
-        };
-        state.client.get(request).await
+        state.client.get(page_request(address)).await
     };
     let response = fetched.map_err(|err| match err {
         FetchError::Timeout => {

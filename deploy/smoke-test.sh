@@ -117,6 +117,9 @@ for service in rueder rssifier; do
 	[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = true ] ||
 		fail "the file system of $service is not read-only"
 done
+# RSSifier's image holds bash and env to look around in.
+compose exec -T rssifier env bash -c 'test -n "$BASH_VERSION"' ||
+	fail "RSSifier's container has no bash or env"
 # `docker port` lists only the ports published on the machine.
 [ -z "$(docker port "$(compose ps --quiet rssifier)")" ] || fail "RSSifier is open on the machine"
 # The server made its key for the image proxy, so it can write where it must.

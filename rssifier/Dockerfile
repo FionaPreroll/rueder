@@ -13,16 +13,24 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/rssifier/target \
     cargo build --release --locked \
     && cp target/release/rssifier /usr/local/bin/rssifier
-# The directory of the tokens, for the stage below, which has no shell.
-RUN mkdir -p /etc/rssifier
+# The directory of the tokens, and bash and env with their library, for the
+# stage below, which has neither. Each comes with its package's entry, so that
+# the scan of the image knows their versions.
+RUN mkdir -p /etc/rssifier /out/var/lib/dpkg/status.d \
+    && cp -a --parents /usr/bin/bash /usr/bin/env /usr/lib/*-linux-gnu/libtinfo.so.6* /out \
+    && for package in bash coreutils libtinfo6; do \
+        dpkg-query --status "$package" >"/out/var/lib/dpkg/status.d/$package"; \
+    done
 
-# The program and the C library, without a shell, as a user that is not root.
+# The program, the C library, bash and env to look around in a running
+# container, as a user that is not root; no other tools, no package manager.
 # The tokens come in as a file the operator mounts (RSSIFIER_TOKENS), and
 # `rssifier token` runs with `docker run` on the same file.
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:cc66d222f0a7ec996b78a99fe76a969bc80b539a5016ad866c14d1949bc6d0ab
 LABEL org.opencontainers.image.title="rssifier" \
       org.opencontainers.image.description="Makes feeds of web pages that have none" \
       org.opencontainers.image.source="https://github.com/FionaPreroll/rueder"
+COPY --from=build /out/ /
 COPY --from=build /usr/local/bin/rssifier /usr/local/bin/rssifier
 COPY --from=build --chown=nonroot:nonroot /etc/rssifier /etc/rssifier
 ENV LISTEN_ADDR=0.0.0.0:3100 \

@@ -1,12 +1,13 @@
-//! `rssifier serve` runs the server, `rssifier token …` keeps the tokens.
+//! `rssifier serve` runs the server, `rssifier token …` keeps the tokens,
+//! `rssifier fetch` shows what the server would get from a page.
 
-use std::{net::SocketAddr, path::PathBuf};
+use std::{io::Write, net::SocketAddr, path::PathBuf};
 
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use hardened_http::{Config, HttpClient, Net};
 use rssifier::{
-    AGENT, AppState, Sites, app, health,
+    AGENT, AppState, Sites, api, app, extract, health,
     limits::Pace,
     recipes::Recipes,
     tokens::{self, Keeper, Limits, Token},
@@ -33,17 +34,8 @@ enum Command {
     Serve {
         #[arg(long, env = "LISTEN_ADDR", default_value = "127.0.0.1:3100")]
         listen: SocketAddr,
-        /// Networks that are fetched from although they are internal, comma
-        /// separated; for tests against a server on this machine.
-        #[arg(long, env = "FETCH_ALLOW_NETS", default_value = "")]
-        allow: String,
-        /// A file of recipes, written like `rules/recipes.toml`, that go
-        /// before those that come with RSSifier.
-        #[arg(long, env = "RSSIFIER_RECIPES")]
-        recipes: Option<PathBuf>,
-        /// Optional recipes to turn on, comma separated: "reddit".
-        #[arg(long, env = "RSSIFIER_ENABLE", default_value = "")]
-        enable: String,
+        #[command(flatten)]
+        reading: Reading,
         /// Hosts never fetched from, each also for its subdomains, comma
         /// separated.
         #[arg(long, env = "RSSIFIER_BLOCKED_HOSTS", default_value = "")]
@@ -52,6 +44,14 @@ enum Command {
         /// needs no `rssifier token add`.
         #[arg(long, env = "RSSIFIER_TOKEN", hide_env_values = true)]
         token: Option<String>,
+    },
+    /// Fetches a page as the server does, at the address a recipe names for
+    /// it, without asking robots.txt. Prints the page and, on stderr, what
+    /// the site answered and what RSSifier reads in it.
+    Fetch {
+        url: String,
+        #[command(flatten)]
+        reading: Reading,
     },
     /// Asks the server that runs on LISTEN_ADDR whether it is well: the
     /// health check of the container. Fails if it does not answer.
@@ -62,6 +62,50 @@ enum Command {
     /// Makes, lists and ends tokens.
     #[command(subcommand)]
     Token(TokenCommand),
+}
+
+/// How pages are fetched and read, for `serve` and `fetch`.
+#[derive(clap::Args)]
+struct Reading {
+    /// Networks that are fetched from although they are internal, comma
+    /// separated; for tests against a server on this machine.
+    #[arg(long, env = "FETCH_ALLOW_NETS", default_value = "")]
+    allow: String,
+    /// A file of recipes, written like `rules/recipes.toml`, that go before
+    /// those that come with RSSifier.
+    #[arg(long, env = "RSSIFIER_RECIPES")]
+    recipes: Option<PathBuf>,
+    /// Optional recipes to turn on, comma separated: "reddit".
+    #[arg(long, env = "RSSIFIER_ENABLE", default_value = "")]
+    enable: String,
+}
+
+impl Reading {
+    fn recipes(&self) -> anyhow::Result<Recipes> {
+        let recipes = match &self.recipes {
+            Some(file) => Recipes::with_file(file)?,
+            None => Recipes::built_in()?,
+        };
+        recipes.enable(&self.enable)
+    }
+
+    fn client(&self) -> anyhow::Result<HttpClient> {
+        let allow = self
+            .allow
+            .split(',')
+            .map(str::trim)
+            .filter(|net| !net.is_empty())
+            .map(|net| {
+                net.parse::<Net>()
+                    .map_err(|err| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        HttpClient::new(Config {
+            agent: AGENT.to_owned(),
+            allow,
+            ..Config::default()
+        })
+    }
 }
 
 #[derive(clap::Args)]
@@ -118,30 +162,18 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Serve {
             listen,
-            allow,
-            recipes,
-            enable,
+            reading,
             blocked,
             token,
         } => {
-            let recipes = match recipes {
-                Some(file) => Recipes::with_file(&file)?,
-                None => Recipes::built_in()?,
-            };
-            let recipes = recipes.enable(&enable)?;
             let mut keeper = Keeper::new(cli.tokens.clone())?;
             if let Some(token) = token.filter(|token| !token.is_empty()) {
                 keeper = keeper.with(tokens::chosen(token.trim())?);
             }
-            serve(
-                keeper,
-                &cli.tokens,
-                listen,
-                &allow,
-                Sites::new(recipes, &blocked),
-            )
-            .await
+            let sites = Sites::new(reading.recipes()?, &blocked);
+            serve(keeper, &cli.tokens, listen, reading.client()?, sites).await
         }
+        Command::Fetch { url, reading } => fetch(&url, &reading).await,
         Command::Health { listen } => {
             health::check(health::address(&listen).await?, health::WAIT).await
         }
@@ -153,23 +185,9 @@ async fn serve(
     keeper: Keeper,
     tokens: &std::path::Path,
     listen: SocketAddr,
-    allow: &str,
+    client: HttpClient,
     sites: Sites,
 ) -> anyhow::Result<()> {
-    let allow = allow
-        .split(',')
-        .map(str::trim)
-        .filter(|net| !net.is_empty())
-        .map(|net| {
-            net.parse::<Net>()
-                .map_err(|err| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-    let client = HttpClient::new(Config {
-        agent: AGENT.to_owned(),
-        allow,
-        ..Config::default()
-    })?;
     let state = AppState::new(client, keeper, Pace::default(), sites);
     let listener = tokio::net::TcpListener::bind(listen)
         .await
@@ -183,6 +201,39 @@ async fn serve(
             let _ = tokio::signal::ctrl_c().await;
         })
         .await?;
+    Ok(())
+}
+
+async fn fetch(address: &str, reading: &Reading) -> anyhow::Result<()> {
+    let client = reading.client()?;
+    let recipes = reading.recipes()?;
+    let url = extract::link(&client.parse(address)?, address).context("no web address")?;
+    let url = recipes.address(&url);
+    eprintln!("fetching {url} as {AGENT}");
+    let response = client.get(api::page_request(url.as_str())).await?;
+    eprintln!("{} from {}", response.status, response.url);
+    let kind = response.header("content-type").unwrap_or("no content type");
+    eprintln!("{kind}, {} bytes", response.body.len());
+    std::io::stdout().write_all(&response.body)?;
+    let text = String::from_utf8_lossy(&response.body);
+    let page = extract::page(&text, &response.url, &recipes);
+    let source = if page.source.is_empty() {
+        "nothing"
+    } else {
+        page.source
+    };
+    let scripted = if page.scripted {
+        ", made by scripts"
+    } else {
+        ""
+    };
+    eprintln!(
+        "\nread: {} entries from {source}{scripted}",
+        page.items.len()
+    );
+    for item in &page.items {
+        eprintln!("  {} {}", item.url, item.title);
+    }
     Ok(())
 }
 
