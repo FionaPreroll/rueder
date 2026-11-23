@@ -244,7 +244,10 @@ With nginx, in the `server` block:
 ## Settings
 
 All settings are in `.env`; `.env.example` lists them with what they do. After
-a change, `docker compose up --detach` starts the containers anew.
+a change, `docker compose up --detach` starts the containers anew. A switch is
+`on` or `off`; anything else, such as `APP_API=false`, stops the start with a
+message that names it, rather than quietly being the default. An empty
+setting counts as not set.
 
 | Setting | What it is for |
 |---|---|

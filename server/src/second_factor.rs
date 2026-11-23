@@ -552,7 +552,7 @@ async fn status(
         app: found.app,
         passkeys: found.passkeys,
         recovery_codes_left: found.left,
-        required_for_admins: state.admin_second_factor,
+        required_for_admins: state.switches.admin_second_factor,
     }))
 }
 

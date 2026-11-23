@@ -280,7 +280,10 @@ async fn without_the_app_api_there_are_none(db: PgPool) {
         .unwrap()
         .unwrap();
     let state = AppState {
-        app_api: false,
+        switches: rueder::settings::Switches {
+            app_api: false,
+            ..Default::default()
+        },
         ..AppState::new(db.clone())
     };
     let cookie = common::session(&db, ada).await;

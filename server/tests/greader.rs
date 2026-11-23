@@ -178,7 +178,10 @@ async fn an_app_logs_in_with_an_app_password_only(db: PgPool) {
 
     // APP_API=off: none of it is there.
     let off = AppState {
-        app_api: false,
+        switches: rueder::settings::Switches {
+            app_api: false,
+            ..Default::default()
+        },
         ..AppState::new(db.clone())
     };
     let (status, _, _) = ask(&off, Method::GET, "/reader/api/0/user-info", Some(auth), "").await;
@@ -981,7 +984,10 @@ async fn where_images_are_public_every_app_gets_the_same_addresses(db: PgPool) {
         .await
         .unwrap();
     let state = AppState {
-        images_public: true,
+        switches: rueder::settings::Switches {
+            images_public: true,
+            ..Default::default()
+        },
         ..with_images(&db)
     };
     let token = logged_in(&state, ada, "ada").await;

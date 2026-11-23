@@ -501,7 +501,10 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
         .unwrap();
     let lax = AppState::new(db.clone());
     let strict = AppState {
-        admin_second_factor: true,
+        switches: rueder::settings::Switches {
+            admin_second_factor: true,
+            ..Default::default()
+        },
         ..AppState::new(db.clone())
     };
     let without = cookie(&log_in(&strict, "root", None).await.1);

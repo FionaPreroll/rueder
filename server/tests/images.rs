@@ -869,7 +869,10 @@ async fn with_images_public_a_cache_in_front_may_keep_them_for_a_week(db: PgPool
     let images = proxy("images-public", true);
     let public = AppState {
         images: Some(images.clone()),
-        images_public: true,
+        switches: rueder::settings::Switches {
+            images_public: true,
+            ..Default::default()
+        },
         ..AppState::new(db.clone())
     };
     let source = format!("{at}/a.png");

@@ -141,7 +141,7 @@ fn auth_token(headers: &HeaderMap) -> Option<&str> {
 /// password is found once and handed on, and what a request changes is
 /// announced to the account's open tabs.
 async fn around_each(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
-    if !state.app_api {
+    if !state.switches.app_api {
         return StatusCode::NOT_FOUND.into_response();
     }
     let path = format!("/greader{}", request.uri().path());
@@ -395,7 +395,7 @@ async fn shared_image(
     State(state): State<AppState>,
     Path((signature, size, address)): Path<(String, String, String)>,
 ) -> Response {
-    let public = state.images_public;
+    let public = state.switches.images_public;
     let Some(images) = state.images.filter(|_| public) else {
         return StatusCode::NOT_FOUND.into_response();
     };

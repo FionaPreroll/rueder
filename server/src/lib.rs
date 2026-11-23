@@ -74,6 +74,7 @@ pub mod rssifier;
 pub mod search;
 pub mod second_factor;
 pub mod sessions;
+pub mod settings;
 pub mod sizes;
 pub mod status;
 pub mod subscribe;
@@ -142,19 +143,10 @@ pub struct AppState {
     pub rates: Arc<Rates>,
     /// What the server notices about itself, for the status page.
     pub monitor: Arc<Monitor>,
-    /// Whether the server takes reports of errors from the browsers of
-    /// readers who agreed to send them.
-    pub reports: bool,
-    /// Whether the right of an admin counts only in a session that began with
-    /// a second factor (`ADMIN_SECOND_FACTOR=required`).
-    pub admin_second_factor: bool,
+    /// What the operator turned on or off.
+    pub switches: settings::Switches,
     /// Where the operator's legal texts are, and which terms count.
     pub legal: Arc<Legal>,
-    /// Whether readers may report feeds and articles (`CONTENT_REPORTS=on`).
-    pub content_reports: bool,
-    /// Whether apps of other makers may log in with app passwords, through
-    /// the Google Reader API (on unless `APP_API=off`).
-    pub app_api: bool,
     /// Passkeys, for the site at `PUBLIC_URL`; none without it.
     pub passkeys: Option<Arc<passkeys::Passkeys>>,
     /// What sends mail (`SMTP_URL`, see `mail`); none without it, and then
@@ -166,10 +158,6 @@ pub struct AppState {
     /// The key of the captcha of open registration and the solutions that
     /// were used.
     pub captcha: Arc<captcha::Captcha>,
-    /// Whether a cache in front of rueder, such as a CDN, may keep images
-    /// (`IMAGES_PUBLIC=on`): they come without a session then, and apps get
-    /// addresses that are the same for all of them.
-    pub images_public: bool,
     /// The size of the database in bytes from which the status page warns
     /// (`DATABASE_WARN_GB`); none without it.
     pub database_warn_bytes: Option<i64>,
@@ -192,16 +180,12 @@ impl AppState {
             rssifier: None,
             rates: Arc::default(),
             monitor: Arc::default(),
-            reports: true,
-            admin_second_factor: false,
+            switches: settings::Switches::default(),
             legal: Arc::default(),
-            content_reports: false,
-            app_api: true,
             passkeys: None,
             mail: None,
             metrics: None,
             captcha: Arc::default(),
-            images_public: false,
             database_warn_bytes: None,
         }
     }
@@ -432,7 +416,7 @@ async fn image(
     UrlPath((signature, size, address)): UrlPath<(String, String, String)>,
 ) -> Response {
     if let Err(refused) = session
-        && !state.images_public
+        && !state.switches.images_public
     {
         return refused.into_response();
     }
@@ -445,7 +429,7 @@ async fn image(
                 (header::CONTENT_TYPE, picture.format.mime()),
                 (
                     header::CACHE_CONTROL,
-                    if state.images_public {
+                    if state.switches.images_public {
                         images::KEPT_BY_ANY_CACHE
                     } else {
                         images::KEPT_BY_ITS_READER

@@ -547,7 +547,7 @@ async fn status(State(state): State<AppState>, session: Session) -> Result<Json<
         error,
     };
 
-    let browsers = reports::summary(&state.db, state.reports).await?;
+    let browsers = reports::summary(&state.db, state.switches.reports).await?;
     let mut hints = hints(
         &routes,
         &all,

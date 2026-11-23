@@ -192,7 +192,7 @@ impl FromRequestParts<AppState> for Session {
             Some(token) => find(&state.db, token).await?,
             None => None,
         };
-        let session = session.map(|session| session.for_admins(state.admin_second_factor));
+        let session = session.map(|session| session.for_admins(state.switches.admin_second_factor));
         session.ok_or_else(|| AppError::Status(StatusCode::UNAUTHORIZED, "not logged in".into()))
     }
 }

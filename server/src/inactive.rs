@@ -16,7 +16,7 @@
 //! - **Only the running server** looks after it, once an hour ([`sweep`]),
 //!   as the mails count against its limits (`rate::Rates::inactive_mail`).
 
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Context;
 use sqlx::PgPool;
@@ -138,6 +138,22 @@ struct Notice {
     language: Language,
     active_at: OffsetDateTime,
     goes: OffsetDateTime,
+}
+
+/// What the server does once an hour: [`sweep`] now, and say in the log what
+/// it did.
+pub async fn hourly(db: PgPool, mailer: Arc<Mailer>, rates: Arc<Rates>) {
+    match sweep(&db, &mailer, &rates, OffsetDateTime::now_utc()).await {
+        Ok(swept) if !swept.is_empty() => tracing::info!(
+            warned = swept.warned,
+            reminded = swept.reminded,
+            removed = swept.removed,
+            waiting = swept.waiting,
+            "accounts nobody uses"
+        ),
+        Ok(_) => {}
+        Err(err) => tracing::error!("looking after accounts nobody uses: {err:#}"),
+    }
 }
 
 /// Mails the accounts nobody used for the months the operator set, and

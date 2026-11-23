@@ -1071,7 +1071,10 @@ async fn admins_log_in_with_a_passkey_as_with_a_second_factor(db: PgPool) {
         .unwrap()
         .unwrap();
     let state = AppState {
-        admin_second_factor: true,
+        switches: rueder::settings::Switches {
+            admin_second_factor: true,
+            ..Default::default()
+        },
         ..with_passkeys(&db)
     };
     let cookie = common::session(&db, admin).await;
