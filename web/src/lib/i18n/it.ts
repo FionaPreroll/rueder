@@ -243,7 +243,10 @@ const it: Messages = {
 
 	media: {
 		title: 'Allegati',
-		play: 'Riproduci'
+		play: 'Riproduci',
+		image: 'Immagine',
+		zoomIn: 'Ingrandisci',
+		zoomOut: 'Riduci'
 	},
 
 	connection: {

@@ -14,6 +14,7 @@
 	import Badge from './Badge.svelte';
 	import Enclosures from './Enclosures.svelte';
 	import Icon from './Icon.svelte';
+	import ImageViewer from './ImageViewer.svelte';
 	import Marked from './Marked.svelte';
 	import Menu from './Menu.svelte';
 	import ReportDialog from './ReportDialog.svelte';
@@ -71,6 +72,30 @@
 	// As Escape does. In the unread items a read article goes from the list with it.
 	function close() {
 		if (reader.open === article.id) reader.open = null;
+	}
+
+	// Images that are no link open large, by a click or, focused, by Enter. The text
+	// comes as HTML, so its images are made buttons once it is in the page.
+	let content: HTMLElement | undefined = $state();
+	let enlarged = $state<{ src: string; alt: string; title: string } | null>(null);
+
+	$effect(() => {
+		void article.html;
+		for (const image of content?.querySelectorAll('img') ?? []) {
+			if (image.closest('a')) continue;
+			image.tabIndex = 0;
+			image.setAttribute('role', 'button');
+			image.setAttribute('aria-haspopup', 'dialog');
+			image.classList.add('cursor-zoom-in');
+		}
+	});
+
+	function enlarge(event: MouseEvent | KeyboardEvent) {
+		const image = event.target;
+		if (!(image instanceof HTMLImageElement) || !image.hasAttribute('aria-haspopup')) return;
+		if (event instanceof KeyboardEvent && event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		enlarged = { src: image.currentSrc || image.src, alt: image.alt, title: image.title };
 	}
 
 	// A list comes without the texts; the text is fetched when the article is shown.
@@ -143,33 +168,35 @@
 	{#if article.html === null}
 		<p class="mt-3 text-sm text-soft" role="status">{m.list.loading}</p>
 	{:else}
-		<!-- The text comes cleaned from the server; with made-up data it is made up in the browser. -->
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-		{#if lead}
-			<img
-				class="mt-3 max-h-96 max-w-full rounded-md"
-				src={lead.url}
-				alt={lead.title}
-				title={lead.title || undefined}
-				loading="lazy"
-			/>
-		{/if}
-		{#if article.textDropped}
-			<!-- The line stayed, the text went: the original may still have it. -->
-			<p class="mt-3 text-sm text-soft">
-				{m.list.textDropped}
-				{#if article.link}
-					<a
-						class="text-link hover:underline"
-						href={article.link}
-						target="_blank"
-						rel="noopener noreferrer">{m.list.textDroppedOriginal}</a
-					>
-				{/if}
-			</p>
-		{:else}
-			<div class="article-body mt-3" dir="auto">{@html article.html}</div>
-		{/if}
+		<div bind:this={content} role="presentation" onclick={enlarge} onkeydown={enlarge}>
+			{#if lead}
+				<img
+					class="mt-3 max-h-96 max-w-full rounded-md"
+					src={lead.url}
+					alt={lead.title}
+					title={lead.title || undefined}
+					loading="lazy"
+				/>
+			{/if}
+			{#if article.textDropped}
+				<!-- The line stayed, the text went: the original may still have it. -->
+				<p class="mt-3 text-sm text-soft">
+					{m.list.textDropped}
+					{#if article.link}
+						<a
+							class="text-link hover:underline"
+							href={article.link}
+							target="_blank"
+							rel="noopener noreferrer">{m.list.textDroppedOriginal}</a
+						>
+					{/if}
+				</p>
+			{:else}
+				<!-- The text comes cleaned from the server; with made-up data it is made up in the browser. -->
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				<div class="article-body mt-3" dir="auto">{@html article.html}</div>
+			{/if}
+		</div>
 		{#if article.enclosures.length > 0}
 			<Enclosures enclosures={article.enclosures} />
 		{/if}
@@ -322,6 +349,9 @@
 	{/if}
 	{#if sourcing}
 		<ArticleSourceDialog {reader} {article} onclose={() => (sourcing = false)} />
+	{/if}
+	{#if enlarged}
+		<ImageViewer {...enlarged} onclose={() => (enlarged = null)} />
 	{/if}
 	{#if reporting}
 		<ReportDialog

@@ -150,12 +150,6 @@
 		appearance: none;
 	}
 
-	/* Images stay a little dimmer on the dark theme, so a bright one does not glare,
-	   until the pointer is on them. */
-	[data-theme='dark'] :is(.article-body :where(img, video), img.dimmed):not(:hover) {
-		filter: brightness(0.85);
-	}
-
 	/* A finger needs 44 by 44 pixels to hit a target (WCAG 2.5.5), so on a screen
 	   worked with one every button, tab, field and option gets them. In the base
 	   layer and without weight, so a class of a component still has the last word.

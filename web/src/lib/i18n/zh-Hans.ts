@@ -232,7 +232,10 @@ const zhHans: Messages = {
 
 	media: {
 		title: '附件',
-		play: '播放'
+		play: '播放',
+		image: '图片',
+		zoomIn: '放大',
+		zoomOut: '缩小'
 	},
 
 	connection: {

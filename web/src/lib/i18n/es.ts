@@ -242,7 +242,10 @@ const es: Messages = {
 
 	media: {
 		title: 'Adjuntos',
-		play: 'Reproducir'
+		play: 'Reproducir',
+		image: 'Imagen',
+		zoomIn: 'Ampliar',
+		zoomOut: 'Reducir'
 	},
 
 	connection: {

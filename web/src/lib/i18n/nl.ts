@@ -240,7 +240,10 @@ const nl: Messages = {
 
 	media: {
 		title: 'Bijlagen',
-		play: 'Afspelen'
+		play: 'Afspelen',
+		image: 'Afbeelding',
+		zoomIn: 'Inzoomen',
+		zoomOut: 'Uitzoomen'
 	},
 
 	connection: {

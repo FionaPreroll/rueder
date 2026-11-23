@@ -241,7 +241,10 @@ const en = {
 
 	media: {
 		title: 'Attachments',
-		play: 'Play'
+		play: 'Play',
+		image: 'Image',
+		zoomIn: 'Zoom in',
+		zoomOut: 'Zoom out'
 	},
 
 	connection: {

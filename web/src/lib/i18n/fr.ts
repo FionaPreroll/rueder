@@ -244,7 +244,10 @@ const fr: Messages = {
 
 	media: {
 		title: 'Pièces jointes',
-		play: 'Lire'
+		play: 'Lire',
+		image: 'Image',
+		zoomIn: 'Agrandir',
+		zoomOut: 'Réduire'
 	},
 
 	connection: {

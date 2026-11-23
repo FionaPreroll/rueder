@@ -62,7 +62,7 @@
 			src={url}
 			alt=""
 			loading={big ? 'eager' : 'lazy'}
-			class={['dimmed w-full object-cover', big ? 'aspect-[21/9] max-h-[26rem]' : 'aspect-video']}
+			class={['w-full object-cover', big ? 'aspect-[21/9] max-h-[26rem]' : 'aspect-video']}
 		/>
 	{/if}
 {/snippet}

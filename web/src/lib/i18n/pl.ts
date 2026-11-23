@@ -246,7 +246,10 @@ const pl: Messages = {
 
 	media: {
 		title: 'Załączniki',
-		play: 'Odtwórz'
+		play: 'Odtwórz',
+		image: 'Obraz',
+		zoomIn: 'Powiększ',
+		zoomOut: 'Pomniejsz'
 	},
 
 	connection: {

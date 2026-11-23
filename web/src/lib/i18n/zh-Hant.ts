@@ -233,7 +233,10 @@ const zhHant: Messages = {
 
 	media: {
 		title: '附件',
-		play: '播放'
+		play: '播放',
+		image: '圖片',
+		zoomIn: '放大',
+		zoomOut: '縮小'
 	},
 
 	connection: {

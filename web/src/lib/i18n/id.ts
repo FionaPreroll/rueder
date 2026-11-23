@@ -236,7 +236,10 @@ const id: Messages = {
 
 	media: {
 		title: 'Lampiran',
-		play: 'Putar'
+		play: 'Putar',
+		image: 'Gambar',
+		zoomIn: 'Perbesar',
+		zoomOut: 'Perkecil'
 	},
 
 	connection: {
