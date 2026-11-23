@@ -344,8 +344,14 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
         ],
         ..Default::default()
     })?;
-    let rules = Arc::new(Rules::built_in()?);
-    let (events, monitor) = (Events::new(), Arc::new(Monitor::default()));
+    let fetcher = fetch::Fetcher {
+        db: db.clone(),
+        client,
+        rssifier: None,
+        rules: Arc::new(Rules::built_in()?),
+        events: Events::new(),
+        monitor: Arc::new(Monitor::default()),
+    };
     let underway = fetch::Underway::new(&options.pace);
     let mut every = tokio::time::interval(options.pace.every);
     every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -362,15 +368,10 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
         .execute(db)
         .await?;
         // As in the server, a round does not wait for the one before.
-        let (db, client, rules, events) =
-            (db.clone(), client.clone(), rules.clone(), events.clone());
-        let (monitor, underway, pace) = (monitor.clone(), underway.clone(), options.pace);
+        let (fetcher, underway, pace) = (fetcher.clone(), underway.clone(), options.pace);
         rounds.spawn(async move {
             let started = Instant::now();
-            fetch::round(
-                &db, &client, None, &rules, &events, &monitor, &pace, &underway,
-            )
-            .await?;
+            fetcher.round(&pace, &underway).await?;
             anyhow::Ok(started.elapsed().as_secs_f64() * 1000.0)
         });
     }
@@ -385,7 +386,7 @@ pub async fn run(db: &PgPool, options: Options) -> anyhow::Result<Report> {
     }
     servers.abort_all();
 
-    let fetches = monitor.fetches(Instant::now());
+    let fetches = fetcher.monitor.fetches(Instant::now());
     Ok(Report {
         options,
         rounds: round_ms.len() as u64,

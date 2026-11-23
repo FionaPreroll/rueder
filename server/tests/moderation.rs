@@ -7,9 +7,7 @@ use std::{sync::Arc, time::Duration};
 use axum::http::{Method, StatusCode};
 use common::call;
 use rueder::{
-    AppState, accounts,
-    events::Events,
-    fetch,
+    AppState, accounts, fetch,
     http_client::{self, HttpClient},
     images::{Cache, Config, Format, ImageProxy, Picture, Refused, Size},
     moderation,
@@ -295,9 +293,11 @@ async fn a_blocked_feed_is_not_fetched_seen_or_subscribed_to(db: PgPool) {
     let monitor = Arc::new(Monitor::default());
     let pace = fetch::Pace::default();
     // The other feed is due too; it is the only one taken.
-    fetch::fetch_due(&db, &client, None, &rules, &Events::new(), &monitor, &pace)
-        .await
-        .unwrap();
+    let fetcher = fetch::Fetcher {
+        monitor: monitor.clone(),
+        ..fetch::Fetcher::new(db.clone(), client.clone(), rules.clone())
+    };
+    fetcher.fetch_due(&pace).await.unwrap();
     let due: Vec<i32> =
         sqlx::query_scalar("SELECT id FROM feeds WHERE next_fetch_at <= now() ORDER BY id")
             .fetch_all(&db)

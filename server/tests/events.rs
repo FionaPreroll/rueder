@@ -943,17 +943,12 @@ async fn the_readers_of_a_feed_hear_what_a_round_of_fetching_finds(db: PgPool) {
             .execute(&db)
             .await
             .unwrap();
-        fetch::fetch_due(
-            &db,
-            &client,
-            None,
-            &rules,
-            &state.events,
-            &state.monitor,
-            &fetch::Pace::default(),
-        )
-        .await
-        .unwrap()
+        let fetcher = fetch::Fetcher {
+            events: state.events.clone(),
+            monitor: state.monitor.clone(),
+            ..fetch::Fetcher::new(db.clone(), client.clone(), rules.clone())
+        };
+        fetcher.fetch_due(&fetch::Pace::default()).await.unwrap()
     };
 
     // New articles: everybody who reads the feed hears of them.
