@@ -279,7 +279,10 @@ const ar: Messages = {
 
 	media: {
 		title: 'المرفقات',
-		play: 'تشغيل'
+		play: 'تشغيل',
+		image: 'صورة',
+		zoomIn: 'تكبير',
+		zoomOut: 'تصغير'
 	},
 
 	connection: {

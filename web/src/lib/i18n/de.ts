@@ -235,7 +235,10 @@ const de: Messages = {
 
 	media: {
 		title: 'Anhänge',
-		play: 'Abspielen'
+		play: 'Abspielen',
+		image: 'Bild',
+		zoomIn: 'Vergrößern',
+		zoomOut: 'Verkleinern'
 	},
 
 	connection: {

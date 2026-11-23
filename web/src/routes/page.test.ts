@@ -98,7 +98,8 @@ describe('an article', () => {
 		const heading2 = within(main).getByRole('heading', { level: 2 });
 		const title = within(heading2).getByRole('link').textContent!.trim();
 		expect(heading2).toHaveTextContent(/labnotes-weekly\.example$/);
-		expect(within(main).getByRole('img', { name: title })).toBeInTheDocument();
+		// The picture opens large, so it is a button.
+		expect(within(main).getByRole('button', { name: title }).tagName).toBe('IMG');
 		expect(within(main).getByRole('heading', { name: 'Attachments' })).toBeInTheDocument();
 		expect(main.querySelector('audio')).toBeNull();
 		await userEvent.click(within(main).getByRole('button', { name: /^Play/ }));

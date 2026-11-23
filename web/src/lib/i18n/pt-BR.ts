@@ -242,7 +242,10 @@ const ptBR: Messages = {
 
 	media: {
 		title: 'Anexos',
-		play: 'Reproduzir'
+		play: 'Reproduzir',
+		image: 'Imagem',
+		zoomIn: 'Ampliar',
+		zoomOut: 'Reduzir'
 	},
 
 	connection: {

@@ -235,7 +235,10 @@ const ko: Messages = {
 
 	media: {
 		title: '첨부 파일',
-		play: '재생'
+		play: '재생',
+		image: '이미지',
+		zoomIn: '확대',
+		zoomOut: '축소'
 	},
 
 	connection: {

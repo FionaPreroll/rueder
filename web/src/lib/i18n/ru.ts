@@ -251,7 +251,10 @@ const ru: Messages = {
 
 	media: {
 		title: 'Вложения',
-		play: 'Воспроизвести'
+		play: 'Воспроизвести',
+		image: 'Изображение',
+		zoomIn: 'Увеличить',
+		zoomOut: 'Уменьшить'
 	},
 
 	connection: {

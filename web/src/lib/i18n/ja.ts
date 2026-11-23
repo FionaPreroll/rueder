@@ -237,7 +237,10 @@ const ja: Messages = {
 
 	media: {
 		title: '添付ファイル',
-		play: '再生'
+		play: '再生',
+		image: '画像',
+		zoomIn: '拡大',
+		zoomOut: '縮小'
 	},
 
 	connection: {

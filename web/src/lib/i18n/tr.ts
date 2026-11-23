@@ -237,7 +237,10 @@ const tr: Messages = {
 
 	media: {
 		title: 'Ekler',
-		play: 'Oynat'
+		play: 'Oynat',
+		image: 'Görsel',
+		zoomIn: 'Yakınlaştır',
+		zoomOut: 'Uzaklaştır'
 	},
 
 	connection: {
