@@ -79,6 +79,17 @@ describe('Journey', () => {
 		expect(history.at).toBe(1);
 	});
 
+	it('takes the place of the entry of a window the reader went on from', () => {
+		const history = new FakeHistory();
+		const journey = new Journey(history);
+		journey.note({ stream: all, open: null });
+		// A dialog opens, and showing a feed from it closes it.
+		history.pushState({ ...(history.state as object), layer: 1 });
+		journey.note({ stream: feed('feed-1'), open: null });
+		expect(history.entries.map((entry) => placeOf(entry)?.stream)).toEqual([all, feed('feed-1')]);
+		expect(history.state).not.toHaveProperty('layer');
+	});
+
 	it('closes in place an article that was open when the page came', () => {
 		const history = new FakeHistory();
 		const journey = new Journey(history);

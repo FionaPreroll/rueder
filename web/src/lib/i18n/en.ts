@@ -741,6 +741,7 @@ const en = {
 		none: 'No rules yet.',
 		add: 'Add a rule',
 		new: 'New rule',
+		change: 'Change the rule',
 		on: 'On',
 		scope: 'In',
 		scopeAll: 'All feeds',

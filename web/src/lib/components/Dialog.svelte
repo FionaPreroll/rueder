@@ -1,10 +1,11 @@
 <script lang="ts">
 	// A window over the page: the settings, the keyboard shortcuts, the versions of an
-	// article. Escape, the close button and a click beside it close it. While it
-	// `holds` something that would be lost, such as a second factor being set up,
-	// only the close button does.
+	// article. Escape, the close button, a click beside it and back
+	// (`#lib/layers.ts`) close it. While it `holds` something that would be lost,
+	// such as a second factor being set up, only the close button does.
 	import { onMount, type Snippet } from 'svelte';
 	import { m } from '#lib/i18n/index.ts';
+	import { backCloses } from '#lib/layers.ts';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -29,7 +30,14 @@
 
 	onMount(() => {
 		if (!panel?.contains(document.activeElement)) panel?.focus();
-		return () => before?.focus?.();
+		const leave = backCloses(
+			() => onclose(),
+			() => holds
+		);
+		return () => {
+			leave();
+			before?.focus?.();
+		};
 	});
 
 	function keydown(event: KeyboardEvent) {

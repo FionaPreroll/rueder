@@ -749,6 +749,7 @@ const fr: Messages = {
 		none: 'Aucune règle pour l’instant.',
 		add: 'Ajouter une règle',
 		new: 'Nouvelle règle',
+		change: 'Modifier la règle',
 		on: 'Active',
 		scope: 'Dans',
 		scopeAll: 'Tous les flux',

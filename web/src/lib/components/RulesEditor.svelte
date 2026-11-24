@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	// The filter rules of the account: a list to switch them on and off, and a form to
 	// add or change one, which says how many articles the rule would catch right now.
+	// The form comes into sight as it opens, and back closes it (`#lib/layers.ts`).
+	import { onMount, tick } from 'svelte';
 	import type { Reader, RuleBook, RulePreview } from '#lib/reader.ts';
 	import {
 		builder,
@@ -12,6 +13,7 @@
 		type RuleScope
 	} from '#lib/filters.ts';
 	import { m } from '#lib/i18n/index.ts';
+	import { backCloses } from '#lib/layers.ts';
 	import type { TreeNode } from '#lib/model.ts';
 	import { ruleText, scopeText } from '#lib/rule-text.ts';
 	import Icon from './Icon.svelte';
@@ -27,6 +29,16 @@
 
 	/** The rule in the form, or null while the form is closed. */
 	let draft = $state<FilterRule | null>(null);
+	let form: HTMLFormElement | undefined = $state();
+	/** Whether the form changes a saved rule rather than adding one. */
+	const changing = $derived(draft !== null && book.rules.some((rule) => rule.id === draft?.id));
+
+	/** Opens the form; below the list it may lie out of sight, on a phone above all. */
+	async function edit(rule: FilterRule) {
+		draft = rule;
+		await tick();
+		form?.scrollIntoView({ block: 'nearest' });
+	}
 
 	/** The folders and feeds as options, indented by their depth: "folder:id" or "feed:id". */
 	const scopes = $derived.by(() => {
@@ -84,8 +96,8 @@
 	/** A rule for all articles looks at nothing in them. */
 	const everything = $derived(draft?.match === 'all');
 
-	function add() {
-		draft = {
+	const add = () =>
+		edit({
 			id: book.newRuleId(),
 			enabled: true,
 			scope: { kind: 'all' },
@@ -93,8 +105,7 @@
 			match: 'contains',
 			pattern: '',
 			action: 'hide'
-		};
-	}
+		});
 
 	function save(event: SubmitEvent) {
 		event.preventDefault();
@@ -129,7 +140,7 @@
 			<button
 				type="button"
 				class="plain px-2 py-1"
-				onclick={() => (draft = { ...rule, scope: { ...rule.scope } })}
+				onclick={() => edit({ ...rule, scope: { ...rule.scope } })}
 			>
 				{m.common.edit}
 			</button>
@@ -149,8 +160,13 @@
 </ul>
 
 {#if draft}
-	<form class="mt-4 rounded-md border border-line bg-panel p-3" onsubmit={save}>
-		<h3 class="text-sm font-semibold">{m.rules.new}</h3>
+	<form
+		bind:this={form}
+		class="mt-4 scroll-m-4 rounded-md border border-line bg-panel p-3"
+		onsubmit={save}
+		{@attach () => backCloses(() => (draft = null))}
+	>
+		<h3 class="text-sm font-semibold">{changing ? m.rules.change : m.rules.new}</h3>
 		<div class="mt-2 grid gap-3 text-sm sm:grid-cols-2">
 			<label class="block">
 				<span class="font-medium">{m.rules.scope}</span>

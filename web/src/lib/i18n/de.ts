@@ -740,6 +740,7 @@ const de: Messages = {
 		none: 'Noch keine Regeln.',
 		add: 'Regel hinzufügen',
 		new: 'Neue Regel',
+		change: 'Regel ändern',
 		on: 'An',
 		scope: 'In',
 		scopeAll: 'Alle Feeds',

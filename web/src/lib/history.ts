@@ -5,6 +5,7 @@
 // to the next takes the place of the entry. The address of the page stays as it
 // is: what the entries hold is in `history.state`, ids only.
 
+import { layerOf } from './layers.ts';
 import { sameStream, type Stream } from './model.ts';
 import { streamOf } from './view.ts';
 
@@ -61,10 +62,10 @@ export class Journey {
 		}
 		if (sameStream(here.stream, place.stream) && here.open === place.open) return;
 		if (!sameStream(here.stream, place.stream)) {
-			this.history.pushState(entry(place, false), '');
+			this.add(entry(place, false));
 		} else if (here.open === null) {
 			// An article opened in the list: back closes it again.
-			this.history.pushState(entry(place, true), '');
+			this.add(entry(place, true));
 		} else if (place.open !== null) {
 			// The next article in its place, so back does not walk through every one.
 			this.history.replaceState(entry(place, here.opened), '');
@@ -75,6 +76,16 @@ export class Journey {
 		} else {
 			this.history.replaceState(entry(place, false), '');
 		}
+	}
+
+	/**
+	 * A new entry. One a window over the page made (`#lib/layers.ts`), which closes
+	 * as the reader goes somewhere from it, gives its place instead, so back goes
+	 * to where the reader was before the window, and once.
+	 */
+	private add(state: Entry) {
+		if (layerOf(this.history.state) > 0) this.history.replaceState(state, '');
+		else this.history.pushState(state, '');
 	}
 
 	/**
