@@ -196,7 +196,10 @@ async fn a_report_keeps_no_address_and_breaks_no_limit(db: PgPool) {
 async fn a_server_can_take_no_reports_at_all(db: PgPool) {
     let ada = common::account(&db, "ada").await;
     let state = AppState {
-        reports: false,
+        switches: rueder::settings::Switches {
+            reports: false,
+            ..Default::default()
+        },
         ..AppState::new(db.clone())
     };
     let cookie = common::session(&db, ada).await;

@@ -189,7 +189,7 @@ async fn file(
     seq: Option<i32>,
     report: Report,
 ) -> Result<StatusCode, AppError> {
-    if !state.content_reports {
+    if !state.switches.content_reports {
         return Err(AppError::NotFound);
     }
     let Some(note) = note_of(&report.note) else {

@@ -22,7 +22,10 @@ use sqlx::PgPool;
 
 fn reporting(db: &PgPool) -> AppState {
     AppState {
-        content_reports: true,
+        switches: rueder::settings::Switches {
+            content_reports: true,
+            ..Default::default()
+        },
         ..AppState::new(db.clone())
     }
 }

@@ -24,8 +24,9 @@ use rueder::{
     progress,
     rate::Rates,
     reclean, registration, reports, retention, router, second_factor, sessions,
+    settings::{self, Settings},
     sizes::Sizes,
-    status, transfer, tree, version,
+    transfer, tree, version,
 };
 use sqlx::{
     Connection, PgConnection, PgPool,
@@ -37,9 +38,6 @@ use tokio::{
     signal::unix::{SignalKind, signal},
 };
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-
-/// Where the server listens if LISTEN_ADDR does not say.
-const LISTEN_ADDR: &str = "127.0.0.1:3000";
 
 /// rueder server. Configured through DATABASE_URL, LISTEN_ADDR and STATIC_DIR.
 #[derive(Parser)]
@@ -407,7 +405,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Asks the server that is running, so it opens no database of its own.
     if matches!(cli.command, Some(Command::Health)) {
-        let listen = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
+        let listen = env::var("LISTEN_ADDR").unwrap_or_else(|_| settings::LISTEN_ADDR.into());
         return health::check(health::address(&listen).await?, health::WAIT).await;
     }
     if matches!(cli.command, Some(Command::Bench(BenchCommand::Limits))) {
@@ -830,7 +828,7 @@ async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
             }
             // The images go from the cache this machine keeps, as the server
             // would find it: in the container, the same volume.
-            let config = image_config()?;
+            let config = Settings::images_from_env()?;
             let cache = images::Cache::open(&config.cache_dir, config.cache_bytes)?;
             let mut files = 0;
             for feed_id in &blocked {
@@ -961,24 +959,6 @@ fn when(at: Option<OffsetDateTime>) -> String {
         .unwrap_or_else(|| "never".to_owned())
 }
 
-/// Where the image proxy keeps its images and its key, from the environment:
-/// IMAGE_CACHE_DIR, IMAGE_CACHE_MB and IMAGE_PROXY_KEY.
-fn image_config() -> anyhow::Result<images::Config> {
-    let mut images =
-        images::Config::new(env::var("IMAGE_CACHE_DIR").unwrap_or_else(|_| "image-cache".into()));
-    if let Ok(megabytes) = env::var("IMAGE_CACHE_MB") {
-        let megabytes: u64 = megabytes
-            .parse()
-            .context("IMAGE_CACHE_MB is not a number")?;
-        images.cache_bytes = megabytes.saturating_mul(1024 * 1024);
-    }
-    images.key = env::var("IMAGE_PROXY_KEY")
-        .ok()
-        .filter(|key| !key.is_empty())
-        .map(String::into_bytes);
-    Ok(images)
-}
-
 async fn admin(db: &PgPool, command: AdminCommand) -> anyhow::Result<()> {
     match command {
         AdminCommand::Add { name } => {
@@ -1030,10 +1010,9 @@ fn ask_password() -> anyhow::Result<String> {
 }
 
 async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Result<()> {
+    let settings = Settings::from_env()?;
+    settings.log();
     let monitor = Arc::new(Monitor::new(problems));
-    let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| LISTEN_ADDR.into());
-    let static_dir =
-        PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../web/build".into()));
 
     // The command line asks for a limit per day when it opens registration;
     // one opened before it did is said here until it has one.
@@ -1046,37 +1025,19 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
 
     // New versions of articles need the partition of their month.
     articles::ensure_current_partitions(&db).await?;
-    let partitions = db.clone();
-    tokio::spawn(async move {
-        let mut every = tokio::time::interval(Duration::from_secs(6 * 60 * 60));
-        every.tick().await;
-        loop {
-            every.tick().await;
-            if let Err(err) = articles::ensure_current_partitions(&partitions).await {
-                tracing::error!("creating partitions: {err:#}");
-            }
+    periodically(6 * HOUR, false, db.clone(), |db| async move {
+        if let Err(err) = articles::ensure_current_partitions(&db).await {
+            tracing::error!("creating partitions: {err:#}");
         }
     });
 
     // Feeds and images are fetched by the server itself, through the one
-    // client that may reach out. FETCH_ALLOW_NETS opens internal networks for
-    // it, e.g. "192.168.1.0/24, fd00::/8".
-    let allow = env::var("FETCH_ALLOW_NETS").unwrap_or_default();
-    let allow = allow
-        .split(',')
-        .map(str::trim)
-        .filter(|net| !net.is_empty())
-        .map(|net| {
-            net.parse()
-                .map_err(|err: String| anyhow::anyhow!("FETCH_ALLOW_NETS: {err}"))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+    // client that may reach out.
     let client = HttpClient::new(http_client::Config {
         agent: http_client::AGENT.to_owned(),
-        allow,
+        allow: settings.allow,
         ..Default::default()
     })?;
-
     // RSSIFIER_URL and RSSIFIER_TOKEN: where RSSifier answers and rueder's
     // token there, for web pages without a feed. Without them rueder finds
     // and fetches none of those.
@@ -1084,7 +1045,6 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
     if rssifier.is_some() {
         tracing::info!("web pages without a feed come through RSSifier");
     }
-
     // CLEANING_RULES_DIR puts the operator's own lists in place of the ones
     // that come with rueder.
     let rules = Arc::new(Rules::from_env()?);
@@ -1093,10 +1053,7 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
     // FETCH_ROUND, FETCH_AT_ONCE and FETCH_EVERY set how fast feeds are
     // fetched; a value out of bounds stops the start.
     let pace = fetch::Pace::from_env()?;
-    // FETCH=off keeps the server from fetching feeds.
-    if env::var("FETCH").is_ok_and(|value| value == "off") {
-        tracing::info!("not fetching feeds (FETCH=off)");
-    } else {
+    if settings.fetch {
         tokio::spawn(fetch::run(
             db.clone(),
             client.clone(),
@@ -1108,69 +1065,33 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         ));
     }
 
-    // Images reach readers through the proxy. IMAGE_CACHE_DIR is where it keeps
-    // them, IMAGE_CACHE_MB how much of them; IMAGE_PROXY_KEY is the secret for
-    // its addresses, which it makes itself if there is none.
-    // It fetches nothing that belongs to a blocked feed.
+    // Images reach readers through the proxy, which fetches nothing that
+    // belongs to a blocked feed. What its cache holds too much of goes once an
+    // hour.
     let images =
-        Arc::new(ImageProxy::open(image_config()?, client.clone())?.with_blocked_from(db.clone()));
-    // Once an hour, what the cache holds too much of goes.
-    let cache = images.clone();
-    tokio::spawn(async move {
-        let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
-        loop {
-            every.tick().await;
-            let cache = cache.clone();
-            let _ = tokio::task::spawn_blocking(move || cache.cache().sweep()).await;
+        Arc::new(ImageProxy::open(settings.images, client.clone())?.with_blocked_from(db.clone()));
+    periodically(HOUR, true, images.clone(), |images| async move {
+        let _ = tokio::task::spawn_blocking(move || images.cache().sweep()).await;
+    });
+    // Once an hour, the sessions that have run out go, the links nobody
+    // used, and the reports of errors in browsers that are old.
+    periodically(HOUR, true, db.clone(), |db| async move {
+        if let Err(err) = sessions::sweep(&db).await {
+            tracing::error!("removing old sessions: {err:#}");
+        }
+        if let Err(err) = rueder::email::sweep(&db).await {
+            tracing::error!("removing old links and unconfirmed accounts: {err:#}");
+        }
+        if let Err(err) = rueder::recovery::sweep(&db).await {
+            tracing::error!("removing old links to set a password: {err:#}");
+        }
+        if let Err(err) = reports::sweep(&db).await {
+            tracing::error!("removing old reports of errors: {err:#}");
         }
     });
-
-    // Once an hour, the sessions that have run out go, and the reports of
-    // errors in browsers that are older than 30 days.
-    let sessions = db.clone();
-    tokio::spawn(async move {
-        let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
-        loop {
-            every.tick().await;
-            if let Err(err) = sessions::sweep(&sessions).await {
-                tracing::error!("removing old sessions: {err:#}");
-            }
-            if let Err(err) = rueder::email::sweep(&sessions).await {
-                tracing::error!("removing old links and unconfirmed accounts: {err:#}");
-            }
-            if let Err(err) = rueder::recovery::sweep(&sessions).await {
-                tracing::error!("removing old links to set a password: {err:#}");
-            }
-            if let Err(err) = reports::sweep(&sessions).await {
-                tracing::error!("removing old reports of errors: {err:#}");
-            }
-        }
-    });
-
-    // Once an hour, what the retention says is old goes, for five minutes at
-    // most, in portions that each hold up fetching only for a moment.
-    let retained = db.clone();
-    let retention_events = events.clone();
-    tokio::spawn(async move {
-        let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
-        loop {
-            every.tick().await;
-            let until = std::time::Instant::now() + Duration::from_secs(5 * 60);
-            let now = OffsetDateTime::now_utc();
-            match retention::sweep(&retained, Some(&retention_events), now, Some(until)).await {
-                Ok(swept) if !swept.is_empty() => tracing::info!(
-                    articles = swept.articles,
-                    texts = swept.texts,
-                    months = swept.months.join(", "),
-                    feeds = swept.feeds,
-                    feed_articles = swept.feed_articles,
-                    more = swept.more,
-                    "the retention cleared what is old"
-                ),
-                Ok(_) => {}
-                Err(err) => tracing::error!("clearing what is old: {err:#}"),
-            }
-        }
+    // Once an hour, what the retention says is old goes.
+    periodically(HOUR, true, (db.clone(), events.clone()), |(db, events)| {
+        retention::hourly(db, events)
     });
 
     let mut state = AppState {
@@ -1181,6 +1102,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         client: Some(client.clone()),
         rssifier,
         rates: Arc::new(Rates::new(sizes.limits())),
+        client_ip_header: settings.client_ip_header,
+        switches: settings.switches,
+        database_warn_bytes: settings.database_warn_bytes,
         ..AppState::new(db)
     };
     if sizes != Sizes::default() {
@@ -1197,71 +1121,8 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         tracing::info!("login through {} is on", config.issuer);
         state.oidc = Some(Arc::new(Oidc::new(config, client)?));
     }
-    // Behind a reverse proxy every connection comes from the proxy.
-    // CLIENT_IP_HEADER names the header it puts the sender's address in, e.g.
-    // X-Forwarded-For. Only set it if a proxy really sets that header.
-    if let Ok(name) = env::var("CLIENT_IP_HEADER")
-        && !name.is_empty()
-    {
-        let name = name
-            .parse()
-            .context("CLIENT_IP_HEADER is not the name of a header")?;
-        state.client_ip_header = Some(name);
-    }
-    // APP_API=off lets no app of another maker log in (see `greader`).
-    if env::var("APP_API").is_ok_and(|value| value == "off") {
-        tracing::info!("apps of other makers cannot log in (APP_API=off)");
-        state.app_api = false;
-    }
-    // CONTENT_REPORTS=on lets readers report feeds and articles to the admins.
-    if env::var("CONTENT_REPORTS").is_ok_and(|value| value == "on") {
-        tracing::info!("readers may report feeds and articles (CONTENT_REPORTS=on)");
-        state.content_reports = true;
-    }
-    // DATABASE_WARN_GB names the size of the database from which the status
-    // page warns; rueder itself never lets an article go unless told to.
-    state.database_warn_bytes = status::warn_from(env::var("DATABASE_WARN_GB").ok())?;
-    // IMAGES_PUBLIC=on lets a cache in front of rueder, such as a CDN, keep
-    // images, which then come without a session too.
-    if env::var("IMAGES_PUBLIC").is_ok_and(|value| value == "on") {
-        tracing::info!("a cache in front of rueder may keep images (IMAGES_PUBLIC=on)");
-        state.images_public = true;
-    }
-    // CLIENT_REPORTS=off takes no reports of errors from browsers, whoever
-    // agreed to send them.
-    if env::var("CLIENT_REPORTS").is_ok_and(|value| value == "off") {
-        tracing::info!("taking no reports of errors from browsers (CLIENT_REPORTS=off)");
-        state.reports = false;
-    }
-    // ADMIN_SECOND_FACTOR=required lets admins be admins only in a session
-    // that began with a second factor. Anything else is a mistake, not "off".
-    match env::var("ADMIN_SECOND_FACTOR").as_deref() {
-        Err(_) | Ok("" | "off") => {}
-        Ok("required") => {
-            tracing::info!("admins need a second factor (ADMIN_SECOND_FACTOR=required)");
-            state.admin_second_factor = true;
-        }
-        Ok(other) => anyhow::bail!("ADMIN_SECOND_FACTOR must be required or off, not {other:?}"),
-    }
-    // PUBLIC_URL: the address browsers reach rueder at. Passkeys belong to
-    // it, and there are none without it. One that is no such address stops
-    // the start rather than turning passkeys off unnoticed.
-    // PASSKEY_ANDROID_APPS: the Android apps that may use them too; without
-    // it rueder's own app from GitHub, with "none" no app.
-    if let Ok(url) = env::var("PUBLIC_URL")
-        && !url.trim().is_empty()
-    {
-        let apps = rueder::asset_links::AndroidApp::from_setting(
-            env::var("PASSKEY_ANDROID_APPS").ok().as_deref(),
-        )?;
-        let packages: Vec<_> = apps.iter().map(|app| app.package().to_owned()).collect();
-        let passkeys = rueder::passkeys::Passkeys::for_apps(&url, apps)?;
-        tracing::info!(
-            "passkeys for {}, also in the Android apps {packages:?}",
-            url.trim()
-        );
-        state.passkeys = Some(Arc::new(passkeys));
-    }
+    // PUBLIC_URL and PASSKEY_ANDROID_APPS: passkeys, for the site and its apps.
+    state.passkeys = rueder::passkeys::Passkeys::from_env()?.map(Arc::new);
     // SMTP_URL, MAIL_FROM and PUBLIC_URL: the relay mail goes through (see
     // `mail`). Where registration asks for addresses there has to be one:
     // otherwise nobody who registers could ever confirm theirs.
@@ -1272,23 +1133,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
             state.mail = Some(mailer.clone());
             // Once an hour, the accounts nobody uses get their mails, and go
             // when their time is over, where the retention says so (E13).
-            let (db, rates) = (state.db.clone(), state.rates.clone());
-            tokio::spawn(async move {
-                let mut every = tokio::time::interval(Duration::from_secs(60 * 60));
-                loop {
-                    every.tick().await;
-                    match inactive::sweep(&db, &mailer, &rates, OffsetDateTime::now_utc()).await {
-                        Ok(swept) if !swept.is_empty() => tracing::info!(
-                            warned = swept.warned,
-                            reminded = swept.reminded,
-                            removed = swept.removed,
-                            waiting = swept.waiting,
-                            "accounts nobody uses"
-                        ),
-                        Ok(_) => {}
-                        Err(err) => tracing::error!("looking after accounts nobody uses: {err:#}"),
-                    }
-                }
+            let looked_after = (state.db.clone(), mailer, state.rates.clone());
+            periodically(HOUR, true, looked_after, |(db, mailer, rates)| {
+                inactive::hourly(db, mailer, rates)
             });
         }
         None => {
@@ -1312,9 +1159,9 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
         tracing::info!("metrics for Prometheus under /metrics (METRICS_TOKEN)");
         state.metrics = Some(Arc::new(metrics));
     }
-    let app = router(state, &static_dir);
-    let listener = TcpListener::bind(&listen_addr).await?;
-    tracing::info!("listening on http://{listen_addr}");
+    let app = router(state, &settings.static_dir);
+    let listener = TcpListener::bind(&settings.listen_addr).await?;
+    tracing::info!("listening on http://{}", settings.listen_addr);
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -1322,6 +1169,30 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
     .with_graceful_shutdown(shutdown())
     .await?;
     Ok(())
+}
+
+/// An hour, how often most of what the server tidies runs.
+const HOUR: Duration = Duration::from_secs(60 * 60);
+
+/// Runs `task` with a copy of `with` every `period` for as long as the
+/// server runs, the first time at once or after the first period. Each task
+/// says in the log what went wrong; the next time runs all the same.
+fn periodically<T, F, Fut>(period: Duration, at_once: bool, with: T, task: F)
+where
+    T: Clone + Send + 'static,
+    F: Fn(T) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()> + Send,
+{
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(period);
+        if !at_once {
+            every.tick().await;
+        }
+        loop {
+            every.tick().await;
+            task(with.clone()).await;
+        }
+    });
 }
 
 /// Resolves on Ctrl+C or SIGTERM (what `docker stop` sends).

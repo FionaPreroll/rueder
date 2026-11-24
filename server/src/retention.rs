@@ -175,6 +175,26 @@ impl Swept {
     }
 }
 
+/// What the server does once an hour: clears what is old for five minutes at
+/// most, in portions that each hold up fetching only for a moment, and says in
+/// the log what went.
+pub async fn hourly(db: PgPool, events: Events) {
+    let until = Instant::now() + std::time::Duration::from_secs(5 * 60);
+    match sweep(&db, Some(&events), OffsetDateTime::now_utc(), Some(until)).await {
+        Ok(swept) if !swept.is_empty() => tracing::info!(
+            articles = swept.articles,
+            texts = swept.texts,
+            months = swept.months.join(", "),
+            feeds = swept.feeds,
+            feed_articles = swept.feed_articles,
+            more = swept.more,
+            "the retention cleared what is old"
+        ),
+        Ok(_) => {}
+        Err(err) => tracing::error!("clearing what is old: {err:#}"),
+    }
+}
+
 /// Clears what the settings say is old at `now`, one portion after the other,
 /// until nothing is left or `until` has passed. The readers of a feed whose
 /// articles went are told, so that their open tabs count anew.

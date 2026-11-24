@@ -224,6 +224,27 @@ impl Passkeys {
         Self::for_apps(public_url, Vec::new())
     }
 
+    /// The passkeys of the site at `PUBLIC_URL`, which the Android apps in
+    /// `PASSKEY_ANDROID_APPS` may use as well (without it rueder's own app from
+    /// GitHub, with `none` no app); none without `PUBLIC_URL`. One that is no
+    /// such address stops the start rather than turning passkeys off unnoticed.
+    pub fn from_env() -> anyhow::Result<Option<Self>> {
+        let Some(url) = std::env::var("PUBLIC_URL")
+            .ok()
+            .filter(|url| !url.trim().is_empty())
+        else {
+            return Ok(None);
+        };
+        let apps = AndroidApp::from_setting(std::env::var("PASSKEY_ANDROID_APPS").ok().as_deref())?;
+        let packages: Vec<_> = apps.iter().map(|app| app.package().to_owned()).collect();
+        let passkeys = Self::for_apps(&url, apps)?;
+        tracing::info!(
+            "passkeys for {}, also in the Android apps {packages:?}",
+            url.trim()
+        );
+        Ok(Some(passkeys))
+    }
+
     /// The passkeys of the site at `public_url`, which these Android apps may
     /// use as well: an answer that comes from one of them names it as its
     /// origin rather than the site (see [`crate::asset_links`]).

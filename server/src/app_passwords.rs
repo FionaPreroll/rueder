@@ -231,7 +231,7 @@ async fn list(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<Json<AppPasswords>, AppError> {
-    if !state.app_api {
+    if !state.switches.app_api {
         return Err(AppError::NotFound);
     }
     let app_passwords = sqlx::query_as!(
@@ -266,7 +266,7 @@ async fn create(
     headers: HeaderMap,
     Json(new): Json<New>,
 ) -> Result<(StatusCode, Json<Created>), AppError> {
-    if !state.app_api {
+    if !state.switches.app_api {
         return Err(AppError::NotFound);
     }
     let name = tree::title(&new.name)?;
@@ -317,7 +317,7 @@ async fn revoke(
     session: Session,
     Path(id): Path<i32>,
 ) -> Result<StatusCode, AppError> {
-    if !state.app_api {
+    if !state.switches.app_api {
         return Err(AppError::NotFound);
     }
     let gone = sqlx::query!(

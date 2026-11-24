@@ -557,7 +557,7 @@ async fn items(
     let keys: Vec<(i32, i32)> = opened.iter().map(|o| (o.feed_id, o.seq)).collect();
     let mut labelled = api::labels_of(state, &login.session, &keys).await?;
     let signer = state.images.as_ref().map(|images| images.signer().clone());
-    let app = (!state.images_public).then_some(login.id);
+    let app = (!state.switches.images_public).then_some(login.id);
     // Pointing the images to the proxy reads every text again.
     let items = tokio::task::spawn_blocking(move || {
         opened
@@ -783,7 +783,7 @@ pub(super) async fn subscriptions(
     .await?;
     let origin = super::origin(&headers);
     let signer = state.images.as_ref().map(|images| images.signer());
-    let app = (!state.images_public).then_some(login.id);
+    let app = (!state.switches.images_public).then_some(login.id);
     let subscriptions: Vec<Value> = rows
         .into_iter()
         .enumerate()

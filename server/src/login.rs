@@ -367,9 +367,9 @@ impl Me {
     /// articles, apps of other makers, and passkeys.
     pub(crate) fn offering(self, state: &crate::AppState) -> Self {
         Self {
-            app_api: state.app_api,
+            app_api: state.switches.app_api,
             passkeys: state.passkeys.is_some(),
-            ..self.reporting(state.content_reports)
+            ..self.reporting(state.switches.content_reports)
         }
     }
 }
@@ -516,7 +516,7 @@ pub(crate) async fn start_session(
         terms_version: account.terms_version,
     };
     let me = Me::of(
-        session.for_admins(state.admin_second_factor),
+        session.for_admins(state.switches.admin_second_factor),
         account.has_password,
         &state.legal,
     )

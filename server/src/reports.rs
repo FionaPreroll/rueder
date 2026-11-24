@@ -157,7 +157,7 @@ async fn consent(
     session: Session,
 ) -> Result<Json<Consent>, AppError> {
     Ok(Json(Consent {
-        available: state.reports,
+        available: state.switches.reports,
         on: sends(&state.db, session.account_id).await?,
     }))
 }
@@ -186,7 +186,7 @@ async fn set_consent(
     session: Session,
     Json(change): Json<ConsentChange>,
 ) -> Result<StatusCode, AppError> {
-    if change.on && !state.reports {
+    if change.on && !state.switches.reports {
         return Err(not_taken());
     }
     let mut tx = state.db.begin().await?;
@@ -229,7 +229,7 @@ async fn receive(
     session: Session,
     Json(sent): Json<Reports>,
 ) -> Result<StatusCode, AppError> {
-    if !state.reports {
+    if !state.switches.reports {
         return Err(not_taken());
     }
     if sent.reports.len() > MAX_REPORTS {
