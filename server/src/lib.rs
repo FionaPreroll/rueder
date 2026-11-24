@@ -89,7 +89,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path as UrlPath, State},
-    http::{HeaderName, StatusCode, header},
+    http::{HeaderName, StatusCode},
     middleware,
     response::{IntoResponse, Response},
 };
@@ -423,33 +423,13 @@ async fn image(
     let Some(images) = state.images else {
         return StatusCode::NOT_FOUND.into_response();
     };
+    let kept = if state.switches.images_public {
+        images::KEPT_BY_ANY_CACHE
+    } else {
+        images::KEPT_BY_ITS_READER
+    };
     match images.get(&signature, &size, &address).await {
-        Ok(picture) => (
-            [
-                (header::CONTENT_TYPE, picture.format.mime()),
-                (
-                    header::CACHE_CONTROL,
-                    if state.switches.images_public {
-                        images::KEPT_BY_ANY_CACHE
-                    } else {
-                        images::KEPT_BY_ITS_READER
-                    },
-                ),
-                // Whatever the bytes are, the browser shows them as this image
-                // or not at all, and nothing in them runs.
-                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-                (
-                    header::CONTENT_SECURITY_POLICY,
-                    "default-src 'none'; sandbox",
-                ),
-                (
-                    HeaderName::from_static("cross-origin-resource-policy"),
-                    "same-origin",
-                ),
-            ],
-            picture.bytes,
-        )
-            .into_response(),
+        Ok(picture) => images::answer(picture, kept, images::ShownBy::ThisServer),
         Err(refused) => {
             tracing::debug!("image refused: {refused}");
             refused.into_response()

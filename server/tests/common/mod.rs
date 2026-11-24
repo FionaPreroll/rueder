@@ -232,3 +232,30 @@ pub fn solve(challenge: &serde_json::Value) -> serde_json::Value {
     solution["number"] = number.into();
     solution
 }
+
+/// What the browser would send back after this answer: `name=token`.
+pub fn cookie(headers: &axum::http::HeaderMap) -> String {
+    let set = headers
+        .get(axum::http::header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    set.split(';').next().unwrap().to_owned()
+}
+
+/// A server with an image proxy of its own, which reaches no site: enough to
+/// see the addresses of images in what the API sends. `name` keeps the
+/// caches of tests apart.
+pub fn with_images(db: &PgPool, name: &str) -> rueder::AppState {
+    let dir = std::env::temp_dir().join(format!("rueder-{name}-{}", std::process::id()));
+    let config = rueder::images::Config {
+        key: Some(b"a key for tests, long enough to be one".to_vec()),
+        ..rueder::images::Config::new(dir)
+    };
+    let client = rueder::http_client::HttpClient::new(Default::default()).unwrap();
+    let images = rueder::images::ImageProxy::open(config, client).unwrap();
+    rueder::AppState {
+        images: Some(std::sync::Arc::new(images)),
+        ..rueder::AppState::new(db.clone())
+    }
+}

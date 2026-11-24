@@ -3,16 +3,9 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use axum::http::{Method, StatusCode};
 use common::call;
-use rueder::{
-    AppState,
-    http_client::{self, HttpClient},
-    images::{Config, ImageProxy},
-    reading,
-};
+use rueder::{AppState, reading};
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -25,25 +18,10 @@ fn seqs(hits: &Value) -> Vec<i64> {
     articles.map(|a| a["seq"].as_i64().unwrap()).collect()
 }
 
-/// A state with an image proxy, which these tests never let fetch anything.
-fn with_images(db: &PgPool) -> AppState {
-    let dir = std::env::temp_dir().join(format!("rueder-api-search-{}", std::process::id()));
-    let config = Config {
-        key: Some(b"a key for tests, long enough to be one".to_vec()),
-        ..Config::new(dir)
-    };
-    let client = HttpClient::new(http_client::Config::default()).unwrap();
-    let images = Arc::new(ImageProxy::open(config, client).unwrap());
-    AppState {
-        images: Some(images),
-        ..AppState::new(db.clone())
-    }
-}
-
 #[sqlx::test]
 async fn finds_in_the_own_feeds_page_by_page(db: PgPool) {
     let (ada, feed) = common::reader(&db, "ada", 5).await;
-    let state = with_images(&db);
+    let state = common::with_images(&db, "api-search");
     let cookie = common::session(&db, ada).await;
 
     // Article 3 gets a picture and a label, article 2 is read, article 4 hidden.

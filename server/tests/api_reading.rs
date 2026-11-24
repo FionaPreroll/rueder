@@ -3,15 +3,9 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use axum::http::{Method, StatusCode};
 use common::call;
-use rueder::{
-    AppState, articles,
-    http_client::{self, HttpClient},
-    images::{Config, ImageProxy},
-};
+use rueder::{AppState, articles};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -29,21 +23,6 @@ async fn put(state: &AppState, path: &str, cookie: &str, body: Value) -> StatusC
     call(state, Method::PUT, path, Some(cookie), Some(body))
         .await
         .0
-}
-
-/// A state with an image proxy, which these tests never let fetch anything.
-fn with_images(db: &PgPool, name: &str) -> AppState {
-    let dir = std::env::temp_dir().join(format!("rueder-api-{name}-{}", std::process::id()));
-    let config = Config {
-        key: Some(b"a key for tests, long enough to be one".to_vec()),
-        ..Config::new(dir)
-    };
-    let client = HttpClient::new(http_client::Config::default()).unwrap();
-    let images = Arc::new(ImageProxy::open(config, client).unwrap());
-    AppState {
-        images: Some(images),
-        ..AppState::new(db.clone())
-    }
 }
 
 /// The numbers the tree shows for a feed: newest, mark and unread.
@@ -119,7 +98,7 @@ async fn the_tree_has_the_readers_folders_feeds_and_counts(db: PgPool) {
     .unwrap();
     let (grace, other) = common::reader(&db, "grace", 1).await;
     common::folder(&db, grace, None, "Hers").await;
-    let state = with_images(&db, "tree");
+    let state = common::with_images(&db, "tree");
     let (ada_cookie, grace_cookie) = (
         common::session(&db, ada).await,
         common::session(&db, grace).await,
@@ -397,7 +376,7 @@ async fn an_article_goes_out_with_its_pictures_at_the_proxy(db: PgPool) {
         .unwrap();
     tx.commit().await.unwrap();
     let (grace, _) = common::reader(&db, "grace", 1).await;
-    let state = with_images(&db, "article");
+    let state = common::with_images(&db, "article");
     let cookie = common::session(&db, ada).await;
     let at_proxy = |address: &Value, size: &str| {
         let address = address.as_str().unwrap();
@@ -581,7 +560,7 @@ async fn an_article_shows_its_source_cleaned_and_as_it_came(db: PgPool) {
     tx.commit().await.unwrap();
     let (grace, _) = common::reader(&db, "grace", 1).await;
     // With an image proxy, which the source passes by: it is shown as text.
-    let state = with_images(&db, "source");
+    let state = common::with_images(&db, "source");
     let cookie = common::session(&db, ada).await;
 
     let path = format!("/api/feeds/{feed}/articles/1/source");

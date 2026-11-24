@@ -40,7 +40,7 @@ use url::Url;
 
 use axum::{
     Extension,
-    http::StatusCode,
+    http::{HeaderName, StatusCode, header},
     response::{IntoResponse, Response},
 };
 
@@ -62,6 +62,43 @@ pub const KEPT_BY_ITS_READER: &str = "private, max-age=31536000, immutable";
 /// (`IMAGES_PUBLIC`): the reader for as long, the cache for a week, after
 /// which it asks again and learns of a feed that was blocked meanwhile.
 pub const KEPT_BY_ANY_CACHE: &str = "public, max-age=31536000, s-maxage=604800, immutable";
+
+/// Who may show an image the proxy answers with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShownBy {
+    /// Pages of this server only, so that no other site shows it.
+    ThisServer,
+    /// Any page: apps show texts in pages of their own, from no origin of
+    /// this server.
+    Anybody,
+}
+
+/// An image as the proxy answers with it: of the type its bytes are, kept as
+/// `cache_control` says, and shown as this image or not at all, with nothing
+/// in it that runs.
+pub fn answer(picture: Picture, cache_control: &'static str, shown_by: ShownBy) -> Response {
+    let resource_policy = match shown_by {
+        ShownBy::ThisServer => "same-origin",
+        ShownBy::Anybody => "cross-origin",
+    };
+    (
+        [
+            (header::CONTENT_TYPE, picture.format.mime()),
+            (header::CACHE_CONTROL, cache_control),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "default-src 'none'; sandbox",
+            ),
+            (
+                HeaderName::from_static("cross-origin-resource-policy"),
+                resource_policy,
+            ),
+        ],
+        picture.bytes,
+    )
+        .into_response()
+}
 /// How many sources are asked at a time, and how many images are decoded.
 const FETCHES_AT_ONCE: usize = 8;
 const DECODES_AT_ONCE: usize = 2;

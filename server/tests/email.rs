@@ -89,11 +89,6 @@ async fn log_in(state: &AppState, name: &str, password: &str) -> (StatusCode, Va
     (status, answer)
 }
 
-fn cookie(headers: &HeaderMap) -> String {
-    let set = headers.get(header::SET_COOKIE).unwrap().to_str().unwrap();
-    set.split(';').next().unwrap().to_owned()
-}
-
 fn sent(outbox: &Outbox) -> Vec<Sent> {
     outbox.lock().unwrap().clone()
 }
@@ -165,7 +160,7 @@ async fn as_rueder_comes_there_are_no_addresses(db: PgPool) {
     );
     assert!(sent(&outbox).is_empty());
 
-    let cookie = cookie(&headers);
+    let cookie = common::cookie(&headers);
     let (status, _) = change(&state, &cookie, "ada@example.org").await;
     assert_eq!(status, StatusCode::CONFLICT);
     let body = json!({ "password": PASSWORD });
@@ -206,7 +201,7 @@ async fn where_it_is_optional_the_account_logs_in_at_once(db: PgPool) {
     assert!(mails[0].body.contains("https://reader.example/#confirm="));
     assert!(mails[0].body.contains("24"));
 
-    let cookie = cookie(&headers);
+    let cookie = common::cookie(&headers);
     let token = token_for(&outbox, "Ada@Example.org");
     let (status, confirmed) = confirm(&state, &token).await;
     assert_eq!(status, StatusCode::OK, "{confirmed}");
@@ -495,7 +490,7 @@ async fn a_new_address_counts_once_confirmed_and_the_old_one_hears_of_it(db: PgP
     // Made by the page in English; the address is asked for in German.
     let (status, headers, _) = register(&state, "ada", Some("ada@old.example")).await;
     assert_eq!(status, StatusCode::CREATED);
-    let cookie = cookie(&headers);
+    let cookie = common::cookie(&headers);
     let ada = rueder::accounts::id_of(&db, "ada").await.unwrap().unwrap();
     confirm(&state, &token_for(&outbox, "ada@old.example")).await;
     outbox.lock().unwrap().clear();
