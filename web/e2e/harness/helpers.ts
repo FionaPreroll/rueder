@@ -3,7 +3,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { MAILBOX, MAIL_ENV, PASSWORD, SITE, database } from './ports.js';
 
 export { PASSWORD, SITE };
@@ -15,6 +15,16 @@ export async function logIn(page: Page, name: string, password = PASSWORD) {
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Log in', exact: true }).click();
 	await expect(sidebar(page)).toBeVisible();
+}
+
+/**
+ * Closes a window over the page by its button. The window takes its entry in the
+ * history with it (`#lib/layers.ts`), a step back that a reload right after would
+ * cut off, so this waits for it.
+ */
+export async function closeWindow(page: Page, dialog: Locator) {
+	await dialog.getByRole('button', { name: 'Close' }).click();
+	await page.waitForFunction(() => !history.state?.layer);
 }
 
 export const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Subscriptions' });

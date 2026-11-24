@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 import {
 	accountSettings,
 	article,
+	closeWindow,
 	articles,
 	logIn,
 	node,
@@ -53,7 +54,7 @@ test('brings the file into another account', async ({ page }) => {
 	});
 	await expect(dialog.getByRole('status')).toContainText('1 new feed, 0 subscribed already.');
 	await expect(dialog.getByRole('status')).toContainText('1 article found here');
-	await dialog.getByRole('button', { name: 'Close' }).click();
+	await closeWindow(page, dialog);
 
 	// What was read and starred came along, and stays after a reload.
 	await expect(node(page, 'Harbour Herald')).toContainText('(11)');

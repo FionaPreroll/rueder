@@ -3,7 +3,7 @@
 // that logs in from then on.
 
 import { expect, test } from '@playwright/test';
-import { accountSettings, logIn, sidebar } from './harness/helpers.ts';
+import { accountSettings, closeWindow, logIn, sidebar } from './harness/helpers.ts';
 import { PASSWORD } from './harness/ports.js';
 
 // The second test logs in with the password the first one set.
@@ -30,7 +30,7 @@ test('a new password logs the other browsers out and logs in from then on', asyn
 	);
 
 	// This browser got a new session with the answer and reads on.
-	await dialog.getByRole('button', { name: 'Close' }).click();
+	await closeWindow(page, dialog);
 	await expect(sidebar(page)).toBeVisible();
 	await page.reload();
 	await expect(sidebar(page)).toBeVisible();
