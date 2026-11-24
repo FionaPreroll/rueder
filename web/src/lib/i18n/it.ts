@@ -746,6 +746,7 @@ const it: Messages = {
 		none: 'Ancora nessuna regola.',
 		add: 'Aggiungi una regola',
 		new: 'Nuova regola',
+		change: 'Modifica la regola',
 		on: 'Attiva',
 		scope: 'In',
 		scopeAll: 'Tutti i feed',

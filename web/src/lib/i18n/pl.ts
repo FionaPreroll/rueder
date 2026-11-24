@@ -741,6 +741,7 @@ const pl: Messages = {
 		none: 'Nie ma jeszcze reguł.',
 		add: 'Dodaj regułę',
 		new: 'Nowa reguła',
+		change: 'Zmień regułę',
 		on: 'Włączona',
 		scope: 'W',
 		scopeAll: 'Wszystkie kanały',

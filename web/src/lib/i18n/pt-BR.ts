@@ -742,6 +742,7 @@ const ptBR: Messages = {
 		none: 'Nenhuma regra ainda.',
 		add: 'Adicionar uma regra',
 		new: 'Nova regra',
+		change: 'Alterar a regra',
 		on: 'Ativada',
 		scope: 'Em',
 		scopeAll: 'Todos os feeds',

@@ -702,6 +702,7 @@ const zhHant: Messages = {
 		none: '還沒有規則。',
 		add: '新增規則',
 		new: '新規則',
+		change: '修改規則',
 		on: '開啟',
 		scope: '範圍',
 		scopeAll: '所有訂閱源',

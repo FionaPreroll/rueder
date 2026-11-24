@@ -716,6 +716,7 @@ const ko: Messages = {
 		none: '아직 규칙이 없습니다.',
 		add: '규칙 추가',
 		new: '새 규칙',
+		change: '규칙 변경',
 		on: '켜짐',
 		scope: '대상',
 		scopeAll: '모든 피드',

@@ -732,6 +732,7 @@ const id: Messages = {
 		none: 'Belum ada aturan.',
 		add: 'Tambahkan aturan',
 		new: 'Aturan baru',
+		change: 'Ubah aturan',
 		on: 'Aktif',
 		scope: 'Di',
 		scopeAll: 'Semua feed',

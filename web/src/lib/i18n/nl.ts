@@ -744,6 +744,7 @@ const nl: Messages = {
 		none: 'Nog geen regels.',
 		add: 'Regel toevoegen',
 		new: 'Nieuwe regel',
+		change: 'Regel wijzigen',
 		on: 'Aan',
 		scope: 'In',
 		scopeAll: 'Alle feeds',

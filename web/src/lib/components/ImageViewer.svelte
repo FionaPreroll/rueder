@@ -3,12 +3,12 @@
 	// too small in the text. Two fingers, the wheel, a double tap, the buttons and
 	// + and - zoom it; a finger, the mouse and the arrow keys move it once it is
 	// larger than the window (`#lib/zoom.ts`). Under it stand its title and its
-	// alternative text, which on webcomics like xkcd hold the joke. It makes an
-	// entry in the history of its own, so the browser's back, and the back button
-	// of a phone, close the image rather than the article; so do the close button,
-	// Escape and a tap beside the image.
+	// alternative text, which on webcomics like xkcd hold the joke. Back closes
+	// the image rather than the article (`#lib/layers.ts`); so do the close
+	// button, Escape and a tap beside the image.
 	import { onMount } from 'svelte';
 	import { m } from '#lib/i18n/index.ts';
+	import { backCloses } from '#lib/layers.ts';
 	import { fitted, moveBy, STEP, zoomAt, type Point, type View } from '#lib/zoom.ts';
 	import Icon, { type IconName } from './Icon.svelte';
 
@@ -33,20 +33,14 @@
 
 	onMount(() => {
 		panel?.focus();
-		history.pushState({ ...history.state, image: true }, '');
-		const back = () => onclose();
-		window.addEventListener('popstate', back);
+		const leave = backCloses(() => onclose());
 		// Not passive, so that the wheel zooms the image instead of scrolling the page under it.
 		stage?.addEventListener('wheel', wheel, { passive: false });
 		return () => {
-			window.removeEventListener('popstate', back);
-			// Closed some other way, its entry goes with it.
-			if (history.state?.image) history.back();
+			leave();
 			before?.focus?.();
 		};
 	});
-
-	const close = () => history.back();
 
 	function sizes() {
 		return {
@@ -135,7 +129,7 @@
 		const [x, y] = [event.clientX, event.clientY];
 		const onImage = box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
 		if (!onImage) {
-			close();
+			onclose();
 		} else if (event.timeStamp - lastTap.at < 300 && distance(lastTap, { x, y }) < 30) {
 			lastTap.at = -Infinity;
 			if (view.scale > 1) view = fitted;
@@ -146,7 +140,7 @@
 	}
 
 	const keys: Record<string, () => void> = {
-		Escape: close,
+		Escape: () => onclose(),
 		'+': () => zoom(STEP),
 		'=': () => zoom(STEP),
 		'-': () => zoom(1 / STEP),
@@ -216,7 +210,7 @@
 		<div class="absolute inset-e-2 top-2 flex gap-1">
 			{@render tool('zoomOut', m.media.zoomOut, () => zoom(1 / STEP))}
 			{@render tool('zoomIn', m.media.zoomIn, () => zoom(STEP))}
-			{@render tool('close', m.common.close, close)}
+			{@render tool('close', m.common.close, onclose)}
 		</div>
 	</div>
 	{#if texts.length > 0}

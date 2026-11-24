@@ -1,4 +1,7 @@
 import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/svelte';
+import { afterEach } from 'vitest';
+import { layerOf } from '#lib/layers.ts';
 
 // Transitions end at once. happy-dom's own animations reject a promise nobody
 // waits for when Svelte cancels them, which Vitest reports as an error.
@@ -24,3 +27,16 @@ HTMLSelectElement.prototype.querySelector = function (this: HTMLSelectElement, s
 		? (this.selectedOptions[0] ?? null)
 		: querySelector.call(this, selector);
 } as typeof querySelector;
+
+// Windows over the page make entries in the history of their own (`#lib/layers.ts`),
+// and take them back once they close. Every test leaves the history as it found it,
+// so that a step back left over from one does not close the windows of the next.
+afterEach(async () => {
+	cleanup();
+	const settled = () => new Promise((done) => setTimeout(done, 20));
+	await settled();
+	while (layerOf(history.state) > 0) {
+		history.back();
+		await settled();
+	}
+});

@@ -699,6 +699,7 @@ const zhHans: Messages = {
 		none: '还没有规则。',
 		add: '添加规则',
 		new: '新规则',
+		change: '修改规则',
 		on: '开启',
 		scope: '范围',
 		scopeAll: '所有订阅源',

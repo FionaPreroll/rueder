@@ -741,6 +741,7 @@ const es: Messages = {
 		none: 'Aún no hay reglas.',
 		add: 'Agregar una regla',
 		new: 'Regla nueva',
+		change: 'Cambiar la regla',
 		on: 'Activada',
 		scope: 'En',
 		scopeAll: 'Todos los feeds',

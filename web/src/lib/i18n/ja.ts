@@ -728,6 +728,7 @@ const ja: Messages = {
 		none: 'まだルールはありません。',
 		add: 'ルールを追加',
 		new: '新しいルール',
+		change: 'ルールを変更',
 		on: 'オン',
 		scope: '対象',
 		scopeAll: 'すべてのフィード',

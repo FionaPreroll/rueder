@@ -732,6 +732,7 @@ const tr: Messages = {
 		none: 'Henüz kural yok.',
 		add: 'Kural ekle',
 		new: 'Yeni kural',
+		change: 'Kuralı değiştir',
 		on: 'Açık',
 		scope: 'Kapsam',
 		scopeAll: 'Tüm akışlar',

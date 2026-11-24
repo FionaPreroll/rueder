@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
+import { layerOf } from '#lib/layers.ts';
 import ArticleBody from './ArticleBody.svelte';
 import ImageViewer from './ImageViewer.svelte';
 
@@ -18,14 +19,6 @@ function article() {
 	render(ArticleBody, { reader, article, now, onversions: vi.fn() });
 	return reader;
 }
-
-afterEach(async () => {
-	// Every test leaves the history where it found it.
-	while (history.state?.image) {
-		history.back();
-		await new Promise((done) => setTimeout(done, 10));
-	}
-});
 
 describe('an image in an article', () => {
 	it('opens large with its title and alternative text, and closes by its button', async () => {
@@ -48,7 +41,7 @@ describe('an image in an article', () => {
 
 		await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
 		await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-		expect(history.state?.image).toBeFalsy();
+		await waitFor(() => expect(layerOf(history.state)).toBe(0));
 	});
 
 	it('closes when the browser goes back', async () => {

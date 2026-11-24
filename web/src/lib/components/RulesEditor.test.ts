@@ -1,7 +1,8 @@
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
+import { layerOf } from '#lib/layers.ts';
 import RulesEditor from './RulesEditor.svelte';
 
 const now = Date.parse('2026-11-10T14:30:00Z');
@@ -131,5 +132,20 @@ describe('RulesEditor', () => {
 		await userEvent.click(screen.getAllByRole('button', { name: /^Delete: / })[0]);
 		expect(screen.getByText('No rules yet.')).toBeInTheDocument();
 		expect(reader.hiddenCount).toBe(0);
+	});
+
+	it('brings the form into sight, names what it does, and closes it on back', async () => {
+		const into = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+		setup();
+		await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+		expect(screen.getByRole('heading', { name: 'Change the rule' })).toBeInTheDocument();
+		expect(into.mock.contexts.map((element) => (element as Element).tagName)).toEqual(['FORM']);
+		expect(layerOf(history.state)).toBe(1);
+
+		history.back();
+		await waitFor(() => expect(screen.queryByRole('heading', { level: 3 })).toBeNull());
+		await userEvent.click(screen.getByRole('button', { name: 'Add a rule' }));
+		expect(screen.getByRole('heading', { name: 'New rule' })).toBeInTheDocument();
+		await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 	});
 });
