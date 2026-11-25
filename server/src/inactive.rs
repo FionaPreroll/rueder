@@ -25,7 +25,7 @@ use time::OffsetDateTime;
 use crate::{
     mail::{Language, Mailer, Template},
     rate::Rates,
-    retention,
+    retention, sizes,
 };
 
 /// How many days before an account goes the first mail goes.
@@ -66,14 +66,9 @@ pub async fn months(db: &PgPool) -> anyhow::Result<Option<i32>> {
 /// Sets after how many months without being used an account goes, within
 /// [`retention::MONTHS`]; `None` keeps every account.
 pub async fn set_months(db: &PgPool, months: Option<i32>) -> anyhow::Result<()> {
-    if let Some(months) = months
-        && !retention::MONTHS.contains(&months)
-    {
-        anyhow::bail!(
-            "the months of accounts nobody uses must be from {} to {}, not {months}",
-            retention::MONTHS.start(),
-            retention::MONTHS.end()
-        );
+    if let Some(months) = months {
+        let what = "the months of accounts nobody uses";
+        sizes::in_bounds(what, months, &retention::MONTHS).map_err(anyhow::Error::msg)?;
     }
     sqlx::query!("UPDATE retention SET inactive_months = $1", months)
         .execute(db)
@@ -175,7 +170,7 @@ pub async fn sweep(
         "DELETE FROM accounts WHERE id IN (
              SELECT id FROM accounts
              WHERE inactive_reminded_at IS NOT NULL
-               AND email IS NOT NULL AND NOT is_admin AND disabled_at IS NULL
+               AND inactive_may_go(accounts)
                AND greatest(active_at + make_interval(months => $2),
                             inactive_warned_at + make_interval(days => $3),
                             inactive_reminded_at + make_interval(days => $4)) <= $1
@@ -199,7 +194,7 @@ pub async fn sweep(
                            $1::timestamptz + make_interval(days => $3)) AS "goes!"
            FROM accounts
            WHERE inactive_warned_at IS NULL
-             AND email IS NOT NULL AND NOT is_admin AND disabled_at IS NULL
+             AND inactive_may_go(accounts)
              AND active_at + make_interval(months => $2) - make_interval(days => $3) <= $1
            ORDER BY active_at, id
            LIMIT $4"#,
@@ -240,7 +235,7 @@ pub async fn sweep(
                            $1::timestamptz + make_interval(days => $4)) AS "goes!"
            FROM accounts
            WHERE inactive_warned_at IS NOT NULL AND inactive_reminded_at IS NULL
-             AND email IS NOT NULL AND NOT is_admin AND disabled_at IS NULL
+             AND inactive_may_go(accounts)
              AND greatest(active_at + make_interval(months => $2),
                           inactive_warned_at + make_interval(days => $3))
                  - make_interval(days => $4) <= $1

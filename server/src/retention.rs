@@ -28,7 +28,10 @@ use std::{collections::HashSet, fmt, ops::RangeInclusive, str::FromStr, time::In
 use sqlx::{PgConnection, PgPool};
 use time::OffsetDateTime;
 
-use crate::events::{Events, ServerEvent};
+use crate::{
+    events::{Events, ServerEvent},
+    sizes,
+};
 
 /// How many months an article or a version may be kept at most before it goes,
 /// when the operator sets it.
@@ -97,13 +100,10 @@ impl Articles {
 
     /// Why these settings cannot be stored, if they cannot.
     pub fn check(&self) -> Result<(), String> {
-        let within = |value: Option<i32>, bounds: &RangeInclusive<i32>, what: &str| match value {
-            Some(value) if !bounds.contains(&value) => Err(format!(
-                "{what} must be from {} to {}, not {value}",
-                bounds.start(),
-                bounds.end()
-            )),
-            _ => Ok(()),
+        let within = |value: Option<i32>, bounds: &RangeInclusive<i32>, what: &str| {
+            value.map_or(Ok(()), |value| {
+                sizes::in_bounds(what, value, bounds).map(drop)
+            })
         };
         within(self.articles_months, &MONTHS, "the months of articles")?;
         within(self.versions_months, &MONTHS, "the months of versions")?;

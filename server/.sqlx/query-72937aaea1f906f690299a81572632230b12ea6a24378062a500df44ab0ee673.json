@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, username, email AS \"email!\",\n                  coalesce(language, 'en') AS \"language!: Language\", active_at,\n                  greatest(active_at + make_interval(months => $2),\n                           $1::timestamptz + make_interval(days => $3)) AS \"goes!\"\n           FROM accounts\n           WHERE inactive_warned_at IS NULL\n             AND email IS NOT NULL AND NOT is_admin AND disabled_at IS NULL\n             AND active_at + make_interval(months => $2) - make_interval(days => $3) <= $1\n           ORDER BY active_at, id\n           LIMIT $4",
+  "query": "SELECT id, username, email AS \"email!\",\n                  coalesce(language, 'en') AS \"language!: Language\", active_at,\n                  greatest(active_at + make_interval(months => $2),\n                           $1::timestamptz + make_interval(days => $3)) AS \"goes!\"\n           FROM accounts\n           WHERE inactive_warned_at IS NULL\n             AND inactive_may_go(accounts)\n             AND active_at + make_interval(months => $2) - make_interval(days => $3) <= $1\n           ORDER BY active_at, id\n           LIMIT $4",
   "describe": {
     "columns": [
       {
@@ -77,5 +77,5 @@
       null
     ]
   },
-  "hash": "35a3f2a679d4cedb6319031e5f8258ff8ad197f92fad5ff44bc2ab6343eec956"
+  "hash": "72937aaea1f906f690299a81572632230b12ea6a24378062a500df44ab0ee673"
 }

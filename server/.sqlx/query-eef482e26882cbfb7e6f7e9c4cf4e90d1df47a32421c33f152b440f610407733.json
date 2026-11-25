@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM accounts WHERE id IN (\n             SELECT id FROM accounts\n             WHERE inactive_reminded_at IS NOT NULL\n               AND inactive_may_go(accounts)\n               AND greatest(active_at + make_interval(months => $2),\n                            inactive_warned_at + make_interval(days => $3),\n                            inactive_reminded_at + make_interval(days => $4)) <= $1\n             LIMIT $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eef482e26882cbfb7e6f7e9c4cf4e90d1df47a32421c33f152b440f610407733"
+}
