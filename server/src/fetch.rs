@@ -1,5 +1,5 @@
 //! Fetching feeds: one feed ([`fetch_feed`]), everything that is due
-//! ([`fetch_due`]) and the loop the server runs ([`run`]).
+//! ([`Fetcher::fetch_due`]) and the loop the server runs ([`Fetcher::run`]).
 //!
 //! A feed is fetched with a conditional request, so a feed that did not change
 //! costs its site next to nothing. What comes back goes through
@@ -389,46 +389,74 @@ async fn failed(db: &PgPool, feed_id: i32, message: String, back: Back) -> anyho
     Ok(Outcome::Failed(message))
 }
 
-/// One round on its own: what [`round`] does with nothing else under way, for
-/// the command line and the tests.
-pub async fn fetch_due(
-    db: &PgPool,
-    client: &HttpClient,
-    rssifier: Option<&Arc<Rssifier>>,
-    rules: &Arc<Rules>,
-    events: &Events,
-    monitor: &Arc<Monitor>,
-    pace: &Pace,
-) -> anyhow::Result<usize> {
-    let underway = Underway::new(pace);
-    round(
-        db, client, rssifier, rules, events, monitor, pace, &underway,
-    )
-    .await
+/// What fetching feeds needs, the same for every round and every fetch of
+/// it, and cheap to copy: each part is shared.
+#[derive(Clone)]
+pub struct Fetcher {
+    pub db: PgPool,
+    pub client: HttpClient,
+    /// For web pages without a feed, where the operator set it up.
+    pub rssifier: Option<Arc<Rssifier>>,
+    pub rules: Arc<Rules>,
+    /// Whom the readers of a feed hear about it from.
+    pub events: Events,
+    /// What counts the fetches and the rounds for the status page.
+    pub monitor: Arc<Monitor>,
 }
 
-/// Takes the feeds that are due and have somebody reading them, at most a
-/// round's worth of the pace and none of a host that another round is still
-/// fetching, fetches them, so many at a time as the pace says and no more of
-/// one host at once than `per_host`, and returns how many it took once they
-/// are fetched. Each fetch and the round count for the status page. A disabled
-/// account reads nothing, so a feed only such accounts subscribe to rests
-/// until one of them is enabled or somebody else subscribes.
-#[allow(clippy::too_many_arguments, reason = "what a round needs")]
-pub async fn round(
-    db: &PgPool,
-    client: &HttpClient,
-    rssifier: Option<&Arc<Rssifier>>,
-    rules: &Arc<Rules>,
-    events: &Events,
-    monitor: &Arc<Monitor>,
-    pace: &Pace,
-    underway: &Arc<Underway>,
-) -> anyhow::Result<usize> {
-    let (started, began) = (Instant::now(), OffsetDateTime::now_utc());
-    // Taking a feed moves its next fetch away, so a second server does not
-    // take it too. The fetch sets the real time.
-    let due = sqlx::query!(
+impl Fetcher {
+    /// A fetcher without RSSifier, with events and counts of its own: what
+    /// the tests take, and the server adds its own to.
+    pub fn new(db: PgPool, client: HttpClient, rules: Arc<Rules>) -> Self {
+        Self {
+            db,
+            client,
+            rssifier: None,
+            rules,
+            events: Events::new(),
+            monitor: Arc::default(),
+        }
+    }
+
+    /// One round on its own: what [`Self::round`] does with nothing else
+    /// under way, for the tests.
+    pub async fn fetch_due(&self, pace: &Pace) -> anyhow::Result<usize> {
+        self.round(pace, &Underway::new(pace)).await
+    }
+
+    /// Fetches what is due, again and again, for as long as the server runs.
+    pub async fn run(self, pace: Pace) {
+        self.monitor.fetching_runs(pace);
+        let underway = Underway::new(&pace);
+        let mut every = tokio::time::interval(pace.every);
+        // A server that was busy starts one round, not several to catch up.
+        every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            every.tick().await;
+            // Rounds overlap: one that waits for a slow host keeps no other
+            // from taking what is due; `underway` keeps them apart.
+            let (fetcher, underway) = (self.clone(), underway.clone());
+            tokio::spawn(async move {
+                if let Err(err) = fetcher.round(&pace, &underway).await {
+                    tracing::error!("fetching feeds: {err:#}");
+                }
+            });
+        }
+    }
+
+    /// Takes the feeds that are due and have somebody reading them, at most a
+    /// round's worth of the pace and none of a host that another round is still
+    /// fetching, fetches them, so many at a time as the pace says and no more of
+    /// one host at once than `per_host`, and returns how many it took once they
+    /// are fetched. Each fetch and the round count for the status page. A disabled
+    /// account reads nothing, so a feed only such accounts subscribe to rests
+    /// until one of them is enabled or somebody else subscribes.
+    pub async fn round(&self, pace: &Pace, underway: &Arc<Underway>) -> anyhow::Result<usize> {
+        let db = &self.db;
+        let (started, began) = (Instant::now(), OffsetDateTime::now_utc());
+        // Taking a feed moves its next fetch away, so a second server does not
+        // take it too. The fetch sets the real time.
+        let due = sqlx::query!(
         r#"UPDATE feeds SET next_fetch_at = now() + $2::float8 * interval '1 second'
          WHERE id IN (
              SELECT f.id FROM feeds f
@@ -447,112 +475,90 @@ pub async fn round(
     )
     .fetch_all(db)
     .await?;
-    let count = due.len();
+        let count = due.len();
 
-    let mut hosts: HashMap<String, Vec<(i32, bool)>> = HashMap::new();
-    for feed in due {
-        hosts
-            .entry(host(&feed.feed_url))
-            .or_default()
-            .push((feed.id, feed.failing));
-    }
-    let mut fetches = JoinSet::new();
-    for (host, feeds) in hosts {
-        // A host that another round took meanwhile, or that the database
-        // wrote otherwise than the address reads: its feeds wait for the next
-        // round.
-        let Some(busy) = underway.take(host) else {
-            sqlx::query!(
-                "UPDATE feeds SET next_fetch_at = now() WHERE id = ANY($1)",
-                &feeds.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
-            )
-            .execute(db)
-            .await?;
-            continue;
-        };
-        let busy = Arc::new(busy);
-        // So many at once of the host as the pace allows, each one after
-        // the other.
-        let mut lines: Vec<Vec<(i32, bool)>> = vec![Vec::new(); pace.per_host.min(feeds.len())];
-        for (n, feed) in feeds.into_iter().enumerate() {
-            let at = n % lines.len();
-            lines[at].push(feed);
+        let mut hosts: HashMap<String, Vec<(i32, bool)>> = HashMap::new();
+        for feed in due {
+            hosts
+                .entry(host(&feed.feed_url))
+                .or_default()
+                .push((feed.id, feed.failing));
         }
-        for line in lines {
-            let (db, client, underway, busy) =
-                (db.clone(), client.clone(), underway.clone(), busy.clone());
-            let rssifier = rssifier.cloned();
-            let (rules, events, monitor) = (rules.clone(), events.clone(), monitor.clone());
-            fetches.spawn(async move {
-                for (feed_id, was_failing) in line {
-                    fetch_one(
-                        &db,
-                        &client,
-                        rssifier.as_deref(),
-                        &rules,
-                        &events,
-                        &monitor,
-                        &underway,
-                        feed_id,
-                        was_failing,
-                    )
-                    .await;
-                }
-                drop(busy);
-            });
+        let mut fetches = JoinSet::new();
+        for (host, feeds) in hosts {
+            // A host that another round took meanwhile, or that the database
+            // wrote otherwise than the address reads: its feeds wait for the next
+            // round.
+            let Some(busy) = underway.take(host) else {
+                sqlx::query!(
+                    "UPDATE feeds SET next_fetch_at = now() WHERE id = ANY($1)",
+                    &feeds.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+                )
+                .execute(db)
+                .await?;
+                continue;
+            };
+            let busy = Arc::new(busy);
+            // So many at once of the host as the pace allows, each one after
+            // the other.
+            let mut lines: Vec<Vec<(i32, bool)>> = vec![Vec::new(); pace.per_host.min(feeds.len())];
+            for (n, feed) in feeds.into_iter().enumerate() {
+                let at = n % lines.len();
+                lines[at].push(feed);
+            }
+            for line in lines {
+                let (fetcher, underway, busy) = (self.clone(), underway.clone(), busy.clone());
+                fetches.spawn(async move {
+                    for (feed_id, was_failing) in line {
+                        fetcher.fetch_one(&underway, feed_id, was_failing).await;
+                    }
+                    drop(busy);
+                });
+            }
         }
+        while fetches.join_next().await.is_some() {}
+        self.monitor.round(Round {
+            at: began,
+            feeds: count,
+            took: started.elapsed(),
+        });
+        Ok(count)
     }
-    while fetches.join_next().await.is_some() {}
-    monitor.round(Round {
-        at: began,
-        feeds: count,
-        took: started.elapsed(),
-    });
-    Ok(count)
-}
 
-/// Fetches one feed of a round when there is room, and tells its readers.
-#[allow(clippy::too_many_arguments, reason = "what a round hands each fetch")]
-async fn fetch_one(
-    db: &PgPool,
-    client: &HttpClient,
-    rssifier: Option<&Rssifier>,
-    rules: &Arc<Rules>,
-    events: &Events,
-    monitor: &Arc<Monitor>,
-    underway: &Underway,
-    feed_id: i32,
-    was_failing: bool,
-) {
-    let Ok(_permit) = underway.at_once.acquire().await else {
-        return;
-    };
-    let fetching = Instant::now();
-    let result = fetch_feed(db, client, rssifier, rules, feed_id).await;
-    let fetched = match &result {
-        Ok(Outcome::Fetched(stored)) => Fetched::Fetched {
-            new: u64::try_from(stored.new).unwrap_or(0),
-        },
-        Ok(Outcome::NotModified) => Fetched::Unchanged,
-        Ok(Outcome::Failed(_)) => Fetched::Failed,
-        Err(_) => Fetched::Broken,
-    };
-    let now = Instant::now();
-    monitor.fetch(fetched, now - fetching, now);
-    let outcome = match result {
-        Ok(outcome) => outcome,
-        Err(err) => {
-            tracing::error!(feed_id, "fetching: {err:#}");
+    /// Fetches one feed of a round when there is room, and tells its readers.
+    async fn fetch_one(&self, underway: &Underway, feed_id: i32, was_failing: bool) {
+        let (db, monitor, events) = (&self.db, &self.monitor, &self.events);
+        let Ok(_permit) = underway.at_once.acquire().await else {
             return;
+        };
+        let fetching = Instant::now();
+        let rssifier = self.rssifier.as_deref();
+        let result = fetch_feed(db, &self.client, rssifier, &self.rules, feed_id).await;
+        let fetched = match &result {
+            Ok(Outcome::Fetched(stored)) => Fetched::Fetched {
+                new: u64::try_from(stored.new).unwrap_or(0),
+            },
+            Ok(Outcome::NotModified) => Fetched::Unchanged,
+            Ok(Outcome::Failed(_)) => Fetched::Failed,
+            Err(_) => Fetched::Broken,
+        };
+        let now = Instant::now();
+        monitor.fetch(fetched, now - fetching, now);
+        let outcome = match result {
+            Ok(outcome) => outcome,
+            Err(err) => {
+                tracing::error!(feed_id, "fetching: {err:#}");
+                return;
+            }
+        };
+        match &outcome {
+            Outcome::Failed(why) => tracing::info!(feed_id, "fetch failed: {why}"),
+            outcome => tracing::debug!(feed_id, ?outcome, "fetched"),
         }
-    };
-    match &outcome {
-        Outcome::Failed(why) => tracing::info!(feed_id, "fetch failed: {why}"),
-        outcome => tracing::debug!(feed_id, ?outcome, "fetched"),
-    }
-    for change in changes(feed_id, was_failing, outcome) {
-        if let Err(err) = events.publish_to_readers(db, feed_id, change).await {
-            tracing::error!(feed_id, "telling readers: {err:#}");
+        for change in changes(feed_id, was_failing, outcome) {
+            if let Err(err) = events.publish_to_readers(db, feed_id, change).await {
+                tracing::error!(feed_id, "telling readers: {err:#}");
+            }
         }
     }
 }
@@ -598,46 +604,6 @@ pub fn changes(feed_id: i32, was_failing: bool, outcome: Outcome) -> Vec<ServerE
         }
     }
     changes
-}
-
-/// Fetches what is due, again and again, for as long as the server runs.
-pub async fn run(
-    db: PgPool,
-    client: HttpClient,
-    rssifier: Option<Arc<Rssifier>>,
-    rules: Arc<Rules>,
-    events: Events,
-    monitor: Arc<Monitor>,
-    pace: Pace,
-) {
-    monitor.fetching_runs(pace);
-    let underway = Underway::new(&pace);
-    let mut every = tokio::time::interval(pace.every);
-    // A server that was busy starts one round, not several to catch up.
-    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    loop {
-        every.tick().await;
-        // Rounds overlap: one that waits for a slow host keeps no other from
-        // taking what is due; `underway` keeps them apart.
-        let (db, client, rules) = (db.clone(), client.clone(), rules.clone());
-        let rssifier = rssifier.clone();
-        let (events, monitor, underway) = (events.clone(), monitor.clone(), underway.clone());
-        tokio::spawn(async move {
-            let round = round(
-                &db,
-                &client,
-                rssifier.as_ref(),
-                &rules,
-                &events,
-                &monitor,
-                &pace,
-                &underway,
-            );
-            if let Err(err) = round.await {
-                tracing::error!("fetching feeds: {err:#}");
-            }
-        });
-    }
 }
 
 #[cfg(test)]

@@ -356,7 +356,7 @@ pub async fn remove(db: &PgPool, account_id: i32) -> anyhow::Result<bool> {
 
 /// Disables an account, which ends its sessions, or enables it again. Returns
 /// how many of its feeds no other enabled account reads: those are not fetched
-/// while it is disabled (see `fetch::fetch_due`). None if there is no account
+/// while it is disabled (see `fetch::Fetcher::round`). None if there is no account
 /// of that name.
 pub async fn set_disabled(db: &PgPool, name: &str, disabled: bool) -> anyhow::Result<Option<i64>> {
     let mut tx = db.begin().await?;

@@ -1054,15 +1054,15 @@ async fn serve(db: PgPool, problems: Arc<Problems>, sizes: Sizes) -> anyhow::Res
     // fetched; a value out of bounds stops the start.
     let pace = fetch::Pace::from_env()?;
     if settings.fetch {
-        tokio::spawn(fetch::run(
-            db.clone(),
-            client.clone(),
-            rssifier.clone(),
-            rules.clone(),
-            events.clone(),
-            monitor.clone(),
-            pace,
-        ));
+        let fetcher = fetch::Fetcher {
+            db: db.clone(),
+            client: client.clone(),
+            rssifier: rssifier.clone(),
+            rules: rules.clone(),
+            events: events.clone(),
+            monitor: monitor.clone(),
+        };
+        tokio::spawn(fetcher.run(pace));
     }
 
     // Images reach readers through the proxy, which fetches nothing that

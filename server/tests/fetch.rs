@@ -412,20 +412,11 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
 
     let client = client();
     let monitor = Arc::new(Monitor::default());
-    assert_eq!(
-        fetch::fetch_due(
-            &db,
-            &client,
-            None,
-            &rules(),
-            &Events::new(),
-            &monitor,
-            &fetch::Pace::default()
-        )
-        .await
-        .unwrap(),
-        2
-    );
+    let fetcher = fetch::Fetcher {
+        monitor: monitor.clone(),
+        ..fetch::Fetcher::new(db.clone(), client.clone(), rules())
+    };
+    assert_eq!(fetcher.fetch_due(&fetch::Pace::default()).await.unwrap(), 2);
     assert_eq!(site.lock().unwrap().requests, 2);
     // The status page hears of the round and of its fetches.
     let fetches = monitor.fetches(Instant::now());
@@ -440,20 +431,7 @@ async fn a_round_takes_the_feeds_that_are_due_and_have_a_reader(db: PgPool) {
         );
     }
     // Fetched feeds are not due any more.
-    assert_eq!(
-        fetch::fetch_due(
-            &db,
-            &client,
-            None,
-            &rules(),
-            &Events::new(),
-            &monitor,
-            &fetch::Pace::default()
-        )
-        .await
-        .unwrap(),
-        0
-    );
+    assert_eq!(fetcher.fetch_due(&fetch::Pace::default()).await.unwrap(), 0);
     assert_eq!(site.lock().unwrap().requests, 2);
 }
 
@@ -478,7 +456,12 @@ async fn a_feed_only_disabled_accounts_read_rests_until_somebody_reads_it(db: Pg
     let (client, rules, events) = (client(), rules(), Events::new());
     let monitor = Arc::new(Monitor::default());
     let pace = fetch::Pace::default();
-    let round = || fetch::fetch_due(&db, &client, None, &rules, &events, &monitor, &pace);
+    let fetcher = fetch::Fetcher {
+        events,
+        monitor,
+        ..fetch::Fetcher::new(db.clone(), client, rules)
+    };
+    let round = || fetcher.fetch_due(&pace);
 
     // Disabled, ada reads nothing: only the feed grace reads too is fetched.
     assert_eq!(
@@ -534,8 +517,13 @@ async fn a_round_takes_no_more_than_the_pace_says(db: PgPool) {
     };
     let (client, rules, events) = (client(), rules(), Events::new());
     let monitor = Arc::new(Monitor::default());
+    let fetcher = fetch::Fetcher {
+        events,
+        monitor,
+        ..fetch::Fetcher::new(db.clone(), client, rules)
+    };
     for taken in [2, 1, 0] {
-        let round = fetch::fetch_due(&db, &client, None, &rules, &events, &monitor, &pace);
+        let round = fetcher.fetch_due(&pace);
         assert_eq!(round.await.unwrap(), taken);
     }
     assert_eq!(site.lock().unwrap().requests, 3);
@@ -726,23 +714,17 @@ async fn a_slow_host_holds_up_only_itself(db: PgPool) {
         ..fetch::Pace::default()
     };
     let underway = fetch::Underway::new(&pace);
-    let (client, rules, events) = (loopback_client(), rules(), Events::new());
-    let monitor = Arc::new(Monitor::default());
+    let fetcher = fetch::Fetcher {
+        db: db.clone(),
+        client: loopback_client(),
+        rssifier: None,
+        rules: rules(),
+        events: Events::new(),
+        monitor: Arc::new(Monitor::default()),
+    };
     let first = {
-        let (db, client, rules, events, monitor, underway) = (
-            db.clone(),
-            client.clone(),
-            rules.clone(),
-            events.clone(),
-            monitor.clone(),
-            underway.clone(),
-        );
-        tokio::spawn(async move {
-            fetch::round(
-                &db, &client, None, &rules, &events, &monitor, &pace, &underway,
-            )
-            .await
-        })
+        let (fetcher, underway) = (fetcher.clone(), underway.clone());
+        tokio::spawn(async move { fetcher.round(&pace, &underway).await })
     };
     // The first round is done with the fast host and still at the slow one;
     // everything is due again.
@@ -754,11 +736,7 @@ async fn a_slow_host_holds_up_only_itself(db: PgPool) {
         .await
         .unwrap();
     let started = Instant::now();
-    let second = fetch::round(
-        &db, &client, None, &rules, &events, &monitor, &pace, &underway,
-    )
-    .await
-    .unwrap();
+    let second = fetcher.round(&pace, &underway).await.unwrap();
     assert_eq!(second, 2, "only the feeds of the fast host");
     assert!(started.elapsed() < delay * 2, "{:?}", started.elapsed());
     assert!(!first.is_finished(), "the slow host is still at it");
@@ -786,8 +764,7 @@ async fn no_more_of_a_host_at_once_than_the_pace_says(db: PgPool) {
     let (site, seen) = slow_site("127.0.0.3", std::time::Duration::from_millis(150)).await;
     let urls: Vec<String> = (0..7).map(|n| format!("{site}/feed/{n}")).collect();
     feeds_at(&db, &urls).await;
-    let (client, rules, events) = (loopback_client(), rules(), Events::new());
-    let monitor = Arc::new(Monitor::default());
+    let fetcher = fetch::Fetcher::new(db.clone(), loopback_client(), rules());
     for per_host in [1, 3] {
         sqlx::query("UPDATE feeds SET next_fetch_at = now()")
             .execute(&db)
@@ -798,7 +775,7 @@ async fn no_more_of_a_host_at_once_than_the_pace_says(db: PgPool) {
             per_host,
             ..fetch::Pace::default()
         };
-        let fetched = fetch::fetch_due(&db, &client, None, &rules, &events, &monitor, &pace).await;
+        let fetched = fetcher.fetch_due(&pace).await;
         assert_eq!(fetched.unwrap(), 7);
         assert_eq!(seen.lock().unwrap().most, per_host);
     }
