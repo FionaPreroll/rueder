@@ -519,7 +519,7 @@ async fn the_proxy_does_not_fetch_the_images_of_a_blocked_feed_again(db: PgPool)
 }
 
 #[sqlx::test]
-async fn the_operator_finds_any_feed_and_says_as_what_it_is_fetched(db: PgPool) {
+async fn the_operator_finds_any_feed_and_says_how_it_is_fetched(db: PgPool) {
     let (ada, news) = common::reader(&db, "ada", 2).await;
     // Another feed at the same address, which nobody reads.
     let twin = common::feed(&db, "ada").await;
@@ -573,4 +573,40 @@ async fn the_operator_finds_any_feed_and_says_as_what_it_is_fetched(db: PgPool) 
             (blog, "rueder".into(), false),
         ]
     );
+
+    // Four hours at least, for both feeds at the address: what was due waits
+    // for them, the other feed keeps its time; none ends it.
+    sqlx::query("UPDATE feeds SET fetched_at = now() - interval '1 hour', fetch_interval_s = 1800")
+        .execute(&db)
+        .await
+        .unwrap();
+    moderation::set_min_interval(&db, &[news, twin], Some(14400))
+        .await
+        .unwrap();
+    let limits = async || {
+        sqlx::query_as::<_, (i32, Option<i32>, i32, f64)>(
+            "SELECT id, min_interval_s, fetch_interval_s,
+                    extract(epoch FROM next_fetch_at - fetched_at)::float8
+             FROM feeds ORDER BY id",
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap()
+    };
+    let shown = limits().await;
+    assert_eq!(
+        shown.iter().map(|l| (l.0, l.1, l.2)).collect::<Vec<_>>(),
+        [
+            (news, Some(14400), 14400),
+            (twin, Some(14400), 14400),
+            (blog, None, 1800)
+        ]
+    );
+    assert!((shown[0].3 - 14400.0).abs() < 1.0, "{shown:?}");
+    assert!((shown[2].3 - 7200.0).abs() < 1.0, "{shown:?}");
+    moderation::set_min_interval(&db, &[news], None)
+        .await
+        .unwrap();
+    assert_eq!(limits().await[0].1, None);
+    assert_eq!(limits().await[1].1, Some(14400));
 }
