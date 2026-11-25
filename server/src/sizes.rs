@@ -102,14 +102,26 @@ pub fn within<T: FromStr + PartialOrd + Display>(
         .trim()
         .parse()
         .map_err(|_| anyhow::anyhow!("{name} is no number: {value:?}"))?;
-    if !bounds.contains(&number) {
-        anyhow::bail!(
-            "{name} must be from {} to {}, not {number}",
+    in_bounds(name, number, bounds)
+        .map(Some)
+        .map_err(anyhow::Error::msg)
+}
+
+/// `value` if it is within `bounds`, else what to say about `what`.
+pub fn in_bounds<T: PartialOrd + Display>(
+    what: &str,
+    value: T,
+    bounds: &RangeInclusive<T>,
+) -> Result<T, String> {
+    if bounds.contains(&value) {
+        Ok(value)
+    } else {
+        Err(format!(
+            "{what} must be from {} to {}, not {value}",
             bounds.start(),
             bounds.end()
-        );
+        ))
     }
-    Ok(Some(number))
 }
 
 #[cfg(test)]

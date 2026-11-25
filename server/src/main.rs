@@ -159,6 +159,18 @@ enum AccountCommand {
     SecondFactorOff { name: String },
 }
 
+/// A number on the command line from `least` on, or the word that stands for
+/// none of it.
+fn number_or(text: &str, word: &str, least: i32) -> Result<Option<i32>, String> {
+    if text == word {
+        return Ok(None);
+    }
+    match text.parse::<i32>() {
+        Ok(number) if number >= least => Ok(Some(number)),
+        _ => Err(format!("a number from {least} on, or `{word}`")),
+    }
+}
+
 /// A limit on the command line: a number, or `none` for no limit.
 #[derive(Clone, Copy)]
 struct Limit(Option<i32>);
@@ -167,13 +179,7 @@ impl std::str::FromStr for Limit {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        match text {
-            "none" => Ok(Self(None)),
-            _ => match text.parse::<i32>() {
-                Ok(number) if number >= 0 => Ok(Self(Some(number))),
-                _ => Err("a number from 0 on, or `none`".into()),
-            },
-        }
+        number_or(text, "none", 0).map(Self)
     }
 }
 
@@ -185,13 +191,7 @@ impl std::str::FromStr for Quota {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        match text {
-            "default" => Ok(Self(None)),
-            _ => match text.parse::<i32>() {
-                Ok(number) if number >= 0 => Ok(Self(Some(number))),
-                _ => Err("a number from 0 on, or `default`".into()),
-            },
-        }
+        number_or(text, "default", 0).map(Self)
     }
 }
 
@@ -282,13 +282,7 @@ impl std::str::FromStr for Keep {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        match text {
-            "never" => Ok(Self(None)),
-            _ => match text.parse::<i32>() {
-                Ok(number) if number >= 1 => Ok(Self(Some(number))),
-                _ => Err("a number from 1 on, or `never`".into()),
-            },
-        }
+        number_or(text, "never", 1).map(Self)
     }
 }
 
