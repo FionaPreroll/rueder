@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, title, feed_url, site_url, fetch_agent, fetch_interval_s, fetched_at,\n                  last_success_at, last_error_at, error_message AS error, next_fetch_at,\n                  last_seq, blocked_at IS NOT NULL AS \"blocked!\"\n           FROM feeds f\n           WHERE id = $1 AND ($2::integer IS NULL OR EXISTS (\n               SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id AND s.account_id = $2))",
+  "query": "SELECT id, title, feed_url, site_url, fetch_agent, fetch_interval_s, min_interval_s,\n                  fetched_at, last_success_at, last_error_at, error_message AS error, next_fetch_at,\n                  last_seq, blocked_at IS NOT NULL AS \"blocked!\"\n           FROM feeds f\n           WHERE id = $1 AND ($2::integer IS NULL OR EXISTS (\n               SELECT 1 FROM subscriptions s WHERE s.feed_id = f.id AND s.account_id = $2))",
   "describe": {
     "columns": [
       {
@@ -71,6 +71,17 @@
       },
       {
         "ordinal": 6,
+        "name": "min_interval_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "feeds",
+            "name": "min_interval_s"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "fetched_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "last_success_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_error_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -103,7 +114,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "error",
         "type_info": "Text",
         "origin": {
@@ -114,7 +125,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "next_fetch_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "last_seq",
         "type_info": "Int4",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "blocked!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -159,10 +170,11 @@
       true,
       true,
       true,
+      true,
       false,
       false,
       null
     ]
   },
-  "hash": "171ed84de7af1901fd99b5e9de910c85453f8b5079a3b8eb32e1708030a22f14"
+  "hash": "eeecdbe6580f9f482a3bfe3d78d609f97a2f3bc4da146bb47ca60fc5c764b7d7"
 }

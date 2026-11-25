@@ -875,6 +875,10 @@ async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
                 );
                 println!("  Fetched as:   {}", info.fetch_agent);
                 println!("  Every:        {} s", info.fetch_interval_s);
+                match info.min_interval_s {
+                    Some(seconds) => println!("  At least:     {seconds} s"),
+                    None => println!("  At least:     -"),
+                }
                 println!("  Last fetch:   {}", when(info.fetched_at));
                 println!("  Last success: {}", when(info.last_success_at));
                 println!("  Last error:   {}", when(info.last_error_at));
@@ -892,7 +896,7 @@ async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
             moderation::set_agent(db, &found, &agent).await?;
             let numbers: Vec<String> = found.iter().map(i32::to_string).collect();
             println!(
-                "Feed {} is fetched as {agent} from now on, the first time at once.",
+                "Feed {} is fetched as {agent} from now on, the first time as soon as it may.",
                 numbers.join(", ")
             );
         }

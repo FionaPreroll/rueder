@@ -1017,7 +1017,7 @@ describe('reading', () => {
 			status: true,
 			reports: true,
 			reportContent: false,
-			fetchAgent: true
+			fetching: true
 		});
 	});
 });

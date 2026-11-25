@@ -194,6 +194,10 @@ const en = {
 		fetchAsHint:
 			'For everyone who reads the feed. As a browser for sites that turn rueder away. It is fetched again at once.',
 		notSwitched: 'That did not work. Try again later.',
+		atMost: 'At most every',
+		noLimit: 'No limit',
+		atMostHint:
+			'For everyone who reads the feed, for sites that complain of too many requests (429): it is never fetched more often, however much it publishes.',
 		copy: 'Copy',
 		copied: 'Copied',
 		loading: 'Loading …',

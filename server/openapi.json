@@ -1652,7 +1652,7 @@
         "tags": [
           "Feeds and folders"
         ],
-        "summary": "Says as what a feed is fetched: as rueder, or as a browser for sites that turn rueder away. The feed is one for all who read it, so this holds for all of them, and rueder passes for a browser in the name of the whole server: only an admin who reads it says it. The next fetch comes at once.",
+        "summary": "Says as what a feed is fetched: as rueder, or as a browser for sites that turn rueder away. The feed is one for all who read it, so this holds for all of them, and rueder passes for a browser in the name of the whole server: only an admin who reads it says it. The next fetch comes at once, or as soon as the feed's shortest time between two fetches allows.",
         "operationId": "set_agent",
         "parameters": [
           {
@@ -1679,6 +1679,59 @@
         "responses": {
           "204": {
             "description": "Done."
+          },
+          "401": {
+            "description": "No valid session: log in first."
+          },
+          "403": {
+            "description": "The account is no admin, or an admin without the second factor where the operator asks for it."
+          },
+          "404": {
+            "description": "The account does not subscribe to this feed."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/feeds/{id}/min-interval": {
+      "put": {
+        "tags": [
+          "Feeds and folders"
+        ],
+        "summary": "Sets the shortest time between two fetches of a feed, for sites that find even the longer interval after a 429 too often: the interval never goes below it, whatever the feed publishes. Like the agent it holds for all who read the feed, so only an admin who reads it says it. A fetch that would come sooner moves back; none moves forward.",
+        "operationId": "set_min_interval",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The feed.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMinInterval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "description": "Shorter than the shortest interval or longer than the longest."
           },
           "401": {
             "description": "No valid session: log in first."
@@ -7068,6 +7121,14 @@
             "format": "int32",
             "description": "How long it waits from one fetch to the next, in seconds."
           },
+          "min_interval_s": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The shortest time between two fetches an admin set, in seconds, which\nthe interval never goes below; null without one."
+          },
           "fetched_at": {
             "type": [
               "string",
@@ -7967,6 +8028,20 @@
           },
           "color": {
             "type": "string"
+          }
+        }
+      },
+      "NewMinInterval": {
+        "type": "object",
+        "description": "What `PUT /api/feeds/{id}/min-interval` reads.",
+        "properties": {
+          "seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "In seconds, from the shortest to the longest interval; null for none."
           }
         }
       },

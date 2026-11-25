@@ -4,7 +4,10 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{Random, call};
-use rueder::AppState;
+use rueder::{
+    AppState,
+    fetch::{MAX_INTERVAL, MIN_INTERVAL},
+};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -844,6 +847,95 @@ async fn an_admin_who_reads_a_feed_says_as_what_it_is_fetched(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn an_admin_who_reads_a_feed_says_how_often_it_is_fetched_at_most(db: PgPool) {
+    let (ada, news) = common::reader(&db, "ada", 1).await;
+    let (grace, blog) = common::reader(&db, "grace", 1).await;
+    rueder::accounts::set_admin(&db, "ada", true).await.unwrap();
+    let state = AppState::new(db.clone());
+    let (cookie, grace_cookie) = (
+        common::session(&db, ada).await,
+        common::session(&db, grace).await,
+    );
+    let set = async |cookie: Option<&str>, feed: i32, seconds: Value| {
+        let path = format!("/api/feeds/{feed}/min-interval");
+        let body = json!({ "seconds": seconds });
+        call(&state, Method::PUT, &path, cookie, Some(body)).await.0
+    };
+    // Fetched ten minutes ago, every half hour, next in twenty minutes.
+    sqlx::query(
+        "UPDATE feeds SET fetched_at = now() - interval '10 minutes', fetch_interval_s = 1800,
+             next_fetch_at = now() + interval '20 minutes'",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    let feed = async |feed: i32| {
+        sqlx::query_as::<_, (Option<i32>, i32, f64)>(
+            "SELECT min_interval_s, fetch_interval_s,
+                    extract(epoch FROM next_fetch_at - fetched_at)::float8
+             FROM feeds WHERE id = $1",
+        )
+        .bind(feed)
+        .fetch_one(&db)
+        .await
+        .unwrap()
+    };
+
+    // Four hours at least: the interval and the next fetch move back.
+    assert_eq!(
+        set(Some(&cookie), news, json!(14400)).await,
+        StatusCode::NO_CONTENT
+    );
+    let (min, every, next) = feed(news).await;
+    assert_eq!((min, every), (Some(14400), 14400));
+    assert!((next - 14400.0).abs() < 1.0, "{next}");
+    let path = format!("/api/feeds/{news}/info");
+    let (_, info) = call(&state, Method::GET, &path, Some(&cookie), None).await;
+    assert_eq!(info["min_interval_s"], 14400);
+    // Switching the agent does not make it due before then.
+    let agent = json!({ "agent": "browser" });
+    let path = format!("/api/feeds/{news}/agent");
+    let (status, _) = call(&state, Method::PUT, &path, Some(&cookie), Some(agent)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!((feed(news).await.2 - 14400.0).abs() < 1.0);
+
+    // A shorter one moves nothing forward, and none ends it.
+    assert_eq!(
+        set(Some(&cookie), news, json!(3600)).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(feed(news).await.0, Some(3600));
+    assert!((feed(news).await.2 - 14400.0).abs() < 1.0);
+    assert_eq!(
+        set(Some(&cookie), news, Value::Null).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(feed(news).await.0, None);
+
+    // Not shorter than the shortest interval nor longer than the longest, not
+    // by a reader who is no admin, not for a feed the admin does not read, and
+    // not without a session.
+    for seconds in [MIN_INTERVAL - 1, MAX_INTERVAL + 1, 0, -1] {
+        assert_eq!(
+            set(Some(&cookie), news, json!(seconds)).await,
+            StatusCode::BAD_REQUEST,
+            "{seconds}"
+        );
+    }
+    assert_eq!(
+        set(Some(&grace_cookie), blog, json!(7200)).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        set(Some(&cookie), blog, json!(7200)).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(set(None, news, json!(7200)).await, StatusCode::UNAUTHORIZED);
+    assert_eq!(feed(news).await.0, None);
+    assert_eq!(feed(blog).await, (None, 1800, 1800.0));
+}
+
+#[sqlx::test]
 async fn a_reader_sees_how_a_feed_of_theirs_is_fetched(db: PgPool) {
     let (ada, news) = common::reader(&db, "ada", 3).await;
     let grace = common::account(&db, "grace").await;
@@ -869,7 +961,7 @@ async fn a_reader_sees_how_a_feed_of_theirs_is_fetched(db: PgPool) {
         json!({
             "id": news, "title": "ada",
             "feed_url": "https://ada.example/feed.xml", "site_url": "https://news.example/",
-            "fetch_agent": "rueder", "fetch_interval_s": 1800,
+            "fetch_agent": "rueder", "fetch_interval_s": 1800, "min_interval_s": null,
             "fetched_at": "2026-11-16T12:30:00Z", "last_success_at": "2026-11-16T12:00:00Z",
             "last_error_at": "2026-11-16T12:30:00Z", "error": "404 Not Found",
             "next_fetch_at": "2026-11-16T13:30:00Z", "last_seq": 3, "blocked": false

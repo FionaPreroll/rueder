@@ -190,6 +190,10 @@ const id: Messages = {
 		fetchAsHint:
 			'Berlaku untuk semua yang membaca feed ini. Pilih browser untuk situs yang menolak rueder. Feed langsung diambil lagi.',
 		notSwitched: 'Tidak berhasil. Coba lagi nanti.',
+		atMost: 'Paling sering setiap',
+		noLimit: 'Tanpa batas',
+		atMostHint:
+			'Berlaku untuk semua yang membaca feed ini, untuk situs yang mengeluh terlalu banyak permintaan (429): feed tidak pernah diambil lebih sering, sebanyak apa pun isinya.',
 		copy: 'Salin',
 		copied: 'Disalin',
 		loading: 'Memuat …',

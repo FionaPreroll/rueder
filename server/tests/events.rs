@@ -180,6 +180,7 @@ fn what_a_request_changes_is_told_by_its_address() {
         ("/api/folders/2", Some(Changed::Tree)),
         ("/api/feeds/7", Some(Changed::Tree)),
         ("/api/feeds/7/agent", Some(Changed::Tree)),
+        ("/api/feeds/7/min-interval", Some(Changed::Tree)),
         ("/api/feeds", Some(Changed::Tree)),
         ("/api/opml", Some(Changed::Tree)),
         ("/api/import", Some(Changed::Everything)),

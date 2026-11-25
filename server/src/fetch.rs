@@ -9,7 +9,9 @@
 //! is written to the feed, where the interface shows it,
 //! and makes the next try come later each time. A site that says it is asked
 //! too often (429) is asked less often for a while, and one that says when to
-//! come back (`Retry-After`) is not asked before then.
+//! come back (`Retry-After`) is not asked before then. Where an admin set a
+//! shortest time between two fetches (`min_interval_s`), the interval never
+//! goes below it, and so neither does anything that makes a feed due at once.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -311,18 +313,20 @@ pub async fn fetch_feed(
     // What a reader who moved here had read elsewhere is read here too.
     crate::reading::settle_read_before(&mut tx, feed_id).await?;
     let state = sqlx::query!(
-        "SELECT last_seq, created_at, fetch_interval_s, limited_at FROM feeds WHERE id = $1",
+        "SELECT last_seq, created_at, fetch_interval_s, limited_at, min_interval_s FROM feeds WHERE id = $1",
         feed_id
     )
     .fetch_one(&mut *tx)
     .await?;
     // A failure made the interval longer; the first success ends that, unless
-    // the site said not long ago that it is asked too often.
+    // the site said not long ago that it is asked too often. It never goes
+    // below what an admin set.
     let mut interval = interval(state.last_seq, now - state.created_at)
         .unwrap_or(state.fetch_interval_s.min(4 * MIN_INTERVAL));
     if state.limited_at.is_some_and(|at| now - at < LIMITED_FOR) {
         interval = interval.max(state.fetch_interval_s);
     }
+    let interval = interval.max(state.min_interval_s.unwrap_or(0));
     sqlx::query!(
         "UPDATE feeds
          SET title = coalesce($2, title), site_url = coalesce($3, site_url),

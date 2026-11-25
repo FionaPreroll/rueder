@@ -123,7 +123,7 @@ export class DemoReader implements Reader {
 		status: true,
 		reports: false,
 		reportContent: false,
-		fetchAgent: true
+		fetching: true
 	};
 	/** The draft sends nothing anywhere. */
 	readonly reportsConsent = null;
@@ -171,6 +171,8 @@ export class DemoReader implements Reader {
 	private ownTitles = new Map<string, string>();
 	/** The feeds that are said to be fetched as a browser. */
 	private asBrowser = new Set<string>();
+	/** The shortest time between two fetches the made-up admin set, in seconds, by feed. */
+	private minIntervals = new Map<string, number>();
 
 	constructor(now: () => number = Date.now, data: DemoData = demoData(now())) {
 		this.now = now;
@@ -649,7 +651,7 @@ export class DemoReader implements Reader {
 	async feedInfo(id: string): Promise<FeedInfo | null> {
 		const feed = this.feeds[id];
 		if (!feed) return null;
-		const every = 30 * 60;
+		const every = Math.max(30 * 60, this.minIntervals.get(id) ?? 0);
 		const fetched = this.now() - 12 * 60_000;
 		const at = (time: number) => new Date(time).toISOString();
 		const address = [...this.addresses].find(([, feedId]) => feedId === id)?.[0];
@@ -660,6 +662,7 @@ export class DemoReader implements Reader {
 			site_url: feed.siteUrl,
 			fetch_agent: this.asBrowser.has(id) ? 'browser' : 'rueder',
 			fetch_interval_s: every,
+			min_interval_s: this.minIntervals.get(id) ?? null,
 			fetched_at: at(fetched),
 			last_success_at: at(feed.error ? fetched - 3 * 24 * 3600_000 : fetched),
 			last_error_at: feed.error ? at(fetched) : null,
@@ -674,6 +677,13 @@ export class DemoReader implements Reader {
 		if (!this.feeds[id]) return false;
 		if (agent === 'browser') this.asBrowser.add(id);
 		else this.asBrowser.delete(id);
+		return true;
+	}
+
+	async setMinInterval(id: string, seconds: number | null) {
+		if (!this.feeds[id]) return false;
+		if (seconds === null) this.minIntervals.delete(id);
+		else this.minIntervals.set(id, seconds);
 		return true;
 	}
 

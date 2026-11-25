@@ -187,6 +187,10 @@ const zhHant: Messages = {
 		fetchAsHint:
 			'對所有閱讀這個訂閱源的人生效。網站拒絕 rueder 時，請選「瀏覽器」。會立即重新擷取。',
 		notSwitched: '沒有成功。請稍後再試。',
+		atMost: '最短擷取間隔',
+		noLimit: '不限',
+		atMostHint:
+			'對所有閱讀這個訂閱源的人生效，適用於抱怨請求過多（429）的網站：無論更新多頻繁，都不會更頻繁地擷取。',
 		copy: '複製',
 		copied: '已複製',
 		loading: '正在載入⋯',

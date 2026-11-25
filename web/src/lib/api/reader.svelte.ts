@@ -452,7 +452,7 @@ export class ServerReader implements Reader {
 			status: account.admin,
 			reports: true,
 			reportContent: account.contentReports === true,
-			fetchAgent: account.admin
+			fetching: account.admin
 		};
 		this.session = session;
 		this.api = api;
@@ -2190,6 +2190,16 @@ export class ServerReader implements Reader {
 	async setFetchAgent(id: string, agent: FetchAgent) {
 		try {
 			await this.api.setFetchAgent(serverId(id), agent);
+			return true;
+		} catch (error) {
+			this.refusal(error);
+			return false;
+		}
+	}
+
+	async setMinInterval(id: string, seconds: number | null) {
+		try {
+			await this.api.setMinInterval(serverId(id), seconds);
 			return true;
 		} catch (error) {
 			this.refusal(error);
