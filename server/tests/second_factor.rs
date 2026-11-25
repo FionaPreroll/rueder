@@ -49,11 +49,6 @@ async fn log_in_with(
     (status, headers, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-fn cookie(headers: &HeaderMap) -> String {
-    let set = headers.get(header::SET_COOKIE).unwrap().to_str().unwrap();
-    set.split(';').next().unwrap().to_owned()
-}
-
 fn now_step() -> u64 {
     let unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -129,7 +124,7 @@ async fn it_is_set_up_with_the_password_and_a_code(db: PgPool) {
         .unwrap();
     let state = AppState::new(db.clone());
     let (_, headers, _) = log_in(&state, "ada", None).await;
-    let ada_cookie = cookie(&headers);
+    let ada_cookie = common::cookie(&headers);
     let cookie = Some(ada_cookie.as_str());
 
     let (status, off) = call(&state, Method::GET, "/api/second-factor", cookie, None).await;
@@ -259,7 +254,7 @@ async fn logging_in_takes_a_code_once_or_a_recovery_code(db: PgPool) {
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
-    let first = cookie(&log_in(&state, "ada", None).await.1);
+    let first = common::cookie(&log_in(&state, "ada", None).await.1);
     let codes = set_up(&state, ada, &first).await;
 
     // The password alone is no longer enough, and says what is missing.
@@ -291,7 +286,7 @@ async fn logging_in_takes_a_code_once_or_a_recovery_code(db: PgPool) {
     let next = app_code(&db, ada, false, 1).await;
     let (status, headers, me) = log_in(&state, "ada", Some(&next)).await;
     assert_eq!(status, StatusCode::OK, "{me}");
-    let with_code = cookie(&headers);
+    let with_code = common::cookie(&headers);
     let second: bool =
         sqlx::query_scalar("SELECT second_factor FROM sessions ORDER BY created_at DESC LIMIT 1")
             .fetch_one(&db)
@@ -337,7 +332,7 @@ async fn wrong_codes_count_like_wrong_passwords(db: PgPool) {
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
-    let first = cookie(&log_in(&state, "ada", None).await.1);
+    let first = common::cookie(&log_in(&state, "ada", None).await.1);
     set_up(&state, ada, &first).await;
     let right = app_code(&db, ada, false, 1).await;
     let wrong = format!(
@@ -372,7 +367,7 @@ async fn wrong_codes_while_setting_it_up_count_like_wrong_passwords(db: PgPool) 
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
-    let first = cookie(&log_in(&state, "ada", None).await.1);
+    let first = common::cookie(&log_in(&state, "ada", None).await.1);
     let body = json!({ "password": PASSWORD });
     let (status, _) = call(
         &state,
@@ -420,7 +415,7 @@ async fn it_is_switched_off_with_the_password_and_a_code_or_on_the_command_line(
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
-    let first = cookie(&log_in(&state, "ada", None).await.1);
+    let first = common::cookie(&log_in(&state, "ada", None).await.1);
     let codes = set_up(&state, ada, &first).await;
     let off = |body: Value| {
         let (state, first) = (state.clone(), first.clone());
@@ -507,7 +502,7 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
         },
         ..AppState::new(db.clone())
     };
-    let without = cookie(&log_in(&strict, "root", None).await.1);
+    let without = common::cookie(&log_in(&strict, "root", None).await.1);
 
     // As rueder comes, an admin is one with the password alone.
     let (status, _) = call(&lax, Method::GET, "/api/status", Some(&without), None).await;
@@ -568,7 +563,7 @@ async fn admins_need_it_where_the_operator_says_so(db: PgPool) {
         &strict,
         Method::GET,
         "/api/status",
-        Some(&cookie(&headers)),
+        Some(&common::cookie(&headers)),
         None,
     )
     .await;
@@ -606,7 +601,7 @@ async fn a_new_password_takes_the_code_too(db: PgPool) {
         .unwrap();
     let state = AppState::new(db.clone());
     let (_, headers, _) = log_in(&state, "ada", None).await;
-    let cookie = cookie(&headers);
+    let cookie = common::cookie(&headers);
     let codes = set_up(&state, ada, &cookie).await;
     // Made up for this test, so that nothing here looks like a real password.
     let fresh = uuid::Uuid::new_v4().to_string();

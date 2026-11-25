@@ -48,7 +48,7 @@ use crate::{
     AppError, AppState, MAX_BODY,
     app_passwords::{self, AppLogin},
     events::{self, ServerEvent},
-    images::{self, Picture},
+    images,
     login::{Key, Sender},
 };
 use parse::Params;
@@ -371,7 +371,11 @@ async fn image(
     match images.get_for_app(app, &signature, &size, &address).await {
         // Only the app may keep it: a cache in front of rueder would keep
         // giving it out after the app password was revoked.
-        Ok(picture) => for_apps(picture, images::KEPT_BY_ITS_READER),
+        Ok(picture) => images::answer(
+            picture,
+            images::KEPT_BY_ITS_READER,
+            images::ShownBy::Anybody,
+        ),
         Err(refused) => {
             tracing::debug!("image for an app refused: {refused}");
             refused.into_response()
@@ -400,33 +404,10 @@ async fn shared_image(
         return StatusCode::NOT_FOUND.into_response();
     };
     match images.get(&signature, &size, &address).await {
-        Ok(picture) => for_apps(picture, images::KEPT_BY_ANY_CACHE),
+        Ok(picture) => images::answer(picture, images::KEPT_BY_ANY_CACHE, images::ShownBy::Anybody),
         Err(refused) => {
             tracing::debug!("image for the apps refused: {refused}");
             refused.into_response()
         }
     }
-}
-
-/// An image as apps get it, kept as `cache_control` says.
-fn for_apps(picture: Picture, cache_control: &'static str) -> Response {
-    (
-        [
-            (header::CONTENT_TYPE, picture.format.mime()),
-            (header::CACHE_CONTROL, cache_control),
-            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-            (
-                header::CONTENT_SECURITY_POLICY,
-                "default-src 'none'; sandbox",
-            ),
-            // Apps show texts in pages of their own, from no origin of this
-            // server.
-            (
-                HeaderName::from_static("cross-origin-resource-policy"),
-                "cross-origin",
-            ),
-        ],
-        picture.bytes,
-    )
-        .into_response()
 }

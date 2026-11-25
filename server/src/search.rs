@@ -79,6 +79,15 @@ pub struct Page {
     pub unread_only: bool,
 }
 
+/// The articles one step of a search reads: from `from` up to before `upto`
+/// in the order of arrival, at most `limit`, newest first.
+#[derive(Debug, Clone, Copy)]
+struct Window {
+    from: i64,
+    upto: i64,
+    limit: i64,
+}
+
 /// A page of hits, newest first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hits {
@@ -247,10 +256,13 @@ pub async fn search(
         let outcome = match next {
             Next::LookAt { articles, span } => {
                 let from = upto.saturating_sub(span).max(first);
-                let looked = look_at(
-                    &mut tx, account_id, feed_ids, &query, &terms, from, upto, articles, page,
-                )
-                .await;
+                let window = Window {
+                    from,
+                    upto,
+                    limit: articles,
+                };
+                let looked =
+                    look_at(&mut tx, account_id, feed_ids, &query, &terms, window, page).await;
                 looked.map(|looked| {
                     let complete = looked.len() as i64 == articles;
                     let oldest = looked.last().map(|article| article.key.id);
@@ -283,11 +295,14 @@ pub async fn search(
                     term: &terms[word.min(terms.len() - 1)],
                     query: (terms.len() > 1).then_some(query.as_str()),
                 };
-                ask_index(
-                    &mut tx, account_id, feed_ids, asked, from, upto, wanted, page,
-                )
-                .await
-                .map(|hits| (hits, from))
+                let window = Window {
+                    from,
+                    upto,
+                    limit: wanted,
+                };
+                ask_index(&mut tx, account_id, feed_ids, asked, window, page)
+                    .await
+                    .map(|hits| (hits, from))
             }
         };
         let (hits, ended) = match outcome {
@@ -338,21 +353,18 @@ struct Looked {
     with_word: Vec<bool>,
 }
 
-/// The newest articles of the search from `from` up to before `upto` in the
-/// order of arrival, at most `limit`, newest first, each with whether it has
+/// The newest articles of the search in the window, each with whether it has
 /// the words.
-#[allow(clippy::too_many_arguments)]
 async fn look_at(
     conn: &mut sqlx::PgConnection,
     account_id: i32,
     feed_ids: &[i32],
     query: &str,
     terms: &[String],
-    from: i64,
-    upto: i64,
-    limit: i64,
+    window: Window,
     page: Page,
 ) -> Result<Vec<Looked>, sqlx::Error> {
+    let Window { from, upto, limit } = window;
     // The inner query finds the articles, the outer one looks at their words:
     // only for those, as a query with a limit is planned on its own.
     let rows = sqlx::query!(
@@ -412,19 +424,16 @@ struct Asked<'a> {
     query: Option<&'a str>,
 }
 
-/// The hits the index has among the articles from `from` up to before `upto`
-/// in the order of arrival, at most `limit`, newest first.
-#[allow(clippy::too_many_arguments)]
+/// The hits the index has among the articles of the window.
 async fn ask_index(
     conn: &mut sqlx::PgConnection,
     account_id: i32,
     feed_ids: &[i32],
     asked: Asked<'_>,
-    from: i64,
-    upto: i64,
-    limit: i64,
+    window: Window,
     page: Page,
 ) -> Result<Vec<Key>, sqlx::Error> {
+    let Window { from, upto, limit } = window;
     // The index is asked for one word only: for all of them, it would read
     // every article with any of them, the common ones too. The inner query
     // is planned on its own, so the other words are only looked for in what

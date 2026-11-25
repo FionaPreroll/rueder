@@ -43,12 +43,6 @@ async fn log_in(state: &AppState, name: &str, password: &str) -> (StatusCode, He
     send(state, login_request(name, password)).await
 }
 
-/// What the browser would send back after this answer: `name=token`.
-fn cookie(headers: &HeaderMap) -> String {
-    let set = headers.get(header::SET_COOKIE).unwrap().to_str().unwrap();
-    set.split(';').next().unwrap().to_owned()
-}
-
 async fn me(state: &AppState, cookie: Option<&str>) -> (StatusCode, String) {
     let mut request = Request::get("/api/me");
     if let Some(cookie) = cookie {
@@ -353,9 +347,9 @@ async fn logging_out_ends_this_session_and_no_other(db: PgPool) {
         .unwrap()
         .unwrap();
     let state = AppState::new(db.clone());
-    let laptop = cookie(&log_in(&state, "ada", PASSWORD).await.1);
-    let phone = cookie(&log_in(&state, "ada", PASSWORD).await.1);
-    let grace = cookie(&log_in(&state, "grace", PASSWORD).await.1);
+    let laptop = common::cookie(&log_in(&state, "ada", PASSWORD).await.1);
+    let phone = common::cookie(&log_in(&state, "ada", PASSWORD).await.1);
+    let grace = common::cookie(&log_in(&state, "grace", PASSWORD).await.1);
     assert_ne!(laptop, phone);
 
     // Each sees who they are and nobody else.
@@ -399,7 +393,7 @@ async fn logging_out_ends_this_session_and_no_other(db: PgPool) {
     let (status, headers, _) = send(&state, request).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(me(&state, Some(&phone)).await.0, StatusCode::UNAUTHORIZED);
-    let phone = cookie(&headers);
+    let phone = common::cookie(&headers);
     assert_eq!(me(&state, Some(&phone)).await.0, StatusCode::OK);
 
     // A new password ends what is left of ada's sessions, and only hers.

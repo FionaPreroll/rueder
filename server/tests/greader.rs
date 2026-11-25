@@ -4,7 +4,7 @@
 
 mod common;
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, time::Duration};
 
 use axum::{
     body::Body,
@@ -14,7 +14,7 @@ use http_body_util::BodyExt;
 use rueder::{
     AppState, http_client,
     http_client::HttpClient,
-    images::{Config, ImageProxy, Size},
+    images::Size,
     rate::{Limits, Rate, Rates},
 };
 use serde_json::{Value, json};
@@ -891,21 +891,6 @@ async fn an_account_asks_for_texts_only_so_often_at_once(db: PgPool) {
     .await;
 }
 
-/// A state with an image proxy, which these tests never let fetch anything.
-fn with_images(db: &PgPool) -> AppState {
-    let dir = std::env::temp_dir().join(format!("rueder-greader-{}", std::process::id()));
-    let config = Config {
-        key: Some(b"a key for tests, long enough to be one".to_vec()),
-        ..Config::new(dir)
-    };
-    let client = HttpClient::new(http_client::Config::default()).unwrap();
-    let images = Arc::new(ImageProxy::open(config, client).unwrap());
-    AppState {
-        images: Some(images),
-        ..AppState::new(db.clone())
-    }
-}
-
 #[sqlx::test]
 async fn images_go_through_the_proxy_for_the_app_password(db: PgPool) {
     let (ada, feed) = common::reader(&db, "ada", 1).await;
@@ -919,7 +904,7 @@ async fn images_go_through_the_proxy_for_the_app_password(db: PgPool) {
         .execute(&db)
         .await
         .unwrap();
-    let state = with_images(&db);
+    let state = common::with_images(&db, "greader");
     let token = logged_in(&state, ada, "ada").await;
 
     let page = get(
@@ -988,7 +973,7 @@ async fn where_images_are_public_every_app_gets_the_same_addresses(db: PgPool) {
             images_public: true,
             ..Default::default()
         },
-        ..with_images(&db)
+        ..common::with_images(&db, "greader")
     };
     let token = logged_in(&state, ada, "ada").await;
     let signer = state.images.as_ref().unwrap().signer();
