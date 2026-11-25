@@ -194,6 +194,10 @@ const nl: Messages = {
 		fetchAsHint:
 			'Voor iedereen die de feed leest. Als browser voor sites die rueder weigeren. Hij wordt meteen opnieuw opgehaald.',
 		notSwitched: 'Dat lukte niet. Probeer het later opnieuw.',
+		atMost: 'Hoogstens elke',
+		noLimit: 'Geen grens',
+		atMostHint:
+			'Voor iedereen die de feed leest, voor sites die klagen over te veel verzoeken (429): hij wordt nooit vaker opgehaald, hoeveel hij ook publiceert.',
 		copy: 'Kopiëren',
 		copied: 'Gekopieerd',
 		loading: 'Laden …',

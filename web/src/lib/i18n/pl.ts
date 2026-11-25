@@ -200,6 +200,10 @@ const pl: Messages = {
 		fetchAsHint:
 			'Dla wszystkich, którzy czytają ten kanał. Jako przeglądarka dla stron, które odrzucają rueder. Kanał zostanie od razu pobrany ponownie.',
 		notSwitched: 'Nie udało się. Spróbuj ponownie później.',
+		atMost: 'Najwyżej co',
+		noLimit: 'Bez limitu',
+		atMostHint:
+			'Dla wszystkich, którzy czytają ten kanał, dla stron, które skarżą się na zbyt wiele żądań (429): nigdy nie jest pobierany częściej, niezależnie od tego, ile publikuje.',
 		copy: 'Kopiuj',
 		copied: 'Skopiowano',
 		loading: 'Wczytywanie …',

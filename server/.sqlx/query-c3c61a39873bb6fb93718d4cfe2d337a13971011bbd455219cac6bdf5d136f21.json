@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds SET fetch_agent = $2, next_fetch_at = greatest(now(), fetched_at + min_interval_s * interval '1 second') WHERE id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3c61a39873bb6fb93718d4cfe2d337a13971011bbd455219cac6bdf5d136f21"
+}

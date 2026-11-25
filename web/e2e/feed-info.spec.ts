@@ -1,6 +1,7 @@
 // A reader looks up what the server knows of a feed, for a message to the
 // operator; the operator finds the same on the command line and says as what
-// the feed is fetched, and so does an admin who reads it, in the same window.
+// the feed is fetched, and so does an admin who reads it, in the same window,
+// where the admin also says how often it is fetched at most.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { logIn, node, rueder, SITE, subscribe } from './harness/helpers.ts';
@@ -54,4 +55,9 @@ test('a reader sees how a feed is fetched, and only the operator and admins chan
 	await expect(line(adminDialog, 'Fetched as')).toHaveText('rueder');
 	expect(rueder('feed', 'show', ADDRESS)).toContain('Fetched as:   rueder');
 	expect(rueder('feed', 'show', ADDRESS)).toContain('Readers:      2');
+	// And how often it is fetched at most.
+	await expect(line(adminDialog, 'At most every')).toHaveText('No limit');
+	await adminDialog.locator('label', { hasText: '4 hr' }).click();
+	await expect(line(adminDialog, 'At most every')).toHaveText('4 hr');
+	expect(rueder('feed', 'show', ADDRESS)).toContain('At least:     14400 s');
 });

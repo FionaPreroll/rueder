@@ -1238,6 +1238,11 @@ export type FeedInfo = {
 	 */
 	fetch_interval_s: number,
 	/**
+	 * The shortest time between two fetches an admin set, in seconds, which
+	 * the interval never goes below; null without one.
+	 */
+	min_interval_s: number | null,
+	/**
 	 * When it was fetched last, whether that worked or not; null before the
 	 * first time.
 	 */
@@ -1274,6 +1279,16 @@ export type FeedInfo = {
  */
 export type NewAgent = {
 	agent: FetchAgent,
+};
+
+/**
+ * What `PUT /api/feeds/{id}/min-interval` reads.
+ */
+export type NewMinInterval = {
+	/**
+	 * In seconds, from the shortest to the longest interval; null for none.
+	 */
+	seconds: number | null,
 };
 
 /**

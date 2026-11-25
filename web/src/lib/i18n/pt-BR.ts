@@ -196,6 +196,10 @@ const ptBR: Messages = {
 		fetchAsHint:
 			'Para todos que leem o feed. Como navegador, para sites que recusam o rueder. Ele é buscado de novo na hora.',
 		notSwitched: 'Não funcionou. Tente de novo mais tarde.',
+		atMost: 'No máximo a cada',
+		noLimit: 'Sem limite',
+		atMostHint:
+			'Para todos que leem o feed, para sites que reclamam de pedidos demais (429): ele nunca é buscado com mais frequência, não importa quanto publique.',
 		copy: 'Copiar',
 		copied: 'Copiado',
 		loading: 'Carregando …',

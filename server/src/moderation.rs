@@ -313,12 +313,12 @@ pub async fn block(db: &PgPool, url: &str) -> anyhow::Result<Vec<i32>> {
     Ok(blocked)
 }
 
-/// Lifts the block of the feeds at this address, which are fetched again at
-/// once and whose images the proxy fetches again; how many there were.
+/// Lifts the block of the feeds at this address, which are fetched again as
+/// soon as their shortest time between two fetches allows, and whose images the proxy fetches again; how many there were.
 pub async fn unblock(db: &PgPool, url: &str) -> anyhow::Result<u64> {
     let mut tx = db.begin().await?;
     let lifted = sqlx::query_scalar!(
-        "UPDATE feeds SET blocked_at = NULL, next_fetch_at = now()
+        "UPDATE feeds SET blocked_at = NULL, next_fetch_at = greatest(now(), fetched_at + min_interval_s * interval '1 second')
          WHERE feed_url = $1 AND blocked_at IS NOT NULL RETURNING id",
         url.trim()
     )
@@ -365,10 +365,11 @@ pub async fn readers(db: &PgPool, feed_id: i32) -> anyhow::Result<i64> {
 }
 
 /// Says as what these feeds are fetched, `rueder` or `browser`; they are
-/// fetched at once.
+/// fetched at once, or as soon as their shortest time between two fetches
+/// allows.
 pub async fn set_agent(db: &PgPool, feed_ids: &[i32], agent: &str) -> anyhow::Result<()> {
     sqlx::query!(
-        "UPDATE feeds SET fetch_agent = $2, next_fetch_at = now() WHERE id = ANY($1)",
+        "UPDATE feeds SET fetch_agent = $2, next_fetch_at = greatest(now(), fetched_at + min_interval_s * interval '1 second') WHERE id = ANY($1)",
         feed_ids,
         agent,
     )

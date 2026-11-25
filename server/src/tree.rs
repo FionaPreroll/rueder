@@ -20,7 +20,7 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{AppError, AppState, accounts, filters, profile, sessions::Session};
+use crate::{AppError, AppState, accounts, fetch, filters, profile, sessions::Session};
 
 /// The longest name of a folder or a subscription, in characters.
 pub const MAX_TITLE: usize = 100;
@@ -42,7 +42,8 @@ pub(crate) fn types(types: &mut crate::typescript::Types) {
         .add::<Created>()
         .add::<Rename>()
         .add::<FeedInfo>()
-        .add::<NewAgent>();
+        .add::<NewAgent>()
+        .add::<NewMinInterval>();
 }
 
 pub fn routes() -> OpenApiRouter<AppState> {
@@ -53,6 +54,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(rename_feed, unsubscribe))
         .routes(routes!(info))
         .routes(routes!(set_agent))
+        .routes(routes!(set_min_interval))
         .routes(routes!(settings, set_settings))
 }
 
@@ -584,6 +586,9 @@ pub struct FeedInfo {
     pub fetch_agent: String,
     /// How long it waits from one fetch to the next, in seconds.
     pub fetch_interval_s: i32,
+    /// The shortest time between two fetches an admin set, in seconds, which
+    /// the interval never goes below; null without one.
+    pub min_interval_s: Option<i32>,
     /// When it was fetched last, whether that worked or not; null before the
     /// first time.
     #[serde(with = "time::serde::rfc3339::option")]
@@ -623,8 +628,8 @@ pub async fn feed_info(
 ) -> sqlx::Result<Option<FeedInfo>> {
     sqlx::query_as!(
         FeedInfo,
-        r#"SELECT id, title, feed_url, site_url, fetch_agent, fetch_interval_s, fetched_at,
-                  last_success_at, last_error_at, error_message AS error, next_fetch_at,
+        r#"SELECT id, title, feed_url, site_url, fetch_agent, fetch_interval_s, min_interval_s,
+                  fetched_at, last_success_at, last_error_at, error_message AS error, next_fetch_at,
                   last_seq, blocked_at IS NOT NULL AS "blocked!"
            FROM feeds f
            WHERE id = $1 AND ($2::integer IS NULL OR EXISTS (
@@ -665,7 +670,8 @@ struct NewAgent {
 /// Says as what a feed is fetched: as rueder, or as a browser for sites that
 /// turn rueder away. The feed is one for all who read it, so this holds for
 /// all of them, and rueder passes for a browser in the name of the whole
-/// server: only an admin who reads it says it. The next fetch comes at once.
+/// server: only an admin who reads it says it. The next fetch comes at once,
+/// or as soon as the feed's shortest time between two fetches allows.
 #[utoipa::path(
     put,
     path = "/feeds/{id}/agent",
@@ -687,12 +693,68 @@ async fn set_agent(
         FetchAgent::Browser => "browser",
     };
     let changed = sqlx::query!(
-        "UPDATE feeds f SET fetch_agent = $3, next_fetch_at = now()
+        "UPDATE feeds f SET fetch_agent = $3, next_fetch_at = greatest(now(), f.fetched_at + f.min_interval_s * interval '1 second')
          FROM subscriptions s
          WHERE s.account_id = $1 AND s.feed_id = $2 AND f.id = s.feed_id",
         session.account_id,
         feed_id,
         agent,
+    )
+    .execute(&state.db)
+    .await?;
+    if changed.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// What `PUT /api/feeds/{id}/min-interval` reads.
+#[derive(Deserialize, TS, ToSchema)]
+struct NewMinInterval {
+    /// In seconds, from the shortest to the longest interval; null for none.
+    seconds: Option<i32>,
+}
+
+/// Sets the shortest time between two fetches of a feed, for sites that find
+/// even the longer interval after a 429 too often: the interval never goes
+/// below it, whatever the feed publishes. Like the agent it holds for all who
+/// read the feed, so only an admin who reads it says it. A fetch that would
+/// come sooner moves back; none moves forward.
+#[utoipa::path(
+    put,
+    path = "/feeds/{id}/min-interval",
+    tag = "Feeds and folders",
+    params(("id" = i32, Path, description = "The feed.")),
+    request_body = NewMinInterval,
+    security(("session" = [])),
+    responses((status = NO_CONTENT, description = "Done."), crate::openapi::NeedsSession, (status = BAD_REQUEST, description = "Shorter than the shortest interval or longer than the longest."), (status = FORBIDDEN, description = "The account is no admin, or an admin without the second factor where the operator asks for it."), (status = NOT_FOUND, description = "The account does not subscribe to this feed.")),
+)]
+async fn set_min_interval(
+    State(state): State<AppState>,
+    session: Session,
+    Path(feed_id): Path<i32>,
+    Json(new): Json<NewMinInterval>,
+) -> Result<StatusCode, AppError> {
+    profile::admin(&session)?;
+    if new
+        .seconds
+        .is_some_and(|seconds| !(fetch::MIN_INTERVAL..=fetch::MAX_INTERVAL).contains(&seconds))
+    {
+        return Err(AppError::BadRequest(format!(
+            "between {} and {} seconds",
+            fetch::MIN_INTERVAL,
+            fetch::MAX_INTERVAL
+        )));
+    }
+    let changed = sqlx::query!(
+        "UPDATE feeds f
+         SET min_interval_s = $3, fetch_interval_s = greatest(f.fetch_interval_s, $3),
+             next_fetch_at = greatest(f.next_fetch_at, f.fetched_at + $3 * interval '1 second')
+         FROM subscriptions s
+         WHERE s.account_id = $1 AND s.feed_id = $2 AND f.id = s.feed_id",
+        session.account_id,
+        feed_id,
+        new.seconds,
     )
     .execute(&state.db)
     .await?;

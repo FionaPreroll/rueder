@@ -120,8 +120,8 @@ export interface Abilities {
 	reports: boolean;
 	/** Feeds and articles can be reported to the admins. */
 	reportContent: boolean;
-	/** As what a feed is fetched can be said, for all who read it: by admins. */
-	fetchAgent: boolean;
+	/** As what and at most how often a feed is fetched can be said, for all who read it: by admins. */
+	fetching: boolean;
 }
 
 /** A feed found at an address. */
@@ -416,8 +416,10 @@ export interface Reader {
 	unsubscribe(id: string): void;
 	/** What the server knows of a feed and how it is fetched, for support; null if there was no answer. */
 	feedInfo(id: string): Promise<FeedInfo | null>;
-	/** Says as what a feed is fetched (`can.fetchAgent`); false if that did not work. */
+	/** Says as what a feed is fetched (`can.fetching`); false if that did not work. */
 	setFetchAgent(id: string, agent: FetchAgent): Promise<boolean>;
+	/** Says how many seconds at least lie between two fetches of a feed, null for no limit (`can.fetching`); false if that did not work. */
+	setMinInterval(id: string, seconds: number | null): Promise<boolean>;
 	/** Takes the subscriptions of an OPML file in; folders are found by their name or made. */
 	importOpml(file: Blob): Promise<Imported>;
 	/** All subscriptions as an OPML file; null if there was no answer. */

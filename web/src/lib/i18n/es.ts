@@ -196,6 +196,10 @@ const es: Messages = {
 		fetchAsHint:
 			'Para todos los que leen el feed. Como navegador, para los sitios que rechazan a rueder. Se vuelve a descargar enseguida.',
 		notSwitched: 'No funcionó. Inténtalo de nuevo más tarde.',
+		atMost: 'Como mucho cada',
+		noLimit: 'Sin límite',
+		atMostHint:
+			'Para todos los que leen el feed, para los sitios que se quejan de demasiadas solicitudes (429): nunca se descarga más a menudo, publique lo que publique.',
 		copy: 'Copiar',
 		copied: 'Copiado',
 		loading: 'Cargando …',

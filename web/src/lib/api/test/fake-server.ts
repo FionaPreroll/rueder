@@ -35,6 +35,8 @@ interface FakeFeed {
 	blocked?: boolean;
 	/** Fetched as a browser, as an admin said. */
 	asBrowser?: boolean;
+	/** The shortest time between two fetches an admin set, in seconds. */
+	minInterval?: number | null;
 }
 
 /** A feed the made-up web has, at the address of a site or of the feed itself. */
@@ -1183,7 +1185,7 @@ export class FakeServer {
 		return {
 			folders: this.folders,
 			hidden: this.articles.filter((article) => article.hidden).length,
-			feeds: this.feeds.map(({ name, url, asBrowser, ...feed }) => ({
+			feeds: this.feeds.map(({ name, url, asBrowser, minInterval, ...feed }) => ({
 				...feed,
 				title: name ?? feed.title,
 				feed_title: feed.title,
@@ -1207,7 +1209,8 @@ export class FakeServer {
 			feed_url: feed.url,
 			site_url: `https://feed-${feed.id}.example`,
 			fetch_agent: feed.asBrowser ? 'browser' : 'rueder',
-			fetch_interval_s: 3600,
+			fetch_interval_s: Math.max(3600, feed.minInterval ?? 0),
+			min_interval_s: feed.minInterval ?? null,
 			fetched_at: feed.fetched ? fetched : null,
 			last_success_at: feed.fetched ? (feed.error ? before : fetched) : null,
 			last_error_at: feed.fetched && feed.error ? fetched : null,
@@ -1324,7 +1327,7 @@ export class FakeServer {
 				return refused(400, 'this is not a feed that can be read: it is a web page');
 			return json({ id: this.addFeed(feed.title, folder as number | null, { url }) }, 201);
 		}
-		const about = /^\/feeds\/(\d+)\/(info|agent)$/.exec(path);
+		const about = /^\/feeds\/(\d+)\/(info|agent|min-interval)$/.exec(path);
 		if (about) {
 			const found = this.feeds.find((f) => f.id === Number(about[1]));
 			if (!found) return refused(404);
@@ -1332,6 +1335,11 @@ export class FakeServer {
 			if (method === 'PUT' && about[2] === 'agent') {
 				if (!this.admin) return refused(403, 'only an admin can do this');
 				found.asBrowser = data.agent === 'browser';
+				return empty();
+			}
+			if (method === 'PUT' && about[2] === 'min-interval') {
+				if (!this.admin) return refused(403, 'only an admin can do this');
+				found.minInterval = (data.seconds as number | null) ?? null;
 				return empty();
 			}
 		}

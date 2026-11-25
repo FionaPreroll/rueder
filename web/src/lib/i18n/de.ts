@@ -188,6 +188,10 @@ const de: Messages = {
 		fetchAsHint:
 			'Für alle, die den Feed lesen. Als Browser für Websites, die rueder abweisen. Er wird gleich neu abgerufen.',
 		notSwitched: 'Das ging nicht. Versuch es später wieder.',
+		atMost: 'Höchstens alle',
+		noLimit: 'Keine Grenze',
+		atMostHint:
+			'Für alle, die den Feed lesen, für Websites, die über zu viele Anfragen klagen (429): Er wird nie öfter abgerufen, wie viel er auch bringt.',
 		copy: 'Kopieren',
 		copied: 'Kopiert',
 		loading: 'Wird geladen …',

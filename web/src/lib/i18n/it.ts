@@ -197,6 +197,10 @@ const it: Messages = {
 		fetchAsHint:
 			'Per tutti quelli che leggono il feed. Come browser, per i siti che respingono rueder. Viene scaricato di nuovo subito.',
 		notSwitched: 'Non ha funzionato. Riprova più tardi.',
+		atMost: 'Al massimo ogni',
+		noLimit: 'Nessun limite',
+		atMostHint:
+			'Per tutti quelli che leggono il feed, per i siti che lamentano troppe richieste (429): non viene mai scaricato più spesso, per quanto pubblichi.',
 		copy: 'Copia',
 		copied: 'Copiato',
 		loading: 'Caricamento …',

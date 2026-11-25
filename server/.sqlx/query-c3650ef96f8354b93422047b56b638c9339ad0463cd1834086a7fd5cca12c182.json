@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE feeds f\n         SET min_interval_s = $3, fetch_interval_s = greatest(f.fetch_interval_s, $3),\n             next_fetch_at = greatest(f.next_fetch_at, f.fetched_at + $3 * interval '1 second')\n         FROM subscriptions s\n         WHERE s.account_id = $1 AND s.feed_id = $2 AND f.id = s.feed_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3650ef96f8354b93422047b56b638c9339ad0463cd1834086a7fd5cca12c182"
+}

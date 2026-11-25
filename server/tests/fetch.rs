@@ -351,6 +351,53 @@ async fn a_site_that_is_asked_too_often_is_asked_less_often_for_a_while(db: PgPo
 }
 
 #[sqlx::test]
+async fn a_feed_is_never_fetched_more_often_than_an_admin_said(db: PgPool) {
+    let (url, site) = site(&[("a", "First", "one")]).await;
+    let feed = feed_at(&db, "ada", &url).await;
+    let client = client();
+    // A feed that publishes enough for the shortest interval, and an admin
+    // who said six hours at least.
+    sqlx::query(
+        "UPDATE feeds SET created_at = now() - interval '2 days', last_seq = 100,
+             min_interval_s = 21600
+         WHERE id = $1",
+    )
+    .bind(feed)
+    .execute(&db)
+    .await
+    .unwrap();
+
+    // Neither a success nor a site that says nothing changed makes it shorter.
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
+        .await
+        .unwrap();
+    assert!(matches!(outcome, Outcome::Fetched(_)), "{outcome:?}");
+    let state = row(&db, feed).await;
+    assert_eq!(state.get::<i32, _>("fetch_interval_s"), 21600);
+    assert!(state.get::<f64, _>("wait") > 21590.0);
+    let outcome = fetch::fetch_feed(&db, &client, None, &rules(), feed)
+        .await
+        .unwrap();
+    assert_eq!(outcome, Outcome::NotModified);
+    assert!(row(&db, feed).await.get::<f64, _>("wait") > 21590.0);
+
+    // Without it, the next success goes by what the feed publishes again.
+    sqlx::query("UPDATE feeds SET min_interval_s = NULL WHERE id = $1")
+        .bind(feed)
+        .execute(&db)
+        .await
+        .unwrap();
+    site.lock().unwrap().body = rss(&[("a", "First", "one"), ("b", "Second", "two")]);
+    fetch::fetch_feed(&db, &client, None, &rules(), feed)
+        .await
+        .unwrap();
+    assert_eq!(
+        row(&db, feed).await.get::<i32, _>("fetch_interval_s"),
+        MIN_INTERVAL
+    );
+}
+
+#[sqlx::test]
 async fn a_feed_inside_the_own_network_is_not_fetched(db: PgPool) {
     let client = client();
     for url in [

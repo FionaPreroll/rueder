@@ -191,6 +191,10 @@ const tr: Messages = {
 		fetchAsHint:
 			'Akışı okuyan herkes için geçerlidir. rueder’i geri çeviren siteler için tarayıcıyı seçin. Akış hemen yeniden getirilir.',
 		notSwitched: 'Olmadı. Daha sonra yeniden deneyin.',
+		atMost: 'En kısa getirme aralığı',
+		noLimit: 'Sınır yok',
+		atMostHint:
+			'Akışı okuyan herkes için geçerlidir; çok fazla istekten yakınan siteler (429) içindir: akış ne kadar yayımlarsa yayımlasın, daha sık getirilmez.',
 		copy: 'Kopyala',
 		copied: 'Kopyalandı',
 		loading: 'Yükleniyor …',

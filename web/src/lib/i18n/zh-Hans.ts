@@ -186,6 +186,10 @@ const zhHans: Messages = {
 		fetchAs: '获取时的身份',
 		fetchAsHint: '对所有阅读此订阅源的人生效。对拒绝 rueder 的网站，请选“浏览器”。会立即重新获取。',
 		notSwitched: '没有成功。请稍后再试。',
+		atMost: '最短获取间隔',
+		noLimit: '不限',
+		atMostHint:
+			'对所有阅读此订阅源的人生效，适用于抱怨请求过多（429）的网站：无论更新多频繁，都不会更频繁地获取。',
 		copy: '复制',
 		copied: '已复制',
 		loading: '正在加载…',

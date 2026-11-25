@@ -198,6 +198,10 @@ const fr: Messages = {
 		fetchAsHint:
 			'Pour tous ceux qui lisent le flux. En tant que navigateur pour les sites qui refusent rueder. Il est récupéré de nouveau tout de suite.',
 		notSwitched: 'Cela n’a pas fonctionné. Réessayez plus tard.',
+		atMost: 'Au plus toutes les',
+		noLimit: 'Sans limite',
+		atMostHint:
+			'Pour tous ceux qui lisent le flux, pour les sites qui se plaignent de trop de requêtes (429) : il n’est jamais récupéré plus souvent, quoi qu’il publie.',
 		copy: 'Copier',
 		copied: 'Copié',
 		loading: 'Chargement …',

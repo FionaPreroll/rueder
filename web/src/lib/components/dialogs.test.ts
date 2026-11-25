@@ -8,6 +8,7 @@ import { FakeServer } from '#lib/api/test/fake-server.ts';
 import { DemoApps } from '#lib/demo/apps.svelte.ts';
 import { DemoReader } from '#lib/demo/reader.svelte.ts';
 import { demoStatus } from '#lib/demo/status.ts';
+import { formatDuration } from '#lib/format.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { MAX_OPML, type Reader } from '#lib/reader.ts';
 import { defaults, settings } from '#lib/settings.svelte.ts';
@@ -1410,6 +1411,7 @@ describe('FeedInfoDialog', () => {
 		expect(line('Name')).toHaveTextContent('Tagesbote');
 		expect(line('Fetched as')).toHaveTextContent('rueder');
 		expect(line('Fetched every')).toHaveTextContent('1 hr');
+		expect(line('At most every')).toHaveTextContent('No limit');
 		expect(line('Last error')).toHaveTextContent('404 Not Found');
 		expect(line('Articles so far')).toHaveTextContent('3');
 		// Only an admin says as what it is fetched.
@@ -1437,6 +1439,23 @@ describe('FeedInfoDialog', () => {
 		expect(screen.getByRole('radio', { name: 'Browser' })).toBeChecked();
 	});
 
+	it('lets an admin say how often the feed is fetched at most', async () => {
+		const id = server.addFeed('Tagesbote');
+		open(new ServerReader({ name: 'fiona', admin: true }, session), `feed-${id}`);
+		// The label of the line, before the one of the choice.
+		const limit = () => screen.getAllByText('At most every')[0]?.nextElementSibling;
+		await userEvent.click(await screen.findByRole('radio', { name: '4 hr' }));
+		await vi.waitFor(() => expect(server.feeds[0]?.minInterval).toBe(4 * 3600));
+		await vi.waitFor(() => expect(limit()).toHaveTextContent('4 hr'));
+		expect(line('Fetched every')).toHaveTextContent('4 hr');
+
+		server.admin = false;
+		await userEvent.click(screen.getByRole('radio', { name: 'No limit' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('That did not work.');
+		await vi.waitFor(() => expect(screen.getByRole('radio', { name: '4 hr' })).toBeChecked());
+		expect(server.feeds[0]?.minInterval).toBe(4 * 3600);
+	});
+
 	it('says when the server does not answer', async () => {
 		open(new ServerReader({ name: 'fiona', admin: false }, session), 'feed-999');
 		expect(await screen.findByRole('alert')).toHaveTextContent('The server did not answer.');
@@ -1451,6 +1470,8 @@ describe('FeedInfoDialog', () => {
 		expect(line('Abgerufen als')).toHaveTextContent('rueder');
 		await userEvent.click(screen.getByRole('radio', { name: 'Browser' }));
 		expect(await reader.feedInfo('feed-tagesbote')).toMatchObject({ fetch_agent: 'browser' });
+		await userEvent.click(screen.getByRole('radio', { name: formatDuration(2 * 3600_000) }));
+		expect(await reader.feedInfo('feed-tagesbote')).toMatchObject({ min_interval_s: 7200 });
 	});
 });
 

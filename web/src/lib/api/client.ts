@@ -50,6 +50,7 @@ import type {
 	Me,
 	Move,
 	NewAgent,
+	NewMinInterval,
 	NewFolder,
 	NewInvite,
 	NewLabel,
@@ -439,6 +440,9 @@ export const api = {
 	/** For admins only. */
 	setFetchAgent: (id: number, agent: FetchAgent) =>
 		call<void>('PUT', `/feeds/${id}/agent`, { agent } satisfies NewAgent),
+	/** For admins only. */
+	setMinInterval: (id: number, seconds: number | null) =>
+		call<void>('PUT', `/feeds/${id}/min-interval`, { seconds } satisfies NewMinInterval),
 	importOpml: (file: Blob) => call<OpmlImported>('POST', '/opml', file),
 	exportOpml: () => text('GET', '/opml'),
 	/** The whole account as a file, for another rueder. */

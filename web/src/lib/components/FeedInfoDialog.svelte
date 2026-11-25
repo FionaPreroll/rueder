@@ -1,8 +1,8 @@
 <script lang="ts">
 	// What the server knows of a feed and how it fetches it, for a reader who asks
 	// for help with it: to read, and to copy into a message to the operator, with
-	// the times as the server gives them. An admin says here as what the feed is
-	// fetched, for all who read it.
+	// the times as the server gives them. An admin says here as what and at most
+	// how often the feed is fetched, for all who read it.
 	import { onMount } from 'svelte';
 	import { formatDuration, formatFull } from '#lib/format.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -44,6 +44,17 @@
 		await load();
 	}
 
+	/** The limits an admin can choose from, in seconds. */
+	const limits = [3600, 2 * 3600, 4 * 3600, 6 * 3600, 12 * 3600];
+
+	async function limitTo(value: string) {
+		const seconds = value === 'none' ? null : Number(value);
+		if (!info || seconds === info.min_interval_s) return;
+		info = { ...info, min_interval_s: seconds };
+		notSwitched = !(await reader.setMinInterval(feedId, seconds));
+		await load();
+	}
+
 	/** Label and value of each line; `time` writes the times. */
 	function lines(info: FeedInfo, time: (at: string) => string) {
 		const texts = m.feedInfo;
@@ -56,6 +67,10 @@
 			[texts.site, info.site_url ?? texts.noSite],
 			[texts.agent, texts.agents[info.fetch_agent]],
 			[texts.every, formatDuration(info.fetch_interval_s * 1000)],
+			[
+				texts.atMost,
+				info.min_interval_s === null ? texts.noLimit : formatDuration(info.min_interval_s * 1000)
+			],
 			[texts.fetched, when(info.fetched_at)],
 			[texts.succeeded, when(info.last_success_at)],
 			[texts.failed, info.error ? `${failed}: ${info.error}` : failed],
@@ -71,6 +86,10 @@
 			label: m.feedInfo.agents[value]
 		}))
 	);
+	const intervals = $derived([
+		{ value: 'none', label: m.feedInfo.noLimit },
+		...limits.map((seconds) => ({ value: String(seconds), label: formatDuration(seconds * 1000) }))
+	]);
 
 	async function copy() {
 		if (!info) return;
@@ -95,7 +114,7 @@
 				<dd class="min-w-0 break-words select-all">{value}</dd>
 			{/each}
 		</dl>
-		{#if reader.can.fetchAgent}
+		{#if reader.can.fetching}
 			<div class="mt-4">
 				<Choice
 					label={m.feedInfo.fetchAs}
@@ -103,6 +122,14 @@
 					bind:value={() => info?.fetch_agent ?? 'rueder', fetchAs}
 				/>
 				<p class="mt-1.5 text-xs text-soft">{m.feedInfo.fetchAsHint}</p>
+			</div>
+			<div class="mt-4">
+				<Choice
+					label={m.feedInfo.atMost}
+					options={intervals}
+					bind:value={() => String(info?.min_interval_s ?? 'none'), limitTo}
+				/>
+				<p class="mt-1.5 text-xs text-soft">{m.feedInfo.atMostHint}</p>
 				{#if notSwitched}
 					<p class="mt-1.5 text-sm text-warn" role="alert">{m.feedInfo.notSwitched}</p>
 				{/if}
