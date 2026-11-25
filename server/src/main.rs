@@ -319,6 +319,10 @@ enum FeedCommand {
         #[arg(value_parser = ["rueder", "browser"])]
         agent: String,
     },
+    /// Say how many seconds at least lie between two fetches of the feed with
+    /// this number or at this address, for sites that find it asked too
+    /// often, or `none`. It holds for all who read it.
+    MinInterval { feed: String, seconds: String },
 }
 
 #[derive(Subcommand)]
@@ -899,6 +903,36 @@ async fn feed(db: &PgPool, command: FeedCommand) -> anyhow::Result<()> {
                 "Feed {} is fetched as {agent} from now on, the first time as soon as it may.",
                 numbers.join(", ")
             );
+        }
+        FeedCommand::MinInterval { feed, seconds } => {
+            let range = fetch::MIN_INTERVAL..=fetch::MAX_INTERVAL;
+            let seconds = match seconds.trim() {
+                "none" => None,
+                given => match given.parse::<i32>() {
+                    Ok(seconds) if range.contains(&seconds) => Some(seconds),
+                    _ => anyhow::bail!(
+                        "the seconds are `none` or between {} and {}",
+                        range.start(),
+                        range.end()
+                    ),
+                },
+            };
+            let found = moderation::named(db, &feed).await?;
+            if found.is_empty() {
+                anyhow::bail!("there is no feed {}", feed.trim());
+            }
+            moderation::set_min_interval(db, &found, seconds).await?;
+            let numbers: Vec<String> = found.iter().map(i32::to_string).collect();
+            match seconds {
+                Some(seconds) => println!(
+                    "Feed {} is fetched at most every {seconds} s from now on.",
+                    numbers.join(", ")
+                ),
+                None => println!(
+                    "Feed {} is fetched as often as it publishes from now on.",
+                    numbers.join(", ")
+                ),
+            }
         }
     }
     Ok(())

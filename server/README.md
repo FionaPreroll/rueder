@@ -122,7 +122,9 @@ What is here:
   <number or address>` prints the same for any feed, with the number of its
   readers. Only an admin who reads a feed says as what it is fetched, for all
   who read it (`PUT /api/feeds/{id}/agent`), and the operator for any feed with
-  `rueder feed agent <number or address> browser|rueder`.
+  `rueder feed agent <number or address> browser|rueder`. Likewise for how
+  often it is fetched at most (`PUT /api/feeds/{id}/min-interval`, `rueder feed
+  min-interval <number or address> <seconds>|none`).
 - What is known of an article, for support (`src/articles.rs`): its readers see
   its feed, its number and id there, its link, when it was published, first
   fetched and changed, and how many versions are kept under "Article info …"
@@ -230,6 +232,7 @@ cargo run -- account second-factor-off ada   # ada lost the app and the recovery
 cargo run -- feed block https://spam.example/feed.xml     # for everybody; `unblock` lifts it
 cargo run -- feed show 130              # what is known of a feed, by number or address
 cargo run -- feed agent 130 browser     # fetch it as a browser, for all who read it; or rueder
+cargo run -- feed min-interval 130 14400   # fetch it at most every four hours; or none
 cargo run -- article show 130 359 --versions   # what is known of article 359 of feed 130, and every version
 ```
 

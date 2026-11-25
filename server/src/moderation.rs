@@ -378,6 +378,27 @@ pub async fn set_agent(db: &PgPool, feed_ids: &[i32], agent: &str) -> anyhow::Re
     Ok(())
 }
 
+/// Sets the shortest time between two fetches of these feeds, in seconds, or
+/// none; as `PUT /api/feeds/{id}/min-interval` does for an admin who reads
+/// one. A fetch that would come sooner moves back; none moves forward.
+pub async fn set_min_interval(
+    db: &PgPool,
+    feed_ids: &[i32],
+    seconds: Option<i32>,
+) -> anyhow::Result<()> {
+    sqlx::query!(
+        "UPDATE feeds
+         SET min_interval_s = $2, fetch_interval_s = greatest(fetch_interval_s, $2),
+             next_fetch_at = greatest(next_fetch_at, fetched_at + $2 * interval '1 second')
+         WHERE id = ANY($1)",
+        feed_ids,
+        seconds,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// How many articles [`images_of`] reads at a time.
 const PAGE: i64 = 1000;
 
